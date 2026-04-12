@@ -19,7 +19,7 @@
       width: 100vw;
       height: 100vh;
       background: #111;
-      cursor: crosshair;
+      cursor: default;
     }
 
     .hud {
@@ -95,11 +95,11 @@ const keys = {
 let muzzleFlash = 0;
 let score = 0;
 
-// 几个固定敌人，先做命中实验
+// 这次把敌人放得更近、更容易看到
 let enemies = [
-  { x: 5.5 * TILE, y: 2.5 * TILE, alive: true },
-  { x: 7.5 * TILE, y: 4.5 * TILE, alive: true },
-  { x: 3.5 * TILE, y: 7.5 * TILE, alive: true }
+  { x: 4.5 * TILE, y: 2.5 * TILE, alive: true },
+  { x: 6.5 * TILE, y: 4.5 * TILE, alive: true },
+  { x: 3.5 * TILE, y: 5.5 * TILE, alive: true }
 ];
 
 document.addEventListener("keydown", (e) => {
@@ -197,7 +197,12 @@ function castRay(angle) {
   return 1200;
 }
 
-// 用于渲染敌人前先排序
+function normalizeAngle(a) {
+  while (a < -Math.PI) a += Math.PI * 2;
+  while (a > Math.PI) a -= Math.PI * 2;
+  return a;
+}
+
 function getEnemyData() {
   const result = [];
 
@@ -207,17 +212,9 @@ function getEnemyData() {
     const dx = enemy.x - player.x;
     const dy = enemy.y - player.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
+    const angle = normalizeAngle(Math.atan2(dy, dx) - player.angle);
 
-    let angleToEnemy = Math.atan2(dy, dx) - player.angle;
-
-    while (angleToEnemy < -Math.PI) angleToEnemy += Math.PI * 2;
-    while (angleToEnemy > Math.PI) angleToEnemy -= Math.PI * 2;
-
-    result.push({
-      enemy,
-      dist,
-      angle: angleToEnemy
-    });
+    result.push({ enemy, dist, angle });
   }
 
   result.sort((a, b) => b.dist - a.dist);
@@ -238,7 +235,6 @@ function draw3D() {
   const rays = w;
   const wallDistances = [];
 
-  // 先画墙
   for (let i = 0; i < rays; i++) {
     const angle = player.angle - fov / 2 + (i / rays) * fov;
     let dist = castRay(angle);
@@ -246,23 +242,22 @@ function draw3D() {
     dist *= Math.cos(angle - player.angle);
     wallDistances[i] = dist;
 
-    const wallHeight = (TILE * h * 0.7) / dist;
+    const wallHeight = (TILE * h * 0.9) / dist;
     const shade = Math.max(35, 255 - dist * 0.45);
 
     ctx.fillStyle = `rgb(${shade},${shade},${shade})`;
     ctx.fillRect(i, h / 2 - wallHeight / 2, 1, wallHeight);
   }
 
-  // 再画敌人
   const enemyData = getEnemyData();
 
   for (const item of enemyData) {
     const dist = item.dist;
     const angle = item.angle;
 
-    if (Math.abs(angle) > fov / 2 + 0.2) continue;
+    if (Math.abs(angle) > fov / 2 + 0.15) continue;
 
-    const size = (TILE * h * 0.35) / dist;
+    const size = (TILE * h * 0.6) / dist;
     const screenX = (w / 2) + Math.tan(angle) * (w / 2) / Math.tan(fov / 2);
     const topY = h / 2 - size / 2;
 
@@ -273,8 +268,8 @@ function draw3D() {
       if (x < 0 || x >= w) continue;
       if (wallDistances[x] < dist) continue;
 
-      const shade = Math.max(60, 255 - dist * 0.5);
-      ctx.fillStyle = `rgb(${shade}, 40, 40)`;
+      const shade = Math.max(80, 255 - dist * 0.45);
+      ctx.fillStyle = `rgb(${shade}, 30, 30)`;
       ctx.fillRect(x, topY, 1, size);
     }
   }
@@ -285,23 +280,23 @@ function drawGun() {
   const h = canvas.height;
 
   ctx.fillStyle = "#3f3f46";
-  ctx.fillRect(w / 2 - 100, h - 160, 200, 140);
+  ctx.fillRect(w / 2 - 130, h - 190, 260, 170);
 
   ctx.fillStyle = "#6b7280";
-  ctx.fillRect(w / 2 - 40, h - 220, 80, 120);
+  ctx.fillRect(w / 2 - 50, h - 260, 100, 130);
 
   ctx.fillStyle = "#9ca3af";
-  ctx.fillRect(w / 2 - 10, h - 290, 20, 80);
+  ctx.fillRect(w / 2 - 12, h - 340, 24, 90);
 
   if (muzzleFlash > 0) {
     ctx.fillStyle = "yellow";
     ctx.beginPath();
-    ctx.arc(w / 2, h - 305, 22, 0, Math.PI * 2);
+    ctx.arc(w / 2, h - 355, 26, 0, Math.PI * 2);
     ctx.fill();
 
     ctx.fillStyle = "orange";
     ctx.beginPath();
-    ctx.arc(w / 2, h - 305, 11, 0, Math.PI * 2);
+    ctx.arc(w / 2, h - 355, 13, 0, Math.PI * 2);
     ctx.fill();
   }
 }
@@ -314,14 +309,14 @@ function drawCrosshair() {
   ctx.lineWidth = 2;
 
   ctx.beginPath();
-  ctx.moveTo(cx - 10, cy);
-  ctx.lineTo(cx - 2, cy);
-  ctx.moveTo(cx + 2, cy);
-  ctx.lineTo(cx + 10, cy);
-  ctx.moveTo(cx, cy - 10);
-  ctx.lineTo(cx, cy - 2);
-  ctx.moveTo(cx, cy + 2);
-  ctx.lineTo(cx, cy + 10);
+  ctx.moveTo(cx - 12, cy);
+  ctx.lineTo(cx - 3, cy);
+  ctx.moveTo(cx + 3, cy);
+  ctx.lineTo(cx + 12, cy);
+  ctx.moveTo(cx, cy - 12);
+  ctx.lineTo(cx, cy - 3);
+  ctx.moveTo(cx, cy + 3);
+  ctx.lineTo(cx, cy + 12);
   ctx.stroke();
 }
 
@@ -330,9 +325,7 @@ function updateEffects() {
 }
 
 function shoot() {
-  const fov = Math.PI / 3;
-  const centerTolerance = 0.08;
-
+  const tolerance = 0.09;
   let bestEnemy = null;
   let bestDist = Infinity;
 
@@ -342,14 +335,9 @@ function shoot() {
     const dx = enemy.x - player.x;
     const dy = enemy.y - player.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
-    let angleToEnemy = Math.atan2(dy, dx) - player.angle;
+    const angle = normalizeAngle(Math.atan2(dy, dx) - player.angle);
 
-    while (angleToEnemy < -Math.PI) angleToEnemy += Math.PI * 2;
-    while (angleToEnemy > Math.PI) angleToEnemy -= Math.PI * 2;
-
-    // 只打准星前方很小角度范围内的敌人
-    if (Math.abs(angleToEnemy) < centerTolerance && dist < bestDist) {
-      // 还要确保中间没有墙挡住
+    if (Math.abs(angle) < tolerance && dist < bestDist) {
       const wallDist = castRay(player.angle);
       if (dist < wallDist) {
         bestEnemy = enemy;
