@@ -19,7 +19,7 @@
       width: 100vw;
       height: 100vh;
       background: #111;
-      cursor: default;
+      cursor: none;
     }
 
     .hud {
@@ -34,6 +34,14 @@
       z-index: 10;
       user-select: none;
     }
+
+    .damage-flash {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background: rgba(255, 0, 0, 0);
+      z-index: 5;
+    }
   </style>
 </head>
 <body>
@@ -42,15 +50,18 @@
     W A S D 移动<br>
     ← → 转向<br>
     鼠标点击开枪<br>
-    Score: 0
+    ❤️ Health: 100<br>
+    🎯 Score: 0
   </div>
 
+  <div class="damage-flash" id="damageFlash"></div>
   <canvas id="game"></canvas>
 
 <script>
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 const hud = document.getElementById("hud");
+const damageFlash = document.getElementById("damageFlash");
 
 function resizeCanvas() {
   canvas.width = window.innerWidth;
@@ -94,12 +105,13 @@ const keys = {
 
 let muzzleFlash = 0;
 let score = 0;
+let health = 100;
+let damageFlashTimer = 0;
 
-// 这次把敌人放得更近、更容易看到
 let enemies = [
-  { x: 4.5 * TILE, y: 2.5 * TILE, alive: true },
-  { x: 6.5 * TILE, y: 4.5 * TILE, alive: true },
-  { x: 3.5 * TILE, y: 5.5 * TILE, alive: true }
+  { x: 4.5 * TILE, y: 2.5 * TILE, alive: true, attackCooldown: 0 },
+  { x: 6.5 * TILE, y: 4.5 * TILE, alive: true, attackCooldown: 0 },
+  { x: 3.5 * TILE, y: 5.5 * TILE, alive: true, attackCooldown: 0 }
 ];
 
 document.addEventListener("keydown", (e) => {
@@ -133,7 +145,8 @@ function updateHud() {
     W A S D 移动<br>
     ← → 转向<br>
     鼠标点击开枪<br>
-    Score: ${score}
+    ❤️ Health: ${Math.max(0, Math.floor(health))}<br>
+    🎯 Score: ${score}
   `;
 }
 
@@ -219,6 +232,41 @@ function getEnemyData() {
 
   result.sort((a, b) => b.dist - a.dist);
   return result;
+}
+
+function updateEnemies() {
+  for (const enemy of enemies) {
+    if (!enemy.alive) continue;
+
+    const dx = player.x - enemy.x;
+    const dy = player.y - enemy.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    if (enemy.attackCooldown > 0) {
+      enemy.attackCooldown--;
+    }
+
+    // 敌人向玩家靠近
+    if (dist > 28) {
+      const speed = 0.55;
+      const moveX = (dx / dist) * speed;
+      const moveY = (dy / dist) * speed;
+
+      const nx = enemy.x + moveX;
+      const ny = enemy.y + moveY;
+
+      if (!isWall(nx, enemy.y)) enemy.x = nx;
+      if (!isWall(enemy.x, ny)) enemy.y = ny;
+    }
+
+    // 敌人贴近攻击
+    if (dist < 30 && enemy.attackCooldown <= 0) {
+      health -= 8;
+      enemy.attackCooldown = 25;
+      damageFlashTimer = 8;
+      updateHud();
+    }
+  }
 }
 
 function draw3D() {
@@ -322,6 +370,13 @@ function drawCrosshair() {
 
 function updateEffects() {
   if (muzzleFlash > 0) muzzleFlash--;
+
+  if (damageFlashTimer > 0) {
+    damageFlashTimer--;
+    damageFlash.style.background = "rgba(255,0,0,0.18)";
+  } else {
+    damageFlash.style.background = "rgba(255,0,0,0)";
+  }
 }
 
 function shoot() {
@@ -353,12 +408,33 @@ function shoot() {
   }
 }
 
+function drawGameOver() {
+  if (health > 0) return;
+
+  ctx.fillStyle = "rgba(0,0,0,0.65)";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  ctx.fillStyle = "white";
+  ctx.font = "bold 48px Arial";
+  ctx.textAlign = "center";
+  ctx.fillText("GAME OVER", canvas.width / 2, canvas.height / 2 - 20);
+
+  ctx.font = "24px Arial";
+  ctx.fillText("刷新页面重新开始", canvas.width / 2, canvas.height / 2 + 30);
+}
+
 function loop() {
-  movePlayer();
+  if (health > 0) {
+    movePlayer();
+    updateEnemies();
+  }
+
   updateEffects();
   draw3D();
   drawGun();
   drawCrosshair();
+  drawGameOver();
+
   requestAnimationFrame(loop);
 }
 
