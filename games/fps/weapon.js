@@ -1,97 +1,75 @@
 import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.152/build/three.module.js";
+import { spawnBlood, spawnSpark } from "./effects.js";
 
-export class Weapon {
+export class Weapon{
 
-constructor(camera){
+constructor(camera,scene){
 
 this.camera = camera;
+this.scene = scene;
 
-this.spread = 0;
-this.recoil = 0;
-this.ads = false;
 this.cooldown = 0;
+this.spread = 0;
+this.ads = false;
 
-/* 红点（屏幕中心） */
-this.dot = document.createElement("div");
-this.dot.style.position="absolute";
-this.dot.style.width="6px";
-this.dot.style.height="6px";
-this.dot.style.background="red";
-this.dot.style.borderRadius="50%";
-this.dot.style.left="50%";
-this.dot.style.top="50%";
-this.dot.style.transform="translate(-50%,-50%)";
-this.dot.style.opacity="0.8";
-document.body.appendChild(this.dot);
-
-/* 鼠标控制 */
-document.addEventListener("mousedown",(e)=>{
- if(e.button===0) this.shoot();   // 左键开火
- if(e.button===2) this.ads = true; // 右键开镜
+/* 鼠标 */
+document.addEventListener("mousedown",e=>{
+ if(e.button===0) this.shoot();
+ if(e.button===2) this.ads=true;
 });
 
-document.addEventListener("mouseup",(e)=>{
- if(e.button===2) this.ads = false;
+document.addEventListener("mouseup",e=>{
+ if(e.button===2) this.ads=false;
 });
 
 }
 
-/* 射击 */
 shoot(){
 
 if(this.cooldown>0) return;
 
-/* 射速控制 */
-this.cooldown = this.ads ? 6 : 10;
+/* 射速（旧版快节奏） */
+this.cooldown = 5;
 
-/* 扩散（核心） */
-let baseSpread = this.ads ? 0.002 : 0.02;
+/* 扩散（核心爽感） */
+this.spread += 0.015;
 
-this.spread += this.ads ? 0.002 : 0.01;
-
-/* 方向 */
 let dir = new THREE.Vector3(0,0,-1);
 dir.applyEuler(this.camera.rotation);
 
-/* 随机偏移（让子弹不再是激光） */
-dir.x += (Math.random()-0.5)*(this.spread + baseSpread);
-dir.y += (Math.random()-0.5)*(this.spread + baseSpread);
+/* 偏移 */
+dir.x += (Math.random()-0.5)*this.spread;
+dir.y += (Math.random()-0.5)*this.spread;
 
-/* 射线检测 */
+/* 射线 */
 let ray = new THREE.Raycaster(this.camera.position,dir);
+
+let hitSomething=false;
 
 /* 打敌人 */
 window.enemies?.forEach(e=>{
  let hit = ray.intersectObject(e.mesh);
  if(hit.length){
-  e.hp -= 25;
+  e.hp -= 20;
+  spawnBlood(this.scene,hit[0].point);
+  hitSomething=true;
  }
 });
 
-/* 后坐力 */
-this.recoil += this.ads ? 0.01 : 0.03;
+/* 打墙 */
+if(!hitSomething){
+ let point = this.camera.position.clone().add(dir.multiplyScalar(10));
+ spawnSpark(this.scene,point);
+}
 
 }
 
-/* 每帧更新 */
 update(){
 
 if(this.cooldown>0) this.cooldown--;
 
-/* 扩散恢复 */
-this.spread *= 0.85;
-
-/* 后坐力恢复 */
-this.recoil *= 0.8;
-
-/* 推镜头 */
-this.camera.rotation.x -= this.recoil;
-
-/* ADS隐藏准星 */
-let cross = document.querySelector(".crosshair");
-if(cross){
- cross.style.opacity = this.ads ? 0 : 1;
-}
+/* 收敛 */
+this.spread *= 0.9;
 
 }
 
