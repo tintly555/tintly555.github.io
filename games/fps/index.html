@@ -707,13 +707,13 @@
       enemy.hpTexture.needsUpdate = true;
     }
 
-    function resetEnemies() {
+    function rebuildEnemyRoster() {
       for (const enemy of state.enemies) {
         scene.remove(enemy.group);
       }
       state.enemies.length = 0;
 
-      const spawnPoints = MAP_SPAWNS[CURRENT_MAP];
+      const spawnPoints = getSpawnPoints();
       for (let i = 0; i < spawnPoints.length; i++) {
         const [x, z] = spawnPoints[i];
         let type = "normal";
@@ -1186,8 +1186,7 @@
     function rebuildMapAndEnemies() {
       clearMap();
       MAP_BUILDERS[CURRENT_MAP]();
-      resetEnemies();
-
+      rebuildEnemyRoster();
       if (CURRENT_MAP === "crossfire") {
         player.position.set(0, 1.65, 34);
       } else {
@@ -1206,7 +1205,7 @@
       return false;
     }
 
-    function resetEnemies() {
+    function rebuildEnemyRoster() {
       for (const enemy of state.enemies) {
         scene.remove(enemy.group);
       }
