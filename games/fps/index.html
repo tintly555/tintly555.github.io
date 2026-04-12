@@ -1186,7 +1186,7 @@
     function rebuildMapAndEnemies() {
       clearMap();
       MAP_BUILDERS[CURRENT_MAP]();
-      rebuildEnemyRoster();
+      spawnEnemyRosterV3();
       if (CURRENT_MAP === "crossfire") {
         player.position.set(0, 1.65, 34);
       } else {
