@@ -34,7 +34,7 @@
       z-index: 10;
       user-select: none;
       pointer-events: none;
-      min-width: 190px;
+      min-width: 210px;
     }
 
     .damage-flash {
@@ -105,6 +105,7 @@ const player = {
 
 const keys = { w:false, a:false, s:false, d:false };
 let locked = false;
+let mouseDown = false;
 let score = 0;
 let damageFlashTimer = 0;
 let cameraPitch = 0;
@@ -121,40 +122,43 @@ const weapons = [
     damageBody: 38,
     damageLegs: 24,
     pellets: 1,
-    spreadBase: 0.003,
+    spreadBase: 0.008,
     spreadBloomAdd: 0.003,
-    spreadBloomMax: 0.02,
-    recover: 0.0009,
+    spreadBloomMax: 0.018,
+    recover: 0.0012,
     fireDelay: 240,
     recoil: 10,
+    auto: false,
     color: "rgba(255,230,140,"
   },
   {
     name: "Assault Rifle",
-    damageHead: 42,
-    damageBody: 24,
-    damageLegs: 16,
+    damageHead: 40,
+    damageBody: 23,
+    damageLegs: 15,
     pellets: 1,
-    spreadBase: 0.002,
-    spreadBloomAdd: 0.0022,
-    spreadBloomMax: 0.03,
-    recover: 0.0006,
-    fireDelay: 85,
+    spreadBase: 0.012,
+    spreadBloomAdd: 0.0035,
+    spreadBloomMax: 0.045,
+    recover: 0.0011,
+    fireDelay: 78,
     recoil: 7,
+    auto: true,
     color: "rgba(140,220,255,"
   },
   {
     name: "Shotgun",
-    damageHead: 24,
-    damageBody: 16,
+    damageHead: 22,
+    damageBody: 15,
     damageLegs: 10,
     pellets: 7,
-    spreadBase: 0.04,
+    spreadBase: 0.055,
     spreadBloomAdd: 0.01,
     spreadBloomMax: 0.08,
-    recover: 0.0012,
+    recover: 0.0014,
     fireDelay: 520,
     recoil: 16,
+    auto: false,
     color: "rgba(255,180,120,"
   }
 ];
@@ -183,7 +187,7 @@ function updateHud() {
     FPS Prototype<br>
     W A S D 移动<br>
     鼠标自由视角<br>
-    点击开枪 / 1 2 3 切枪<br>
+    按住鼠标开火（AR可连射）<br>
     武器: ${weapons[currentWeapon].name}<br>
     ❤️ Health: ${Math.max(0, Math.floor(player.health))}<br>
     🎯 Score: ${score}
@@ -233,12 +237,22 @@ document.addEventListener("keyup", (e) => {
   if (k === "d") keys.d = false;
 });
 
-canvas.addEventListener("click", () => {
+canvas.addEventListener("mousedown", () => {
   if (!locked) {
     canvas.requestPointerLock();
     return;
   }
+  mouseDown = true;
   tryShoot();
+});
+document.addEventListener("mouseup", () => {
+  mouseDown = false;
+});
+
+canvas.addEventListener("click", () => {
+  if (!locked) {
+    canvas.requestPointerLock();
+  }
 });
 
 document.addEventListener("pointerlockchange", () => {
@@ -248,12 +262,15 @@ document.addEventListener("pointerlockchange", () => {
 
 document.addEventListener("mousemove", (e) => {
   if (!locked || player.health <= 0) return;
-  player.angle += e.movementX * 0.0025;
+
+  // 灵敏度提高
+  player.angle += e.movementX * 0.0042;
   player.angle = normalizeAngle(player.angle);
 
-  cameraPitch -= e.movementY * 0.35;
-  if (cameraPitch > 120) cameraPitch = 120;
-  if (cameraPitch < -120) cameraPitch = -120;
+  // 更自由但仍有限制，避免翻转
+  cameraPitch -= e.movementY * 0.55;
+  if (cameraPitch > 220) cameraPitch = 220;
+  if (cameraPitch < -220) cameraPitch = -220;
 });
 
 function movePlayer() {
@@ -294,9 +311,8 @@ function castRay(angle, maxDist = 1400) {
 function updateEnemies() {
   for (const enemy of enemies) {
     if (!enemy.alive) {
-      if (enemy.respawnTimer > 0) {
-        enemy.respawnTimer--;
-      } else {
+      if (enemy.respawnTimer > 0) enemy.respawnTimer--;
+      else {
         enemy.alive = true;
         enemy.hp = 100;
         enemy.x = enemy.spawnX;
@@ -315,10 +331,8 @@ function updateEnemies() {
       const speed = 0.48;
       const stepX = (dx / dist) * speed;
       const stepY = (dy / dist) * speed;
-
       const nx = enemy.x + stepX;
       const ny = enemy.y + stepY;
-
       if (!isWall(nx, enemy.y)) enemy.x = nx;
       if (!isWall(enemy.x, ny)) enemy.y = ny;
     }
@@ -353,7 +367,6 @@ function draw3D() {
 
   ctx.fillStyle = "#203050";
   ctx.fillRect(0, 0, w, horizon);
-
   ctx.fillStyle = "#2f2f2f";
   ctx.fillRect(0, horizon, w, h - horizon);
 
@@ -405,15 +418,12 @@ function draw3D() {
 
       const headLeft = screenX - headSize / 2;
       const headRight = screenX + headSize / 2;
-
       const torsoLeft = screenX - torsoW / 2;
       const torsoRight = screenX + torsoW / 2;
-
       const leftArmLeft = torsoLeft - armW * 0.9;
       const leftArmRight = leftArmLeft + armW;
       const rightArmLeft = torsoRight - armW * 0.1;
       const rightArmRight = rightArmLeft + armW;
-
       const leftLegLeft = screenX - legW * 1.4;
       const leftLegRight = leftLegLeft + legW;
       const rightLegLeft = screenX + legW * 0.4;
@@ -423,27 +433,22 @@ function draw3D() {
         ctx.fillStyle = `rgb(${shade}, 185, 155)`;
         ctx.fillRect(x, headTop, 1, headSize);
       }
-
       if (x >= torsoLeft && x <= torsoRight) {
         ctx.fillStyle = `rgb(${shade}, 40, 40)`;
         ctx.fillRect(x, torsoTop, 1, torsoH);
       }
-
       if (x >= leftArmLeft && x <= leftArmRight) {
         ctx.fillStyle = `rgb(${shade}, 55, 55)`;
         ctx.fillRect(x, torsoTop + 4, 1, armH);
       }
-
       if (x >= rightArmLeft && x <= rightArmRight) {
         ctx.fillStyle = `rgb(${shade}, 55, 55)`;
         ctx.fillRect(x, torsoTop + 4, 1, armH);
       }
-
       if (x >= leftLegLeft && x <= leftLegRight) {
         ctx.fillStyle = `rgb(${shade}, 90, 90)`;
         ctx.fillRect(x, legTop, 1, legH);
       }
-
       if (x >= rightLegLeft && x <= rightLegRight) {
         ctx.fillStyle = `rgb(${shade}, 90, 90)`;
         ctx.fillRect(x, legTop, 1, legH);
@@ -464,20 +469,15 @@ function drawHandsAndGun() {
   const w = canvas.width;
   const h = canvas.height;
   const recoil = recoilKick;
-
   const baseX = w - 240 + recoil * 0.5;
   const baseY = h - 170 + recoil;
 
-  // 右手臂
   ctx.fillStyle = "#c89d7c";
   ctx.fillRect(baseX + 15, baseY + 60, 90, 42);
-
-  // 左手臂
   ctx.fillStyle = "#b98562";
   ctx.fillRect(baseX - 25, baseY + 78, 70, 34);
 
   if (currentWeapon === 0) {
-    // pistol
     ctx.fillStyle = "#4b5563";
     ctx.fillRect(baseX + 82, baseY + 8, 88, 54);
     ctx.fillStyle = "#9ca3af";
@@ -485,7 +485,6 @@ function drawHandsAndGun() {
     ctx.fillStyle = "#374151";
     ctx.fillRect(baseX + 98, baseY + 46, 24, 58);
   } else if (currentWeapon === 1) {
-    // assault rifle
     ctx.fillStyle = "#374151";
     ctx.fillRect(baseX + 30, baseY + 15, 175, 42);
     ctx.fillStyle = "#9ca3af";
@@ -495,7 +494,6 @@ function drawHandsAndGun() {
     ctx.fillStyle = "#111827";
     ctx.fillRect(baseX + 32, baseY + 8, 45, 10);
   } else {
-    // shotgun
     ctx.fillStyle = "#6b7280";
     ctx.fillRect(baseX + 28, baseY + 20, 175, 32);
     ctx.fillStyle = "#d1d5db";
@@ -582,11 +580,13 @@ function makeTracer(ex, ey) {
 
 function worldToScreen(x, y) {
   const angle = normalizeAngle(Math.atan2(y - player.y, x - player.x) - player.angle);
+  const dist = Math.sqrt((x - player.x) ** 2 + (y - player.y) ** 2);
   const screenX =
     (canvas.width / 2) +
     Math.tan(angle) * (canvas.width / 2) / Math.tan(FOV / 2);
   const screenY = canvas.height / 2 + cameraPitch;
-  return { screenX, screenY };
+
+  return { screenX, screenY, dist };
 }
 
 function rayHitsEnemy(rayAngle, enemy) {
@@ -601,15 +601,14 @@ function rayHitsEnemy(rayAngle, enemy) {
   const wallDist = castRay(rayAngle);
   if (dist >= wallDist) return null;
 
-  // 按竖向分区：默认准心中心高度与人物投影对比
+  // 更稳定的部分判定：用屏幕投影高度分头/身/腿
   const size = (TILE * canvas.height * 0.72) / dist;
   const headTop = canvas.height / 2 + cameraPitch - size * 0.50;
   const headBottom = headTop + size * 0.20;
   const torsoBottom = headBottom + size * 0.34;
   const legsBottom = torsoBottom + size * 0.23;
 
-  const crossY = canvas.height / 2 + cameraPitch;
-
+  const crossY = canvas.height / 2;
   let zone = "body";
   if (crossY >= headTop && crossY <= headBottom) zone = "head";
   else if (crossY > torsoBottom && crossY <= legsBottom) zone = "legs";
@@ -662,22 +661,23 @@ function tryShoot() {
       const pos = worldToScreen(bestEnemy.x, bestEnemy.y);
       makeTracer(pos.screenX, pos.screenY);
     } else {
-      makeTracer(canvas.width / 2, canvas.height / 2 + cameraPitch);
+      // 跟准心方向走，但显示出轻微扩散，不再钉死中心
+      const missDist = 420;
+      const missX = canvas.width / 2 + Math.tan(spread) * 320;
+      const missY = canvas.height / 2 + cameraPitch - spread * missDist * 0.2;
+      makeTracer(missX, missY);
     }
   }
 }
 
 function drawGameOver() {
   if (player.health > 0) return;
-
   ctx.fillStyle = "rgba(0,0,0,0.65)";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-
   ctx.fillStyle = "white";
   ctx.font = "bold 48px Arial";
   ctx.textAlign = "center";
   ctx.fillText("GAME OVER", canvas.width / 2, canvas.height / 2 - 20);
-
   ctx.font = "24px Arial";
   ctx.fillText("刷新页面重新开始", canvas.width / 2, canvas.height / 2 + 30);
 }
@@ -686,6 +686,9 @@ function loop() {
   if (player.health > 0) {
     movePlayer();
     updateEnemies();
+    if (mouseDown && weapons[currentWeapon].auto) {
+      tryShoot();
+    }
   }
 
   updateEffects();
