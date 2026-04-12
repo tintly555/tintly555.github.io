@@ -113,7 +113,12 @@ let score = 0;
 let muzzleFlash = 0;
 let damageFlashTimer = 0;
 let locked = false;
+let cameraPitch = 0;
 
+// 弹道特效
+let tracers = [];
+
+// 更像“人”的敌人
 let enemies = [
   { x: 4.5 * TILE, y: 2.5 * TILE, alive: true, attackCooldown: 0 },
   { x: 6.2 * TILE, y: 4.5 * TILE, alive: true, attackCooldown: 0 },
@@ -186,8 +191,15 @@ document.addEventListener("pointerlockchange", () => {
 
 document.addEventListener("mousemove", (e) => {
   if (!locked || player.health <= 0) return;
-  player.angle += e.movementX * 0.0025;
+
+  // 主流 FPS 风格：鼠标左右直接控制朝向
+  player.angle += e.movementX * 0.0028;
   player.angle = normalizeAngle(player.angle);
+
+  // 上下只做轻微镜头抬头低头效果
+  cameraPitch += e.movementY * 0.25;
+  if (cameraPitch > 80) cameraPitch = 80;
+  if (cameraPitch < -80) cameraPitch = -80;
 });
 
 function movePlayer() {
@@ -226,6 +238,31 @@ function castRay(angle) {
     if (isWall(x, y)) return dist;
   }
   return 1400;
+}
+
+function castRayWithHit(angle) {
+  const sin = Math.sin(angle);
+  const cos = Math.cos(angle);
+  let dist = 0;
+
+  while (dist < 1400) {
+    dist += 1;
+    const x = player.x + cos * dist;
+    const y = player.y + sin * dist;
+    if (isWall(x, y)) {
+      return {
+        dist,
+        x,
+        y
+      };
+    }
+  }
+
+  return {
+    dist: 1400,
+    x: player.x + cos * 1400,
+    y: player.y + sin * 1400
+  };
 }
 
 function getEnemyData() {
@@ -277,25 +314,29 @@ function draw3D() {
   const w = canvas.width;
   const h = canvas.height;
 
+  const horizon = h / 2 + cameraPitch;
+
   ctx.fillStyle = "#203050";
-  ctx.fillRect(0, 0, w, h / 2);
+  ctx.fillRect(0, 0, w, horizon);
 
   ctx.fillStyle = "#2f2f2f";
-  ctx.fillRect(0, h / 2, w, h / 2);
+  ctx.fillRect(0, horizon, w, h - horizon);
 
   const wallDistances = [];
 
   for (let i = 0; i < w; i++) {
     const angle = player.angle - FOV / 2 + (i / w) * FOV;
     let dist = castRay(angle);
+
     dist *= Math.cos(angle - player.angle);
     wallDistances[i] = dist;
 
     const wallHeight = (TILE * h * 0.9) / dist;
+    const top = horizon - wallHeight / 2;
     const shade = Math.max(35, 255 - dist * 0.45);
 
     ctx.fillStyle = `rgb(${shade},${shade},${shade})`;
-    ctx.fillRect(i, h / 2 - wallHeight / 2, 1, wallHeight);
+    ctx.fillRect(i, top, 1, wallHeight);
   }
 
   const enemiesToDraw = getEnemyData();
@@ -309,7 +350,7 @@ function draw3D() {
     const size = (TILE * h * 0.65) / dist;
     const screenX = (w / 2) + Math.tan(angle) * (w / 2) / Math.tan(FOV / 2);
 
-    const bodyTop = h / 2 - size * 0.15;
+    const bodyTop = horizon - size * 0.15;
     const bodyHeight = size * 0.55;
     const headSize = size * 0.22;
 
@@ -346,24 +387,28 @@ function drawGun() {
   const w = canvas.width;
   const h = canvas.height;
 
+  // 枪放右边
+  const baseX = w - 180;
+  const baseY = h - 170;
+
   ctx.fillStyle = "#3f3f46";
-  ctx.fillRect(w / 2 - 130, h - 190, 260, 170);
+  ctx.fillRect(baseX, baseY, 220, 150);
 
   ctx.fillStyle = "#6b7280";
-  ctx.fillRect(w / 2 - 50, h - 260, 100, 130);
+  ctx.fillRect(baseX + 60, baseY - 55, 95, 110);
 
   ctx.fillStyle = "#9ca3af";
-  ctx.fillRect(w / 2 - 12, h - 340, 24, 90);
+  ctx.fillRect(baseX + 98, baseY - 135, 22, 85);
 
   if (muzzleFlash > 0) {
     ctx.fillStyle = "yellow";
     ctx.beginPath();
-    ctx.arc(w / 2, h - 355, 26, 0, Math.PI * 2);
+    ctx.arc(baseX + 109, baseY - 147, 24, 0, Math.PI * 2);
     ctx.fill();
 
     ctx.fillStyle = "orange";
     ctx.beginPath();
-    ctx.arc(w / 2, h - 355, 13, 0, Math.PI * 2);
+    ctx.arc(baseX + 109, baseY - 147, 12, 0, Math.PI * 2);
     ctx.fill();
   }
 }
@@ -386,6 +431,17 @@ function drawCrosshair() {
   ctx.stroke();
 }
 
+function drawTracers() {
+  for (const t of tracers) {
+    ctx.strokeStyle = `rgba(255, 230, 120, ${t.life / 6})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(t.sx, t.sy);
+    ctx.lineTo(t.ex, t.ey);
+    ctx.stroke();
+  }
+}
+
 function updateEffects() {
   if (muzzleFlash > 0) muzzleFlash--;
 
@@ -395,12 +451,34 @@ function updateEffects() {
   } else {
     damageFlash.style.background = "rgba(255,0,0,0)";
   }
+
+  for (const t of tracers) {
+    t.life--;
+  }
+  tracers = tracers.filter(t => t.life > 0);
+}
+
+function worldToScreen(enemyX, enemyY) {
+  const dx = enemyX - player.x;
+  const dy = enemyY - player.y;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  const angle = normalizeAngle(Math.atan2(dy, dx) - player.angle);
+
+  const screenX =
+    (canvas.width / 2) +
+    Math.tan(angle) * (canvas.width / 2) / Math.tan(FOV / 2);
+
+  const screenY = canvas.height / 2 + cameraPitch;
+
+  return { dist, screenX, screenY };
 }
 
 function shoot() {
   const tolerance = 0.09;
   let bestEnemy = null;
   let bestDist = Infinity;
+
+  const wallHit = castRayWithHit(player.angle);
 
   for (const enemy of enemies) {
     if (!enemy.alive) continue;
@@ -411,18 +489,44 @@ function shoot() {
     const angle = normalizeAngle(Math.atan2(dy, dx) - player.angle);
 
     if (Math.abs(angle) < tolerance && dist < bestDist) {
-      const wallDist = castRay(player.angle);
-      if (dist < wallDist) {
+      if (dist < wallHit.dist) {
         bestEnemy = enemy;
         bestDist = dist;
       }
     }
   }
 
+  const sx = canvas.width - 70;
+  const sy = canvas.height - 260;
+
   if (bestEnemy) {
     bestEnemy.alive = false;
     score += 1;
     updateHud();
+
+    const screenPos = worldToScreen(bestEnemy.x, bestEnemy.y);
+    tracers.push({
+      sx,
+      sy,
+      ex: screenPos.screenX,
+      ey: screenPos.screenY,
+      life: 6
+    });
+  } else {
+    const hitAngle = player.angle;
+    const relativeAngle = normalizeAngle(hitAngle - player.angle);
+    const ex =
+      (canvas.width / 2) +
+      Math.tan(relativeAngle) * (canvas.width / 2) / Math.tan(FOV / 2);
+    const ey = canvas.height / 2 + cameraPitch;
+
+    tracers.push({
+      sx,
+      sy,
+      ex,
+      ey,
+      life: 6
+    });
   }
 }
 
@@ -449,12 +553,14 @@ function loop() {
 
   updateEffects();
   draw3D();
+  drawTracers();
   drawGun();
   drawCrosshair();
   drawGameOver();
   requestAnimationFrame(loop);
 }
 
+updateHud();
 loop();
 </script>
 </body>
