@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>3D FPS Prototype</title>
+  <title>3D Zombie FPS Prototype</title>
   <style>
     html, body {
       margin: 0;
@@ -32,7 +32,7 @@
       line-height: 1.5;
       user-select: none;
       pointer-events: none;
-      min-width: 270px;
+      min-width: 300px;
       font-size: 14px;
       backdrop-filter: blur(4px);
       box-shadow: 0 6px 20px rgba(0,0,0,0.28);
@@ -110,8 +110,8 @@
     const flash = document.getElementById("flash");
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x101522);
-    scene.fog = new THREE.Fog(0x101522, 18, 65);
+    scene.background = new THREE.Color(0x0d111b);
+    scene.fog = new THREE.Fog(0x0d111b, 24, 100);
 
     const camera = new THREE.PerspectiveCamera(
       75,
@@ -128,24 +128,26 @@
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     app.appendChild(renderer.domElement);
 
-    const hemi = new THREE.HemisphereLight(0x9ab6ff, 0x2e2e2e, 1.15);
+    const hemi = new THREE.HemisphereLight(0x8ea9ff, 0x2c2c2c, 1.1);
     scene.add(hemi);
 
-    const sun = new THREE.DirectionalLight(0xffffff, 1.05);
-    sun.position.set(14, 20, 10);
-    sun.castShadow = true;
-    sun.shadow.mapSize.set(2048, 2048);
-    sun.shadow.camera.left = -45;
-    sun.shadow.camera.right = 45;
-    sun.shadow.camera.top = 45;
-    sun.shadow.camera.bottom = -45;
-    scene.add(sun);
+    const moon = new THREE.DirectionalLight(0xe8ecff, 1.05);
+    moon.position.set(20, 28, 16);
+    moon.castShadow = true;
+    moon.shadow.mapSize.set(2048, 2048);
+    moon.shadow.camera.left = -80;
+    moon.shadow.camera.right = 80;
+    moon.shadow.camera.top = 80;
+    moon.shadow.camera.bottom = -80;
+    scene.add(moon);
+
+    const worldSize = 220;
 
     const floor = new THREE.Mesh(
-      new THREE.PlaneGeometry(120, 120, 40, 40),
+      new THREE.PlaneGeometry(worldSize, worldSize, 70, 70),
       new THREE.MeshStandardMaterial({
-        color: 0x4c4f59,
-        roughness: 0.95,
+        color: 0x43454d,
+        roughness: 0.96,
         metalness: 0.02
       })
     );
@@ -154,9 +156,9 @@
     scene.add(floor);
 
     const ceiling = new THREE.Mesh(
-      new THREE.PlaneGeometry(120, 120),
+      new THREE.PlaneGeometry(worldSize, worldSize),
       new THREE.MeshStandardMaterial({
-        color: 0x1a223a,
+        color: 0x171f33,
         roughness: 1,
         side: THREE.DoubleSide
       })
@@ -165,17 +167,24 @@
     ceiling.rotation.x = Math.PI / 2;
     scene.add(ceiling);
 
+    // 更大的地图
     const gridMap = [
-      [1,1,1,1,1,1,1,1,1,1],
-      [1,0,0,0,0,0,0,0,0,1],
-      [1,0,0,1,0,0,1,0,0,1],
-      [1,0,0,1,0,0,1,0,0,1],
-      [1,0,0,0,0,0,0,0,0,1],
-      [1,0,1,0,1,1,0,1,0,1],
-      [1,0,1,0,0,0,0,1,0,1],
-      [1,0,0,0,0,1,0,0,0,1],
-      [1,0,0,0,0,0,0,0,0,1],
-      [1,1,1,1,1,1,1,1,1,1]
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+      [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+      [1,0,0,1,0,0,1,0,0,1,0,0,1,0,0,1],
+      [1,0,0,1,0,0,1,0,0,1,0,0,1,0,0,1],
+      [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+      [1,0,1,0,1,1,0,1,0,1,1,0,1,0,0,1],
+      [1,0,1,0,0,0,0,1,0,0,0,0,1,0,0,1],
+      [1,0,0,0,0,1,0,0,0,1,0,0,0,0,0,1],
+      [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+      [1,0,1,0,1,0,0,1,0,0,1,0,1,0,0,1],
+      [1,0,1,0,0,0,0,1,0,0,0,0,1,0,0,1],
+      [1,0,0,0,0,1,0,0,0,1,0,0,0,0,0,1],
+      [1,0,0,1,0,0,1,0,0,1,0,0,1,0,0,1],
+      [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+      [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
     ];
 
     const CELL = 4;
@@ -200,7 +209,7 @@
         const wall = new THREE.Mesh(
           wallGeo,
           new THREE.MeshStandardMaterial({
-            color: 0x71798a,
+            color: 0x6b7384,
             roughness: 0.88,
             metalness: 0.04
           })
@@ -220,7 +229,7 @@
       yaw: 0,
       pitch: 0,
       radius: 0.34,
-      speed: 6.4,
+      speed: 6.5,
       health: 100,
       velocityY: 0,
       onGround: true
@@ -306,7 +315,7 @@
     function updateHud() {
       const w = weapon();
       hud.innerHTML = `
-        3D FPS<br>
+        3D Zombie FPS<br>
         W A S D 移动 | 空格跳跃 | R换弹<br>
         鼠标自由视角 | 1 2 3 切枪<br>
         武器: ${w.name}<br>
@@ -342,75 +351,68 @@
       return result;
     }
 
-    function makeEnemy(x, z) {
+    function makeZombie(x, z) {
       const group = new THREE.Group();
 
-      // 头
       const head = new THREE.Mesh(
         new THREE.BoxGeometry(0.50, 0.50, 0.50),
-        new THREE.MeshStandardMaterial({ color: 0xe6c2a8 })
+        new THREE.MeshStandardMaterial({ color: 0xa5b89a })
       );
-      head.position.y = 1.85;
+      head.position.y = 1.82;
       group.add(head);
 
-      // 头发/帽子
       const hair = new THREE.Mesh(
-        new THREE.BoxGeometry(0.52, 0.18, 0.52),
-        new THREE.MeshStandardMaterial({ color: 0x2f221a })
+        new THREE.BoxGeometry(0.52, 0.12, 0.52),
+        new THREE.MeshStandardMaterial({ color: 0x25201d })
       );
-      hair.position.y = 2.01;
+      hair.position.y = 2.00;
       group.add(hair);
 
-      // 身体
       const body = new THREE.Mesh(
-        new THREE.BoxGeometry(0.72, 0.96, 0.40),
-        new THREE.MeshStandardMaterial({ color: 0x3b82f6 })
+        new THREE.BoxGeometry(0.76, 0.96, 0.42),
+        new THREE.MeshStandardMaterial({ color: 0x53775a })
       );
-      body.position.y = 1.12;
+      body.position.y = 1.10;
       group.add(body);
 
-      // 腰
-      const waist = new THREE.Mesh(
-        new THREE.BoxGeometry(0.70, 0.18, 0.38),
-        new THREE.MeshStandardMaterial({ color: 0x1e293b })
+      const tornShirt = new THREE.Mesh(
+        new THREE.BoxGeometry(0.60, 0.30, 0.10),
+        new THREE.MeshStandardMaterial({ color: 0x708f74 })
       );
-      waist.position.y = 0.62;
-      group.add(waist);
+      tornShirt.position.set(0, 1.15, 0.23);
+      group.add(tornShirt);
 
-      // 左手
+      // 僵尸双手前伸
       const armL = new THREE.Mesh(
         new THREE.BoxGeometry(0.22, 0.84, 0.22),
-        new THREE.MeshStandardMaterial({ color: 0x3b82f6 })
+        new THREE.MeshStandardMaterial({ color: 0x8fa48a })
       );
-      armL.position.set(-0.50, 1.10, 0);
+      armL.position.set(-0.52, 1.18, 0.18);
+      armL.rotation.x = -1.1;
       group.add(armL);
 
-      // 右手
       const armR = armL.clone();
-      armR.position.x = 0.50;
+      armR.position.x = 0.52;
       group.add(armR);
 
-      // 手掌
       const handL = new THREE.Mesh(
         new THREE.BoxGeometry(0.20, 0.20, 0.20),
-        new THREE.MeshStandardMaterial({ color: 0xe6c2a8 })
+        new THREE.MeshStandardMaterial({ color: 0x9fb698 })
       );
-      handL.position.set(-0.50, 0.62, 0);
+      handL.position.set(-0.52, 1.02, 0.48);
       group.add(handL);
 
       const handR = handL.clone();
-      handR.position.x = 0.50;
+      handR.position.x = 0.52;
       group.add(handR);
 
-      // 左腿
       const legL = new THREE.Mesh(
         new THREE.BoxGeometry(0.26, 0.90, 0.26),
-        new THREE.MeshStandardMaterial({ color: 0x4b5563 })
+        new THREE.MeshStandardMaterial({ color: 0x3f4552 })
       );
       legL.position.set(-0.18, 0.15, 0);
       group.add(legL);
 
-      // 右腿
       const legR = legL.clone();
       legR.position.x = 0.18;
       group.add(legR);
@@ -445,6 +447,12 @@
         group,
         head,
         body,
+        armL,
+        armR,
+        handL,
+        handR,
+        legL,
+        legR,
         legs: [legL, legR],
         hpCanvas,
         hpCtx,
@@ -454,7 +462,10 @@
         hp: 100,
         attackCooldown: 0,
         respawnTimer: 0,
-        spawn: new THREE.Vector3(x, 0, z)
+        spawn: new THREE.Vector3(x, 0, z),
+        walkTime: Math.random() * 10,
+        moving: false,
+        attackPhase: 0
       };
     }
 
@@ -471,16 +482,15 @@
       enemy.hpTexture.needsUpdate = true;
     }
 
-    const spawnPoints = [
-      cellToWorld(4, 2),
-      cellToWorld(6, 4),
-      cellToWorld(3, 7)
+    const spawnCells = [
+      [4, 2], [6, 4], [3, 7], [10, 2], [12, 6], [13, 10], [7, 12]
     ];
 
-    for (const p of spawnPoints) {
-      const enemy = makeEnemy(p.x, p.z);
-      drawEnemyHp(enemy);
-      state.enemies.push(enemy);
+    for (const [cx, cz] of spawnCells) {
+      const p = cellToWorld(cx, cz);
+      const zombie = makeZombie(p.x, p.z);
+      drawEnemyHp(zombie);
+      state.enemies.push(zombie);
     }
 
     const tracerGroup = new THREE.Group();
@@ -690,24 +700,37 @@
         player.onGround = true;
       }
 
+      const movingNow = keys.w || keys.a || keys.s || keys.d;
+      const headBob = (movingNow && player.onGround)
+        ? Math.abs(Math.sin(performance.now() * 0.012)) * 0.04
+        : 0;
+
       camera.position.copy(player.position);
+      camera.position.y += headBob;
     }
 
     function updateEnemies(dt) {
-      const stopDistance = 1.8;
-      const attackDistance = 2.0;
+      const playerRadius = player.radius;
+      const enemyRadius = 0.34;
+      const stopGap = 0.06;
+      const stopDistance = playerRadius + enemyRadius + stopGap;
+      const attackDistance = stopDistance + 0.28;
 
       for (const enemy of state.enemies) {
         if (!enemy.alive) {
           enemy.group.visible = false;
           enemy.hpSprite.visible = false;
           enemy.respawnTimer -= dt;
+
           if (enemy.respawnTimer <= 0) {
             enemy.alive = true;
             enemy.hp = 100;
             enemy.group.position.copy(enemy.spawn);
             enemy.group.visible = true;
             enemy.hpSprite.visible = true;
+            enemy.walkTime = Math.random() * 10;
+            enemy.moving = false;
+            enemy.attackPhase = 0;
             drawEnemyHp(enemy);
           }
           continue;
@@ -715,53 +738,101 @@
 
         drawEnemyHp(enemy);
 
-        const toPlayer = player.position.clone().sub(enemy.group.position);
-        const dist = toPlayer.length();
+        const dx = player.position.x - enemy.group.position.x;
+        const dz = player.position.z - enemy.group.position.z;
+        const flatDist = Math.sqrt(dx * dx + dz * dz);
 
         if (enemy.attackCooldown > 0) {
           enemy.attackCooldown -= dt;
         }
 
-        if (dist > stopDistance) {
-          toPlayer.y = 0;
-          toPlayer.normalize().multiplyScalar(1.7 * dt);
+        enemy.moving = false;
 
-          const next = enemy.group.position.clone().add(toPlayer);
-          const enemySphere = new THREE.Sphere(
-            new THREE.Vector3(next.x, 1.0, next.z),
-            0.34
-          );
+        if (flatDist > stopDistance) {
+          const dirX = dx / flatDist;
+          const dirZ = dz / flatDist;
+          const moveSpeed = 1.75;
 
-          let blocked = false;
+          // 僵尸追到玩家碰撞箱外沿
+          const targetX = player.position.x - dirX * stopDistance;
+          const targetZ = player.position.z - dirZ * stopDistance;
 
-          for (const box of wallBoxes) {
-            if (box.intersectsSphere(enemySphere)) {
-              blocked = true;
-              break;
+          const toTargetX = targetX - enemy.group.position.x;
+          const toTargetZ = targetZ - enemy.group.position.z;
+          const toTargetDist = Math.sqrt(toTargetX * toTargetX + toTargetZ * toTargetZ);
+
+          if (toTargetDist > 0.001) {
+            const stepX = (toTargetX / toTargetDist) * moveSpeed * dt;
+            const stepZ = (toTargetZ / toTargetDist) * moveSpeed * dt;
+
+            const next = enemy.group.position.clone();
+            next.x += stepX;
+            next.z += stepZ;
+
+            const enemySphere = new THREE.Sphere(
+              new THREE.Vector3(next.x, 1.0, next.z),
+              enemyRadius
+            );
+
+            let blocked = false;
+
+            for (const box of wallBoxes) {
+              if (box.intersectsSphere(enemySphere)) {
+                blocked = true;
+                break;
+              }
             }
-          }
 
-          const dx = next.x - player.position.x;
-          const dz = next.z - player.position.z;
-          const playerEnemyDist = Math.sqrt(dx * dx + dz * dz);
-          if (playerEnemyDist < stopDistance) {
-            blocked = true;
-          }
+            const ndx = next.x - player.position.x;
+            const ndz = next.z - player.position.z;
+            const nextPlayerDist = Math.sqrt(ndx * ndx + ndz * ndz);
 
-          if (!blocked) {
-            enemy.group.position.copy(next);
+            if (nextPlayerDist < stopDistance) {
+              blocked = true;
+            }
+
+            if (!blocked) {
+              enemy.group.position.copy(next);
+              enemy.moving = true;
+              enemy.walkTime += dt * 8.5;
+            }
           }
         }
 
-        enemy.group.lookAt(
-          player.position.x,
-          enemy.group.position.y + 1.2,
-          player.position.z
-        );
+        // 面朝玩家胸口
+        enemy.group.lookAt(player.position.x, 1.2, player.position.z);
 
-        if (dist < attackDistance && enemy.attackCooldown <= 0) {
+        // 动作
+        const swing = enemy.moving ? Math.sin(enemy.walkTime) * 0.55 : 0;
+        const bodyBob = enemy.moving ? Math.abs(Math.sin(enemy.walkTime * 2)) * 0.05 : 0;
+
+        if (flatDist < attackDistance) {
+          enemy.attackPhase += dt * 10;
+        } else {
+          enemy.attackPhase = 0;
+        }
+
+        const attackSwing = flatDist < attackDistance
+          ? Math.sin(enemy.attackPhase) * 0.45
+          : 0;
+
+        // 僵尸前伸双手 + 攻击挥动
+        enemy.armL.rotation.x = -1.1 + attackSwing + swing * 0.15;
+        enemy.armR.rotation.x = -1.1 + attackSwing - swing * 0.15;
+
+        enemy.handL.rotation.x = attackSwing * 0.3;
+        enemy.handR.rotation.x = attackSwing * 0.3;
+
+        enemy.legL.rotation.x = -swing;
+        enemy.legR.rotation.x = swing;
+
+        enemy.body.position.y = 1.10 + bodyBob;
+        enemy.head.position.y = 1.82 + bodyBob;
+        enemy.hpSprite.position.y = 2.7 + bodyBob;
+
+        if (flatDist < attackDistance && enemy.attackCooldown <= 0) {
           player.health -= 8;
-          enemy.attackCooldown = 0.36;
+          enemy.attackCooldown = 0.42;
           state.flashTimer = 0.12;
           updateHud();
         }
@@ -799,7 +870,7 @@
 
       if (enemy.hp <= 0) {
         enemy.alive = false;
-        enemy.respawnTimer = 3.2;
+        enemy.respawnTimer = 3.5;
         state.score += 1;
       }
 
@@ -835,7 +906,7 @@
         const dir = getWeaponDirection(totalSpread);
 
         raycaster.set(camera.position, dir);
-        raycaster.far = 120;
+        raycaster.far = 160;
 
         const wallHits = raycaster.intersectObjects(wallMeshes, false);
         let wallDistance = Infinity;
@@ -871,7 +942,7 @@
         } else {
           createTracer(
             muzzleStart,
-            muzzleStart.clone().add(dir.multiplyScalar(40)),
+            muzzleStart.clone().add(dir.multiplyScalar(50)),
             w.color
           );
         }
@@ -880,9 +951,21 @@
       updateHud();
     }
 
-    function updateWeaponVisuals() {
-      weaponRoot.position.set(0, -state.recoil, 0);
-      weaponRoot.rotation.set(state.recoil * 1.2, 0, 0);
+    function updateWeaponVisuals(dt, isMoving) {
+      const t = performance.now() * 0.001;
+
+      let bobX = 0;
+      let bobY = 0;
+      let bobRotZ = 0;
+
+      if (isMoving && player.onGround) {
+        bobX = Math.sin(t * 9) * 0.012;
+        bobY = Math.abs(Math.cos(t * 18)) * 0.015;
+        bobRotZ = Math.sin(t * 9) * 0.02;
+      }
+
+      weaponRoot.position.set(bobX, -state.recoil - bobY, 0);
+      weaponRoot.rotation.set(state.recoil * 1.2, 0, bobRotZ);
     }
 
     window.addEventListener("resize", () => {
@@ -927,7 +1010,8 @@
         state.spreadBloom - weapon().recover * dt * 60
       );
 
-      updateWeaponVisuals();
+      const isMoving = keys.w || keys.a || keys.s || keys.d;
+      updateWeaponVisuals(dt, isMoving);
 
       for (const t of state.tracers) {
         t.life -= dt;
