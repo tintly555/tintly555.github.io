@@ -34,7 +34,7 @@
       z-index: 10;
       user-select: none;
       pointer-events: none;
-      min-width: 180px;
+      min-width: 190px;
     }
 
     .damage-flash {
@@ -98,57 +98,79 @@ const player = {
   x: 2.5 * TILE,
   y: 2.5 * TILE,
   angle: 0,
-  moveSpeed: 2.3,
+  moveSpeed: 2.35,
   radius: 10,
   health: 100
 };
 
-const keys = {
-  w: false,
-  a: false,
-  s: false,
-  d: false
-};
+const keys = { w:false, a:false, s:false, d:false };
+let locked = false;
+let score = 0;
+let damageFlashTimer = 0;
+let cameraPitch = 0;
+let muzzleFlash = 0;
+let recoilKick = 0;
+let tracers = [];
+let lastShotTime = 0;
+let spreadBloom = 0;
 
 const weapons = [
   {
     name: "Pistol",
-    damage: 34,
+    damageHead: 70,
+    damageBody: 38,
+    damageLegs: 24,
     pellets: 1,
-    spread: 0.008,
-    fireDelay: 260,
-    color: "rgba(255,230,140,",
-    recoil: 10
+    spreadBase: 0.003,
+    spreadBloomAdd: 0.003,
+    spreadBloomMax: 0.02,
+    recover: 0.0009,
+    fireDelay: 240,
+    recoil: 10,
+    color: "rgba(255,230,140,"
   },
   {
-    name: "Rifle",
-    damage: 16,
+    name: "Assault Rifle",
+    damageHead: 42,
+    damageBody: 24,
+    damageLegs: 16,
     pellets: 1,
-    spread: 0.02,
-    fireDelay: 90,
-    color: "rgba(140,220,255,",
-    recoil: 6
+    spreadBase: 0.002,
+    spreadBloomAdd: 0.0022,
+    spreadBloomMax: 0.03,
+    recover: 0.0006,
+    fireDelay: 85,
+    recoil: 7,
+    color: "rgba(140,220,255,"
   },
   {
     name: "Shotgun",
-    damage: 14,
-    pellets: 6,
-    spread: 0.08,
-    fireDelay: 500,
-    color: "rgba(255,180,120,",
-    recoil: 16
+    damageHead: 24,
+    damageBody: 16,
+    damageLegs: 10,
+    pellets: 7,
+    spreadBase: 0.04,
+    spreadBloomAdd: 0.01,
+    spreadBloomMax: 0.08,
+    recover: 0.0012,
+    fireDelay: 520,
+    recoil: 16,
+    color: "rgba(255,180,120,"
   }
 ];
-let currentWeapon = 0;
+let currentWeapon = 1;
 
-let score = 0;
-let muzzleFlash = 0;
-let damageFlashTimer = 0;
-let locked = false;
-let cameraPitch = 0;
-let tracers = [];
-let lastShotTime = 0;
-let recoilOffset = 0;
+function makeEnemy(x, y) {
+  return {
+    x, y,
+    alive: true,
+    hp: 100,
+    attackCooldown: 0,
+    respawnTimer: 0,
+    spawnX: x,
+    spawnY: y
+  };
+}
 
 let enemies = [
   makeEnemy(4.5 * TILE, 2.5 * TILE),
@@ -156,25 +178,13 @@ let enemies = [
   makeEnemy(3.4 * TILE, 7.2 * TILE)
 ];
 
-function makeEnemy(x, y) {
-  return {
-    x, y,
-    alive: true,
-    attackCooldown: 0,
-    hp: 100,
-    respawnTimer: 0,
-    spawnX: x,
-    spawnY: y
-  };
-}
-
 function updateHud() {
   hud.innerHTML = `
     FPS Prototype<br>
     W A S D 移动<br>
-    鼠标控制视角<br>
-    点击开枪<br>
-    武器: ${weapons[currentWeapon].name} (${currentWeapon + 1})<br>
+    鼠标自由视角<br>
+    点击开枪 / 1 2 3 切枪<br>
+    武器: ${weapons[currentWeapon].name}<br>
     ❤️ Health: ${Math.max(0, Math.floor(player.health))}<br>
     🎯 Score: ${score}
   `;
@@ -238,8 +248,6 @@ document.addEventListener("pointerlockchange", () => {
 
 document.addEventListener("mousemove", (e) => {
   if (!locked || player.health <= 0) return;
-
-  // 正常方向：右看右，下看下
   player.angle += e.movementX * 0.0025;
   player.angle = normalizeAngle(player.angle);
 
@@ -251,7 +259,6 @@ document.addEventListener("mousemove", (e) => {
 function movePlayer() {
   let move = 0;
   let strafe = 0;
-
   if (keys.w) move = player.moveSpeed;
   if (keys.s) move = -player.moveSpeed;
   if (keys.a) strafe = -player.moveSpeed;
@@ -276,27 +283,12 @@ function castRay(angle, maxDist = 1400) {
   const step = 0.5;
   const cos = Math.cos(angle);
   const sin = Math.sin(angle);
-
   for (let dist = 0; dist < maxDist; dist += step) {
     const x = player.x + cos * dist;
     const y = player.y + sin * dist;
     if (isWall(x, y)) return dist;
   }
   return maxDist;
-}
-
-function getEnemyData() {
-  const arr = [];
-  for (const enemy of enemies) {
-    if (!enemy.alive) continue;
-    const dx = enemy.x - player.x;
-    const dy = enemy.y - player.y;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    const angle = normalizeAngle(Math.atan2(dy, dx) - player.angle);
-    arr.push({ enemy, dist, angle });
-  }
-  arr.sort((a, b) => b.dist - a.dist);
-  return arr;
 }
 
 function updateEnemies() {
@@ -340,6 +332,20 @@ function updateEnemies() {
   }
 }
 
+function getEnemyData() {
+  const arr = [];
+  for (const enemy of enemies) {
+    if (!enemy.alive) continue;
+    const dx = enemy.x - player.x;
+    const dy = enemy.y - player.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    const angle = normalizeAngle(Math.atan2(dy, dx) - player.angle);
+    arr.push({ enemy, dist, angle });
+  }
+  arr.sort((a, b) => b.dist - a.dist);
+  return arr;
+}
+
 function draw3D() {
   const w = canvas.width;
   const h = canvas.height;
@@ -356,7 +362,6 @@ function draw3D() {
   for (let i = 0; i < w; i++) {
     const angle = player.angle - FOV / 2 + (i / w) * FOV;
     let dist = castRay(angle);
-
     dist *= Math.cos(angle - player.angle);
     wallDistances[i] = dist;
 
@@ -368,20 +373,26 @@ function draw3D() {
     ctx.fillRect(i, top, 1, wallHeight);
   }
 
-  const enemiesToDraw = getEnemyData();
-
-  for (const item of enemiesToDraw) {
+  const enemyData = getEnemyData();
+  for (const item of enemyData) {
     const dist = item.dist;
     const angle = item.angle;
-
     if (Math.abs(angle) > FOV / 2 + 0.18) continue;
 
-    const size = (TILE * h * 0.68) / dist;
+    const size = (TILE * h * 0.72) / dist;
     const screenX = (w / 2) + Math.tan(angle) * (w / 2) / Math.tan(FOV / 2);
 
-    const bodyTop = horizon - size * 0.15;
-    const bodyHeight = size * 0.56;
-    const headSize = size * 0.22;
+    const headSize = size * 0.20;
+    const torsoW = size * 0.34;
+    const torsoH = size * 0.34;
+    const legW = size * 0.10;
+    const legH = size * 0.23;
+    const armW = size * 0.08;
+    const armH = size * 0.25;
+
+    const headTop = horizon - size * 0.50;
+    const torsoTop = headTop + headSize * 1.05;
+    const legTop = torsoTop + torsoH;
 
     const left = Math.floor(screenX - size / 2);
     const right = Math.floor(screenX + size / 2);
@@ -390,30 +401,58 @@ function draw3D() {
       if (x < 0 || x >= w) continue;
       if (wallDistances[x] < dist) continue;
 
-      const bodyWidth = size * 0.36;
-      const headWidth = headSize;
-      const bodyLeft = screenX - bodyWidth / 2;
-      const bodyRight = screenX + bodyWidth / 2;
-      const headLeft = screenX - headWidth / 2;
-      const headRight = screenX + headWidth / 2;
+      const shade = Math.max(80, 255 - dist * 0.45);
 
-      if (x >= bodyLeft && x <= bodyRight) {
-        const shade = Math.max(80, 255 - dist * 0.45);
-        ctx.fillStyle = `rgb(${shade}, 40, 40)`;
-        ctx.fillRect(x, bodyTop, 1, bodyHeight);
-      }
+      const headLeft = screenX - headSize / 2;
+      const headRight = screenX + headSize / 2;
+
+      const torsoLeft = screenX - torsoW / 2;
+      const torsoRight = screenX + torsoW / 2;
+
+      const leftArmLeft = torsoLeft - armW * 0.9;
+      const leftArmRight = leftArmLeft + armW;
+      const rightArmLeft = torsoRight - armW * 0.1;
+      const rightArmRight = rightArmLeft + armW;
+
+      const leftLegLeft = screenX - legW * 1.4;
+      const leftLegRight = leftLegLeft + legW;
+      const rightLegLeft = screenX + legW * 0.4;
+      const rightLegRight = rightLegLeft + legW;
 
       if (x >= headLeft && x <= headRight) {
-        const shade = Math.max(100, 255 - dist * 0.45);
-        ctx.fillStyle = `rgb(${shade}, 180, 150)`;
-        ctx.fillRect(x, bodyTop - headSize * 0.9, 1, headSize);
+        ctx.fillStyle = `rgb(${shade}, 185, 155)`;
+        ctx.fillRect(x, headTop, 1, headSize);
+      }
+
+      if (x >= torsoLeft && x <= torsoRight) {
+        ctx.fillStyle = `rgb(${shade}, 40, 40)`;
+        ctx.fillRect(x, torsoTop, 1, torsoH);
+      }
+
+      if (x >= leftArmLeft && x <= leftArmRight) {
+        ctx.fillStyle = `rgb(${shade}, 55, 55)`;
+        ctx.fillRect(x, torsoTop + 4, 1, armH);
+      }
+
+      if (x >= rightArmLeft && x <= rightArmRight) {
+        ctx.fillStyle = `rgb(${shade}, 55, 55)`;
+        ctx.fillRect(x, torsoTop + 4, 1, armH);
+      }
+
+      if (x >= leftLegLeft && x <= leftLegRight) {
+        ctx.fillStyle = `rgb(${shade}, 90, 90)`;
+        ctx.fillRect(x, legTop, 1, legH);
+      }
+
+      if (x >= rightLegLeft && x <= rightLegRight) {
+        ctx.fillStyle = `rgb(${shade}, 90, 90)`;
+        ctx.fillRect(x, legTop, 1, legH);
       }
     }
 
-    // 简单血条
     const barW = size * 0.42;
     const barX = screenX - barW / 2;
-    const barY = bodyTop - headSize;
+    const barY = headTop - 10;
     ctx.fillStyle = "rgba(0,0,0,0.5)";
     ctx.fillRect(barX, barY, barW, 5);
     ctx.fillStyle = "#22c55e";
@@ -421,51 +460,62 @@ function draw3D() {
   }
 }
 
-function drawGun() {
+function drawHandsAndGun() {
   const w = canvas.width;
   const h = canvas.height;
+  const recoil = recoilKick;
 
-  const recoil = recoilOffset;
-  const weaponX = w - 200 + recoil * 0.6;
-  const weaponY = h - 180 + recoil;
+  const baseX = w - 240 + recoil * 0.5;
+  const baseY = h - 170 + recoil;
 
-  // 不同武器稍微换外观
+  // 右手臂
+  ctx.fillStyle = "#c89d7c";
+  ctx.fillRect(baseX + 15, baseY + 60, 90, 42);
+
+  // 左手臂
+  ctx.fillStyle = "#b98562";
+  ctx.fillRect(baseX - 25, baseY + 78, 70, 34);
+
   if (currentWeapon === 0) {
     // pistol
     ctx.fillStyle = "#4b5563";
-    ctx.fillRect(weaponX + 70, weaponY - 40, 95, 85);
+    ctx.fillRect(baseX + 82, baseY + 8, 88, 54);
     ctx.fillStyle = "#9ca3af";
-    ctx.fillRect(weaponX + 125, weaponY - 90, 18, 55);
+    ctx.fillRect(baseX + 140, baseY - 18, 14, 36);
     ctx.fillStyle = "#374151";
-    ctx.fillRect(weaponX + 35, weaponY + 20, 60, 110);
+    ctx.fillRect(baseX + 98, baseY + 46, 24, 58);
   } else if (currentWeapon === 1) {
-    // rifle
+    // assault rifle
     ctx.fillStyle = "#374151";
-    ctx.fillRect(weaponX + 25, weaponY + 10, 170, 85);
+    ctx.fillRect(baseX + 30, baseY + 15, 175, 42);
     ctx.fillStyle = "#9ca3af";
-    ctx.fillRect(weaponX + 160, weaponY - 35, 20, 70);
+    ctx.fillRect(baseX + 185, baseY + 4, 16, 30);
     ctx.fillStyle = "#4b5563";
-    ctx.fillRect(weaponX + 55, weaponY + 75, 45, 85);
+    ctx.fillRect(baseX + 95, baseY + 46, 24, 62);
+    ctx.fillStyle = "#111827";
+    ctx.fillRect(baseX + 32, baseY + 8, 45, 10);
   } else {
     // shotgun
     ctx.fillStyle = "#6b7280";
-    ctx.fillRect(weaponX + 10, weaponY + 10, 185, 75);
+    ctx.fillRect(baseX + 28, baseY + 20, 175, 32);
     ctx.fillStyle = "#d1d5db";
-    ctx.fillRect(weaponX + 165, weaponY - 25, 18, 60);
+    ctx.fillRect(baseX + 170, baseY + 5, 14, 36);
     ctx.fillStyle = "#4b5563";
-    ctx.fillRect(weaponX + 55, weaponY + 70, 55, 105);
+    ctx.fillRect(baseX + 100, baseY + 46, 26, 70);
+    ctx.fillStyle = "#7c5a3a";
+    ctx.fillRect(baseX + 48, baseY + 50, 42, 28);
   }
 
   if (muzzleFlash > 0) {
-    const fx = weaponX + 173;
-    const fy = weaponY - 10;
+    const fx = baseX + 190;
+    const fy = baseY + 20;
     ctx.fillStyle = "yellow";
     ctx.beginPath();
-    ctx.arc(fx, fy, 24, 0, Math.PI * 2);
+    ctx.arc(fx, fy, 20, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = "orange";
     ctx.beginPath();
-    ctx.arc(fx, fy, 12, 0, Math.PI * 2);
+    ctx.arc(fx, fy, 10, 0, Math.PI * 2);
     ctx.fill();
   }
 }
@@ -501,8 +551,11 @@ function drawTracers() {
 
 function updateEffects() {
   if (muzzleFlash > 0) muzzleFlash--;
-  recoilOffset *= 0.72;
-  if (recoilOffset < 0.2) recoilOffset = 0;
+  recoilKick *= 0.72;
+  if (recoilKick < 0.2) recoilKick = 0;
+
+  const weapon = weapons[currentWeapon];
+  spreadBloom = Math.max(0, spreadBloom - weapon.recover);
 
   if (damageFlashTimer > 0) {
     damageFlashTimer--;
@@ -516,8 +569,8 @@ function updateEffects() {
 }
 
 function makeTracer(ex, ey) {
-  const sx = canvas.width - 35;
-  const sy = canvas.height - 165;
+  const sx = canvas.width - 40;
+  const sy = canvas.height - 120;
   const weapon = weapons[currentWeapon];
   tracers.push({
     sx, sy, ex, ey,
@@ -527,17 +580,12 @@ function makeTracer(ex, ey) {
   });
 }
 
-function worldToScreen(enemyX, enemyY) {
-  const dx = enemyX - player.x;
-  const dy = enemyY - player.y;
-  const angle = normalizeAngle(Math.atan2(dy, dx) - player.angle);
-
+function worldToScreen(x, y) {
+  const angle = normalizeAngle(Math.atan2(y - player.y, x - player.x) - player.angle);
   const screenX =
     (canvas.width / 2) +
     Math.tan(angle) * (canvas.width / 2) / Math.tan(FOV / 2);
-
   const screenY = canvas.height / 2 + cameraPitch;
-
   return { screenX, screenY };
 }
 
@@ -547,14 +595,40 @@ function rayHitsEnemy(rayAngle, enemy) {
   const dist = Math.sqrt(dx * dx + dy * dy);
   const angleToEnemy = normalizeAngle(Math.atan2(dy, dx) - rayAngle);
 
-  // 容差随距离变化：远的更小，近的更大
-  const tolerance = Math.min(0.14, 20 / dist);
+  const tolerance = Math.min(0.055, 10 / dist);
   if (Math.abs(angleToEnemy) > tolerance) return null;
 
   const wallDist = castRay(rayAngle);
   if (dist >= wallDist) return null;
 
-  return dist;
+  // 按竖向分区：默认准心中心高度与人物投影对比
+  const size = (TILE * canvas.height * 0.72) / dist;
+  const headTop = canvas.height / 2 + cameraPitch - size * 0.50;
+  const headBottom = headTop + size * 0.20;
+  const torsoBottom = headBottom + size * 0.34;
+  const legsBottom = torsoBottom + size * 0.23;
+
+  const crossY = canvas.height / 2 + cameraPitch;
+
+  let zone = "body";
+  if (crossY >= headTop && crossY <= headBottom) zone = "head";
+  else if (crossY > torsoBottom && crossY <= legsBottom) zone = "legs";
+
+  return { dist, zone };
+}
+
+function applyDamage(enemy, zone) {
+  const w = weapons[currentWeapon];
+  if (zone === "head") enemy.hp -= w.damageHead;
+  else if (zone === "legs") enemy.hp -= w.damageLegs;
+  else enemy.hp -= w.damageBody;
+
+  if (enemy.hp <= 0) {
+    enemy.alive = false;
+    enemy.respawnTimer = 300;
+    score += 1;
+  }
+  updateHud();
 }
 
 function tryShoot() {
@@ -564,39 +638,31 @@ function tryShoot() {
   lastShotTime = now;
 
   muzzleFlash = 6;
-  recoilOffset = weapon.recoil;
+  recoilKick = weapon.recoil;
+  spreadBloom = Math.min(weapon.spreadBloomMax, spreadBloom + weapon.spreadBloomAdd);
 
   for (let p = 0; p < weapon.pellets; p++) {
-    const spread = (Math.random() - 0.5) * weapon.spread;
+    const spread = (Math.random() - 0.5) * (weapon.spreadBase + spreadBloom);
     const rayAngle = player.angle + spread;
 
     let bestEnemy = null;
-    let bestDist = Infinity;
+    let bestHit = null;
 
     for (const enemy of enemies) {
       if (!enemy.alive) continue;
-      const hitDist = rayHitsEnemy(rayAngle, enemy);
-      if (hitDist !== null && hitDist < bestDist) {
-        bestDist = hitDist;
+      const hit = rayHitsEnemy(rayAngle, enemy);
+      if (hit && (!bestHit || hit.dist < bestHit.dist)) {
         bestEnemy = enemy;
+        bestHit = hit;
       }
     }
 
-    if (bestEnemy) {
-      bestEnemy.hp -= weapon.damage;
+    if (bestEnemy && bestHit) {
+      applyDamage(bestEnemy, bestHit.zone);
       const pos = worldToScreen(bestEnemy.x, bestEnemy.y);
       makeTracer(pos.screenX, pos.screenY);
-
-      if (bestEnemy.hp <= 0) {
-        bestEnemy.alive = false;
-        bestEnemy.respawnTimer = 300;
-        score += 1;
-      }
-      updateHud();
     } else {
-      const ex = canvas.width / 2 + Math.tan(spread) * 240;
-      const ey = canvas.height / 2 + cameraPitch;
-      makeTracer(ex, ey);
+      makeTracer(canvas.width / 2, canvas.height / 2 + cameraPitch);
     }
   }
 }
@@ -625,7 +691,7 @@ function loop() {
   updateEffects();
   draw3D();
   drawTracers();
-  drawGun();
+  drawHandsAndGun();
   drawCrosshair();
   drawGameOver();
   requestAnimationFrame(loop);
