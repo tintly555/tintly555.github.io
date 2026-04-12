@@ -32,7 +32,7 @@
       line-height: 1.5;
       user-select: none;
       pointer-events: none;
-      min-width: 310px;
+      min-width: 320px;
       font-size: 14px;
       backdrop-filter: blur(4px);
       box-shadow: 0 6px 20px rgba(0,0,0,0.28);
@@ -59,39 +59,6 @@
       pointer-events: none;
       z-index: 10;
     }
-
-    .crosshair {
-      position: fixed;
-      left: 50%;
-      top: 50%;
-      width: 20px;
-      height: 20px;
-      transform: translate(-50%, -50%);
-      pointer-events: none;
-      z-index: 25;
-    }
-
-    .crosshair::before,
-    .crosshair::after {
-      content: "";
-      position: absolute;
-      background: rgba(255,255,255,0.96);
-      box-shadow: 0 0 6px rgba(255,255,255,0.5);
-    }
-
-    .crosshair::before {
-      left: 9px;
-      top: 0;
-      width: 2px;
-      height: 20px;
-    }
-
-    .crosshair::after {
-      left: 0;
-      top: 9px;
-      width: 20px;
-      height: 2px;
-    }
   </style>
 </head>
 <body>
@@ -99,7 +66,6 @@
   <div class="hud" id="hud"></div>
   <div class="hint" id="hint">点击画面锁定鼠标并开始</div>
   <div class="flash" id="flash"></div>
-  <div class="crosshair"></div>
 
   <script type="module">
     import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.182.0/build/three.module.js";
@@ -111,7 +77,7 @@
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x0d111b);
-    scene.fog = new THREE.Fog(0x0d111b, 24, 110);
+    scene.fog = new THREE.Fog(0x0d111b, 28, 130);
 
     const camera = new THREE.PerspectiveCamera(
       75,
@@ -132,16 +98,16 @@
     scene.add(hemi);
 
     const moon = new THREE.DirectionalLight(0xe8ecff, 1.05);
-    moon.position.set(24, 30, 18);
+    moon.position.set(28, 34, 22);
     moon.castShadow = true;
     moon.shadow.mapSize.set(2048, 2048);
-    moon.shadow.camera.left = -90;
-    moon.shadow.camera.right = 90;
-    moon.shadow.camera.top = 90;
-    moon.shadow.camera.bottom = -90;
+    moon.shadow.camera.left = -100;
+    moon.shadow.camera.right = 100;
+    moon.shadow.camera.top = 100;
+    moon.shadow.camera.bottom = -100;
     scene.add(moon);
 
-    const worldSize = 240;
+    const worldSize = 260;
 
     const floor = new THREE.Mesh(
       new THREE.PlaneGeometry(worldSize, worldSize, 80, 80),
@@ -163,36 +129,10 @@
         side: THREE.DoubleSide
       })
     );
-    ceiling.position.y = 4.2;
+    ceiling.position.y = 4.5;
     ceiling.rotation.x = Math.PI / 2;
     scene.add(ceiling);
 
-    // 更像墙和走廊的地图
-    const gridMap = [
-      [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
-      [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-      [1,0,1,1,1,0,1,1,1,0,1,1,0,1,1,1,0,1,0,1],
-      [1,0,0,0,1,0,0,0,1,0,0,0,0,1,0,0,0,1,0,1],
-      [1,1,1,0,1,1,1,0,1,1,1,1,0,1,0,1,1,1,0,1],
-      [1,0,0,0,0,0,1,0,0,0,0,1,0,1,0,0,0,0,0,1],
-      [1,0,1,1,1,0,1,1,1,1,0,1,0,1,1,1,1,1,0,1],
-      [1,0,1,0,0,0,0,0,0,1,0,0,0,0,0,0,0,1,0,1],
-      [1,0,1,0,1,1,1,1,0,1,1,1,1,1,1,1,0,1,0,1],
-      [1,0,0,0,1,0,0,0,0,0,0,0,0,0,0,1,0,0,0,1],
-      [1,1,1,0,1,0,1,1,1,1,1,1,1,1,0,1,0,1,1,1],
-      [1,0,0,0,1,0,0,0,0,1,0,0,0,1,0,0,0,0,0,1],
-      [1,0,1,1,1,1,1,1,0,1,0,1,0,1,1,1,1,1,0,1],
-      [1,0,1,0,0,0,0,1,0,0,0,1,0,0,0,0,0,1,0,1],
-      [1,0,1,0,1,1,0,1,1,1,1,1,1,1,1,1,0,1,0,1],
-      [1,0,0,0,0,1,0,0,0,0,0,0,0,0,0,1,0,0,0,1],
-      [1,0,1,1,0,1,1,1,1,1,1,1,1,1,0,1,1,1,0,1],
-      [1,0,0,1,0,0,0,0,0,0,0,0,0,1,0,0,0,1,0,1],
-      [1,0,0,0,0,1,1,1,1,1,1,1,0,0,0,1,0,0,0,1],
-      [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
-    ];
-
-    const CELL = 4;
-    const HALF = (gridMap.length * CELL) / 2;
     const wallMeshes = [];
     const wallBoxes = [];
     const decalGroup = new THREE.Group();
@@ -202,102 +142,97 @@
     scene.add(sparkGroup);
     scene.add(tracerGroup);
 
-    function cellToWorld(ix, iz) {
-      return {
-        x: ix * CELL - HALF + CELL / 2,
-        z: iz * CELL - HALF + CELL / 2
-      };
+    function addWallBox(w, h, d, x, y, z, color = 0x6b7384) {
+      const mesh = new THREE.Mesh(
+        new THREE.BoxGeometry(w, h, d),
+        new THREE.MeshStandardMaterial({
+          color,
+          roughness: 0.88,
+          metalness: 0.04
+        })
+      );
+      mesh.position.set(x, y, z);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      scene.add(mesh);
+      wallMeshes.push(mesh);
+      wallBoxes.push(new THREE.Box3().setFromObject(mesh));
+      return mesh;
     }
 
-    function buildWallsFromGrid() {
-      const visitedH = new Set();
-      const visitedV = new Set();
+    function addWindowWallX(centerX, centerZ, totalW, wallH = 4.5, thick = 1.0, windowW = 4, windowBottom = 1.4, windowTop = 3.0) {
+      const pillarW = (totalW - windowW) / 2;
+      addWallBox(pillarW, wallH, thick, centerX - (windowW / 2 + pillarW / 2), wallH / 2, centerZ);
+      addWallBox(pillarW, wallH, thick, centerX + (windowW / 2 + pillarW / 2), wallH / 2, centerZ);
 
-      function key(x, z) {
-        return `${x},${z}`;
+      const lowerH = windowBottom;
+      if (lowerH > 0) {
+        addWallBox(windowW, lowerH, thick, centerX, lowerH / 2, centerZ);
       }
 
-      const wallMaterial = new THREE.MeshStandardMaterial({
-        color: 0x6b7384,
-        roughness: 0.88,
-        metalness: 0.04
-      });
-
-      // 横向合并
-      for (let z = 0; z < gridMap.length; z++) {
-        for (let x = 0; x < gridMap[z].length; x++) {
-          if (gridMap[z][x] !== 1 || visitedH.has(key(x, z))) continue;
-
-          let len = 1;
-          while (
-            x + len < gridMap[z].length &&
-            gridMap[z][x + len] === 1 &&
-            !visitedH.has(key(x + len, z))
-          ) {
-            len++;
-          }
-
-          if (len >= 2) {
-            for (let i = 0; i < len; i++) visitedH.add(key(x + i, z));
-
-            const w = CELL * len;
-            const box = new THREE.Mesh(
-              new THREE.BoxGeometry(w, 4.2, CELL),
-              wallMaterial.clone()
-            );
-
-            const start = cellToWorld(x, z);
-            const end = cellToWorld(x + len - 1, z);
-            box.position.set((start.x + end.x) / 2, 2.1, start.z);
-            box.castShadow = true;
-            box.receiveShadow = true;
-            scene.add(box);
-            wallMeshes.push(box);
-            wallBoxes.push(new THREE.Box3().setFromObject(box));
-          }
-        }
-      }
-
-      // 剩余单元做纵向合并
-      for (let z = 0; z < gridMap.length; z++) {
-        for (let x = 0; x < gridMap[z].length; x++) {
-          if (gridMap[z][x] !== 1) continue;
-          if (visitedH.has(key(x, z)) || visitedV.has(key(x, z))) continue;
-
-          let len = 1;
-          while (
-            z + len < gridMap.length &&
-            gridMap[z + len][x] === 1 &&
-            !visitedH.has(key(x, z + len)) &&
-            !visitedV.has(key(x, z + len))
-          ) {
-            len++;
-          }
-
-          for (let i = 0; i < len; i++) visitedV.add(key(x, z + i));
-
-          const d = CELL * len;
-          const box = new THREE.Mesh(
-            new THREE.BoxGeometry(CELL, 4.2, d),
-            wallMaterial.clone()
-          );
-
-          const start = cellToWorld(x, z);
-          const end = cellToWorld(x, z + len - 1);
-          box.position.set(start.x, 2.1, (start.z + end.z) / 2);
-          box.castShadow = true;
-          box.receiveShadow = true;
-          scene.add(box);
-          wallMeshes.push(box);
-          wallBoxes.push(new THREE.Box3().setFromObject(box));
-        }
+      const upperH = wallH - windowTop;
+      if (upperH > 0) {
+        addWallBox(windowW, upperH, thick, centerX, windowTop + upperH / 2, centerZ);
       }
     }
 
-    buildWallsFromGrid();
+    function addWindowWallZ(centerX, centerZ, totalD, wallH = 4.5, thick = 1.0, windowD = 4, windowBottom = 1.4, windowTop = 3.0) {
+      const pillarD = (totalD - windowD) / 2;
+      addWallBox(thick, wallH, pillarD, centerX, wallH / 2, centerZ - (windowD / 2 + pillarD / 2));
+      addWallBox(thick, wallH, pillarD, centerX, wallH / 2, centerZ + (windowD / 2 + pillarD / 2));
+
+      const lowerH = windowBottom;
+      if (lowerH > 0) {
+        addWallBox(thick, lowerH, windowD, centerX, lowerH / 2, centerZ);
+      }
+
+      const upperH = wallH - windowTop;
+      if (upperH > 0) {
+        addWallBox(thick, upperH, windowD, centerX, windowTop + upperH / 2, centerZ);
+      }
+    }
+
+    function buildArena() {
+      const S = 42;
+      const H = 4.5;
+      const T = 1.0;
+
+      // 外圈
+      addWallBox(S * 2, H, T, 0, H / 2, -S);
+      addWallBox(S * 2, H, T, 0, H / 2,  S);
+      addWallBox(T, H, S * 2, -S, H / 2, 0);
+      addWallBox(T, H, S * 2,  S, H / 2, 0);
+
+      // 中区长墙（不是迷宫）
+      addWindowWallX(0, -18, 28, H, 1.0, 6, 1.4, 3.1);
+      addWindowWallX(0,  18, 28, H, 1.0, 6, 1.4, 3.1);
+
+      addWindowWallZ(-18, 0, 22, H, 1.0, 5, 1.4, 3.0);
+      addWindowWallZ( 18, 0, 22, H, 1.0, 5, 1.4, 3.0);
+
+      // 两侧半墙和掩体
+      addWallBox(10, 2.2, 1.0, -26, 1.1, -8, 0x70798a);
+      addWallBox(10, 2.2, 1.0,  26, 1.1,  8, 0x70798a);
+
+      addWallBox(1.0, 2.2, 10, -10, 1.1,  26, 0x70798a);
+      addWallBox(1.0, 2.2, 10,  10, 1.1, -26, 0x70798a);
+
+      addWallBox(6, 2.5, 2, -28, 1.25, 20, 0x5e6778);
+      addWallBox(6, 2.5, 2,  28, 1.25,-20, 0x5e6778);
+      addWallBox(2, 2.5, 6, -20, 1.25,-28, 0x5e6778);
+      addWallBox(2, 2.5, 6,  20, 1.25, 28, 0x5e6778);
+
+      // 中间几个分散短墙
+      addWallBox(8, 3.2, 1.0, -12, 1.6, 0, 0x697183);
+      addWallBox(8, 3.2, 1.0,  12, 1.6, 0, 0x697183);
+      addWallBox(1.0, 3.2, 8, 0, 1.6, -12, 0x697183);
+      addWallBox(1.0, 3.2, 8, 0, 1.6,  12, 0x697183);
+    }
+
+    buildArena();
 
     const player = {
-      position: new THREE.Vector3(-HALF + CELL * 1.5, 1.65, -HALF + CELL * 1.5),
+      position: new THREE.Vector3(-30, 1.65, -30),
       yaw: 0,
       pitch: 0,
       radius: 0.34,
@@ -320,8 +255,7 @@
       enemies: [],
       tracers: [],
       reloading: false,
-      reloadEnd: 0,
-      reloadPhase: 0
+      reloadEnd: 0
     };
 
     const weapons = [
@@ -403,10 +337,7 @@
     updateHud();
 
     function collidesWithWalls(pos) {
-      const sphere = new THREE.Sphere(
-        new THREE.Vector3(pos.x, 1.0, pos.z),
-        player.radius
-      );
+      const sphere = new THREE.Sphere(new THREE.Vector3(pos.x, 1.0, pos.z), player.radius);
       for (const box of wallBoxes) {
         if (box.intersectsSphere(sphere)) return true;
       }
@@ -430,12 +361,11 @@
     function makeZombie(x, z) {
       const root = new THREE.Group();
       const torsoRoot = new THREE.Group();
-      const leftLegRoot = new THREE.Group();
-      const rightLegRoot = new THREE.Group();
       const leftArmRoot = new THREE.Group();
       const rightArmRoot = new THREE.Group();
+      const leftLegRoot = new THREE.Group();
+      const rightLegRoot = new THREE.Group();
 
-      // 身体主干
       const body = new THREE.Mesh(
         new THREE.BoxGeometry(0.76, 0.96, 0.42),
         new THREE.MeshStandardMaterial({ color: 0x53775a })
@@ -464,7 +394,7 @@
       hair.position.y = 2.00;
       torsoRoot.add(hair);
 
-      // 手臂根节点挂在肩膀
+      // 手臂挂在肩上
       leftArmRoot.position.set(-0.52, 1.52, 0.02);
       rightArmRoot.position.set(0.52, 1.52, 0.02);
 
@@ -488,7 +418,7 @@
       const handR = handL.clone();
       rightArmRoot.add(handR);
 
-      // 腿根节点挂在髋部，彻底解决分离
+      // 腿挂在髋部
       leftLegRoot.position.set(-0.18, 0.60, 0);
       rightLegRoot.position.set(0.18, 0.60, 0);
 
@@ -502,12 +432,7 @@
       const legR = legL.clone();
       rightLegRoot.add(legR);
 
-      root.add(torsoRoot);
-      root.add(leftArmRoot);
-      root.add(rightArmRoot);
-      root.add(leftLegRoot);
-      root.add(rightLegRoot);
-
+      root.add(torsoRoot, leftArmRoot, rightArmRoot, leftLegRoot, rightLegRoot);
       root.position.set(x, 0, z);
 
       root.traverse((o) => {
@@ -546,11 +471,8 @@
         body,
         armL,
         armR,
-        handL,
-        handR,
         legL,
         legR,
-        legs: [legL, legR],
         hpCanvas,
         hpCtx,
         hpTexture,
@@ -579,86 +501,17 @@
       enemy.hpTexture.needsUpdate = true;
     }
 
-    const spawnCells = [
-      [4, 2], [6, 4], [3, 7], [10, 2], [12, 6], [13, 10], [7, 12], [16, 16]
+    const spawnPoints = [
+      [-22, -22], [22, -22], [-22, 22], [22, 22],
+      [0, -30], [0, 30], [-30, 0], [30, 0]
     ];
 
-    for (const [cx, cz] of spawnCells) {
-      const p = cellToWorld(cx, cz);
-      const zombie = makeZombie(p.x, p.z);
+    for (const [x, z] of spawnPoints) {
+      const zombie = makeZombie(x, z);
       drawEnemyHp(zombie);
       state.enemies.push(zombie);
     }
 
-    // 弹痕
-    function createBulletMark(point, normal) {
-      if (decalGroup.children.length > 120) {
-        const old = decalGroup.children.shift();
-        decalGroup.remove(old);
-        old.geometry.dispose();
-        old.material.dispose();
-      }
-
-      const mark = new THREE.Mesh(
-        new THREE.CircleGeometry(0.08, 12),
-        new THREE.MeshBasicMaterial({
-          color: 0x1a1a1a,
-          transparent: true,
-          opacity: 0.85
-        })
-      );
-
-      mark.position.copy(point).add(normal.clone().multiplyScalar(0.01));
-      mark.lookAt(point.clone().add(normal));
-      decalGroup.add(mark);
-    }
-
-    // 火花
-    function createSparks(point, color = 0xffdd88) {
-      for (let i = 0; i < 5; i++) {
-        const geo = new THREE.SphereGeometry(0.025, 6, 6);
-        const mat = new THREE.MeshBasicMaterial({ color });
-        const spark = new THREE.Mesh(geo, mat);
-        spark.position.copy(point);
-        spark.userData.vel = new THREE.Vector3(
-          (Math.random() - 0.5) * 2.4,
-          Math.random() * 1.8,
-          (Math.random() - 0.5) * 2.4
-        );
-        spark.userData.life = 0.18;
-        sparkGroup.add(spark);
-      }
-    }
-
-    function updateSparks(dt) {
-      const toRemove = [];
-      sparkGroup.children.forEach((spark) => {
-        spark.userData.life -= dt;
-        spark.position.addScaledVector(spark.userData.vel, dt);
-        spark.userData.vel.y -= 8 * dt;
-        if (spark.userData.life <= 0) toRemove.push(spark);
-      });
-
-      for (const spark of toRemove) {
-        sparkGroup.remove(spark);
-        spark.geometry.dispose();
-        spark.material.dispose();
-      }
-    }
-
-    function createTracer(start, end, color) {
-      const geometry = new THREE.BufferGeometry().setFromPoints([start, end]);
-      const material = new THREE.LineBasicMaterial({
-        color,
-        transparent: true,
-        opacity: 1
-      });
-      const line = new THREE.Line(geometry, material);
-      tracerGroup.add(line);
-      state.tracers.push({ line, material, life: 0.08, maxLife: 0.08 });
-    }
-
-    // 枪声
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
     function playGunSound(w) {
@@ -688,6 +541,72 @@
       osc.stop(now + 0.12);
     }
 
+    function createBulletMark(point, normal) {
+      if (decalGroup.children.length > 140) {
+        const old = decalGroup.children[0];
+        decalGroup.remove(old);
+        old.geometry.dispose();
+        old.material.dispose();
+      }
+
+      const mark = new THREE.Mesh(
+        new THREE.CircleGeometry(0.08, 12),
+        new THREE.MeshBasicMaterial({
+          color: 0x1a1a1a,
+          transparent: true,
+          opacity: 0.85
+        })
+      );
+
+      mark.position.copy(point).add(normal.clone().multiplyScalar(0.01));
+      mark.lookAt(point.clone().add(normal));
+      decalGroup.add(mark);
+    }
+
+    function createSparks(point, color = 0xffdd88) {
+      for (let i = 0; i < 5; i++) {
+        const geo = new THREE.SphereGeometry(0.025, 6, 6);
+        const mat = new THREE.MeshBasicMaterial({ color });
+        const spark = new THREE.Mesh(geo, mat);
+        spark.position.copy(point);
+        spark.userData.vel = new THREE.Vector3(
+          (Math.random() - 0.5) * 2.4,
+          Math.random() * 1.8,
+          (Math.random() - 0.5) * 2.4
+        );
+        spark.userData.life = 0.18;
+        sparkGroup.add(spark);
+      }
+    }
+
+    function updateSparks(dt) {
+      const dead = [];
+      sparkGroup.children.forEach((spark) => {
+        spark.userData.life -= dt;
+        spark.position.addScaledVector(spark.userData.vel, dt);
+        spark.userData.vel.y -= 8 * dt;
+        if (spark.userData.life <= 0) dead.push(spark);
+      });
+
+      for (const spark of dead) {
+        sparkGroup.remove(spark);
+        spark.geometry.dispose();
+        spark.material.dispose();
+      }
+    }
+
+    function createTracer(start, end, color) {
+      const geometry = new THREE.BufferGeometry().setFromPoints([start, end]);
+      const material = new THREE.LineBasicMaterial({
+        color,
+        transparent: true,
+        opacity: 1
+      });
+      const line = new THREE.Line(geometry, material);
+      tracerGroup.add(line);
+      state.tracers.push({ line, material, life: 0.08, maxLife: 0.08 });
+    }
+
     camera.position.copy(player.position);
     scene.add(camera);
 
@@ -711,80 +630,109 @@
       leftHand.position.set(0.12, -0.28, -0.42);
       root.add(leftHand);
 
-      let gun;
+      let gunGroup = new THREE.Group();
 
       if (type === 0) {
-        gun = new THREE.Group();
-
-        const body = new THREE.Mesh(
-          new THREE.BoxGeometry(0.14, 0.14, 0.52),
-          new THREE.MeshStandardMaterial({ color: 0x4b5563 })
+        const frame = new THREE.Mesh(
+          new THREE.BoxGeometry(0.12, 0.16, 0.46),
+          new THREE.MeshStandardMaterial({ color: 0x3b4450 })
         );
-        gun.add(body);
+        gunGroup.add(frame);
 
         const slide = new THREE.Mesh(
-          new THREE.BoxGeometry(0.12, 0.05, 0.24),
+          new THREE.BoxGeometry(0.11, 0.06, 0.24),
           new THREE.MeshStandardMaterial({ color: 0x8891a0 })
         );
-        slide.position.set(0, 0.08, -0.04);
-        gun.add(slide);
+        slide.position.set(0, 0.08, -0.05);
+        gunGroup.add(slide);
 
-        gun.position.set(0.28, -0.22, -0.70);
-      } else if (type === 1) {
-        gun = new THREE.Group();
-
-        const body = new THREE.Mesh(
-          new THREE.BoxGeometry(0.18, 0.18, 0.92),
-          new THREE.MeshStandardMaterial({ color: 0x374151 })
-        );
-        gun.add(body);
-
-        const stock = new THREE.Mesh(
-          new THREE.BoxGeometry(0.12, 0.16, 0.28),
-          new THREE.MeshStandardMaterial({ color: 0x1f2937 })
-        );
-        stock.position.set(0, 0, 0.52);
-        gun.add(stock);
-
-        const mag = new THREE.Mesh(
-          new THREE.BoxGeometry(0.08, 0.28, 0.12),
+        const grip = new THREE.Mesh(
+          new THREE.BoxGeometry(0.10, 0.22, 0.12),
           new THREE.MeshStandardMaterial({ color: 0x20242c })
         );
-        mag.position.set(0, -0.18, 0.02);
-        gun.add(mag);
+        grip.position.set(0, -0.17, 0.08);
+        gunGroup.add(grip);
 
-        gun.position.set(0.25, -0.22, -0.80);
-        gun.userData.mag = mag;
-      } else {
-        gun = new THREE.Group();
-
+        gunGroup.position.set(0.28, -0.22, -0.70);
+      } else if (type === 1) {
         const body = new THREE.Mesh(
-          new THREE.BoxGeometry(0.20, 0.16, 0.96),
+          new THREE.BoxGeometry(0.14, 0.16, 0.90),
+          new THREE.MeshStandardMaterial({ color: 0x374151 })
+        );
+        gunGroup.add(body);
+
+        const upper = new THREE.Mesh(
+          new THREE.BoxGeometry(0.10, 0.06, 0.52),
+          new THREE.MeshStandardMaterial({ color: 0x1f2937 })
+        );
+        upper.position.set(0, 0.08, -0.05);
+        gunGroup.add(upper);
+
+        const stock = new THREE.Mesh(
+          new THREE.BoxGeometry(0.12, 0.16, 0.26),
+          new THREE.MeshStandardMaterial({ color: 0x222831 })
+        );
+        stock.position.set(0, 0, 0.52);
+        gunGroup.add(stock);
+
+        const grip = new THREE.Mesh(
+          new THREE.BoxGeometry(0.10, 0.24, 0.12),
+          new THREE.MeshStandardMaterial({ color: 0x1f2937 })
+        );
+        grip.position.set(0, -0.18, 0.12);
+        gunGroup.add(grip);
+
+        const mag = new THREE.Mesh(
+          new THREE.BoxGeometry(0.08, 0.30, 0.12),
+          new THREE.MeshStandardMaterial({ color: 0x20242c })
+        );
+        mag.position.set(0, -0.16, 0.00);
+        gunGroup.add(mag);
+
+        const frontSight = new THREE.Mesh(
+          new THREE.BoxGeometry(0.04, 0.08, 0.04),
+          new THREE.MeshStandardMaterial({ color: 0xaeb6c2 })
+        );
+        frontSight.position.set(0, 0.10, -0.42);
+        gunGroup.add(frontSight);
+
+        gunGroup.userData.mag = mag;
+        gunGroup.position.set(0.25, -0.22, -0.80);
+      } else {
+        const body = new THREE.Mesh(
+          new THREE.BoxGeometry(0.18, 0.16, 0.92),
           new THREE.MeshStandardMaterial({ color: 0x6b7280 })
         );
-        gun.add(body);
+        gunGroup.add(body);
 
         const pump = new THREE.Mesh(
           new THREE.BoxGeometry(0.16, 0.10, 0.24),
           new THREE.MeshStandardMaterial({ color: 0x7c5a3a })
         );
         pump.position.set(0, -0.08, -0.1);
-        gun.add(pump);
+        gunGroup.add(pump);
 
-        gun.position.set(0.23, -0.20, -0.82);
+        const stock = new THREE.Mesh(
+          new THREE.BoxGeometry(0.16, 0.16, 0.26),
+          new THREE.MeshStandardMaterial({ color: 0x5d4633 })
+        );
+        stock.position.set(0, 0, 0.48);
+        gunGroup.add(stock);
+
+        gunGroup.position.set(0.23, -0.20, -0.82);
       }
 
-      root.add(gun);
+      root.add(gunGroup);
 
       const barrel = new THREE.Mesh(
-        new THREE.BoxGeometry(0.05, 0.05, 0.24),
+        new THREE.BoxGeometry(0.04, 0.04, 0.26),
         new THREE.MeshStandardMaterial({ color: 0xd1d5db })
       );
-      barrel.position.copy(gun.position).add(new THREE.Vector3(0, 0, -0.50));
+      barrel.position.copy(gunGroup.position).add(new THREE.Vector3(0, 0, -0.50));
       root.add(barrel);
 
       root.userData.barrel = barrel;
-      root.userData.gun = gun;
+      root.userData.gun = gunGroup;
       return root;
     }
 
@@ -921,9 +869,44 @@
     function updateEnemies(dt) {
       const playerRadius = player.radius;
       const enemyRadius = 0.34;
-      const stopGap = 0.06;
+      const stopGap = 0.08;
       const stopDistance = playerRadius + enemyRadius + stopGap;
-      const attackDistance = stopDistance + 0.28;
+      const attackDistance = stopDistance + 0.30;
+
+      function enemyHitsWall(pos) {
+        const sphere = new THREE.Sphere(new THREE.Vector3(pos.x, 1.0, pos.z), enemyRadius);
+        for (const box of wallBoxes) {
+          if (box.intersectsSphere(sphere)) return true;
+        }
+        return false;
+      }
+
+      function unstickEnemy(enemy) {
+        if (!enemyHitsWall(enemy.group.position)) return;
+
+        const tries = [
+          new THREE.Vector3( 0.18, 0, 0),
+          new THREE.Vector3(-0.18, 0, 0),
+          new THREE.Vector3(0, 0,  0.18),
+          new THREE.Vector3(0, 0, -0.18),
+          new THREE.Vector3( 0.18, 0,  0.18),
+          new THREE.Vector3(-0.18, 0,  0.18),
+          new THREE.Vector3( 0.18, 0, -0.18),
+          new THREE.Vector3(-0.18, 0, -0.18),
+          new THREE.Vector3( 0.32, 0, 0),
+          new THREE.Vector3(-0.32, 0, 0),
+          new THREE.Vector3(0, 0,  0.32),
+          new THREE.Vector3(0, 0, -0.32)
+        ];
+
+        for (const offset of tries) {
+          const test = enemy.group.position.clone().add(offset);
+          if (!enemyHitsWall(test)) {
+            enemy.group.position.copy(test);
+            return;
+          }
+        }
+      }
 
       for (const enemy of state.enemies) {
         if (!enemy.alive) {
@@ -946,6 +929,7 @@
         }
 
         drawEnemyHp(enemy);
+        unstickEnemy(enemy);
 
         const dx = player.position.x - enemy.group.position.x;
         const dz = player.position.z - enemy.group.position.z;
@@ -960,7 +944,7 @@
         if (flatDist > stopDistance) {
           const dirX = dx / flatDist;
           const dirZ = dz / flatDist;
-          const moveSpeed = 1.75;
+          const moveSpeed = 1.7;
 
           const targetX = player.position.x - dirX * stopDistance;
           const targetZ = player.position.z - dirZ * stopDistance;
@@ -973,36 +957,34 @@
             const stepX = (toTargetX / toTargetDist) * moveSpeed * dt;
             const stepZ = (toTargetZ / toTargetDist) * moveSpeed * dt;
 
-            const next = enemy.group.position.clone();
-            next.x += stepX;
-            next.z += stepZ;
+            const nextX = enemy.group.position.clone();
+            nextX.x += stepX;
 
-            const enemySphere = new THREE.Sphere(
-              new THREE.Vector3(next.x, 1.0, next.z),
-              enemyRadius
+            const nextZ = enemy.group.position.clone();
+            nextZ.z += stepZ;
+
+            const xDistToPlayer = Math.sqrt(
+              (nextX.x - player.position.x) ** 2 +
+              (enemy.group.position.z - player.position.z) ** 2
             );
 
-            let blocked = false;
+            const zDistToPlayer = Math.sqrt(
+              (enemy.group.position.x - player.position.x) ** 2 +
+              (nextZ.z - player.position.z) ** 2
+            );
 
-            for (const box of wallBoxes) {
-              if (box.intersectsSphere(enemySphere)) {
-                blocked = true;
-                break;
-              }
-            }
-
-            const ndx = next.x - player.position.x;
-            const ndz = next.z - player.position.z;
-            const nextPlayerDist = Math.sqrt(ndx * ndx + ndz * ndz);
-
-            if (nextPlayerDist < stopDistance) {
-              blocked = true;
-            }
-
-            if (!blocked) {
-              enemy.group.position.copy(next);
+            if (!enemyHitsWall(nextX) && xDistToPlayer >= stopDistance) {
+              enemy.group.position.x = nextX.x;
               enemy.moving = true;
-              enemy.walkTime += dt * 5.2;
+            }
+
+            if (!enemyHitsWall(nextZ) && zDistToPlayer >= stopDistance) {
+              enemy.group.position.z = nextZ.z;
+              enemy.moving = true;
+            }
+
+            if (enemy.moving) {
+              enemy.walkTime += dt * 4.6;
             }
           }
         }
@@ -1013,22 +995,21 @@
         );
         enemy.group.rotation.y = faceAngle;
 
-        const walkSwing = enemy.moving ? Math.sin(enemy.walkTime) * 0.28 : 0;
-        const bodyBob = enemy.moving ? Math.abs(Math.sin(enemy.walkTime * 2)) * 0.025 : 0;
+        const walkSwing = enemy.moving ? Math.sin(enemy.walkTime) * 0.22 : 0;
+        const bodyBob = enemy.moving ? Math.abs(Math.sin(enemy.walkTime * 2)) * 0.018 : 0;
 
         if (flatDist < attackDistance) {
-          enemy.attackPhase += dt * 5.5;
+          enemy.attackPhase += dt * 4.2;
         } else {
           enemy.attackPhase = 0;
         }
 
         const attackSwing = flatDist < attackDistance
-          ? Math.max(0, Math.sin(enemy.attackPhase)) * 0.38
+          ? Math.max(0, Math.sin(enemy.attackPhase)) * 0.30
           : 0;
 
-        // 动作都挂在根节点上，腿和身体不会分离
-        enemy.leftArmRoot.rotation.x = -1.0 + attackSwing + walkSwing * 0.18;
-        enemy.rightArmRoot.rotation.x = -1.0 + attackSwing - walkSwing * 0.18;
+        enemy.leftArmRoot.rotation.x = -1.0 + attackSwing + walkSwing * 0.12;
+        enemy.rightArmRoot.rotation.x = -1.0 + attackSwing - walkSwing * 0.12;
 
         enemy.leftLegRoot.rotation.x = -walkSwing;
         enemy.rightLegRoot.rotation.x = walkSwing;
@@ -1038,7 +1019,7 @@
 
         if (flatDist < attackDistance && enemy.attackCooldown <= 0) {
           player.health -= 8;
-          enemy.attackCooldown = 0.42;
+          enemy.attackCooldown = 0.48;
           state.flashTimer = 0.12;
           updateHud();
         }
@@ -1132,7 +1113,7 @@
 
         for (const enemy of state.enemies) {
           if (!enemy.alive) continue;
-          const parts = [enemy.head, enemy.body, ...enemy.legs];
+          const parts = [enemy.head, enemy.body, enemy.legL, enemy.legR];
           const hits = raycaster.intersectObjects(parts, false);
           if (hits.length > 0) {
             const hit = hits[0];
@@ -1177,7 +1158,6 @@
         bobRotZ = Math.sin(t * 5.5) * 0.008;
       }
 
-      // 换弹动画：横过来 + 插几下
       let reloadX = 0;
       let reloadY = 0;
       let reloadRotZ = 0;
@@ -1190,19 +1170,19 @@
 
         if (progress < 0.25) {
           const p = progress / 0.25;
-          reloadRotZ = -1.1 * p;
-          reloadRotY = -0.4 * p;
+          reloadRotZ = -1.0 * p;
+          reloadRotY = -0.35 * p;
           reloadY = 0.08 * p;
         } else if (progress < 0.8) {
           const p = (progress - 0.25) / 0.55;
-          reloadRotZ = -1.1;
-          reloadRotY = -0.4;
+          reloadRotZ = -1.0;
+          reloadRotY = -0.35;
           reloadY = 0.08 + Math.sin(p * Math.PI * 3) * 0.05;
           reloadX = -0.03;
         } else {
           const p = (progress - 0.8) / 0.2;
-          reloadRotZ = -1.1 * (1 - p);
-          reloadRotY = -0.4 * (1 - p);
+          reloadRotZ = -1.0 * (1 - p);
+          reloadRotY = -0.35 * (1 - p);
           reloadY = 0.08 * (1 - p);
         }
       }
