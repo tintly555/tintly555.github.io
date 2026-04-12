@@ -167,7 +167,6 @@
     ceiling.rotation.x = Math.PI / 2;
     scene.add(ceiling);
 
-    // 更大的地图
     const gridMap = [
       [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
       [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
@@ -382,13 +381,12 @@
       tornShirt.position.set(0, 1.15, 0.23);
       group.add(tornShirt);
 
-      // 僵尸双手前伸
       const armL = new THREE.Mesh(
         new THREE.BoxGeometry(0.22, 0.84, 0.22),
         new THREE.MeshStandardMaterial({ color: 0x8fa48a })
       );
       armL.position.set(-0.52, 1.18, 0.18);
-      armL.rotation.x = -1.1;
+      armL.rotation.x = -1.0;
       group.add(armL);
 
       const armR = armL.clone();
@@ -702,7 +700,7 @@
 
       const movingNow = keys.w || keys.a || keys.s || keys.d;
       const headBob = (movingNow && player.onGround)
-        ? Math.abs(Math.sin(performance.now() * 0.012)) * 0.04
+        ? Math.abs(Math.sin(performance.now() * 0.012)) * 0.02
         : 0;
 
       camera.position.copy(player.position);
@@ -753,7 +751,6 @@
           const dirZ = dz / flatDist;
           const moveSpeed = 1.75;
 
-          // 僵尸追到玩家碰撞箱外沿
           const targetX = player.position.x - dirX * stopDistance;
           const targetZ = player.position.z - dirZ * stopDistance;
 
@@ -794,41 +791,43 @@
             if (!blocked) {
               enemy.group.position.copy(next);
               enemy.moving = true;
-              enemy.walkTime += dt * 8.5;
+              enemy.walkTime += dt * 5.2;
             }
           }
         }
 
-        // 面朝玩家胸口
-        enemy.group.lookAt(player.position.x, 1.2, player.position.z);
+        // 只水平转向，不允许整个模型俯仰后仰
+        const faceAngle = Math.atan2(
+          player.position.x - enemy.group.position.x,
+          player.position.z - enemy.group.position.z
+        );
+        enemy.group.rotation.y = faceAngle;
 
-        // 动作
-        const swing = enemy.moving ? Math.sin(enemy.walkTime) * 0.55 : 0;
-        const bodyBob = enemy.moving ? Math.abs(Math.sin(enemy.walkTime * 2)) * 0.05 : 0;
+        const walkSwing = enemy.moving ? Math.sin(enemy.walkTime) * 0.28 : 0;
+        const bodyBob = enemy.moving ? Math.abs(Math.sin(enemy.walkTime * 2)) * 0.025 : 0;
 
         if (flatDist < attackDistance) {
-          enemy.attackPhase += dt * 10;
+          enemy.attackPhase += dt * 5.5;
         } else {
           enemy.attackPhase = 0;
         }
 
         const attackSwing = flatDist < attackDistance
-          ? Math.sin(enemy.attackPhase) * 0.45
+          ? Math.max(0, Math.sin(enemy.attackPhase)) * 0.38
           : 0;
 
-        // 僵尸前伸双手 + 攻击挥动
-        enemy.armL.rotation.x = -1.1 + attackSwing + swing * 0.15;
-        enemy.armR.rotation.x = -1.1 + attackSwing - swing * 0.15;
+        enemy.armL.rotation.x = -1.0 + attackSwing + walkSwing * 0.18;
+        enemy.armR.rotation.x = -1.0 + attackSwing - walkSwing * 0.18;
 
-        enemy.handL.rotation.x = attackSwing * 0.3;
-        enemy.handR.rotation.x = attackSwing * 0.3;
+        enemy.handL.rotation.x = attackSwing * 0.18;
+        enemy.handR.rotation.x = attackSwing * 0.18;
 
-        enemy.legL.rotation.x = -swing;
-        enemy.legR.rotation.x = swing;
+        enemy.legL.rotation.x = -walkSwing;
+        enemy.legR.rotation.x = walkSwing;
 
         enemy.body.position.y = 1.10 + bodyBob;
         enemy.head.position.y = 1.82 + bodyBob;
-        enemy.hpSprite.position.y = 2.7 + bodyBob;
+        enemy.hpSprite.position.y = 2.70 + bodyBob;
 
         if (flatDist < attackDistance && enemy.attackCooldown <= 0) {
           player.health -= 8;
@@ -959,13 +958,13 @@
       let bobRotZ = 0;
 
       if (isMoving && player.onGround) {
-        bobX = Math.sin(t * 9) * 0.012;
-        bobY = Math.abs(Math.cos(t * 18)) * 0.015;
-        bobRotZ = Math.sin(t * 9) * 0.02;
+        bobX = Math.sin(t * 5.5) * 0.005;
+        bobY = Math.abs(Math.cos(t * 11)) * 0.007;
+        bobRotZ = Math.sin(t * 5.5) * 0.008;
       }
 
       weaponRoot.position.set(bobX, -state.recoil - bobY, 0);
-      weaponRoot.rotation.set(state.recoil * 1.2, 0, bobRotZ);
+      weaponRoot.rotation.set(state.recoil * 1.0, 0, bobRotZ);
     }
 
     window.addEventListener("resize", () => {
