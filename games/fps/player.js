@@ -1,38 +1,60 @@
-export class Player{
+export class Player {
+  constructor(camera) {
+    this.camera = camera;
+    this.keys = {};
+    this.yaw = 0;
+    this.pitch = 0;
+    this.speed = 0.12;
 
-constructor(camera){
+    document.addEventListener("keydown", (e) => {
+      this.keys[e.key.toLowerCase()] = true;
+    });
 
-this.camera = camera;
+    document.addEventListener("keyup", (e) => {
+      this.keys[e.key.toLowerCase()] = false;
+    });
 
-this.keys = {};
+    document.body.addEventListener("click", () => {
+      if (document.pointerLockElement !== document.body) {
+        document.body.requestPointerLock();
+      }
+    });
 
-document.addEventListener("keydown",e=>this.keys[e.key]=true);
-document.addEventListener("keyup",e=>this.keys[e.key]=false);
+    document.addEventListener("mousemove", (e) => {
+      if (document.pointerLockElement !== document.body) return;
 
-this.yaw = 0;
-this.pitch = 0;
+      this.yaw -= e.movementX * 0.0022;
+      this.pitch -= e.movementY * 0.0022;
 
-document.body.onclick = () => document.body.requestPointerLock();
+      const limit = 1.5;
+      if (this.pitch > limit) this.pitch = limit;
+      if (this.pitch < -limit) this.pitch = -limit;
+    });
+  }
 
-document.addEventListener("mousemove",e=>{
- this.yaw -= e.movementX * 0.002;
- this.pitch -= e.movementY * 0.002;
- this.pitch = Math.max(-1.5,Math.min(1.5,this.pitch));
-});
+  update() {
+    const forward = { x: Math.sin(this.yaw), z: Math.cos(this.yaw) };
+    const right = { x: Math.cos(this.yaw), z: -Math.sin(this.yaw) };
 
-}
+    if (this.keys["w"]) {
+      this.camera.position.x -= forward.x * this.speed;
+      this.camera.position.z -= forward.z * this.speed;
+    }
+    if (this.keys["s"]) {
+      this.camera.position.x += forward.x * this.speed;
+      this.camera.position.z += forward.z * this.speed;
+    }
+    if (this.keys["a"]) {
+      this.camera.position.x -= right.x * this.speed;
+      this.camera.position.z -= right.z * this.speed;
+    }
+    if (this.keys["d"]) {
+      this.camera.position.x += right.x * this.speed;
+      this.camera.position.z += right.z * this.speed;
+    }
 
-update(){
-
-let speed = 0.1;
-
-if(this.keys["w"]) this.camera.position.z -= speed;
-if(this.keys["s"]) this.camera.position.z += speed;
-if(this.keys["a"]) this.camera.position.x -= speed;
-if(this.keys["d"]) this.camera.position.x += speed;
-
-this.camera.rotation.set(this.pitch,this.yaw,0);
-
-}
-
+    this.camera.rotation.order = "YXZ";
+    this.camera.rotation.y = this.yaw;
+    this.camera.rotation.x = this.pitch;
+  }
 }
