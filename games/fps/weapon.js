@@ -1,76 +1,84 @@
 import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.152/build/three.module.js";
 import { spawnBlood, spawnSpark } from "./effects.js";
 
-export class Weapon{
+export class Weapon {
+  constructor(camera, scene) {
+    this.camera = camera;
+    this.scene = scene;
 
-constructor(camera,scene){
+    this.cooldown = 0;
+    this.spread = 0.0;
+    this.ads = false;
 
-this.camera = camera;
-this.scene = scene;
+    document.addEventListener("contextmenu", (e) => e.preventDefault());
 
-this.cooldown = 0;
-this.spread = 0;
-this.ads = false;
+    document.addEventListener("mousedown", (e) => {
+      if (e.button === 0) this.shoot();
+      if (e.button === 2) this.ads = true;
+    });
 
-/* 鼠标 */
-document.addEventListener("mousedown",e=>{
- if(e.button===0) this.shoot();
- if(e.button===2) this.ads=true;
-});
+    document.addEventListener("mouseup", (e) => {
+      if (e.button === 2) this.ads = false;
+    });
+  }
 
-document.addEventListener("mouseup",e=>{
- if(e.button===2) this.ads=false;
-});
+  shoot() {
+    if (this.cooldown > 0) return;
 
-}
+    this.cooldown = this.ads ? 5 : 7;
+    this.spread += this.ads ? 0.004 : 0.015;
 
-shoot(){
+    const dir = new THREE.Vector3(0, 0, -1);
+    dir.applyEuler(this.camera.rotation);
 
-if(this.cooldown>0) return;
+    const spreadAmount = this.ads ? 0.006 : 0.03;
+    dir.x += (Math.random() - 0.5) * (this.spread + spreadAmount);
+    dir.y += (Math.random() - 0.5) * (this.spread + spreadAmount);
+    dir.z += (Math.random() - 0.5) * 0.002;
+    dir.normalize();
 
-/* 射速（旧版快节奏） */
-this.cooldown = 5;
+    const ray = new THREE.Raycaster(this.camera.position, dir);
 
-/* 扩散（核心爽感） */
-this.spread += 0.015;
+    let hitEnemy = false;
 
-let dir = new THREE.Vector3(0,0,-1);
-dir.applyEuler(this.camera.rotation);
+    if (window.enemies) {
+      for (const e of window.enemies) {
+        if (!e || !e.mesh || e.hp <= 0) continue;
+        const hit = ray.intersectObject(e.mesh, true);
+        if (hit.length) {
+          e.hp -= this.ads ? 28 : 20;
+          spawnBlood(this.scene, hit[0].point);
+          hitEnemy = true;
+          break;
+        }
+      }
+    }
 
-/* 偏移 */
-dir.x += (Math.random()-0.5)*this.spread;
-dir.y += (Math.random()-0.5)*this.spread;
+    if (!hitEnemy) {
+      if (window.worldWalls && window.worldWalls.length > 0) {
+        const wallHits = ray.intersectObjects(window.worldWalls, false);
+        if (wallHits.length) {
+          spawnSpark(this.scene, wallHits[0].point);
+        } else {
+          const point = this.camera.position.clone().add(dir.multiplyScalar(8));
+          spawnSpark(this.scene, point);
+        }
+      }
+    }
+  }
 
-/* 射线 */
-let ray = new THREE.Raycaster(this.camera.position,dir);
+  update() {
+    if (this.cooldown > 0) this.cooldown--;
 
-let hitSomething=false;
+    this.spread *= 0.88;
 
-/* 打敌人 */
-window.enemies?.forEach(e=>{
- let hit = ray.intersectObject(e.mesh);
- if(hit.length){
-  e.hp -= 20;
-  spawnBlood(this.scene,hit[0].point);
-  hitSomething=true;
- }
-});
+    const crosshair = document.getElementById("crosshair");
+    if (crosshair) {
+      crosshair.classList.toggle("hidden", this.ads);
+    }
 
-/* 打墙 */
-if(!hitSomething){
- let point = this.camera.position.clone().add(dir.multiplyScalar(10));
- spawnSpark(this.scene,point);
-}
-
-}
-
-update(){
-
-if(this.cooldown>0) this.cooldown--;
-
-/* 收敛 */
-this.spread *= 0.9;
-
-}
-
+    const targetFov = this.ads ? 58 : 75;
+    this.camera.fov += (targetFov - this.camera.fov) * 0.18;
+    this.camera.updateProjectionMatrix();
+  }
 }
