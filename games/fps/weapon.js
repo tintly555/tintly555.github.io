@@ -7,7 +7,7 @@ export class Weapon {
     this.scene = scene;
 
     this.cooldown = 0;
-    this.spread = 0.0;
+    this.spread = 0;
     this.ads = false;
 
     document.addEventListener("contextmenu", (e) => e.preventDefault());
@@ -26,15 +26,14 @@ export class Weapon {
     if (this.cooldown > 0) return;
 
     this.cooldown = this.ads ? 5 : 7;
-    this.spread += this.ads ? 0.004 : 0.015;
+    this.spread += this.ads ? 0.004 : 0.014;
 
     const dir = new THREE.Vector3(0, 0, -1);
     dir.applyEuler(this.camera.rotation);
 
-    const spreadAmount = this.ads ? 0.006 : 0.03;
-    dir.x += (Math.random() - 0.5) * (this.spread + spreadAmount);
-    dir.y += (Math.random() - 0.5) * (this.spread + spreadAmount);
-    dir.z += (Math.random() - 0.5) * 0.002;
+    const baseSpread = this.ads ? 0.006 : 0.03;
+    dir.x += (Math.random() - 0.5) * (this.spread + baseSpread);
+    dir.y += (Math.random() - 0.5) * (this.spread + baseSpread);
     dir.normalize();
 
     const ray = new THREE.Raycaster(this.camera.position, dir);
@@ -44,10 +43,10 @@ export class Weapon {
     if (window.enemies) {
       for (const e of window.enemies) {
         if (!e || !e.mesh || e.hp <= 0) continue;
-        const hit = ray.intersectObject(e.mesh, true);
-        if (hit.length) {
+        const hits = ray.intersectObject(e.mesh, true);
+        if (hits.length > 0) {
           e.hp -= this.ads ? 28 : 20;
-          spawnBlood(this.scene, hit[0].point);
+          spawnBlood(this.scene, hits[0].point);
           hitEnemy = true;
           break;
         }
@@ -57,7 +56,7 @@ export class Weapon {
     if (!hitEnemy) {
       if (window.worldWalls && window.worldWalls.length > 0) {
         const wallHits = ray.intersectObjects(window.worldWalls, false);
-        if (wallHits.length) {
+        if (wallHits.length > 0) {
           spawnSpark(this.scene, wallHits[0].point);
         } else {
           const point = this.camera.position.clone().add(dir.multiplyScalar(8));
@@ -69,7 +68,6 @@ export class Weapon {
 
   update() {
     if (this.cooldown > 0) this.cooldown--;
-
     this.spread *= 0.88;
 
     const crosshair = document.getElementById("crosshair");
