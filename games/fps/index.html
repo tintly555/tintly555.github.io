@@ -26,14 +26,15 @@
       top: 10px;
       left: 10px;
       z-index: 20;
-      background: rgba(0, 0, 0, 0.48);
+      background: rgba(0, 0, 0, 0.5);
       padding: 10px 12px;
       border-radius: 10px;
       line-height: 1.5;
       user-select: none;
       pointer-events: none;
-      min-width: 230px;
+      min-width: 260px;
       font-size: 14px;
+      backdrop-filter: blur(4px);
     }
 
     .hint {
@@ -73,6 +74,7 @@
       content: "";
       position: absolute;
       background: rgba(255,255,255,0.96);
+      box-shadow: 0 0 6px rgba(255,255,255,0.5);
     }
 
     .crosshair::before {
@@ -106,8 +108,8 @@
     const flash = document.getElementById("flash");
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x0f1117);
-    scene.fog = new THREE.Fog(0x0f1117, 18, 48);
+    scene.background = new THREE.Color(0x101522);
+    scene.fog = new THREE.Fog(0x101522, 20, 60);
 
     const camera = new THREE.PerspectiveCamera(
       75,
@@ -121,30 +123,41 @@
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     app.appendChild(renderer.domElement);
 
-    const hemi = new THREE.HemisphereLight(0x8aa8ff, 0x2f2f2f, 1.15);
-    scene.add(hemi);
+    const ambient = new THREE.HemisphereLight(0xa7c1ff, 0x303030, 1.15);
+    scene.add(ambient);
 
-    const dir = new THREE.DirectionalLight(0xffffff, 0.9);
-    dir.position.set(8, 14, 10);
-    dir.castShadow = true;
-    dir.shadow.mapSize.set(1024, 1024);
-    scene.add(dir);
+    const sun = new THREE.DirectionalLight(0xffffff, 1.1);
+    sun.position.set(10, 18, 8);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(2048, 2048);
+    sun.shadow.camera.left = -40;
+    sun.shadow.camera.right = 40;
+    sun.shadow.camera.top = 40;
+    sun.shadow.camera.bottom = -40;
+    scene.add(sun);
+
+    const floorMat = new THREE.MeshStandardMaterial({
+      color: 0x474951,
+      roughness: 0.92,
+      metalness: 0.03
+    });
 
     const floor = new THREE.Mesh(
-      new THREE.PlaneGeometry(100, 100),
-      new THREE.MeshStandardMaterial({ color: 0x3a3a42, roughness: 1.0 })
+      new THREE.PlaneGeometry(120, 120, 60, 60),
+      floorMat
     );
     floor.rotation.x = -Math.PI / 2;
     floor.receiveShadow = true;
     scene.add(floor);
 
     const ceiling = new THREE.Mesh(
-      new THREE.PlaneGeometry(100, 100),
+      new THREE.PlaneGeometry(120, 120),
       new THREE.MeshStandardMaterial({
-        color: 0x1a2135,
-        roughness: 1.0,
+        color: 0x1a233c,
+        roughness: 1,
         side: THREE.DoubleSide
       })
     );
@@ -186,7 +199,11 @@
         const p = cellToWorld(x, z);
         const wall = new THREE.Mesh(
           wallGeo,
-          new THREE.MeshStandardMaterial({ color: 0x6e7480, roughness: 0.9 })
+          new THREE.MeshStandardMaterial({
+            color: 0x727888,
+            roughness: 0.85,
+            metalness: 0.05
+          })
         );
         wall.position.set(p.x, 2, p.z);
         wall.castShadow = true;
@@ -202,11 +219,14 @@
       position: new THREE.Vector3(-HALF + CELL * 1.5, 1.65, -HALF + CELL * 1.5),
       yaw: 0,
       pitch: 0,
-      radius: 0.45,
+      radius: 0.38,
       speed: 6.2,
-      health: 100
+      health: 100,
+      velocityY: 0,
+      onGround: true
     };
 
+    const keys = { w:false, a:false, s:false, d:false, space:false };
     const state = {
       locked: false,
       mouseDown: false,
@@ -217,10 +237,10 @@
       lastShot: 0,
       spreadBloom: 0,
       enemies: [],
-      tracers: []
+      tracers: [],
+      reloading: false,
+      reloadEnd: 0
     };
-
-    const keys = { w: false, a: false, s: false, d: false };
 
     const weapons = [
       {
@@ -228,7 +248,7 @@
         fireDelay: 260,
         auto: false,
         pellets: 1,
-        spreadBase: 0.006,
+        spreadBase: 0.005,
         spreadBloomAdd: 0.002,
         spreadBloomMax: 0.014,
         recover: 0.028,
@@ -236,7 +256,10 @@
         damageHead: 70,
         damageBody: 36,
         damageLegs: 22,
-        color: 0xffe08a
+        color: 0xffe08a,
+        magSize: 12,
+        ammo: 12,
+        reloadTime: 1200
       },
       {
         name: "Assault Rifle",
@@ -251,7 +274,10 @@
         damageHead: 42,
         damageBody: 24,
         damageLegs: 16,
-        color: 0x8fdcff
+        color: 0x8fdcff,
+        magSize: 30,
+        ammo: 30,
+        reloadTime: 1600
       },
       {
         name: "Shotgun",
@@ -266,17 +292,25 @@
         damageHead: 24,
         damageBody: 15,
         damageLegs: 10,
-        color: 0xffb47a
+        color: 0xffb47a,
+        magSize: 8,
+        ammo: 8,
+        reloadTime: 1900
       }
     ];
 
+    function currentWeapon() {
+      return weapons[state.weaponIndex];
+    }
+
     function updateHud() {
+      const w = currentWeapon();
       hud.innerHTML = `
         3D FPS<br>
-        W A S D 移动<br>
-        鼠标自由视角<br>
-        按住鼠标开火（AR连射）<br>
-        武器: ${weapons[state.weaponIndex].name}<br>
+        W A S D 移动 | 空格跳跃 | R换弹<br>
+        鼠标自由视角 | 1 2 3 切枪<br>
+        武器: ${w.name}<br>
+        弹匣: ${w.ammo} / ${w.magSize}${state.reloading ? "（换弹中）" : ""}<br>
         ❤️ Health: ${Math.max(0, Math.floor(player.health))}<br>
         🎯 Score: ${state.score}
       `;
@@ -284,11 +318,28 @@
     updateHud();
 
     function collidesWithWalls(pos) {
-      const sphere = new THREE.Sphere(pos.clone(), player.radius);
+      const sphere = new THREE.Sphere(
+        new THREE.Vector3(pos.x, 1.0, pos.z),
+        player.radius
+      );
       for (const box of wallBoxes) {
         if (box.intersectsSphere(sphere)) return true;
       }
       return false;
+    }
+
+    function resolveWallSliding(nextPos) {
+      const result = player.position.clone();
+
+      const tryX = result.clone();
+      tryX.x = nextPos.x;
+      if (!collidesWithWalls(tryX)) result.x = tryX.x;
+
+      const tryZ = result.clone();
+      tryZ.z = nextPos.z;
+      if (!collidesWithWalls(tryZ)) result.z = tryZ.z;
+
+      return result;
     }
 
     function makeEnemy(x, z) {
@@ -298,32 +349,46 @@
         new THREE.BoxGeometry(0.42, 0.42, 0.42),
         new THREE.MeshStandardMaterial({ color: 0xe4b89e })
       );
-      head.position.y = 1.78;
+      head.position.y = 1.84;
       group.add(head);
 
+      const neck = new THREE.Mesh(
+        new THREE.BoxGeometry(0.16, 0.12, 0.16),
+        new THREE.MeshStandardMaterial({ color: 0xe4b89e })
+      );
+      neck.position.y = 1.55;
+      group.add(neck);
+
       const body = new THREE.Mesh(
-        new THREE.BoxGeometry(0.70, 0.95, 0.36),
+        new THREE.BoxGeometry(0.72, 0.96, 0.40),
         new THREE.MeshStandardMaterial({ color: 0x8d2d2d })
       );
-      body.position.y = 1.10;
+      body.position.y = 1.12;
       group.add(body);
+
+      const chest = new THREE.Mesh(
+        new THREE.BoxGeometry(0.40, 0.20, 0.10),
+        new THREE.MeshStandardMaterial({ color: 0xbf4a4a })
+      );
+      chest.position.set(0, 1.18, 0.22);
+      group.add(chest);
 
       const armL = new THREE.Mesh(
         new THREE.BoxGeometry(0.18, 0.68, 0.18),
         new THREE.MeshStandardMaterial({ color: 0x555555 })
       );
-      armL.position.set(-0.48, 1.10, 0);
+      armL.position.set(-0.50, 1.10, 0);
       group.add(armL);
 
       const armR = armL.clone();
-      armR.position.x = 0.48;
+      armR.position.x = 0.50;
       group.add(armR);
 
       const legL = new THREE.Mesh(
-        new THREE.BoxGeometry(0.22, 0.82, 0.22),
+        new THREE.BoxGeometry(0.22, 0.86, 0.22),
         new THREE.MeshStandardMaterial({ color: 0x666670 })
       );
-      legL.position.set(-0.16, 0.38, 0);
+      legL.position.set(-0.16, 0.42, 0);
       group.add(legL);
 
       const legR = legL.clone();
@@ -340,11 +405,33 @@
 
       scene.add(group);
 
+      // 头顶血条
+      const hpCanvas = document.createElement("canvas");
+      hpCanvas.width = 128;
+      hpCanvas.height = 24;
+      const hpCtx = hpCanvas.getContext("2d");
+
+      const hpTexture = new THREE.CanvasTexture(hpCanvas);
+      const hpSprite = new THREE.Sprite(
+        new THREE.SpriteMaterial({
+          map: hpTexture,
+          transparent: true,
+          depthTest: false
+        })
+      );
+      hpSprite.scale.set(1.6, 0.3, 1);
+      hpSprite.position.set(0, 2.55, 0);
+      group.add(hpSprite);
+
       return {
         group,
         head,
         body,
         legs: [legL, legR],
+        hpCanvas,
+        hpCtx,
+        hpTexture,
+        hpSprite,
         alive: true,
         hp: 100,
         attackCooldown: 0,
@@ -353,13 +440,29 @@
       };
     }
 
+    function drawEnemyHp(enemy) {
+      const ctx = enemy.hpCtx;
+      ctx.clearRect(0, 0, 128, 24);
+      ctx.fillStyle = "rgba(0,0,0,0.55)";
+      ctx.fillRect(4, 8, 120, 8);
+      ctx.fillStyle = "#22c55e";
+      ctx.fillRect(4, 8, 120 * Math.max(0, enemy.hp) / 100, 8);
+      ctx.strokeStyle = "rgba(255,255,255,0.85)";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(4, 8, 120, 8);
+      enemy.hpTexture.needsUpdate = true;
+    }
+
     const spawnPoints = [
       cellToWorld(4, 2),
       cellToWorld(6, 4),
       cellToWorld(3, 7)
     ];
+
     for (const p of spawnPoints) {
-      state.enemies.push(makeEnemy(p.x, p.z));
+      const enemy = makeEnemy(p.x, p.z);
+      drawEnemyHp(enemy);
+      state.enemies.push(enemy);
     }
 
     const tracerGroup = new THREE.Group();
@@ -407,18 +510,39 @@
           new THREE.MeshStandardMaterial({ color: 0x4b5563 })
         );
         gun.position.set(0.28, -0.22, -0.70);
+
+        const slide = new THREE.Mesh(
+          new THREE.BoxGeometry(0.12, 0.05, 0.24),
+          new THREE.MeshStandardMaterial({ color: 0x8891a0 })
+        );
+        slide.position.set(0, 0.08, -0.04);
+        gun.add(slide);
       } else if (type === 1) {
         gun = new THREE.Mesh(
           new THREE.BoxGeometry(0.18, 0.18, 0.92),
           new THREE.MeshStandardMaterial({ color: 0x374151 })
         );
         gun.position.set(0.25, -0.22, -0.80);
+
+        const stock = new THREE.Mesh(
+          new THREE.BoxGeometry(0.12, 0.16, 0.28),
+          new THREE.MeshStandardMaterial({ color: 0x1f2937 })
+        );
+        stock.position.set(0, 0, 0.52);
+        gun.add(stock);
       } else {
         gun = new THREE.Mesh(
           new THREE.BoxGeometry(0.20, 0.16, 0.96),
           new THREE.MeshStandardMaterial({ color: 0x6b7280 })
         );
         gun.position.set(0.23, -0.20, -0.82);
+
+        const pump = new THREE.Mesh(
+          new THREE.BoxGeometry(0.16, 0.10, 0.24),
+          new THREE.MeshStandardMaterial({ color: 0x7c5a3a })
+        );
+        pump.position.set(0, -0.08, -0.1);
+        gun.add(pump);
       }
       root.add(gun);
 
@@ -452,15 +576,26 @@
       updateHud();
     }
 
+    function startReload() {
+      const w = currentWeapon();
+      if (state.reloading) return;
+      if (w.ammo >= w.magSize) return;
+      state.reloading = true;
+      state.reloadEnd = performance.now() + w.reloadTime;
+      updateHud();
+    }
+
     document.addEventListener("keydown", (e) => {
       const k = e.key.toLowerCase();
       if (k === "w") keys.w = true;
       if (k === "a") keys.a = true;
       if (k === "s") keys.s = true;
       if (k === "d") keys.d = true;
+      if (k === " ") keys.space = true;
       if (k === "1") setWeapon(0);
       if (k === "2") setWeapon(1);
       if (k === "3") setWeapon(2);
+      if (k === "r") startReload();
     });
 
     document.addEventListener("keyup", (e) => {
@@ -469,6 +604,7 @@
       if (k === "a") keys.a = false;
       if (k === "s") keys.s = false;
       if (k === "d") keys.d = false;
+      if (k === " ") keys.space = false;
     });
 
     renderer.domElement.addEventListener("mousedown", () => {
@@ -522,18 +658,25 @@
 
       if (move.lengthSq() > 0) {
         move.normalize().multiplyScalar(player.speed * dt);
+        const next = player.position.clone().add(new THREE.Vector3(move.x, 0, move.z));
+        const resolved = resolveWallSliding(next);
+        player.position.x = resolved.x;
+        player.position.z = resolved.z;
+      }
 
-        const nextX = player.position.clone();
-        nextX.x += move.x;
-        if (!collidesWithWalls(nextX)) {
-          player.position.x = nextX.x;
-        }
+      // 跳跃
+      if (keys.space && player.onGround) {
+        player.velocityY = 5.8;
+        player.onGround = false;
+      }
 
-        const nextZ = player.position.clone();
-        nextZ.z += move.z;
-        if (!collidesWithWalls(nextZ)) {
-          player.position.z = nextZ.z;
-        }
+      player.velocityY -= 14 * dt;
+      player.position.y += player.velocityY * dt;
+
+      if (player.position.y <= 1.65) {
+        player.position.y = 1.65;
+        player.velocityY = 0;
+        player.onGround = true;
       }
 
       camera.position.copy(player.position);
@@ -543,15 +686,20 @@
       for (const enemy of state.enemies) {
         if (!enemy.alive) {
           enemy.group.visible = false;
+          enemy.hpSprite.visible = false;
           enemy.respawnTimer -= dt;
           if (enemy.respawnTimer <= 0) {
             enemy.alive = true;
             enemy.hp = 100;
             enemy.group.position.copy(enemy.spawn);
             enemy.group.visible = true;
+            enemy.hpSprite.visible = true;
+            drawEnemyHp(enemy);
           }
           continue;
         }
+
+        drawEnemyHp(enemy);
 
         const toPlayer = player.position.clone().sub(enemy.group.position);
         const dist = toPlayer.length();
@@ -567,7 +715,7 @@
 
           const enemySphere = new THREE.Sphere(
             new THREE.Vector3(next.x, 1.0, next.z),
-            0.45
+            0.38
           );
 
           let blocked = false;
@@ -622,7 +770,7 @@
     }
 
     function applyDamage(enemy, zone) {
-      const weapon = weapons[state.weaponIndex];
+      const weapon = currentWeapon();
       if (zone === "head") enemy.hp -= weapon.damageHead;
       else if (zone === "legs") enemy.hp -= weapon.damageLegs;
       else enemy.hp -= weapon.damageBody;
@@ -638,9 +786,17 @@
 
     function tryShoot() {
       const now = performance.now();
-      const weapon = weapons[state.weaponIndex];
+      const weapon = currentWeapon();
+
+      if (state.reloading) return;
+      if (weapon.ammo <= 0) {
+        startReload();
+        return;
+      }
       if (now - state.lastShot < weapon.fireDelay) return;
+
       state.lastShot = now;
+      weapon.ammo -= 1;
 
       state.recoil = weapon.recoil;
       state.spreadBloom = Math.min(
@@ -691,9 +847,15 @@
         } else if (wallPoint) {
           createTracer(muzzleStart, wallPoint, weapon.color);
         } else {
-          createTracer(muzzleStart, muzzleStart.clone().add(dir.multiplyScalar(40)), weapon.color);
+          createTracer(
+            muzzleStart,
+            muzzleStart.clone().add(dir.multiplyScalar(40)),
+            weapon.color
+          );
         }
       }
+
+      updateHud();
     }
 
     function updateWeaponVisuals() {
@@ -717,9 +879,15 @@
         updatePlayer(dt);
         updateEnemies(dt);
 
-        if (state.mouseDown && weapons[state.weaponIndex].auto) {
+        if (state.mouseDown && currentWeapon().auto) {
           tryShoot();
         }
+      }
+
+      if (state.reloading && performance.now() >= state.reloadEnd) {
+        state.reloading = false;
+        currentWeapon().ammo = currentWeapon().magSize;
+        updateHud();
       }
 
       if (state.flashTimer > 0) {
@@ -734,7 +902,7 @@
 
       state.spreadBloom = Math.max(
         0,
-        state.spreadBloom - weapons[state.weaponIndex].recover * dt * 60
+        state.spreadBloom - currentWeapon().recover * dt * 60
       );
 
       updateWeaponVisuals();
