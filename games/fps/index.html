@@ -14,6 +14,7 @@
       font-family: Arial, sans-serif;
       color: white;
     }
+
     #menu {
       position: absolute;
       inset: 0;
@@ -21,15 +22,59 @@
       flex-direction: column;
       justify-content: center;
       align-items: center;
-      background: rgba(0,0,0,0.7);
-      z-index: 10;
+      background: linear-gradient(to bottom, #07090f, #111827);
+      z-index: 20;
+      gap: 12px;
     }
+
+    #menu h1 {
+      margin: 0 0 12px 0;
+      font-size: 42px;
+    }
+
+    #menu .sub {
+      opacity: 0.8;
+      margin-bottom: 16px;
+    }
+
     #menu button {
-      margin: 10px;
-      padding: 14px 28px;
+      width: 220px;
+      padding: 14px 20px;
       font-size: 18px;
+      border: none;
+      border-radius: 10px;
       cursor: pointer;
+      background: white;
     }
+
+    #hud {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 10;
+      background: rgba(0,0,0,0.45);
+      padding: 10px 12px;
+      border-radius: 10px;
+      font-size: 14px;
+      line-height: 1.55;
+      pointer-events: none;
+      min-width: 220px;
+      backdrop-filter: blur(4px);
+    }
+
+    #hint {
+      position: absolute;
+      left: 50%;
+      top: 56%;
+      transform: translate(-50%, -50%);
+      z-index: 15;
+      background: rgba(0,0,0,0.65);
+      padding: 12px 16px;
+      border-radius: 10px;
+      pointer-events: none;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+    }
+
     .crosshair {
       position: absolute;
       left: 50%;
@@ -38,52 +83,59 @@
       height: 18px;
       transform: translate(-50%, -50%);
       pointer-events: none;
-      z-index: 5;
+      z-index: 12;
       opacity: 1;
       transition: opacity 0.12s ease;
     }
-    .crosshair.hidden { opacity: 0; }
+
+    .crosshair.hidden {
+      opacity: 0;
+    }
+
     .crosshair::before,
     .crosshair::after {
       content: "";
       position: absolute;
-      background: white;
+      background: rgba(255,255,255,0.95);
+      box-shadow: 0 0 6px rgba(255,255,255,0.45);
     }
+
     .crosshair::before {
       width: 2px;
       height: 18px;
       left: 8px;
       top: 0;
     }
+
     .crosshair::after {
       width: 18px;
       height: 2px;
       left: 0;
       top: 8px;
     }
-    #hud {
+
+    #damageFlash {
       position: absolute;
-      top: 10px;
-      left: 10px;
-      z-index: 6;
-      background: rgba(0,0,0,0.45);
-      padding: 8px 10px;
-      border-radius: 8px;
-      font-size: 14px;
-      line-height: 1.5;
+      inset: 0;
+      background: rgba(255, 0, 0, 0);
       pointer-events: none;
+      z-index: 11;
+      transition: background 0.08s linear;
     }
   </style>
 </head>
 <body>
   <div id="menu">
     <h1>FPS Game</h1>
+    <div class="sub">3D 工程版 · 不再混搭旧文件</div>
     <button onclick="startGame('zombie')">Zombie Mode</button>
-    <button onclick="startGame('duel')">1v1</button>
-    <button onclick="startGame('custom')">Custom</button>
+    <button onclick="startGame('duel')">1v1 Map</button>
+    <button onclick="startGame('custom')">Custom Map</button>
   </div>
 
   <div id="hud">Loading...</div>
+  <div id="hint">点击画面锁定鼠标开始</div>
+  <div id="damageFlash"></div>
   <div class="crosshair" id="crosshair"></div>
 
   <script type="module" src="./main.js"></script>
