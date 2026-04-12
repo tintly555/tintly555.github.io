@@ -1,61 +1,91 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-CN">
 <head>
-<meta charset="utf-8">
-<title>FPS Game</title>
-<style>
-body { margin:0; overflow:hidden; background:#000; }
-
-#menu{
- position:absolute;
- width:100%; height:100%;
- display:flex;
- flex-direction:column;
- justify-content:center;
- align-items:center;
- background:#000c;
- color:white;
-}
-
-button{
- margin:10px;
- padding:15px 30px;
- font-size:18px;
- cursor:pointer;
-}
-
-.crosshair{
- position:absolute;
- left:50%; top:50%;
- transform:translate(-50%,-50%);
- width:20px;height:20px;
-}
-
-.crosshair::before,
-.crosshair::after{
- content:"";
- position:absolute;
- background:white;
-}
-
-.crosshair::before{ width:2px;height:20px;left:9px;}
-.crosshair::after{ width:20px;height:2px;top:9px;}
-
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FPS Game</title>
+  <style>
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #000;
+      font-family: Arial, sans-serif;
+      color: white;
+    }
+    #menu {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      background: rgba(0,0,0,0.7);
+      z-index: 10;
+    }
+    #menu button {
+      margin: 10px;
+      padding: 14px 28px;
+      font-size: 18px;
+      cursor: pointer;
+    }
+    .crosshair {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 18px;
+      height: 18px;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      z-index: 5;
+      opacity: 1;
+      transition: opacity 0.12s ease;
+    }
+    .crosshair.hidden { opacity: 0; }
+    .crosshair::before,
+    .crosshair::after {
+      content: "";
+      position: absolute;
+      background: white;
+    }
+    .crosshair::before {
+      width: 2px;
+      height: 18px;
+      left: 8px;
+      top: 0;
+    }
+    .crosshair::after {
+      width: 18px;
+      height: 2px;
+      left: 0;
+      top: 8px;
+    }
+    #hud {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 6;
+      background: rgba(0,0,0,0.45);
+      padding: 8px 10px;
+      border-radius: 8px;
+      font-size: 14px;
+      line-height: 1.5;
+      pointer-events: none;
+    }
+  </style>
 </head>
-
 <body>
+  <div id="menu">
+    <h1>FPS Game</h1>
+    <button onclick="startGame('zombie')">Zombie Mode</button>
+    <button onclick="startGame('duel')">1v1</button>
+    <button onclick="startGame('custom')">Custom</button>
+  </div>
 
-<div id="menu">
-<h1>FPS Game</h1>
-<button onclick="startGame('zombie')">Zombie Mode</button>
-<button onclick="startGame('duel')">1v1</button>
-<button onclick="startGame('custom')">Custom</button>
-</div>
+  <div id="hud">Loading...</div>
+  <div class="crosshair" id="crosshair"></div>
 
-<div class="crosshair"></div>
-
-<script type="module" src="./main.js"></script>
-
+  <script type="module" src="./main.js"></script>
 </body>
 </html>
