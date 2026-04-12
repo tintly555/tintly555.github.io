@@ -1,221 +1,282 @@
 import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.152/build/three.module.js";
 import { Player } from "./player.js";
 import { Weapon } from "./weapon.js";
+import { EnemyManager } from "./enemy.js";
 
 let scene, camera, renderer;
-let player, weapon;
+let player, weapon, enemies;
 
+let worldWalls = [];
+
+// 给其他模块临时访问
 window.enemies = [];
-let walls = [];
+window.worldWalls = worldWalls;
 
-/* 菜单 */
-window.startGame = function(){
- document.getElementById("menu").style.display="none";
- init();
+/* 菜单按钮会调用 */
+window.startGame = function startGame(mode) {
+  const menu = document.getElementById("menu");
+  if (menu) menu.style.display = "none";
+  init(mode || "zombie");
 };
 
-function init(){
+function init(mode) {
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x101218);
+  scene.fog = new THREE.Fog(0x101218, 30, 120);
 
-scene = new THREE.Scene();
+  camera = new THREE.PerspectiveCamera(
+    75,
+    window.innerWidth / window.innerHeight,
+    0.1,
+    1000
+  );
+  camera.position.set(0, 1.6, 8);
 
-/* 摄像机 */
-camera = new THREE.PerspectiveCamera(75,innerWidth/innerHeight,0.1,1000);
-camera.position.set(0,1.6,5);
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.shadowMap.enabled = true;
+  document.body.appendChild(renderer.domElement);
 
-/* 渲染 */
-renderer = new THREE.WebGLRenderer();
-renderer.setSize(innerWidth,innerHeight);
-document.body.appendChild(renderer.domElement);
+  addLights();
+  addFloor();
+  buildMap(mode);
 
-/* 光 */
-let light = new THREE.DirectionalLight(0xffffff,1);
-light.position.set(10,20,10);
-scene.add(light);
+  player = new Player(camera);
+  weapon = new Weapon(camera, scene);
 
-/* 地面 */
-let floor = new THREE.Mesh(
- new THREE.PlaneGeometry(200,200),
- new THREE.MeshStandardMaterial({color:0x333333})
-);
-floor.rotation.x = -Math.PI/2;
-scene.add(floor);
+  enemies = new EnemyManager(scene, camera);
+  enemies.spawn(mode);
 
-/* 地图 */
-createMap();
+  window.addEventListener("resize", onResize);
 
-/* 玩家 */
-player = new Player(camera);
-weapon = new Weapon(camera);
-
-/* 敌人 */
-spawnEnemies();
-
-animate();
+  animate();
 }
 
-/* ================= 地图 ================= */
+function addLights() {
+  const hemi = new THREE.HemisphereLight(0x8fa8ff, 0x2d2d2d, 1.05);
+  scene.add(hemi);
 
-function addWall(x,z,w,h,d){
- let m = new THREE.Mesh(
-  new THREE.BoxGeometry(w,h,d),
-  new THREE.MeshStandardMaterial({color:0x555555})
- );
- m.position.set(x,h/2,z);
- scene.add(m);
- walls.push(m);
+  const dir = new THREE.DirectionalLight(0xffffff, 1.0);
+  dir.position.set(18, 24, 12);
+  dir.castShadow = true;
+  dir.shadow.mapSize.width = 1024;
+  dir.shadow.mapSize.height = 1024;
+  scene.add(dir);
 }
 
-function createMap(){
-
-/* 外围 */
-addWall(0,-30,60,6,2);
-addWall(0,30,60,6,2);
-addWall(-30,0,2,6,60);
-addWall(30,0,2,6,60);
-
-/* 房间 */
-addWall(0,0,20,5,2);
-addWall(-12,8,2,5,20);
-addWall(12,-8,2,5,20);
-
-/* 窗洞 */
-addWall(0,5,6,2,2);
-addWall(0,-5,6,2,2);
+function addFloor() {
+  const floor = new THREE.Mesh(
+    new THREE.PlaneGeometry(220, 220),
+    new THREE.MeshStandardMaterial({
+      color: 0x3f434a,
+      roughness: 0.95,
+      metalness: 0.02
+    })
+  );
+  floor.rotation.x = -Math.PI / 2;
+  floor.receiveShadow = true;
+  scene.add(floor);
 }
 
-/* ================= 敌人 ================= */
+function addWall(x, z, w, h, d, color = 0x666a73) {
+  const wall = new THREE.Mesh(
+    new THREE.BoxGeometry(w, h, d),
+    new THREE.MeshStandardMaterial({
+      color,
+      roughness: 0.88,
+      metalness: 0.03
+    })
+  );
 
-function createZombie(){
+  wall.position.set(x, h / 2, z);
+  wall.castShadow = true;
+  wall.receiveShadow = true;
+  scene.add(wall);
 
-let g = new THREE.Group();
+  worldWalls.push(wall);
+  window.worldWalls = worldWalls;
 
-/* 身体 */
-let body = new THREE.Mesh(
- new THREE.BoxGeometry(1,1.5,0.6),
- new THREE.MeshStandardMaterial({color:0x228822})
-);
-body.position.y=1;
-
-/* 头 */
-let head = new THREE.Mesh(
- new THREE.BoxGeometry(0.6,0.6,0.6),
- new THREE.MeshStandardMaterial({color:0x44aa44})
-);
-head.position.y=2;
-
-/* 腿 */
-let leg1 = new THREE.Mesh(
- new THREE.BoxGeometry(0.3,1,0.3),
- new THREE.MeshStandardMaterial({color:0x222222})
-);
-leg1.position.set(-0.2,0.5,0);
-
-let leg2 = leg1.clone();
-leg2.position.x=0.2;
-
-/* 手 */
-let arm1 = new THREE.Mesh(
- new THREE.BoxGeometry(0.3,1,0.3),
- new THREE.MeshStandardMaterial({color:0x228822})
-);
-arm1.position.set(-0.8,1.3,0);
-
-let arm2 = arm1.clone();
-arm2.position.x=0.8;
-
-g.add(body,head,leg1,leg2,arm1,arm2);
-
-return g;
+  return wall;
 }
 
-function spawnEnemies(){
+/**
+ * 带“窗洞”的横向墙（沿 X 方向展开）
+ */
+function addWindowWallX(centerX, centerZ, totalWidth, wallHeight = 4.5, thickness = 1.0, windowWidth = 5, windowBottom = 1.4, windowTop = 3.0) {
+  const sideWidth = (totalWidth - windowWidth) / 2;
 
-for(let i=0;i<6;i++){
+  addWall(centerX - (windowWidth / 2 + sideWidth / 2), centerZ, sideWidth, wallHeight, thickness);
+  addWall(centerX + (windowWidth / 2 + sideWidth / 2), centerZ, sideWidth, wallHeight, thickness);
 
- let z = createZombie();
+  const lowerHeight = windowBottom;
+  if (lowerHeight > 0) {
+    addWall(centerX, centerZ, windowWidth, lowerHeight, thickness);
+  }
 
- z.position.set(
-  Math.random()*30-15,
-  0,
-  Math.random()*30-15
- );
-
- scene.add(z);
-
- window.enemies.push({
-  mesh:z,
-  hp:100,
-  speed:0.03,
-  attackCooldown:0
- });
-}
-}
-
-/* ================= AI ================= */
-
-function updateEnemies(){
-
-window.enemies.forEach(e=>{
-
-if(e.hp<=0){
- scene.remove(e.mesh);
- return;
-}
-
-let dx = camera.position.x - e.mesh.position.x;
-let dz = camera.position.z - e.mesh.position.z;
-
-let dist = Math.sqrt(dx*dx + dz*dz);
-
-/* 移动 */
-if(dist>1.5){
- e.mesh.position.x += dx/dist * e.speed;
- e.mesh.position.z += dz/dist * e.speed;
+  const upperHeight = wallHeight - windowTop;
+  if (upperHeight > 0) {
+    const y = windowTop + upperHeight / 2;
+    const topWall = new THREE.Mesh(
+      new THREE.BoxGeometry(windowWidth, upperHeight, thickness),
+      new THREE.MeshStandardMaterial({
+        color: 0x666a73,
+        roughness: 0.88,
+        metalness: 0.03
+      })
+    );
+    topWall.position.set(centerX, y, centerZ);
+    topWall.castShadow = true;
+    topWall.receiveShadow = true;
+    scene.add(topWall);
+    worldWalls.push(topWall);
+  }
 }
 
-/* 攻击 */
-e.attackCooldown--;
+/**
+ * 带“窗洞”的纵向墙（沿 Z 方向展开）
+ */
+function addWindowWallZ(centerX, centerZ, totalDepth, wallHeight = 4.5, thickness = 1.0, windowDepth = 5, windowBottom = 1.4, windowTop = 3.0) {
+  const sideDepth = (totalDepth - windowDepth) / 2;
 
-if(dist<2 && e.attackCooldown<=0){
- e.attackCooldown = 60;
+  addWall(centerX, centerZ - (windowDepth / 2 + sideDepth / 2), thickness, wallHeight, sideDepth);
+  addWall(centerX, centerZ + (windowDepth / 2 + sideDepth / 2), thickness, wallHeight, sideDepth);
 
- document.body.style.background="red";
- setTimeout(()=>document.body.style.background="black",80);
+  const lowerHeight = windowBottom;
+  if (lowerHeight > 0) {
+    addWall(centerX, centerZ, thickness, lowerHeight, windowDepth);
+  }
+
+  const upperHeight = wallHeight - windowTop;
+  if (upperHeight > 0) {
+    const y = windowTop + upperHeight / 2;
+    const topWall = new THREE.Mesh(
+      new THREE.BoxGeometry(thickness, upperHeight, windowDepth),
+      new THREE.MeshStandardMaterial({
+        color: 0x666a73,
+        roughness: 0.88,
+        metalness: 0.03
+      })
+    );
+    topWall.position.set(centerX, y, centerZ);
+    topWall.castShadow = true;
+    topWall.receiveShadow = true;
+    scene.add(topWall);
+    worldWalls.push(topWall);
+  }
 }
 
-/* 面向玩家 */
-e.mesh.lookAt(camera.position);
-
-});
+function clearWalls() {
+  for (const wall of worldWalls) {
+    scene.remove(wall);
+    wall.geometry.dispose();
+    if (Array.isArray(wall.material)) {
+      wall.material.forEach((m) => m.dispose());
+    } else {
+      wall.material.dispose();
+    }
+  }
+  worldWalls = [];
+  window.worldWalls = worldWalls;
 }
 
-/* ================= 特效 ================= */
+function buildMap(mode) {
+  clearWalls();
 
-function bloodEffect(pos){
+  if (mode === "duel") {
+    buildDuelMap();
+    return;
+  }
 
-for(let i=0;i<5;i++){
- let p = new THREE.Mesh(
-  new THREE.SphereGeometry(0.05),
-  new THREE.MeshBasicMaterial({color:0xaa0000})
- );
- p.position.copy(pos);
+  if (mode === "custom") {
+    buildCustomMap();
+    return;
+  }
 
- scene.add(p);
-
- setTimeout(()=>scene.remove(p),300);
+  buildZombieMap();
 }
+
+function buildZombieMap() {
+  const H = 4.5;
+
+  // 外圈
+  addWall(0, -36, 76, H, 2);
+  addWall(0, 36, 76, H, 2);
+  addWall(-36, 0, 2, H, 76);
+  addWall(36, 0, 2, H, 76);
+
+  // 中区开放结构
+  addWindowWallX(0, -16, 24, H, 1.2, 6, 1.4, 3.1);
+  addWindowWallX(0, 16, 24, H, 1.2, 6, 1.4, 3.1);
+
+  addWindowWallZ(-16, 0, 20, H, 1.2, 5, 1.4, 3.0);
+  addWindowWallZ(16, 0, 20, H, 1.2, 5, 1.4, 3.0);
+
+  // 半墙和掩体
+  addWall(-24, -6, 10, 2.4, 1.2, 0x70798a);
+  addWall(24, 6, 10, 2.4, 1.2, 0x70798a);
+  addWall(-8, 24, 1.2, 2.4, 10, 0x70798a);
+  addWall(8, -24, 1.2, 2.4, 10, 0x70798a);
+
+  addWall(-10, 0, 8, 3.2, 1.2, 0x6a7487);
+  addWall(10, 0, 8, 3.2, 1.2, 0x6a7487);
 }
 
-window.spawnBlood = bloodEffect;
+function buildDuelMap() {
+  const H = 4.5;
 
-/* ================= 主循环 ================= */
+  addWall(0, -40, 84, H, 2);
+  addWall(0, 40, 84, H, 2);
+  addWall(-40, 0, 2, H, 84);
+  addWall(40, 0, 2, H, 84);
 
-function animate(){
-requestAnimationFrame(animate);
+  // 中央主掩体
+  addWindowWallX(0, 0, 18, H, 1.2, 6, 1.2, 3.0);
+  addWindowWallZ(0, 0, 18, H, 1.2, 6, 1.2, 3.0);
 
-player.update();
-weapon.update();
-updateEnemies();
+  // 左右交叉墙
+  addWall(-22, -10, 14, 2.6, 1.2, 0x717b8d);
+  addWall(22, 10, 14, 2.6, 1.2, 0x717b8d);
+  addWall(-10, 22, 1.2, 2.6, 14, 0x717b8d);
+  addWall(10, -22, 1.2, 2.6, 14, 0x717b8d);
+}
 
-renderer.render(scene,camera);
+function buildCustomMap() {
+  const H = 4.5;
+
+  addWall(0, -44, 92, H, 2);
+  addWall(0, 44, 92, H, 2);
+  addWall(-44, 0, 2, H, 92);
+  addWall(44, 0, 2, H, 92);
+
+  // 更开放，给以后多人留空间
+  addWindowWallX(0, -20, 30, H, 1.2, 8, 1.3, 3.2);
+  addWindowWallX(0, 20, 30, H, 1.2, 8, 1.3, 3.2);
+
+  addWindowWallZ(-20, 0, 24, H, 1.2, 6, 1.3, 3.0);
+  addWindowWallZ(20, 0, 24, H, 1.2, 6, 1.3, 3.0);
+
+  addWall(-28, 12, 12, 2.5, 1.2, 0x6f7686);
+  addWall(28, -12, 12, 2.5, 1.2, 0x6f7686);
+  addWall(-12, -28, 1.2, 2.5, 12, 0x6f7686);
+  addWall(12, 28, 1.2, 2.5, 12, 0x6f7686);
+
+  addWall(0, 0, 10, 3.0, 1.2, 0x687184);
+  addWall(0, 0, 1.2, 3.0, 10, 0x687184);
+}
+
+function onResize() {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+function animate() {
+  requestAnimationFrame(animate);
+
+  if (player) player.update();
+  if (weapon) weapon.update();
+  if (enemies) enemies.update();
+
+  renderer.render(scene, camera);
 }
