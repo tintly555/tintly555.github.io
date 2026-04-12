@@ -8,7 +8,7 @@
       margin: 0;
       background: black;
       overflow: hidden;
-      font-family: Arial, sans-serif;
+      font-family: Arial;
       color: white;
     }
 
@@ -16,6 +16,7 @@
       display: block;
       margin: 0 auto;
       background: #111;
+      cursor: crosshair;
     }
 
     .hud {
@@ -23,10 +24,9 @@
       top: 10px;
       left: 10px;
       font-size: 14px;
-      color: white;
-      background: rgba(0, 0, 0, 0.35);
-      padding: 8px 10px;
-      border-radius: 8px;
+      background: rgba(0,0,0,0.4);
+      padding: 8px;
+      border-radius: 6px;
       line-height: 1.5;
     }
 
@@ -55,183 +55,198 @@
     }
 
     .crosshair::after {
-      left: 0;
       top: 7px;
+      left: 0;
       width: 16px;
       height: 2px;
     }
   </style>
 </head>
+
 <body>
   <div class="hud">
     FPS Prototype<br>
-    Move: W A S D<br>
-    Turn: ← →
+    W A S D 移动<br>
+    ← → 转向<br>
+    鼠标点击开枪
   </div>
+
   <div class="crosshair"></div>
   <canvas id="game" width="800" height="500"></canvas>
 
-  <script>
-    const canvas = document.getElementById("game");
-    const ctx = canvas.getContext("2d");
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
 
-    const map = [
-      [1,1,1,1,1,1,1,1,1,1],
-      [1,0,0,0,0,0,0,0,0,1],
-      [1,0,0,1,0,0,1,0,0,1],
-      [1,0,0,1,0,0,1,0,0,1],
-      [1,0,0,0,0,0,0,0,0,1],
-      [1,0,1,0,1,1,0,1,0,1],
-      [1,0,1,0,0,0,0,1,0,1],
-      [1,0,0,0,0,1,0,0,0,1],
-      [1,0,0,0,0,0,0,0,0,1],
-      [1,1,1,1,1,1,1,1,1,1]
-    ];
+const map = [
+  [1,1,1,1,1,1,1,1,1,1],
+  [1,0,0,0,0,0,0,0,0,1],
+  [1,0,0,1,0,0,1,0,0,1],
+  [1,0,0,1,0,0,1,0,0,1],
+  [1,0,0,0,0,0,0,0,0,1],
+  [1,0,1,0,1,1,0,1,0,1],
+  [1,0,1,0,0,0,0,1,0,1],
+  [1,0,0,0,0,1,0,0,0,1],
+  [1,0,0,0,0,0,0,0,0,1],
+  [1,1,1,1,1,1,1,1,1,1]
+];
 
-    const TILE = 64;
+const TILE = 64;
 
-    const player = {
-      x: 2.5 * TILE,
-      y: 2.5 * TILE,
-      angle: 0,
-      moveSpeed: 2.5,
-      rotSpeed: 0.04
-    };
+const player = {
+  x: 2.5 * TILE,
+  y: 2.5 * TILE,
+  angle: 0,
+  moveSpeed: 2.5,
+  rotSpeed: 0.04,
+  radius: 10
+};
 
-    const keys = {
-      w: false,
-      a: false,
-      s: false,
-      d: false,
-      left: false,
-      right: false
-    };
+const keys = {
+  w:false,a:false,s:false,d:false,left:false,right:false
+};
 
-    document.addEventListener("keydown", (e) => {
-      const k = e.key.toLowerCase();
-      if (k === "w") keys.w = true;
-      if (k === "a") keys.a = true;
-      if (k === "s") keys.s = true;
-      if (k === "d") keys.d = true;
-      if (e.key === "ArrowLeft") keys.left = true;
-      if (e.key === "ArrowRight") keys.right = true;
-    });
+let muzzleFlash = 0;
 
-    document.addEventListener("keyup", (e) => {
-      const k = e.key.toLowerCase();
-      if (k === "w") keys.w = false;
-      if (k === "a") keys.a = false;
-      if (k === "s") keys.s = false;
-      if (k === "d") keys.d = false;
-      if (e.key === "ArrowLeft") keys.left = false;
-      if (e.key === "ArrowRight") keys.right = false;
-    });
+document.addEventListener("keydown", e=>{
+  let k=e.key.toLowerCase();
+  if(k==="w")keys.w=true;
+  if(k==="a")keys.a=true;
+  if(k==="s")keys.s=true;
+  if(k==="d")keys.d=true;
+  if(e.key==="ArrowLeft")keys.left=true;
+  if(e.key==="ArrowRight")keys.right=true;
+});
 
-    function isWall(x, y) {
-      const mapX = Math.floor(x / TILE);
-      const mapY = Math.floor(y / TILE);
+document.addEventListener("keyup", e=>{
+  let k=e.key.toLowerCase();
+  if(k==="w")keys.w=false;
+  if(k==="a")keys.a=false;
+  if(k==="s")keys.s=false;
+  if(k==="d")keys.d=false;
+  if(e.key==="ArrowLeft")keys.left=false;
+  if(e.key==="ArrowRight")keys.right=false;
+});
 
-      if (
-        mapY < 0 || mapY >= map.length ||
-        mapX < 0 || mapX >= map[0].length
-      ) {
-        return true;
-      }
+canvas.addEventListener("click", () => {
+  muzzleFlash = 5;
+});
 
-      return map[mapY][mapX] !== 0;
-    }
+function isWall(x,y){
+  let mx=Math.floor(x/TILE);
+  let my=Math.floor(y/TILE);
+  if(my<0||my>=map.length||mx<0||mx>=map[0].length) return true;
+  return map[my][mx]!==0;
+}
 
-    function movePlayer() {
-      if (keys.left) player.angle -= player.rotSpeed;
-      if (keys.right) player.angle += player.rotSpeed;
+function canMoveTo(x,y,r){
+  return(
+    !isWall(x-r,y-r)&&
+    !isWall(x+r,y-r)&&
+    !isWall(x-r,y+r)&&
+    !isWall(x+r,y+r)
+  );
+}
 
-      let moveStep = 0;
-      let strafeStep = 0;
+function movePlayer(){
+  if(keys.left) player.angle-=player.rotSpeed;
+  if(keys.right) player.angle+=player.rotSpeed;
 
-      if (keys.w) moveStep = player.moveSpeed;
-      if (keys.s) moveStep = -player.moveSpeed;
-      if (keys.a) strafeStep = -player.moveSpeed;
-      if (keys.d) strafeStep = player.moveSpeed;
+  let move=0,strafe=0;
+  if(keys.w) move=player.moveSpeed;
+  if(keys.s) move=-player.moveSpeed;
+  if(keys.a) strafe=-player.moveSpeed;
+  if(keys.d) strafe=player.moveSpeed;
 
-      const nextX =
-        player.x +
-        Math.cos(player.angle) * moveStep +
-        Math.cos(player.angle + Math.PI / 2) * strafeStep;
+  let dx=Math.cos(player.angle)*move+
+         Math.cos(player.angle+Math.PI/2)*strafe;
 
-      const nextY =
-        player.y +
-        Math.sin(player.angle) * moveStep +
-        Math.sin(player.angle + Math.PI / 2) * strafeStep;
+  let dy=Math.sin(player.angle)*move+
+         Math.sin(player.angle+Math.PI/2)*strafe;
 
-      if (!isWall(nextX, player.y)) {
-        player.x = nextX;
-      }
-      if (!isWall(player.x, nextY)) {
-        player.y = nextY;
-      }
-    }
+  let nx=player.x+dx;
+  let ny=player.y+dy;
 
-    function castRay(angle) {
-      const sin = Math.sin(angle);
-      const cos = Math.cos(angle);
+  if(canMoveTo(nx,player.y,player.radius)) player.x=nx;
+  if(canMoveTo(player.x,ny,player.radius)) player.y=ny;
+}
 
-      let distance = 0;
-      while (distance < 1000) {
-        distance += 1;
-        const x = player.x + cos * distance;
-        const y = player.y + sin * distance;
+function castRay(angle){
+  let sin=Math.sin(angle),cos=Math.cos(angle);
+  let dist=0;
+  while(dist<1000){
+    dist+=1;
+    let x=player.x+cos*dist;
+    let y=player.y+sin*dist;
+    if(isWall(x,y)) return dist;
+  }
+  return 1000;
+}
 
-        if (isWall(x, y)) {
-          return distance;
-        }
-      }
-      return 1000;
-    }
+function draw3D(){
+  let w=canvas.width,h=canvas.height;
 
-    function draw3D() {
-      const width = canvas.width;
-      const height = canvas.height;
+  ctx.fillStyle="#203050";
+  ctx.fillRect(0,0,w,h/2);
 
-      // sky
-      ctx.fillStyle = "#202840";
-      ctx.fillRect(0, 0, width, height / 2);
+  ctx.fillStyle="#333";
+  ctx.fillRect(0,h/2,w,h/2);
 
-      // floor
-      ctx.fillStyle = "#2f2f2f";
-      ctx.fillRect(0, height / 2, width, height / 2);
+  let fov=Math.PI/3;
+  let rays=w;
 
-      const fov = Math.PI / 3; // 60 degrees
-      const numRays = width;
-      const halfFov = fov / 2;
+  for(let i=0;i<rays;i++){
+    let angle=player.angle-fov/2+i/rays*fov;
+    let dist=castRay(angle);
 
-      for (let i = 0; i < numRays; i++) {
-        const rayAngle = player.angle - halfFov + (i / numRays) * fov;
-        let dist = castRay(rayAngle);
+    dist*=Math.cos(angle-player.angle);
 
-        // fisheye correction
-        dist *= Math.cos(rayAngle - player.angle);
+    let height=(TILE*280)/dist;
+    let shade=Math.max(40,255-dist*0.5);
+    ctx.fillStyle=`rgb(${shade},${shade},${shade})`;
+    ctx.fillRect(i,h/2-height/2,1,height);
+  }
+}
 
-        const wallHeight = (TILE * 280) / dist;
+function drawGun(){
+  const w = canvas.width;
+  const h = canvas.height;
 
-        const shade = Math.max(40, 255 - dist * 0.5);
-        ctx.fillStyle = `rgb(${shade}, ${shade}, ${shade})`;
+  // 枪身
+  ctx.fillStyle = "#555";
+  ctx.fillRect(w/2 - 40, h - 70, 80, 50);
 
-        ctx.fillRect(
-          i,
-          height / 2 - wallHeight / 2,
-          1,
-          wallHeight
-        );
-      }
-    }
+  // 枪管
+  ctx.fillStyle = "#777";
+  ctx.fillRect(w/2 - 10, h - 95, 20, 35);
 
-    function loop() {
-      movePlayer();
-      draw3D();
-      requestAnimationFrame(loop);
-    }
+  // 枪口火花
+  if (muzzleFlash > 0) {
+    ctx.fillStyle = "yellow";
+    ctx.beginPath();
+    ctx.arc(w/2, h - 105, 12, 0, Math.PI * 2);
+    ctx.fill();
 
-    loop();
-  </script>
+    ctx.fillStyle = "orange";
+    ctx.beginPath();
+    ctx.arc(w/2, h - 105, 6, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function updateEffects(){
+  if (muzzleFlash > 0) muzzleFlash--;
+}
+
+function loop(){
+  movePlayer();
+  updateEffects();
+  draw3D();
+  drawGun();
+  requestAnimationFrame(loop);
+}
+
+loop();
+</script>
 </body>
 </html>
