@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Shooter</title>
+<style>
+body { margin:0; background:black; }
+canvas { display:block; margin:auto; background:#111; }
+</style>
+</head>
+
+<body>
+<canvas id="game" width="400" height="600"></canvas>
+
+<script>
+let c = document.getElementById("game");
+let ctx = c.getContext("2d");
+
+let player = {x:180, y:500, w:40, h:40};
+let bullets = [];
+let enemies = [];
+
+document.addEventListener("keydown", e=>{
+  if(e.key==="ArrowLeft") player.x -= 20;
+  if(e.key==="ArrowRight") player.x += 20;
+  if(e.key===" ") bullets.push({x:player.x+18, y:player.y});
+});
+
+function spawnEnemy(){
+  enemies.push({x:Math.random()*360, y:0});
+}
+setInterval(spawnEnemy,1000);
+
+function update(){
+  ctx.clearRect(0,0,400,600);
+
+  // player
+  ctx.fillStyle="white";
+  ctx.fillRect(player.x,player.y,player.w,player.h);
+
+  // bullets
+  ctx.fillStyle="yellow";
+  bullets.forEach(b=>{
+    b.y -= 5;
+    ctx.fillRect(b.x,b.y,4,10);
+  });
+
+  // enemies
+  ctx.fillStyle="red";
+  enemies.forEach(e=>{
+    e.y += 2;
+    ctx.fillRect(e.x,e.y,30,30);
+  });
+
+  requestAnimationFrame(update);
+}
+
+update();
+</script>
+</body>
+</html>
