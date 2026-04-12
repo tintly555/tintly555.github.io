@@ -5,15 +5,12 @@ import { Weapon } from "./weapon.js";
 let scene, camera, renderer;
 let player, weapon;
 
-/* 🌍 全局敌人（给 weapon 用） */
 window.enemies = [];
+let walls = [];
 
-let mode = "zombie";
-
-/* 🎮 菜单入口 */
-window.startGame = function(m){
- mode = m;
- document.getElementById("menu").style.display = "none";
+/* 菜单 */
+window.startGame = function(){
+ document.getElementById("menu").style.display="none";
  init();
 };
 
@@ -25,7 +22,7 @@ scene = new THREE.Scene();
 camera = new THREE.PerspectiveCamera(75,innerWidth/innerHeight,0.1,1000);
 camera.position.set(0,1.6,5);
 
-/* 渲染器 */
+/* 渲染 */
 renderer = new THREE.WebGLRenderer();
 renderer.setSize(innerWidth,innerHeight);
 document.body.appendChild(renderer.domElement);
@@ -38,109 +35,186 @@ scene.add(light);
 /* 地面 */
 let floor = new THREE.Mesh(
  new THREE.PlaneGeometry(200,200),
- new THREE.MeshStandardMaterial({color:0x444444})
+ new THREE.MeshStandardMaterial({color:0x333333})
 );
 floor.rotation.x = -Math.PI/2;
 scene.add(floor);
 
-/* 墙 */
-createWalls();
+/* 地图 */
+createMap();
 
-/* 玩家 + 武器 */
+/* 玩家 */
 player = new Player(camera);
 weapon = new Weapon(camera);
 
-/* 生成敌人 */
+/* 敌人 */
 spawnEnemies();
 
 animate();
 }
 
-/* 🧱 墙体 */
-function createWalls(){
+/* ================= 地图 ================= */
 
 function addWall(x,z,w,h,d){
- let wall = new THREE.Mesh(
+ let m = new THREE.Mesh(
   new THREE.BoxGeometry(w,h,d),
-  new THREE.MeshStandardMaterial({color:0x666666})
+  new THREE.MeshStandardMaterial({color:0x555555})
  );
- wall.position.set(x,h/2,z);
- scene.add(wall);
+ m.position.set(x,h/2,z);
+ scene.add(m);
+ walls.push(m);
 }
 
-/* 四周 */
-addWall(0,-20,40,4,1);
-addWall(0,20,40,4,1);
-addWall(-20,0,1,4,40);
-addWall(20,0,1,4,40);
+function createMap(){
 
-/* 中间掩体 */
-addWall(0,0,8,3,1);
+/* 外围 */
+addWall(0,-30,60,6,2);
+addWall(0,30,60,6,2);
+addWall(-30,0,2,6,60);
+addWall(30,0,2,6,60);
 
+/* 房间 */
+addWall(0,0,20,5,2);
+addWall(-12,8,2,5,20);
+addWall(12,-8,2,5,20);
+
+/* 窗洞 */
+addWall(0,5,6,2,2);
+addWall(0,-5,6,2,2);
 }
 
-/* 💀 敌人生成 */
+/* ================= 敌人 ================= */
+
+function createZombie(){
+
+let g = new THREE.Group();
+
+/* 身体 */
+let body = new THREE.Mesh(
+ new THREE.BoxGeometry(1,1.5,0.6),
+ new THREE.MeshStandardMaterial({color:0x228822})
+);
+body.position.y=1;
+
+/* 头 */
+let head = new THREE.Mesh(
+ new THREE.BoxGeometry(0.6,0.6,0.6),
+ new THREE.MeshStandardMaterial({color:0x44aa44})
+);
+head.position.y=2;
+
+/* 腿 */
+let leg1 = new THREE.Mesh(
+ new THREE.BoxGeometry(0.3,1,0.3),
+ new THREE.MeshStandardMaterial({color:0x222222})
+);
+leg1.position.set(-0.2,0.5,0);
+
+let leg2 = leg1.clone();
+leg2.position.x=0.2;
+
+/* 手 */
+let arm1 = new THREE.Mesh(
+ new THREE.BoxGeometry(0.3,1,0.3),
+ new THREE.MeshStandardMaterial({color:0x228822})
+);
+arm1.position.set(-0.8,1.3,0);
+
+let arm2 = arm1.clone();
+arm2.position.x=0.8;
+
+g.add(body,head,leg1,leg2,arm1,arm2);
+
+return g;
+}
+
 function spawnEnemies(){
 
 for(let i=0;i<6;i++){
 
- let mesh = new THREE.Mesh(
-  new THREE.BoxGeometry(1,2,1),
-  new THREE.MeshStandardMaterial({color:0x00ff00})
- );
+ let z = createZombie();
 
- mesh.position.set(
+ z.position.set(
   Math.random()*30-15,
-  1,
+  0,
   Math.random()*30-15
  );
 
- scene.add(mesh);
+ scene.add(z);
 
  window.enemies.push({
-  mesh: mesh,
-  hp: 100
+  mesh:z,
+  hp:100,
+  speed:0.03,
+  attackCooldown:0
  });
-
+}
 }
 
-}
+/* ================= AI ================= */
 
-/* 🤖 敌人AI */
 function updateEnemies(){
 
 window.enemies.forEach(e=>{
 
- if(e.hp <= 0){
-  scene.remove(e.mesh);
-  return;
- }
-
- let dx = camera.position.x - e.mesh.position.x;
- let dz = camera.position.z - e.mesh.position.z;
-
- let dist = Math.sqrt(dx*dx + dz*dz);
-
- if(dist > 1){
-  e.mesh.position.x += dx/dist * 0.02;
-  e.mesh.position.z += dz/dist * 0.02;
- }
-
-});
-
+if(e.hp<=0){
+ scene.remove(e.mesh);
+ return;
 }
 
-/* 🔁 主循环 */
+let dx = camera.position.x - e.mesh.position.x;
+let dz = camera.position.z - e.mesh.position.z;
+
+let dist = Math.sqrt(dx*dx + dz*dz);
+
+/* 移动 */
+if(dist>1.5){
+ e.mesh.position.x += dx/dist * e.speed;
+ e.mesh.position.z += dz/dist * e.speed;
+}
+
+/* 攻击 */
+e.attackCooldown--;
+
+if(dist<2 && e.attackCooldown<=0){
+ e.attackCooldown = 60;
+
+ document.body.style.background="red";
+ setTimeout(()=>document.body.style.background="black",80);
+}
+
+/* 面向玩家 */
+e.mesh.lookAt(camera.position);
+
+});
+}
+
+/* ================= 特效 ================= */
+
+function bloodEffect(pos){
+
+for(let i=0;i<5;i++){
+ let p = new THREE.Mesh(
+  new THREE.SphereGeometry(0.05),
+  new THREE.MeshBasicMaterial({color:0xaa0000})
+ );
+ p.position.copy(pos);
+
+ scene.add(p);
+
+ setTimeout(()=>scene.remove(p),300);
+}
+}
+
+window.spawnBlood = bloodEffect;
+
+/* ================= 主循环 ================= */
+
 function animate(){
 requestAnimationFrame(animate);
 
-/* 玩家移动 */
 player.update();
-
-/* 武器 */
 weapon.update();
-
-/* 敌人 */
 updateEnemies();
 
 renderer.render(scene,camera);
