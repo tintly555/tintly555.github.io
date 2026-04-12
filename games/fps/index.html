@@ -32,7 +32,7 @@
       line-height: 1.5;
       user-select: none;
       pointer-events: none;
-      min-width: 300px;
+      min-width: 310px;
       font-size: 14px;
       backdrop-filter: blur(4px);
       box-shadow: 0 6px 20px rgba(0,0,0,0.28);
@@ -111,7 +111,7 @@
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x0d111b);
-    scene.fog = new THREE.Fog(0x0d111b, 24, 100);
+    scene.fog = new THREE.Fog(0x0d111b, 24, 110);
 
     const camera = new THREE.PerspectiveCamera(
       75,
@@ -132,19 +132,19 @@
     scene.add(hemi);
 
     const moon = new THREE.DirectionalLight(0xe8ecff, 1.05);
-    moon.position.set(20, 28, 16);
+    moon.position.set(24, 30, 18);
     moon.castShadow = true;
     moon.shadow.mapSize.set(2048, 2048);
-    moon.shadow.camera.left = -80;
-    moon.shadow.camera.right = 80;
-    moon.shadow.camera.top = 80;
-    moon.shadow.camera.bottom = -80;
+    moon.shadow.camera.left = -90;
+    moon.shadow.camera.right = 90;
+    moon.shadow.camera.top = 90;
+    moon.shadow.camera.bottom = -90;
     scene.add(moon);
 
-    const worldSize = 220;
+    const worldSize = 240;
 
     const floor = new THREE.Mesh(
-      new THREE.PlaneGeometry(worldSize, worldSize, 70, 70),
+      new THREE.PlaneGeometry(worldSize, worldSize, 80, 80),
       new THREE.MeshStandardMaterial({
         color: 0x43454d,
         roughness: 0.96,
@@ -163,33 +163,44 @@
         side: THREE.DoubleSide
       })
     );
-    ceiling.position.y = 4;
+    ceiling.position.y = 4.2;
     ceiling.rotation.x = Math.PI / 2;
     scene.add(ceiling);
 
+    // 更像墙和走廊的地图
     const gridMap = [
-      [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
-      [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-      [1,0,0,1,0,0,1,0,0,1,0,0,1,0,0,1],
-      [1,0,0,1,0,0,1,0,0,1,0,0,1,0,0,1],
-      [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-      [1,0,1,0,1,1,0,1,0,1,1,0,1,0,0,1],
-      [1,0,1,0,0,0,0,1,0,0,0,0,1,0,0,1],
-      [1,0,0,0,0,1,0,0,0,1,0,0,0,0,0,1],
-      [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-      [1,0,1,0,1,0,0,1,0,0,1,0,1,0,0,1],
-      [1,0,1,0,0,0,0,1,0,0,0,0,1,0,0,1],
-      [1,0,0,0,0,1,0,0,0,1,0,0,0,0,0,1],
-      [1,0,0,1,0,0,1,0,0,1,0,0,1,0,0,1],
-      [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-      [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
-      [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+      [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+      [1,0,1,1,1,0,1,1,1,0,1,1,0,1,1,1,0,1,0,1],
+      [1,0,0,0,1,0,0,0,1,0,0,0,0,1,0,0,0,1,0,1],
+      [1,1,1,0,1,1,1,0,1,1,1,1,0,1,0,1,1,1,0,1],
+      [1,0,0,0,0,0,1,0,0,0,0,1,0,1,0,0,0,0,0,1],
+      [1,0,1,1,1,0,1,1,1,1,0,1,0,1,1,1,1,1,0,1],
+      [1,0,1,0,0,0,0,0,0,1,0,0,0,0,0,0,0,1,0,1],
+      [1,0,1,0,1,1,1,1,0,1,1,1,1,1,1,1,0,1,0,1],
+      [1,0,0,0,1,0,0,0,0,0,0,0,0,0,0,1,0,0,0,1],
+      [1,1,1,0,1,0,1,1,1,1,1,1,1,1,0,1,0,1,1,1],
+      [1,0,0,0,1,0,0,0,0,1,0,0,0,1,0,0,0,0,0,1],
+      [1,0,1,1,1,1,1,1,0,1,0,1,0,1,1,1,1,1,0,1],
+      [1,0,1,0,0,0,0,1,0,0,0,1,0,0,0,0,0,1,0,1],
+      [1,0,1,0,1,1,0,1,1,1,1,1,1,1,1,1,0,1,0,1],
+      [1,0,0,0,0,1,0,0,0,0,0,0,0,0,0,1,0,0,0,1],
+      [1,0,1,1,0,1,1,1,1,1,1,1,1,1,0,1,1,1,0,1],
+      [1,0,0,1,0,0,0,0,0,0,0,0,0,1,0,0,0,1,0,1],
+      [1,0,0,0,0,1,1,1,1,1,1,1,0,0,0,1,0,0,0,1],
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
     ];
 
     const CELL = 4;
     const HALF = (gridMap.length * CELL) / 2;
     const wallMeshes = [];
     const wallBoxes = [];
+    const decalGroup = new THREE.Group();
+    const sparkGroup = new THREE.Group();
+    const tracerGroup = new THREE.Group();
+    scene.add(decalGroup);
+    scene.add(sparkGroup);
+    scene.add(tracerGroup);
 
     function cellToWorld(ix, iz) {
       return {
@@ -198,30 +209,92 @@
       };
     }
 
-    const wallGeo = new THREE.BoxGeometry(CELL, 4, CELL);
+    function buildWallsFromGrid() {
+      const visitedH = new Set();
+      const visitedV = new Set();
 
-    for (let z = 0; z < gridMap.length; z++) {
-      for (let x = 0; x < gridMap[z].length; x++) {
-        if (gridMap[z][x] !== 1) continue;
+      function key(x, z) {
+        return `${x},${z}`;
+      }
 
-        const p = cellToWorld(x, z);
-        const wall = new THREE.Mesh(
-          wallGeo,
-          new THREE.MeshStandardMaterial({
-            color: 0x6b7384,
-            roughness: 0.88,
-            metalness: 0.04
-          })
-        );
-        wall.position.set(p.x, 2, p.z);
-        wall.castShadow = true;
-        wall.receiveShadow = true;
-        scene.add(wall);
+      const wallMaterial = new THREE.MeshStandardMaterial({
+        color: 0x6b7384,
+        roughness: 0.88,
+        metalness: 0.04
+      });
 
-        wallMeshes.push(wall);
-        wallBoxes.push(new THREE.Box3().setFromObject(wall));
+      // 横向合并
+      for (let z = 0; z < gridMap.length; z++) {
+        for (let x = 0; x < gridMap[z].length; x++) {
+          if (gridMap[z][x] !== 1 || visitedH.has(key(x, z))) continue;
+
+          let len = 1;
+          while (
+            x + len < gridMap[z].length &&
+            gridMap[z][x + len] === 1 &&
+            !visitedH.has(key(x + len, z))
+          ) {
+            len++;
+          }
+
+          if (len >= 2) {
+            for (let i = 0; i < len; i++) visitedH.add(key(x + i, z));
+
+            const w = CELL * len;
+            const box = new THREE.Mesh(
+              new THREE.BoxGeometry(w, 4.2, CELL),
+              wallMaterial.clone()
+            );
+
+            const start = cellToWorld(x, z);
+            const end = cellToWorld(x + len - 1, z);
+            box.position.set((start.x + end.x) / 2, 2.1, start.z);
+            box.castShadow = true;
+            box.receiveShadow = true;
+            scene.add(box);
+            wallMeshes.push(box);
+            wallBoxes.push(new THREE.Box3().setFromObject(box));
+          }
+        }
+      }
+
+      // 剩余单元做纵向合并
+      for (let z = 0; z < gridMap.length; z++) {
+        for (let x = 0; x < gridMap[z].length; x++) {
+          if (gridMap[z][x] !== 1) continue;
+          if (visitedH.has(key(x, z)) || visitedV.has(key(x, z))) continue;
+
+          let len = 1;
+          while (
+            z + len < gridMap.length &&
+            gridMap[z + len][x] === 1 &&
+            !visitedH.has(key(x, z + len)) &&
+            !visitedV.has(key(x, z + len))
+          ) {
+            len++;
+          }
+
+          for (let i = 0; i < len; i++) visitedV.add(key(x, z + i));
+
+          const d = CELL * len;
+          const box = new THREE.Mesh(
+            new THREE.BoxGeometry(CELL, 4.2, d),
+            wallMaterial.clone()
+          );
+
+          const start = cellToWorld(x, z);
+          const end = cellToWorld(x, z + len - 1);
+          box.position.set(start.x, 2.1, (start.z + end.z) / 2);
+          box.castShadow = true;
+          box.receiveShadow = true;
+          scene.add(box);
+          wallMeshes.push(box);
+          wallBoxes.push(new THREE.Box3().setFromObject(box));
+        }
       }
     }
+
+    buildWallsFromGrid();
 
     const player = {
       position: new THREE.Vector3(-HALF + CELL * 1.5, 1.65, -HALF + CELL * 1.5),
@@ -247,7 +320,8 @@
       enemies: [],
       tracers: [],
       reloading: false,
-      reloadEnd: 0
+      reloadEnd: 0,
+      reloadPhase: 0
     };
 
     const weapons = [
@@ -267,7 +341,8 @@
         color: 0xffe08a,
         magSize: 12,
         ammo: 12,
-        reloadTime: 1200
+        reloadTime: 1200,
+        soundBase: 520
       },
       {
         name: "Assault Rifle",
@@ -285,7 +360,8 @@
         color: 0x8fdcff,
         magSize: 30,
         ammo: 30,
-        reloadTime: 1600
+        reloadTime: 1600,
+        soundBase: 720
       },
       {
         name: "Shotgun",
@@ -303,7 +379,8 @@
         color: 0xffb47a,
         magSize: 8,
         ammo: 8,
-        reloadTime: 1900
+        reloadTime: 1900,
+        soundBase: 260
       }
     ];
 
@@ -351,79 +428,96 @@
     }
 
     function makeZombie(x, z) {
-      const group = new THREE.Group();
+      const root = new THREE.Group();
+      const torsoRoot = new THREE.Group();
+      const leftLegRoot = new THREE.Group();
+      const rightLegRoot = new THREE.Group();
+      const leftArmRoot = new THREE.Group();
+      const rightArmRoot = new THREE.Group();
 
-      const head = new THREE.Mesh(
-        new THREE.BoxGeometry(0.50, 0.50, 0.50),
-        new THREE.MeshStandardMaterial({ color: 0xa5b89a })
-      );
-      head.position.y = 1.82;
-      group.add(head);
-
-      const hair = new THREE.Mesh(
-        new THREE.BoxGeometry(0.52, 0.12, 0.52),
-        new THREE.MeshStandardMaterial({ color: 0x25201d })
-      );
-      hair.position.y = 2.00;
-      group.add(hair);
-
+      // 身体主干
       const body = new THREE.Mesh(
         new THREE.BoxGeometry(0.76, 0.96, 0.42),
         new THREE.MeshStandardMaterial({ color: 0x53775a })
       );
       body.position.y = 1.10;
-      group.add(body);
+      torsoRoot.add(body);
 
       const tornShirt = new THREE.Mesh(
         new THREE.BoxGeometry(0.60, 0.30, 0.10),
         new THREE.MeshStandardMaterial({ color: 0x708f74 })
       );
       tornShirt.position.set(0, 1.15, 0.23);
-      group.add(tornShirt);
+      torsoRoot.add(tornShirt);
+
+      const head = new THREE.Mesh(
+        new THREE.BoxGeometry(0.50, 0.50, 0.50),
+        new THREE.MeshStandardMaterial({ color: 0xa5b89a })
+      );
+      head.position.y = 1.82;
+      torsoRoot.add(head);
+
+      const hair = new THREE.Mesh(
+        new THREE.BoxGeometry(0.52, 0.12, 0.52),
+        new THREE.MeshStandardMaterial({ color: 0x25201d })
+      );
+      hair.position.y = 2.00;
+      torsoRoot.add(hair);
+
+      // 手臂根节点挂在肩膀
+      leftArmRoot.position.set(-0.52, 1.52, 0.02);
+      rightArmRoot.position.set(0.52, 1.52, 0.02);
 
       const armL = new THREE.Mesh(
         new THREE.BoxGeometry(0.22, 0.84, 0.22),
         new THREE.MeshStandardMaterial({ color: 0x8fa48a })
       );
-      armL.position.set(-0.52, 1.18, 0.18);
-      armL.rotation.x = -1.0;
-      group.add(armL);
+      armL.position.set(0, -0.42, 0.16);
+      leftArmRoot.add(armL);
 
       const armR = armL.clone();
-      armR.position.x = 0.52;
-      group.add(armR);
+      rightArmRoot.add(armR);
 
       const handL = new THREE.Mesh(
         new THREE.BoxGeometry(0.20, 0.20, 0.20),
         new THREE.MeshStandardMaterial({ color: 0x9fb698 })
       );
-      handL.position.set(-0.52, 1.02, 0.48);
-      group.add(handL);
+      handL.position.set(0, -0.82, 0.28);
+      leftArmRoot.add(handL);
 
       const handR = handL.clone();
-      handR.position.x = 0.52;
-      group.add(handR);
+      rightArmRoot.add(handR);
+
+      // 腿根节点挂在髋部，彻底解决分离
+      leftLegRoot.position.set(-0.18, 0.60, 0);
+      rightLegRoot.position.set(0.18, 0.60, 0);
 
       const legL = new THREE.Mesh(
         new THREE.BoxGeometry(0.26, 0.90, 0.26),
         new THREE.MeshStandardMaterial({ color: 0x3f4552 })
       );
-      legL.position.set(-0.18, 0.15, 0);
-      group.add(legL);
+      legL.position.set(0, -0.45, 0);
+      leftLegRoot.add(legL);
 
       const legR = legL.clone();
-      legR.position.x = 0.18;
-      group.add(legR);
+      rightLegRoot.add(legR);
 
-      group.position.set(x, 0, z);
-      group.traverse((o) => {
+      root.add(torsoRoot);
+      root.add(leftArmRoot);
+      root.add(rightArmRoot);
+      root.add(leftLegRoot);
+      root.add(rightLegRoot);
+
+      root.position.set(x, 0, z);
+
+      root.traverse((o) => {
         if (o.isMesh) {
           o.castShadow = true;
           o.receiveShadow = true;
         }
       });
 
-      scene.add(group);
+      scene.add(root);
 
       const hpCanvas = document.createElement("canvas");
       hpCanvas.width = 128;
@@ -438,11 +532,16 @@
         })
       );
       hpSprite.scale.set(1.7, 0.32, 1);
-      hpSprite.position.set(0, 2.7, 0);
-      group.add(hpSprite);
+      hpSprite.position.set(0, 2.75, 0);
+      root.add(hpSprite);
 
       return {
-        group,
+        group: root,
+        torsoRoot,
+        leftArmRoot,
+        rightArmRoot,
+        leftLegRoot,
+        rightLegRoot,
         head,
         body,
         armL,
@@ -481,7 +580,7 @@
     }
 
     const spawnCells = [
-      [4, 2], [6, 4], [3, 7], [10, 2], [12, 6], [13, 10], [7, 12]
+      [4, 2], [6, 4], [3, 7], [10, 2], [12, 6], [13, 10], [7, 12], [16, 16]
     ];
 
     for (const [cx, cz] of spawnCells) {
@@ -491,8 +590,61 @@
       state.enemies.push(zombie);
     }
 
-    const tracerGroup = new THREE.Group();
-    scene.add(tracerGroup);
+    // 弹痕
+    function createBulletMark(point, normal) {
+      if (decalGroup.children.length > 120) {
+        const old = decalGroup.children.shift();
+        decalGroup.remove(old);
+        old.geometry.dispose();
+        old.material.dispose();
+      }
+
+      const mark = new THREE.Mesh(
+        new THREE.CircleGeometry(0.08, 12),
+        new THREE.MeshBasicMaterial({
+          color: 0x1a1a1a,
+          transparent: true,
+          opacity: 0.85
+        })
+      );
+
+      mark.position.copy(point).add(normal.clone().multiplyScalar(0.01));
+      mark.lookAt(point.clone().add(normal));
+      decalGroup.add(mark);
+    }
+
+    // 火花
+    function createSparks(point, color = 0xffdd88) {
+      for (let i = 0; i < 5; i++) {
+        const geo = new THREE.SphereGeometry(0.025, 6, 6);
+        const mat = new THREE.MeshBasicMaterial({ color });
+        const spark = new THREE.Mesh(geo, mat);
+        spark.position.copy(point);
+        spark.userData.vel = new THREE.Vector3(
+          (Math.random() - 0.5) * 2.4,
+          Math.random() * 1.8,
+          (Math.random() - 0.5) * 2.4
+        );
+        spark.userData.life = 0.18;
+        sparkGroup.add(spark);
+      }
+    }
+
+    function updateSparks(dt) {
+      const toRemove = [];
+      sparkGroup.children.forEach((spark) => {
+        spark.userData.life -= dt;
+        spark.position.addScaledVector(spark.userData.vel, dt);
+        spark.userData.vel.y -= 8 * dt;
+        if (spark.userData.life <= 0) toRemove.push(spark);
+      });
+
+      for (const spark of toRemove) {
+        sparkGroup.remove(spark);
+        spark.geometry.dispose();
+        spark.material.dispose();
+      }
+    }
 
     function createTracer(start, end, color) {
       const geometry = new THREE.BufferGeometry().setFromPoints([start, end]);
@@ -504,6 +656,36 @@
       const line = new THREE.Line(geometry, material);
       tracerGroup.add(line);
       state.tracers.push({ line, material, life: 0.08, maxLife: 0.08 });
+    }
+
+    // 枪声
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+    function playGunSound(w) {
+      if (audioCtx.state === "suspended") audioCtx.resume();
+
+      const now = audioCtx.currentTime;
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      const filter = audioCtx.createBiquadFilter();
+
+      osc.type = "square";
+      osc.frequency.setValueAtTime(w.soundBase, now);
+      osc.frequency.exponentialRampToValueAtTime(w.soundBase * 0.45, now + 0.08);
+
+      filter.type = "lowpass";
+      filter.frequency.setValueAtTime(2200, now);
+
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(0.10, now + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.11);
+
+      osc.connect(filter);
+      filter.connect(gain);
+      gain.connect(audioCtx.destination);
+
+      osc.start(now);
+      osc.stop(now + 0.12);
     }
 
     camera.position.copy(player.position);
@@ -530,18 +712,32 @@
       root.add(leftHand);
 
       let gun;
+
       if (type === 0) {
-        gun = new THREE.Mesh(
+        gun = new THREE.Group();
+
+        const body = new THREE.Mesh(
           new THREE.BoxGeometry(0.14, 0.14, 0.52),
           new THREE.MeshStandardMaterial({ color: 0x4b5563 })
         );
+        gun.add(body);
+
+        const slide = new THREE.Mesh(
+          new THREE.BoxGeometry(0.12, 0.05, 0.24),
+          new THREE.MeshStandardMaterial({ color: 0x8891a0 })
+        );
+        slide.position.set(0, 0.08, -0.04);
+        gun.add(slide);
+
         gun.position.set(0.28, -0.22, -0.70);
       } else if (type === 1) {
-        gun = new THREE.Mesh(
+        gun = new THREE.Group();
+
+        const body = new THREE.Mesh(
           new THREE.BoxGeometry(0.18, 0.18, 0.92),
           new THREE.MeshStandardMaterial({ color: 0x374151 })
         );
-        gun.position.set(0.25, -0.22, -0.80);
+        gun.add(body);
 
         const stock = new THREE.Mesh(
           new THREE.BoxGeometry(0.12, 0.16, 0.28),
@@ -549,12 +745,24 @@
         );
         stock.position.set(0, 0, 0.52);
         gun.add(stock);
+
+        const mag = new THREE.Mesh(
+          new THREE.BoxGeometry(0.08, 0.28, 0.12),
+          new THREE.MeshStandardMaterial({ color: 0x20242c })
+        );
+        mag.position.set(0, -0.18, 0.02);
+        gun.add(mag);
+
+        gun.position.set(0.25, -0.22, -0.80);
+        gun.userData.mag = mag;
       } else {
-        gun = new THREE.Mesh(
+        gun = new THREE.Group();
+
+        const body = new THREE.Mesh(
           new THREE.BoxGeometry(0.20, 0.16, 0.96),
           new THREE.MeshStandardMaterial({ color: 0x6b7280 })
         );
-        gun.position.set(0.23, -0.20, -0.82);
+        gun.add(body);
 
         const pump = new THREE.Mesh(
           new THREE.BoxGeometry(0.16, 0.10, 0.24),
@@ -562,6 +770,8 @@
         );
         pump.position.set(0, -0.08, -0.1);
         gun.add(pump);
+
+        gun.position.set(0.23, -0.20, -0.82);
       }
 
       root.add(gun);
@@ -574,6 +784,7 @@
       root.add(barrel);
 
       root.userData.barrel = barrel;
+      root.userData.gun = gun;
       return root;
     }
 
@@ -796,7 +1007,6 @@
           }
         }
 
-        // 只水平转向，不允许整个模型俯仰后仰
         const faceAngle = Math.atan2(
           player.position.x - enemy.group.position.x,
           player.position.z - enemy.group.position.z
@@ -816,18 +1026,15 @@
           ? Math.max(0, Math.sin(enemy.attackPhase)) * 0.38
           : 0;
 
-        enemy.armL.rotation.x = -1.0 + attackSwing + walkSwing * 0.18;
-        enemy.armR.rotation.x = -1.0 + attackSwing - walkSwing * 0.18;
+        // 动作都挂在根节点上，腿和身体不会分离
+        enemy.leftArmRoot.rotation.x = -1.0 + attackSwing + walkSwing * 0.18;
+        enemy.rightArmRoot.rotation.x = -1.0 + attackSwing - walkSwing * 0.18;
 
-        enemy.handL.rotation.x = attackSwing * 0.18;
-        enemy.handR.rotation.x = attackSwing * 0.18;
+        enemy.leftLegRoot.rotation.x = -walkSwing;
+        enemy.rightLegRoot.rotation.x = walkSwing;
 
-        enemy.legL.rotation.x = -walkSwing;
-        enemy.legR.rotation.x = walkSwing;
-
-        enemy.body.position.y = 1.10 + bodyBob;
-        enemy.head.position.y = 1.82 + bodyBob;
-        enemy.hpSprite.position.y = 2.70 + bodyBob;
+        enemy.torsoRoot.position.y = bodyBob;
+        enemy.hpSprite.position.y = 2.75 + bodyBob;
 
         if (flatDist < attackDistance && enemy.attackCooldown <= 0) {
           player.health -= 8;
@@ -896,6 +1103,8 @@
         state.spreadBloom + w.spreadBloomAdd
       );
 
+      playGunSound(w);
+
       const activeWeapon = weaponModels[state.weaponIndex];
       const barrel = activeWeapon.userData.barrel;
       const muzzleStart = barrel.getWorldPosition(new THREE.Vector3());
@@ -910,10 +1119,12 @@
         const wallHits = raycaster.intersectObjects(wallMeshes, false);
         let wallDistance = Infinity;
         let wallPoint = null;
+        let wallNormal = null;
 
         if (wallHits.length > 0) {
           wallDistance = wallHits[0].distance;
           wallPoint = wallHits[0].point.clone();
+          wallNormal = wallHits[0].face.normal.clone().transformDirection(wallHits[0].object.matrixWorld);
         }
 
         let bestEnemy = null;
@@ -936,8 +1147,11 @@
           const zone = getBodyZone(bestEnemy, bestHit.point);
           applyDamage(bestEnemy, zone);
           createTracer(muzzleStart, bestHit.point.clone(), w.color);
+          createSparks(bestHit.point.clone(), 0xff8844);
         } else if (wallPoint) {
           createTracer(muzzleStart, wallPoint, w.color);
+          createBulletMark(wallPoint, wallNormal || new THREE.Vector3(0, 1, 0));
+          createSparks(wallPoint.clone());
         } else {
           createTracer(
             muzzleStart,
@@ -963,8 +1177,42 @@
         bobRotZ = Math.sin(t * 5.5) * 0.008;
       }
 
-      weaponRoot.position.set(bobX, -state.recoil - bobY, 0);
-      weaponRoot.rotation.set(state.recoil * 1.0, 0, bobRotZ);
+      // 换弹动画：横过来 + 插几下
+      let reloadX = 0;
+      let reloadY = 0;
+      let reloadRotZ = 0;
+      let reloadRotY = 0;
+
+      if (state.reloading) {
+        const total = weapon().reloadTime;
+        const remaining = state.reloadEnd - performance.now();
+        const progress = THREE.MathUtils.clamp(1 - remaining / total, 0, 1);
+
+        if (progress < 0.25) {
+          const p = progress / 0.25;
+          reloadRotZ = -1.1 * p;
+          reloadRotY = -0.4 * p;
+          reloadY = 0.08 * p;
+        } else if (progress < 0.8) {
+          const p = (progress - 0.25) / 0.55;
+          reloadRotZ = -1.1;
+          reloadRotY = -0.4;
+          reloadY = 0.08 + Math.sin(p * Math.PI * 3) * 0.05;
+          reloadX = -0.03;
+        } else {
+          const p = (progress - 0.8) / 0.2;
+          reloadRotZ = -1.1 * (1 - p);
+          reloadRotY = -0.4 * (1 - p);
+          reloadY = 0.08 * (1 - p);
+        }
+      }
+
+      weaponRoot.position.set(bobX + reloadX, -state.recoil - bobY + reloadY, 0);
+      weaponRoot.rotation.set(
+        state.recoil * 1.0,
+        reloadRotY,
+        bobRotZ + reloadRotZ
+      );
     }
 
     window.addEventListener("resize", () => {
@@ -1011,6 +1259,7 @@
 
       const isMoving = keys.w || keys.a || keys.s || keys.d;
       updateWeaponVisuals(dt, isMoving);
+      updateSparks(dt);
 
       for (const t of state.tracers) {
         t.life -= dt;
