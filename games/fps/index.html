@@ -32,7 +32,7 @@
       line-height: 1.5;
       user-select: none;
       pointer-events: none;
-      min-width: 320px;
+      min-width: 340px;
       font-size: 14px;
       backdrop-filter: blur(4px);
       box-shadow: 0 6px 20px rgba(0,0,0,0.28);
@@ -59,6 +59,83 @@
       pointer-events: none;
       z-index: 10;
     }
+
+    .crosshair {
+      position: fixed;
+      left: 50%;
+      top: 50%;
+      width: 18px;
+      height: 18px;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      z-index: 25;
+      opacity: 1;
+      transition: opacity 0.12s ease;
+    }
+
+    .crosshair.hidden {
+      opacity: 0;
+    }
+
+    .crosshair::before,
+    .crosshair::after {
+      content: "";
+      position: absolute;
+      background: rgba(255,255,255,0.96);
+      box-shadow: 0 0 6px rgba(255,255,255,0.5);
+    }
+
+    .crosshair::before {
+      left: 8px;
+      top: 0;
+      width: 2px;
+      height: 18px;
+    }
+
+    .crosshair::after {
+      left: 0;
+      top: 8px;
+      width: 18px;
+      height: 2px;
+    }
+
+    .hitmarker {
+      position: fixed;
+      left: 50%;
+      top: 50%;
+      width: 26px;
+      height: 26px;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+      z-index: 28;
+      opacity: 0;
+      transition: opacity 0.08s linear;
+    }
+
+    .hitmarker.show {
+      opacity: 1;
+    }
+
+    .hitmarker::before,
+    .hitmarker::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: 2px;
+      height: 22px;
+      background: rgba(255,255,255,0.9);
+      transform-origin: center center;
+      box-shadow: 0 0 6px rgba(255,255,255,0.45);
+    }
+
+    .hitmarker::before {
+      transform: translate(-50%, -50%) rotate(45deg);
+    }
+
+    .hitmarker::after {
+      transform: translate(-50%, -50%) rotate(-45deg);
+    }
   </style>
 </head>
 <body>
@@ -66,6 +143,8 @@
   <div class="hud" id="hud"></div>
   <div class="hint" id="hint">点击画面锁定鼠标并开始</div>
   <div class="flash" id="flash"></div>
+  <div class="crosshair" id="crosshair"></div>
+  <div class="hitmarker" id="hitmarker"></div>
 
   <script type="module">
     import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.182.0/build/three.module.js";
@@ -74,6 +153,8 @@
     const hud = document.getElementById("hud");
     const hint = document.getElementById("hint");
     const flash = document.getElementById("flash");
+    const crosshairEl = document.getElementById("crosshair");
+    const hitmarkerEl = document.getElementById("hitmarker");
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x0d111b);
@@ -138,9 +219,8 @@
     const decalGroup = new THREE.Group();
     const sparkGroup = new THREE.Group();
     const tracerGroup = new THREE.Group();
-    scene.add(decalGroup);
-    scene.add(sparkGroup);
-    scene.add(tracerGroup);
+    const bloodGroup = new THREE.Group();
+    scene.add(decalGroup, sparkGroup, tracerGroup, bloodGroup);
 
     function addWallBox(w, h, d, x, y, z, color = 0x6b7384) {
       const mesh = new THREE.Mesh(
@@ -166,14 +246,10 @@
       addWallBox(pillarW, wallH, thick, centerX + (windowW / 2 + pillarW / 2), wallH / 2, centerZ);
 
       const lowerH = windowBottom;
-      if (lowerH > 0) {
-        addWallBox(windowW, lowerH, thick, centerX, lowerH / 2, centerZ);
-      }
+      if (lowerH > 0) addWallBox(windowW, lowerH, thick, centerX, lowerH / 2, centerZ);
 
       const upperH = wallH - windowTop;
-      if (upperH > 0) {
-        addWallBox(windowW, upperH, thick, centerX, windowTop + upperH / 2, centerZ);
-      }
+      if (upperH > 0) addWallBox(windowW, upperH, thick, centerX, windowTop + upperH / 2, centerZ);
     }
 
     function addWindowWallZ(centerX, centerZ, totalD, wallH = 4.5, thick = 1.0, windowD = 4, windowBottom = 1.4, windowTop = 3.0) {
@@ -182,14 +258,10 @@
       addWallBox(thick, wallH, pillarD, centerX, wallH / 2, centerZ + (windowD / 2 + pillarD / 2));
 
       const lowerH = windowBottom;
-      if (lowerH > 0) {
-        addWallBox(thick, lowerH, windowD, centerX, lowerH / 2, centerZ);
-      }
+      if (lowerH > 0) addWallBox(thick, lowerH, windowD, centerX, lowerH / 2, centerZ);
 
       const upperH = wallH - windowTop;
-      if (upperH > 0) {
-        addWallBox(thick, upperH, windowD, centerX, windowTop + upperH / 2, centerZ);
-      }
+      if (upperH > 0) addWallBox(thick, upperH, windowD, centerX, windowTop + upperH / 2, centerZ);
     }
 
     function buildArena() {
@@ -197,20 +269,17 @@
       const H = 4.5;
       const T = 1.0;
 
-      // 外圈
       addWallBox(S * 2, H, T, 0, H / 2, -S);
       addWallBox(S * 2, H, T, 0, H / 2,  S);
       addWallBox(T, H, S * 2, -S, H / 2, 0);
       addWallBox(T, H, S * 2,  S, H / 2, 0);
 
-      // 中区长墙（不是迷宫）
       addWindowWallX(0, -18, 28, H, 1.0, 6, 1.4, 3.1);
       addWindowWallX(0,  18, 28, H, 1.0, 6, 1.4, 3.1);
 
       addWindowWallZ(-18, 0, 22, H, 1.0, 5, 1.4, 3.0);
       addWindowWallZ( 18, 0, 22, H, 1.0, 5, 1.4, 3.0);
 
-      // 两侧半墙和掩体
       addWallBox(10, 2.2, 1.0, -26, 1.1, -8, 0x70798a);
       addWallBox(10, 2.2, 1.0,  26, 1.1,  8, 0x70798a);
 
@@ -222,7 +291,6 @@
       addWallBox(2, 2.5, 6, -20, 1.25,-28, 0x5e6778);
       addWallBox(2, 2.5, 6,  20, 1.25, 28, 0x5e6778);
 
-      // 中间几个分散短墙
       addWallBox(8, 3.2, 1.0, -12, 1.6, 0, 0x697183);
       addWallBox(8, 3.2, 1.0,  12, 1.6, 0, 0x697183);
       addWallBox(1.0, 3.2, 8, 0, 1.6, -12, 0x697183);
@@ -246,6 +314,7 @@
     const state = {
       locked: false,
       mouseDown: false,
+      ads: false,
       score: 0,
       flashTimer: 0,
       recoil: 0,
@@ -255,7 +324,8 @@
       enemies: [],
       tracers: [],
       reloading: false,
-      reloadEnd: 0
+      reloadEnd: 0,
+      hitmarkerTimer: 0
     };
 
     const weapons = [
@@ -276,7 +346,8 @@
         magSize: 12,
         ammo: 12,
         reloadTime: 1200,
-        soundBase: 520
+        soundBase: 520,
+        adsFov: 67
       },
       {
         name: "Assault Rifle",
@@ -295,7 +366,8 @@
         magSize: 30,
         ammo: 30,
         reloadTime: 1600,
-        soundBase: 720
+        soundBase: 720,
+        adsFov: 55
       },
       {
         name: "Shotgun",
@@ -314,7 +386,8 @@
         magSize: 8,
         ammo: 8,
         reloadTime: 1900,
-        soundBase: 260
+        soundBase: 260,
+        adsFov: 63
       }
     ];
 
@@ -327,7 +400,7 @@
       hud.innerHTML = `
         3D Zombie FPS<br>
         W A S D 移动 | 空格跳跃 | R换弹<br>
-        鼠标自由视角 | 1 2 3 切枪<br>
+        鼠标自由视角 | 右键瞄准 | 1 2 3 切枪<br>
         武器: ${w.name}<br>
         弹匣: ${w.ammo} / ${w.magSize}${state.reloading ? "（换弹中）" : ""}<br>
         ❤️ Health: ${Math.max(0, Math.floor(player.health))}<br>
@@ -394,7 +467,6 @@
       hair.position.y = 2.00;
       torsoRoot.add(hair);
 
-      // 手臂挂在肩上
       leftArmRoot.position.set(-0.52, 1.52, 0.02);
       rightArmRoot.position.set(0.52, 1.52, 0.02);
 
@@ -418,7 +490,6 @@
       const handR = handL.clone();
       rightArmRoot.add(handR);
 
-      // 腿挂在髋部
       leftLegRoot.position.set(-0.18, 0.60, 0);
       rightLegRoot.position.set(0.18, 0.60, 0);
 
@@ -469,8 +540,6 @@
         rightLegRoot,
         head,
         body,
-        armL,
-        armR,
         legL,
         legR,
         hpCanvas,
@@ -579,6 +648,40 @@
       }
     }
 
+    function createBlood(point) {
+      for (let i = 0; i < 7; i++) {
+        const geo = new THREE.SphereGeometry(0.03, 6, 6);
+        const mat = new THREE.MeshBasicMaterial({ color: 0x9d1111 });
+        const drop = new THREE.Mesh(geo, mat);
+        drop.position.copy(point);
+        drop.userData.vel = new THREE.Vector3(
+          (Math.random() - 0.5) * 1.6,
+          Math.random() * 1.4,
+          (Math.random() - 0.5) * 1.6
+        );
+        drop.userData.life = 0.26;
+        bloodGroup.add(drop);
+      }
+      state.hitmarkerTimer = 0.08;
+      hitmarkerEl.classList.add("show");
+    }
+
+    function updateBlood(dt) {
+      const dead = [];
+      bloodGroup.children.forEach((drop) => {
+        drop.userData.life -= dt;
+        drop.position.addScaledVector(drop.userData.vel, dt);
+        drop.userData.vel.y -= 9 * dt;
+        if (drop.userData.life <= 0) dead.push(drop);
+      });
+
+      for (const drop of dead) {
+        bloodGroup.remove(drop);
+        drop.geometry.dispose();
+        drop.material.dispose();
+      }
+    }
+
     function updateSparks(dt) {
       const dead = [];
       sparkGroup.children.forEach((spark) => {
@@ -630,7 +733,9 @@
       leftHand.position.set(0.12, -0.28, -0.42);
       root.add(leftHand);
 
-      let gunGroup = new THREE.Group();
+      const gunGroup = new THREE.Group();
+      let sightRoot = null;
+      let adsOffset = new THREE.Vector3();
 
       if (type === 0) {
         const frame = new THREE.Mesh(
@@ -646,6 +751,20 @@
         slide.position.set(0, 0.08, -0.05);
         gunGroup.add(slide);
 
+        const rearSight = new THREE.Mesh(
+          new THREE.BoxGeometry(0.06, 0.04, 0.02),
+          new THREE.MeshStandardMaterial({ color: 0xd1d5db })
+        );
+        rearSight.position.set(0, 0.10, 0.08);
+        gunGroup.add(rearSight);
+
+        const frontSight = new THREE.Mesh(
+          new THREE.BoxGeometry(0.03, 0.06, 0.02),
+          new THREE.MeshStandardMaterial({ color: 0xd1d5db })
+        );
+        frontSight.position.set(0, 0.11, -0.18);
+        gunGroup.add(frontSight);
+
         const grip = new THREE.Mesh(
           new THREE.BoxGeometry(0.10, 0.22, 0.12),
           new THREE.MeshStandardMaterial({ color: 0x20242c })
@@ -654,6 +773,7 @@
         gunGroup.add(grip);
 
         gunGroup.position.set(0.28, -0.22, -0.70);
+        adsOffset.set(-0.18, 0.13, 0.28);
       } else if (type === 1) {
         const body = new THREE.Mesh(
           new THREE.BoxGeometry(0.14, 0.16, 0.90),
@@ -689,15 +809,35 @@
         mag.position.set(0, -0.16, 0.00);
         gunGroup.add(mag);
 
-        const frontSight = new THREE.Mesh(
-          new THREE.BoxGeometry(0.04, 0.08, 0.04),
-          new THREE.MeshStandardMaterial({ color: 0xaeb6c2 })
+        // 红点瞄具
+        sightRoot = new THREE.Group();
+        sightRoot.position.set(0, 0.14, -0.10);
+
+        const sightBase = new THREE.Mesh(
+          new THREE.BoxGeometry(0.09, 0.05, 0.12),
+          new THREE.MeshStandardMaterial({ color: 0x20242c })
         );
-        frontSight.position.set(0, 0.10, -0.42);
-        gunGroup.add(frontSight);
+        sightRoot.add(sightBase);
+
+        const sightFrame = new THREE.Mesh(
+          new THREE.BoxGeometry(0.08, 0.10, 0.03),
+          new THREE.MeshStandardMaterial({ color: 0x111827 })
+        );
+        sightFrame.position.set(0, 0.065, -0.03);
+        sightRoot.add(sightFrame);
+
+        const dot = new THREE.Mesh(
+          new THREE.SphereGeometry(0.008, 8, 8),
+          new THREE.MeshBasicMaterial({ color: 0xff2d2d })
+        );
+        dot.position.set(0, 0.065, -0.02);
+        sightRoot.add(dot);
+
+        gunGroup.add(sightRoot);
 
         gunGroup.userData.mag = mag;
         gunGroup.position.set(0.25, -0.22, -0.80);
+        adsOffset.set(-0.15, 0.10, 0.36);
       } else {
         const body = new THREE.Mesh(
           new THREE.BoxGeometry(0.18, 0.16, 0.92),
@@ -719,7 +859,22 @@
         stock.position.set(0, 0, 0.48);
         gunGroup.add(stock);
 
+        const rearSight = new THREE.Mesh(
+          new THREE.BoxGeometry(0.06, 0.04, 0.02),
+          new THREE.MeshStandardMaterial({ color: 0xd1d5db })
+        );
+        rearSight.position.set(0, 0.09, 0.18);
+        gunGroup.add(rearSight);
+
+        const frontSight = new THREE.Mesh(
+          new THREE.BoxGeometry(0.03, 0.08, 0.02),
+          new THREE.MeshStandardMaterial({ color: 0xd1d5db })
+        );
+        frontSight.position.set(0, 0.10, -0.34);
+        gunGroup.add(frontSight);
+
         gunGroup.position.set(0.23, -0.20, -0.82);
+        adsOffset.set(-0.16, 0.12, 0.30);
       }
 
       root.add(gunGroup);
@@ -733,6 +888,9 @@
 
       root.userData.barrel = barrel;
       root.userData.gun = gunGroup;
+      root.userData.sightRoot = sightRoot;
+      root.userData.basePos = gunGroup.position.clone();
+      root.userData.adsOffset = adsOffset.clone();
       return root;
     }
 
@@ -749,6 +907,7 @@
 
     function setWeapon(index) {
       state.weaponIndex = index;
+      state.ads = false;
       weaponModels.forEach((w, i) => {
         w.visible = i === index;
       });
@@ -760,6 +919,7 @@
       if (state.reloading) return;
       if (w.ammo >= w.magSize) return;
       state.reloading = true;
+      state.ads = false;
       state.reloadEnd = performance.now() + w.reloadTime;
       updateHud();
     }
@@ -786,23 +946,38 @@
       if (k === " ") keys.space = false;
     });
 
-    renderer.domElement.addEventListener("mousedown", () => {
+    renderer.domElement.addEventListener("mousedown", (e) => {
       if (!state.locked) {
         renderer.domElement.requestPointerLock();
         return;
       }
-      state.mouseDown = true;
-      tryShoot();
+      if (e.button === 0) {
+        state.mouseDown = true;
+        tryShoot();
+      }
     });
 
-    document.addEventListener("mouseup", () => {
-      state.mouseDown = false;
+    renderer.domElement.addEventListener("contextmenu", (e) => e.preventDefault());
+
+    document.addEventListener("mouseup", (e) => {
+      if (e.button === 0) state.mouseDown = false;
+    });
+
+    document.addEventListener("mousedown", (e) => {
+      if (!state.locked) return;
+      if (e.button === 2) {
+        if (!state.reloading) state.ads = true;
+      }
+    });
+
+    document.addEventListener("mouseup", (e) => {
+      if (e.button === 2) {
+        state.ads = false;
+      }
     });
 
     renderer.domElement.addEventListener("click", () => {
-      if (!state.locked) {
-        renderer.domElement.requestPointerLock();
-      }
+      if (!state.locked) renderer.domElement.requestPointerLock();
     });
 
     document.addEventListener("pointerlockchange", () => {
@@ -823,6 +998,10 @@
     function updatePlayer(dt) {
       camera.rotation.y = player.yaw;
       camera.rotation.x = player.pitch;
+
+      const targetFov = state.ads ? weapon().adsFov : 75;
+      camera.fov += (targetFov - camera.fov) * Math.min(1, dt * 10);
+      camera.updateProjectionMatrix();
 
       const forward = new THREE.Vector3(0, 0, -1)
         .applyAxisAngle(new THREE.Vector3(0, 1, 0), player.yaw);
@@ -858,7 +1037,7 @@
       }
 
       const movingNow = keys.w || keys.a || keys.s || keys.d;
-      const headBob = (movingNow && player.onGround)
+      const headBob = (movingNow && player.onGround && !state.ads)
         ? Math.abs(Math.sin(performance.now() * 0.012)) * 0.02
         : 0;
 
@@ -883,22 +1062,14 @@
 
       function unstickEnemy(enemy) {
         if (!enemyHitsWall(enemy.group.position)) return;
-
         const tries = [
-          new THREE.Vector3( 0.18, 0, 0),
-          new THREE.Vector3(-0.18, 0, 0),
-          new THREE.Vector3(0, 0,  0.18),
-          new THREE.Vector3(0, 0, -0.18),
-          new THREE.Vector3( 0.18, 0,  0.18),
-          new THREE.Vector3(-0.18, 0,  0.18),
-          new THREE.Vector3( 0.18, 0, -0.18),
-          new THREE.Vector3(-0.18, 0, -0.18),
-          new THREE.Vector3( 0.32, 0, 0),
-          new THREE.Vector3(-0.32, 0, 0),
-          new THREE.Vector3(0, 0,  0.32),
-          new THREE.Vector3(0, 0, -0.32)
+          new THREE.Vector3( 0.18, 0, 0), new THREE.Vector3(-0.18, 0, 0),
+          new THREE.Vector3(0, 0,  0.18), new THREE.Vector3(0, 0, -0.18),
+          new THREE.Vector3( 0.18, 0,  0.18), new THREE.Vector3(-0.18, 0,  0.18),
+          new THREE.Vector3( 0.18, 0, -0.18), new THREE.Vector3(-0.18, 0, -0.18),
+          new THREE.Vector3( 0.32, 0, 0), new THREE.Vector3(-0.32, 0, 0),
+          new THREE.Vector3(0, 0,  0.32), new THREE.Vector3(0, 0, -0.32)
         ];
-
         for (const offset of tries) {
           const test = enemy.group.position.clone().add(offset);
           if (!enemyHitsWall(test)) {
@@ -913,7 +1084,6 @@
           enemy.group.visible = false;
           enemy.hpSprite.visible = false;
           enemy.respawnTimer -= dt;
-
           if (enemy.respawnTimer <= 0) {
             enemy.alive = true;
             enemy.hp = 100;
@@ -935,10 +1105,7 @@
         const dz = player.position.z - enemy.group.position.z;
         const flatDist = Math.sqrt(dx * dx + dz * dz);
 
-        if (enemy.attackCooldown > 0) {
-          enemy.attackCooldown -= dt;
-        }
-
+        if (enemy.attackCooldown > 0) enemy.attackCooldown -= dt;
         enemy.moving = false;
 
         if (flatDist > stopDistance) {
@@ -983,9 +1150,7 @@
               enemy.moving = true;
             }
 
-            if (enemy.moving) {
-              enemy.walkTime += dt * 4.6;
-            }
+            if (enemy.moving) enemy.walkTime += dt * 4.6;
           }
         }
 
@@ -998,11 +1163,8 @@
         const walkSwing = enemy.moving ? Math.sin(enemy.walkTime) * 0.22 : 0;
         const bodyBob = enemy.moving ? Math.abs(Math.sin(enemy.walkTime * 2)) * 0.018 : 0;
 
-        if (flatDist < attackDistance) {
-          enemy.attackPhase += dt * 4.2;
-        } else {
-          enemy.attackPhase = 0;
-        }
+        if (flatDist < attackDistance) enemy.attackPhase += dt * 4.2;
+        else enemy.attackPhase = 0;
 
         const attackSwing = flatDist < attackDistance
           ? Math.max(0, Math.sin(enemy.attackPhase)) * 0.30
@@ -1010,10 +1172,8 @@
 
         enemy.leftArmRoot.rotation.x = -1.0 + attackSwing + walkSwing * 0.12;
         enemy.rightArmRoot.rotation.x = -1.0 + attackSwing - walkSwing * 0.12;
-
         enemy.leftLegRoot.rotation.x = -walkSwing;
         enemy.rightLegRoot.rotation.x = walkSwing;
-
         enemy.torsoRoot.position.y = bodyBob;
         enemy.hpSprite.position.y = 2.75 + bodyBob;
 
@@ -1078,20 +1238,23 @@
       state.lastShot = now;
       w.ammo -= 1;
 
-      state.recoil = w.recoil;
+      playGunSound(w);
+
+      const spreadMultiplier = state.ads ? 0.45 : 1;
+      const recoilMultiplier = state.ads ? 0.65 : 1;
+
+      state.recoil = w.recoil * recoilMultiplier;
       state.spreadBloom = Math.min(
         w.spreadBloomMax,
-        state.spreadBloom + w.spreadBloomAdd
+        state.spreadBloom + w.spreadBloomAdd * (state.ads ? 0.7 : 1)
       );
-
-      playGunSound(w);
 
       const activeWeapon = weaponModels[state.weaponIndex];
       const barrel = activeWeapon.userData.barrel;
       const muzzleStart = barrel.getWorldPosition(new THREE.Vector3());
 
       for (let i = 0; i < w.pellets; i++) {
-        const totalSpread = w.spreadBase + state.spreadBloom;
+        const totalSpread = (w.spreadBase + state.spreadBloom) * spreadMultiplier;
         const dir = getWeaponDirection(totalSpread);
 
         raycaster.set(camera.position, dir);
@@ -1128,7 +1291,7 @@
           const zone = getBodyZone(bestEnemy, bestHit.point);
           applyDamage(bestEnemy, zone);
           createTracer(muzzleStart, bestHit.point.clone(), w.color);
-          createSparks(bestHit.point.clone(), 0xff8844);
+          createBlood(bestHit.point.clone());
         } else if (wallPoint) {
           createTracer(muzzleStart, wallPoint, w.color);
           createBulletMark(wallPoint, wallNormal || new THREE.Vector3(0, 1, 0));
@@ -1152,7 +1315,7 @@
       let bobY = 0;
       let bobRotZ = 0;
 
-      if (isMoving && player.onGround) {
+      if (isMoving && player.onGround && !state.ads) {
         bobX = Math.sin(t * 5.5) * 0.005;
         bobY = Math.abs(Math.cos(t * 11)) * 0.007;
         bobRotZ = Math.sin(t * 5.5) * 0.008;
@@ -1186,6 +1349,19 @@
           reloadY = 0.08 * (1 - p);
         }
       }
+
+      const activeWeapon = weaponModels[state.weaponIndex];
+      const gun = activeWeapon.userData.gun;
+      const basePos = activeWeapon.userData.basePos;
+      const adsOffset = activeWeapon.userData.adsOffset;
+
+      const adsBlend = state.ads && !state.reloading ? 1 : 0;
+
+      gun.position.x += ((basePos.x + adsOffset.x * adsBlend) - gun.position.x) * Math.min(1, dt * 14);
+      gun.position.y += ((basePos.y + adsOffset.y * adsBlend) - gun.position.y) * Math.min(1, dt * 14);
+      gun.position.z += ((basePos.z + adsOffset.z * adsBlend) - gun.position.z) * Math.min(1, dt * 14);
+
+      crosshairEl.classList.toggle("hidden", state.ads);
 
       weaponRoot.position.set(bobX + reloadX, -state.recoil - bobY + reloadY, 0);
       weaponRoot.rotation.set(
@@ -1229,6 +1405,12 @@
         flash.style.background = "rgba(255,0,0,0)";
       }
 
+      if (state.hitmarkerTimer > 0) {
+        state.hitmarkerTimer -= dt;
+      } else {
+        hitmarkerEl.classList.remove("show");
+      }
+
       state.recoil *= 0.82;
       if (state.recoil < 0.001) state.recoil = 0;
 
@@ -1240,6 +1422,7 @@
       const isMoving = keys.w || keys.a || keys.s || keys.d;
       updateWeaponVisuals(dt, isMoving);
       updateSparks(dt);
+      updateBlood(dt);
 
       for (const t of state.tracers) {
         t.life -= dt;
