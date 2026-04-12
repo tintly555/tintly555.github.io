@@ -37,11 +37,12 @@
   </style>
 </head>
 <body>
-  <div class="hud">
+  <div class="hud" id="hud">
     FPS Prototype<br>
     W A S D 移动<br>
     ← → 转向<br>
-    鼠标点击开枪
+    鼠标点击开枪<br>
+    Score: 0
   </div>
 
   <canvas id="game"></canvas>
@@ -49,6 +50,7 @@
 <script>
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
+const hud = document.getElementById("hud");
 
 function resizeCanvas() {
   canvas.width = window.innerWidth;
@@ -91,6 +93,14 @@ const keys = {
 };
 
 let muzzleFlash = 0;
+let score = 0;
+
+// 几个固定敌人，先做命中实验
+let enemies = [
+  { x: 5.5 * TILE, y: 2.5 * TILE, alive: true },
+  { x: 7.5 * TILE, y: 4.5 * TILE, alive: true },
+  { x: 3.5 * TILE, y: 7.5 * TILE, alive: true }
+];
 
 document.addEventListener("keydown", (e) => {
   const k = e.key.toLowerCase();
@@ -114,7 +124,18 @@ document.addEventListener("keyup", (e) => {
 
 canvas.addEventListener("click", () => {
   muzzleFlash = 6;
+  shoot();
 });
+
+function updateHud() {
+  hud.innerHTML = `
+    FPS Prototype<br>
+    W A S D 移动<br>
+    ← → 转向<br>
+    鼠标点击开枪<br>
+    Score: ${score}
+  `;
+}
 
 function isWall(x, y) {
   const mx = Math.floor(x / TILE);
@@ -176,6 +197,33 @@ function castRay(angle) {
   return 1200;
 }
 
+// 用于渲染敌人前先排序
+function getEnemyData() {
+  const result = [];
+
+  for (const enemy of enemies) {
+    if (!enemy.alive) continue;
+
+    const dx = enemy.x - player.x;
+    const dy = enemy.y - player.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    let angleToEnemy = Math.atan2(dy, dx) - player.angle;
+
+    while (angleToEnemy < -Math.PI) angleToEnemy += Math.PI * 2;
+    while (angleToEnemy > Math.PI) angleToEnemy -= Math.PI * 2;
+
+    result.push({
+      enemy,
+      dist,
+      angle: angleToEnemy
+    });
+  }
+
+  result.sort((a, b) => b.dist - a.dist);
+  return result;
+}
+
 function draw3D() {
   const w = canvas.width;
   const h = canvas.height;
@@ -188,12 +236,15 @@ function draw3D() {
 
   const fov = Math.PI / 3;
   const rays = w;
+  const wallDistances = [];
 
+  // 先画墙
   for (let i = 0; i < rays; i++) {
     const angle = player.angle - fov / 2 + (i / rays) * fov;
     let dist = castRay(angle);
 
     dist *= Math.cos(angle - player.angle);
+    wallDistances[i] = dist;
 
     const wallHeight = (TILE * h * 0.7) / dist;
     const shade = Math.max(35, 255 - dist * 0.45);
@@ -201,34 +252,56 @@ function draw3D() {
     ctx.fillStyle = `rgb(${shade},${shade},${shade})`;
     ctx.fillRect(i, h / 2 - wallHeight / 2, 1, wallHeight);
   }
+
+  // 再画敌人
+  const enemyData = getEnemyData();
+
+  for (const item of enemyData) {
+    const dist = item.dist;
+    const angle = item.angle;
+
+    if (Math.abs(angle) > fov / 2 + 0.2) continue;
+
+    const size = (TILE * h * 0.35) / dist;
+    const screenX = (w / 2) + Math.tan(angle) * (w / 2) / Math.tan(fov / 2);
+    const topY = h / 2 - size / 2;
+
+    const left = Math.floor(screenX - size / 2);
+    const right = Math.floor(screenX + size / 2);
+
+    for (let x = left; x < right; x++) {
+      if (x < 0 || x >= w) continue;
+      if (wallDistances[x] < dist) continue;
+
+      const shade = Math.max(60, 255 - dist * 0.5);
+      ctx.fillStyle = `rgb(${shade}, 40, 40)`;
+      ctx.fillRect(x, topY, 1, size);
+    }
+  }
 }
 
 function drawGun() {
   const w = canvas.width;
   const h = canvas.height;
 
-  // 手柄底座
   ctx.fillStyle = "#3f3f46";
-  ctx.fillRect(w / 2 - 70, h - 120, 140, 100);
+  ctx.fillRect(w / 2 - 100, h - 160, 200, 140);
 
-  // 枪身
   ctx.fillStyle = "#6b7280";
-  ctx.fillRect(w / 2 - 24, h - 170, 48, 70);
+  ctx.fillRect(w / 2 - 40, h - 220, 80, 120);
 
-  // 枪管
   ctx.fillStyle = "#9ca3af";
-  ctx.fillRect(w / 2 - 8, h - 220, 16, 55);
+  ctx.fillRect(w / 2 - 10, h - 290, 20, 80);
 
-  // 开枪时轻微后坐
   if (muzzleFlash > 0) {
     ctx.fillStyle = "yellow";
     ctx.beginPath();
-    ctx.arc(w / 2, h - 230, 20, 0, Math.PI * 2);
+    ctx.arc(w / 2, h - 305, 22, 0, Math.PI * 2);
     ctx.fill();
 
     ctx.fillStyle = "orange";
     ctx.beginPath();
-    ctx.arc(w / 2, h - 230, 10, 0, Math.PI * 2);
+    ctx.arc(w / 2, h - 305, 11, 0, Math.PI * 2);
     ctx.fill();
   }
 }
@@ -256,6 +329,42 @@ function updateEffects() {
   if (muzzleFlash > 0) muzzleFlash--;
 }
 
+function shoot() {
+  const fov = Math.PI / 3;
+  const centerTolerance = 0.08;
+
+  let bestEnemy = null;
+  let bestDist = Infinity;
+
+  for (const enemy of enemies) {
+    if (!enemy.alive) continue;
+
+    const dx = enemy.x - player.x;
+    const dy = enemy.y - player.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    let angleToEnemy = Math.atan2(dy, dx) - player.angle;
+
+    while (angleToEnemy < -Math.PI) angleToEnemy += Math.PI * 2;
+    while (angleToEnemy > Math.PI) angleToEnemy -= Math.PI * 2;
+
+    // 只打准星前方很小角度范围内的敌人
+    if (Math.abs(angleToEnemy) < centerTolerance && dist < bestDist) {
+      // 还要确保中间没有墙挡住
+      const wallDist = castRay(player.angle);
+      if (dist < wallDist) {
+        bestEnemy = enemy;
+        bestDist = dist;
+      }
+    }
+  }
+
+  if (bestEnemy) {
+    bestEnemy.alive = false;
+    score += 1;
+    updateHud();
+  }
+}
+
 function loop() {
   movePlayer();
   updateEffects();
@@ -265,6 +374,7 @@ function loop() {
   requestAnimationFrame(loop);
 }
 
+updateHud();
 loop();
 </script>
 </body>
