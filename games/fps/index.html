@@ -707,25 +707,7 @@
       enemy.hpTexture.needsUpdate = true;
     }
 
-    function rebuildEnemyRoster() {
-      for (const enemy of state.enemies) {
-        scene.remove(enemy.group);
-      }
-      state.enemies.length = 0;
-
-      const spawnPoints = getSpawnPoints();
-      for (let i = 0; i < spawnPoints.length; i++) {
-        const [x, z] = spawnPoints[i];
-        let type = "normal";
-        if (i === 1 || i === 5) type = "fast";
-        if (i === 2 || i === 6) type = "gunner";
-        if (i === 7) type = "tank";
-        const zombie = makeZombie(x, z, type);
-        drawEnemyHp(zombie);
-        state.enemies.push(zombie);
-      }
-    }
-
+    
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
     function playGunSound(w) {
