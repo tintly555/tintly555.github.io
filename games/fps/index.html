@@ -1216,12 +1216,12 @@ return {
            
       } else if (state.weaponIndex === 1) {
         // 步枪（已削弱）
-        spreadMultiplier = state.ads ? 0.38 : 4.20;
-        recoilMultiplier = state.ads ? 0.78 : 2.05;
+        spreadMultiplier = state.ads ? 0.25 : 2.50;
+        recoilMultiplier = state.ads ? 0.60 : 1.50;
             
       } else {
            // 喷子（你已经调过）
-        spreadMultiplier = state.ads ? 0.62 : 1.28;
+        spreadMultiplier = state.ads ? 0.50 : 1.10;
         recoilMultiplier = state.ads ? 0.90 : 1.15;
       }
       state.recoil += w.recoil * recoilMultiplier;
@@ -1359,6 +1359,11 @@ return {
         reloadRotY,
         bobRotZ + reloadRotZ
       );
+      const targetFov = (state.ads && !state.reloading) ? 45 : 75; 
+      if (camera.fov !== targetFov) {
+        camera.fov += (targetFov - camera.fov) * Math.min(1, dt * 10);
+        camera.updateProjectionMatrix();
+      }
     }
 
     function updateWeapon(dt) {
