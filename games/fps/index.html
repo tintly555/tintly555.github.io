@@ -1110,31 +1110,6 @@
       player.pitch = Math.max(-limit, Math.min(limit, player.pitch));
     });
 
-    
-
-      if (keys.space && player.onGround) {
-        player.velocityY = 5.8;
-        player.onGround = false;
-      }
-
-      player.velocityY -= 14 * dt;
-      player.position.y += player.velocityY * dt;
-
-      if (player.position.y <= 1.65) {
-        player.position.y = 1.65;
-        player.velocityY = 0;
-        player.onGround = true;
-      }
-
-      const movingNow = keys.w || keys.a || keys.s || keys.d;
-      const headBob = (movingNow && player.onGround)
-        ? Math.abs(Math.sin(performance.now() * 0.012)) * 0.02
-        : 0;
-
-      camera.position.copy(player.position);
-      camera.position.y += headBob;
-    }
-
     /* ==== PART 2 STARTS HERE ==== */
         function getSpawnPoints() {
       return MAP_SPAWNS[CURRENT_MAP] || MAP_SPAWNS.arena;
