@@ -1110,32 +1110,7 @@
       player.pitch = Math.max(-limit, Math.min(limit, player.pitch));
     });
 
-    function updatePlayer(dt) {
-      camera.rotation.y = player.yaw;
-      camera.rotation.x = player.pitch;
-
-      const targetFov = state.ads ? weapon().adsFov : 75;
-      camera.fov += (targetFov - camera.fov) * Math.min(1, dt * 10);
-      camera.updateProjectionMatrix();
-
-      const forward = new THREE.Vector3(0, 0, -1)
-        .applyAxisAngle(new THREE.Vector3(0, 1, 0), player.yaw);
-      const right = new THREE.Vector3(1, 0, 0)
-        .applyAxisAngle(new THREE.Vector3(0, 1, 0), player.yaw);
-
-      const move = new THREE.Vector3();
-      if (keys.w) move.add(forward);
-      if (keys.s) move.sub(forward);
-      if (keys.d) move.add(right);
-      if (keys.a) move.sub(right);
-
-      if (move.lengthSq() > 0) {
-        move.normalize().multiplyScalar(player.speed * dt);
-        const next = player.position.clone().add(new THREE.Vector3(move.x, 0, move.z));
-        const resolved = resolveWallSliding(next);
-        player.position.x = resolved.x;
-        player.position.z = resolved.z;
-      }
+    
 
       if (keys.space && player.onGround) {
         player.velocityY = 5.8;
