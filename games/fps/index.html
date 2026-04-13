@@ -448,39 +448,39 @@
         soundBase: 520,
         adsFov: 67
       },
-      {
+      {    
         name: "Assault Rifle",
-        fireDelay: 82,
+        fireDelay: 98,
         auto: true,
         pellets: 1,
-        spreadBase: 0.013,
-        spreadBloomAdd: 0.004,
-        spreadBloomMax: 0.045,
-        recover: 0.035,
-        recoil: 0.028,
-        damageHead: 42,
-        damageBody: 24,
-        damageLegs: 16,
-        color: 0x8fdcff,
+          
+        spreadBase: 0.022,
+        spreadBloomAdd: 0.007,
+        spreadBloomMax: 0.080,
+        recover: 7.5,
+            
+        recoil: 0.042,
+            
+        damageHead: 26,
+        damageBody: 15,
+        damageLegs: 10,
+          
         magSize: 30,
-        ammo: 30,
-        reloadTime: 1600,
-        soundBase: 720,
-        adsFov: 55
-      },
+        reloadTime: 1.6
+      }
       {
         name: "Shotgun",
         fireDelay: 520,
         auto: false,
         pellets: 7,
-        spreadBase: 0.055,
-        spreadBloomAdd: 0.014,
-        spreadBloomMax: 0.095,
+        spreadBase: 0.040,
+        spreadBloomAdd: 0.010,
+        spreadBloomMax: 0.070,
         recover: 0.045,
-        recoil: 0.060,
-        damageHead: 24,
-        damageBody: 15,
-        damageLegs: 10,
+        recoil: 0.065,
+        damageHead: 26,
+        damageBody: 16,
+        damageLegs: 11,
         color: 0xffb47a,
         magSize: 8,
         ammo: 8,
@@ -908,7 +908,7 @@ return {
         gunGroup.add(grip);
 
         gunGroup.position.set(0.28, -0.22, -0.70);
-        adsOffset.set(-0.165, 0.085, 0.18);
+        adsOffset.set(-0.195, 0.118, 0.26);
       } else if (type === 1) {
         const body = new THREE.Mesh(
           new THREE.BoxGeometry(0.14, 0.16, 0.90),
@@ -970,7 +970,7 @@ return {
         gunGroup.add(dot);
 
         gunGroup.position.set(0.25, -0.22, -0.80);
-        adsOffset.set(-0.125, 0.070, 0.20);
+        adsOffset.set(-0.155, 0.092, 0.28);
       } else {
         const body = new THREE.Mesh(
           new THREE.BoxGeometry(0.18, 0.16, 0.92),
@@ -1007,7 +1007,7 @@ return {
         gunGroup.add(frontSight);
 
         gunGroup.position.set(0.23, -0.20, -0.82);
-        adsOffset.set(-0.145, 0.080, 0.18);
+        adsOffset.set(-0.175, 0.105, 0.24);
       }
 
       root.add(gunGroup);
@@ -1209,18 +1209,22 @@ return {
 
       let spreadMultiplier = 1;
       let recoilMultiplier = 1;
-
+         
       if (state.weaponIndex === 0) {
-        spreadMultiplier = state.ads ? 0.42 : 1.45;
-        recoilMultiplier = state.ads ? 0.72 : 1.15;
+      // 手枪
+        spreadMultiplier = state.ads ? 0.52 : 2.10;
+        recoilMultiplier = state.ads ? 0.82 : 1.35;
+           
       } else if (state.weaponIndex === 1) {
-        spreadMultiplier = state.ads ? 0.20 : 1.55;
-        recoilMultiplier = state.ads ? 0.55 : 1.25;
+        // 步枪（已削弱）
+        spreadMultiplier = state.ads ? 0.38 : 4.20;
+        recoilMultiplier = state.ads ? 0.78 : 2.05;
+            
       } else {
-        spreadMultiplier = state.ads ? 0.78 : 1.12;
-        recoilMultiplier = state.ads ? 0.82 : 1.0;
+           // 喷子（你已经调过）
+        spreadMultiplier = state.ads ? 0.62 : 1.28;
+        recoilMultiplier = state.ads ? 0.90 : 1.15;
       }
-
       state.recoil += w.recoil * recoilMultiplier;
       state.spreadBloom = Math.min(
         w.spreadBloomMax,
@@ -1233,7 +1237,7 @@ return {
       playGunSound(w);
 
       for (let i = 0; i < w.pellets; i++) {
-        const movingPenalty = (keys.w || keys.a || keys.s || keys.d) ? 1.28 : 1;
+        const movingPenalty = (keys.w || keys.a || keys.s || keys.d) ? 1.60 : 1;
         const adsPenalty = state.ads ? 1 : 2.8;  // 不开镜扩散×2.8
         const totalSpread = (w.spreadBase + state.spreadBloom) * spreadMultiplier * movingPenalty * adsPenalty;
         const dir = getWeaponDirection(totalSpread);
