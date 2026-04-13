@@ -448,26 +448,26 @@
         soundBase: 520,
         adsFov: 67
       },
-      {    
+      {
         name: "Assault Rifle",
         fireDelay: 98,
         auto: true,
         pellets: 1,
-          
         spreadBase: 0.022,
         spreadBloomAdd: 0.007,
         spreadBloomMax: 0.080,
-        recover: 7.5,
-            
+        recover: 0.035,
         recoil: 0.042,
-            
         damageHead: 26,
         damageBody: 15,
         damageLegs: 10,
-          
+        color: 0x8fdcff,
         magSize: 30,
-        reloadTime: 1.6
-      }
+        ammo: 30,
+        reloadTime: 1600,
+        soundBase: 720,
+        adsFov: 55
+      },
       {
         name: "Shotgun",
         fireDelay: 520,
@@ -489,7 +489,6 @@
         adsFov: 63
       }
     ];
-
     function weapon() {
       return weapons[state.weaponIndex];
     }
