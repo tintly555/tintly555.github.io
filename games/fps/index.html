@@ -660,8 +660,9 @@
       hpSprite.scale.set(1.7, 0.32, 1);
       hpSprite.position.set(0, 2.75, 0);
       root.add(hpSprite);
+      hpSprite.raycast = () => {};
 
-      return {
+return {
         type,
         group: root,
         torsoRoot,
@@ -1226,6 +1227,7 @@
         const totalSpread = (w.spreadBase + state.spreadBloom) * spreadMultiplier * movingPenalty;
         const dir = getWeaponDirection(totalSpread);
         const ray = new THREE.Raycaster(camera.position, dir, 0, 160);
+        ray.camera = camera;
 
         let bestEnemy = null;
         let bestEnemyHit = null;
