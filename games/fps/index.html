@@ -1379,7 +1379,7 @@
         const next = player.position.clone().add(new THREE.Vector3(move.x, 0, move.z));
         const resolved = resolveWallSliding(next);
         player.position.x = resolved.x;
-        player.position.z = resolved.z;
+        player.position.z = resolved.z;  
       }
 
       if (keys.space && player.onGround) {
