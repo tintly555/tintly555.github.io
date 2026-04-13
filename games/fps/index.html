@@ -186,7 +186,13 @@
   <div class="flash" id="flash"></div>
   <div class="crosshair" id="crosshair"></div>
   <div class="hitmarker" id="hitmarker"></div>
-
+  <div id="deathScreen" class="death-screen" style="display:none;">
+  <div class="death-card">
+    <h1>你死了</h1>
+    <p id="deathText">本局得分：0</p>
+    <button id="btnRespawn">重新开始</button>
+  </div>
+</div>
   <script type="module">
     import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.182.0/build/three.module.js";
 
@@ -199,7 +205,9 @@
     const menuEl = document.getElementById("menu");
     const btnArena = document.getElementById("btnArena");
     const btnCrossfire = document.getElementById("btnCrossfire");
-
+    const deathScreen = document.getElementById("deathScreen");
+    const deathText = document.getElementById("deathText");
+    const btnRespawn = document.getElementById("btnRespawn");
     let CURRENT_MAP = "arena";
     let started = false;
 
@@ -900,7 +908,7 @@ return {
         gunGroup.add(grip);
 
         gunGroup.position.set(0.28, -0.22, -0.70);
-        adsOffset.set(-0.205, 0.125, 0.28);
+        adsOffset.set(-0.165, 0.085, 0.18);
       } else if (type === 1) {
         const body = new THREE.Mesh(
           new THREE.BoxGeometry(0.14, 0.16, 0.90),
@@ -962,7 +970,7 @@ return {
         gunGroup.add(dot);
 
         gunGroup.position.set(0.25, -0.22, -0.80);
-        adsOffset.set(-0.165, 0.095, 0.34);
+        adsOffset.set(-0.125, 0.070, 0.20);
       } else {
         const body = new THREE.Mesh(
           new THREE.BoxGeometry(0.18, 0.16, 0.92),
@@ -999,7 +1007,7 @@ return {
         gunGroup.add(frontSight);
 
         gunGroup.position.set(0.23, -0.20, -0.82);
-        adsOffset.set(-0.185, 0.115, 0.30);
+        adsOffset.set(-0.145, 0.080, 0.18);
       }
 
       root.add(gunGroup);
@@ -1226,7 +1234,8 @@ return {
 
       for (let i = 0; i < w.pellets; i++) {
         const movingPenalty = (keys.w || keys.a || keys.s || keys.d) ? 1.28 : 1;
-        const totalSpread = (w.spreadBase + state.spreadBloom) * spreadMultiplier * movingPenalty;
+        const adsPenalty = state.ads ? 1 : 2.8;  // 不开镜扩散×2.8
+        const totalSpread = (w.spreadBase + state.spreadBloom) * spreadMultiplier * movingPenalty * adsPenalty;
         const dir = getWeaponDirection(totalSpread);
         const ray = new THREE.Raycaster(camera.position, dir, 0, 160);
         ray.camera = camera;
@@ -1417,11 +1426,31 @@ return {
       camera.rotation.y = player.yaw;
       camera.rotation.x = player.pitch;
     }
+    function showDeathScreen() {
+      deathText.textContent = `本局得分：${state.score}`;
+      deathScreen.style.display = "flex";
+      crosshairEl.classList.add("hidden");
+      state.mouseDown = false;
+      state.ads = false;
+          
+      if (document.pointerLockElement) {
+        document.exitPointerLock();
+      }
+    }
 
+    function hideDeathScreen() {
+      deathScreen.style.display = "none";
+    }
     function damagePlayer(amount) {
+      if (player.health <= 0) return;
+             
       player.health = Math.max(0, player.health - amount);
       state.flashTimer = 0.14;
       updateHud();
+           
+      if (player.health <= 0) {
+        showDeathScreen();
+      }
     }
 
     function updateEnemies(dt) {
@@ -1562,6 +1591,7 @@ return {
     const clock = new THREE.Clock();
 
     function startGame(mapName) {
+      hideDeathScreen();
       CURRENT_MAP = mapName;
       menuEl.style.display = "none";
       rebuildMapAndEnemies();
@@ -1588,7 +1618,10 @@ return {
 
     btnArena.addEventListener("click", () => startGame("arena"));
     btnCrossfire.addEventListener("click", () => startGame("crossfire"));
-
+    btnRespawn.addEventListener("click", () => {
+      hideDeathScreen();
+      startGame(CURRENT_MAP);
+    });
     window.addEventListener("resize", () => {
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
