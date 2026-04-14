@@ -414,6 +414,7 @@
       locked: false,
       mouseDown: false,
       ads: false,
+      adsProgress: 0,
       score: 0,
       flashTimer: 0,
       recoil: 0,
@@ -446,7 +447,8 @@
         ammo: 12,
         reloadTime: 1200,
         soundBase: 520,
-        adsFov: 67
+        adsFov: 67,
+        adsSpeed: 12,
       },
       {
         name: "Assault Rifle",
@@ -466,7 +468,8 @@
         ammo: 30,
         reloadTime: 1600,
         soundBase: 720,
-        adsFov: 55
+        adsFov: 55,
+        adsSpeed: 8,
       },
       {
         name: "Shotgun",
@@ -486,7 +489,8 @@
         ammo: 8,
         reloadTime: 1900,
         soundBase: 260,
-        adsFov: 63
+        adsFov: 63,
+        adsSpeed: 6,
       }
     ];
     function weapon() {
@@ -1006,6 +1010,7 @@ return {
     function setWeapon(index) {
       state.weaponIndex = index;
       state.ads = false;
+      state.adsProgress = 0;
       weaponModels.forEach((w, i) => {
         w.visible = i === index;
       });
@@ -1320,12 +1325,16 @@ return {
       const basePos = activeWeapon.userData.basePos;
       const adsOffset = activeWeapon.userData.adsOffset;
 
+      const targetAds = usingAds ? 1 : 0;
+      const adsSpeed = weapon().adsSpeed ?? 8;
+
+      state.adsProgress += (targetAds - state.adsProgress) * Math.min(1, dt * adsSpeed);
+
+      const adsBlend = state.adsProgress;
+
       const targetScale = (usingAds && state.weaponIndex === 1) ? 1.18 : 1.0;
       const scaleVec = new THREE.Vector3(targetScale, targetScale, targetScale);
       activeWeapon.scale.lerp(scaleVec, Math.min(1, dt * 12));
-
-      const adsBlend = usingAds ? 1 : 0;
-
       const targetX = basePos.x + adsOffset.x * adsBlend;
       const targetY = basePos.y + adsOffset.y * adsBlend;
       const targetZ = basePos.z + adsOffset.z * adsBlend;
@@ -1591,6 +1600,7 @@ return {
       state.score = 0;
       player.health = 100;
       state.ads = false;
+      state.adsProgress = 0;
       state.mouseDown = false;
       state.reloading = false;
       state.recoil = 0;
