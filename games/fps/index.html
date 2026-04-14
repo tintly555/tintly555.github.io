@@ -409,7 +409,7 @@
       onGround: true
     };
 
-    const keys = { w:false, a:false, s:false, d:false, space:false };
+    const keys = { w:false, a:false, s:false, d:false, space:false, shift:false };
     const state = {
       locked: false,
       mouseDown: false,
@@ -944,7 +944,7 @@ return {
         gunGroup.add(mag);
 
         gunGroup.position.set(0.25, -0.22, -0.80);
-        adsOffset.set(-0.205, 0.135, 0.40);
+        adsOffset.set(-0.235, 0.155, 0.46);
       } else {
         const body = new THREE.Mesh(
           new THREE.BoxGeometry(0.18, 0.16, 0.92),
@@ -1029,6 +1029,7 @@ return {
       if (k === "s") keys.s = true;
       if (k === "d") keys.d = true;
       if (k === " ") keys.space = true;
+      if (k.key === "Shift") keys.shift = true;
       if (k === "1") setWeapon(0);
       if (k === "2") setWeapon(1);
       if (k === "3") setWeapon(2);
@@ -1042,6 +1043,7 @@ return {
       if (k === "s") keys.s = false;
       if (k === "d") keys.d = false;
       if (k === " ") keys.space = false;
+      if (k.key === "Shift") keys.shift = false;
     });
 
     renderer.domElement.addEventListener("mousedown", (e) => {
@@ -1319,7 +1321,8 @@ return {
       const scaleVec = new THREE.Vector3(targetScale, targetScale, targetScale);
       activeWeapon.scale.lerp(scaleVec, Math.min(1, dt * 12));
 
-      const adsBlend = (state.ads && !state.reloading) ? 1 : 0;
+      const usingAds = (state.ads || keys.shift) && !state.reloading && player.health > 0;
+      const adsBlend = usingAds ? 1 : 0;
 
       const targetX = basePos.x + adsOffset.x * adsBlend;
       const targetY = basePos.y + adsOffset.y * adsBlend;
@@ -1329,16 +1332,16 @@ return {
       gun.position.y += (targetY - gun.position.y) * Math.min(1, dt * 16);
       gun.position.z += (targetZ - gun.position.z) * Math.min(1, dt * 16);
 
-      const hideCrosshair = state.ads && state.weaponIndex !== 1;
+      const hideCrosshair = usingAds && state.weaponIndex !== 1;
       crosshairEl.classList.toggle("hidden", hideCrosshair);
 
       weaponRoot.position.set(bobX + reloadX, -state.recoil - bobY + reloadY, 0);
       weaponRoot.rotation.set(
-        state.recoil * (state.ads ? 0.7 : 1.0),
+        state.recoil * (usingAds ? 0.7 : 1.0),
         reloadRotY,
         bobRotZ + reloadRotZ
       );
-      const targetFov = (state.ads && !state.reloading) ? 45 : 75; 
+      const targetFov = usingAds ? 45 : 75;
       if (camera.fov !== targetFov) {
         camera.fov += (targetFov - camera.fov) * Math.min(1, dt * 10);
         camera.updateProjectionMatrix();
