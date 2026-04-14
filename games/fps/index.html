@@ -1274,11 +1274,13 @@ return {
     function updateWeaponVisuals(dt, isMoving) {
       const t = performance.now() * 0.001;
 
+      const usingAds = (state.ads || keys.shift) && !state.reloading && player.health > 0;
+        
       let bobX = 0;
       let bobY = 0;
       let bobRotZ = 0;
 
-      if (isMoving && player.onGround && !state.ads) {
+      if (isMoving && player.onGround && !usingAds) {
         bobX = Math.sin(t * 5.5) * 0.005;
         bobY = Math.abs(Math.cos(t * 11)) * 0.007;
         bobRotZ = Math.sin(t * 5.5) * 0.008;
@@ -1317,12 +1319,11 @@ return {
       const gun = activeWeapon.userData.gun;
       const basePos = activeWeapon.userData.basePos;
       const adsOffset = activeWeapon.userData.adsOffset;
+
       const targetScale = (usingAds && state.weaponIndex === 1) ? 1.18 : 1.0;
       const scaleVec = new THREE.Vector3(targetScale, targetScale, targetScale);
       activeWeapon.scale.lerp(scaleVec, Math.min(1, dt * 12));
 
-      const usingAds = (state.ads || keys.shift) && !state.reloading && player.health > 0;
-      state.ads = usingAds;
       const adsBlend = usingAds ? 1 : 0;
 
       const targetX = basePos.x + adsOffset.x * adsBlend;
@@ -1332,7 +1333,7 @@ return {
       gun.position.x += (targetX - gun.position.x) * Math.min(1, dt * 16);
       gun.position.y += (targetY - gun.position.y) * Math.min(1, dt * 16);
       gun.position.z += (targetZ - gun.position.z) * Math.min(1, dt * 16);
-
+         
       const hideCrosshair = usingAds && state.weaponIndex !== 1;
       crosshairEl.classList.toggle("hidden", hideCrosshair);
 
@@ -1342,6 +1343,7 @@ return {
         reloadRotY,
         bobRotZ + reloadRotZ
       );
+
       const targetFov = usingAds ? 38 : 75;
       if (camera.fov !== targetFov) {
         camera.fov += (targetFov - camera.fov) * Math.min(1, dt * 10);
