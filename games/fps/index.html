@@ -944,7 +944,7 @@ return {
         gunGroup.add(mag);
 
         gunGroup.position.set(0.25, -0.22, -0.80);
-        adsOffset.set(-0.235, 0.155, 0.46);
+        adsOffset.set(-0.06, 0.11, 0.52);
       } else {
         const body = new THREE.Mesh(
           new THREE.BoxGeometry(0.18, 0.16, 0.92),
@@ -1029,7 +1029,7 @@ return {
       if (k === "s") keys.s = true;
       if (k === "d") keys.d = true;
       if (k === " ") keys.space = true;
-      if (k.key === "Shift") keys.shift = true;
+      if (k === "shift") keys.shift = true;
       if (k === "1") setWeapon(0);
       if (k === "2") setWeapon(1);
       if (k === "3") setWeapon(2);
@@ -1043,7 +1043,7 @@ return {
       if (k === "s") keys.s = false;
       if (k === "d") keys.d = false;
       if (k === " ") keys.space = false;
-      if (k.key === "Shift") keys.shift = false;
+      if (k === "shift") keys.shift = false;
     });
 
     renderer.domElement.addEventListener("mousedown", (e) => {
@@ -1317,11 +1317,12 @@ return {
       const gun = activeWeapon.userData.gun;
       const basePos = activeWeapon.userData.basePos;
       const adsOffset = activeWeapon.userData.adsOffset;
-      const targetScale = (state.ads && state.weaponIndex === 1 && !state.reloading) ? 1.12 : 1.0;
+      const targetScale = (usingAds && state.weaponIndex === 1) ? 1.18 : 1.0;
       const scaleVec = new THREE.Vector3(targetScale, targetScale, targetScale);
       activeWeapon.scale.lerp(scaleVec, Math.min(1, dt * 12));
 
       const usingAds = (state.ads || keys.shift) && !state.reloading && player.health > 0;
+      state.ads = usingAds;
       const adsBlend = usingAds ? 1 : 0;
 
       const targetX = basePos.x + adsOffset.x * adsBlend;
@@ -1341,7 +1342,7 @@ return {
         reloadRotY,
         bobRotZ + reloadRotZ
       );
-      const targetFov = usingAds ? 45 : 75;
+      const targetFov = usingAds ? 38 : 75;
       if (camera.fov !== targetFov) {
         camera.fov += (targetFov - camera.fov) * Math.min(1, dt * 10);
         camera.updateProjectionMatrix();
