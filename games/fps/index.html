@@ -943,31 +943,6 @@ return {
         mag.position.set(0, -0.16, 0.00);
         gunGroup.add(mag);
 
-        const sightFrame = new THREE.Mesh(
-          new THREE.BoxGeometry(0.08, 0.10, 0.02),
-          new THREE.MeshStandardMaterial({ color: 0x111827 })
-        );
-        sightFrame.position.set(0, 0.065, -0.035);
-        gunGroup.add(sightFrame);
-
-        const lens = new THREE.Mesh(
-          new THREE.PlaneGeometry(0.055, 0.075),
-          new THREE.MeshBasicMaterial({
-            color: 0x88ccff,
-            transparent: true,
-            opacity: 0.18
-          })
-        );
-        lens.position.set(0, 0.065, -0.018);
-        gunGroup.add(lens);
-
-        const dot = new THREE.Mesh(
-          new THREE.SphereGeometry(0.008, 8, 8),
-          new THREE.MeshBasicMaterial({ color: 0xff2d2d })
-        );
-        dot.position.set(0, 0.065, -0.02);
-        gunGroup.add(dot);
-
         gunGroup.position.set(0.25, -0.22, -0.80);
         adsOffset.set(-0.155, 0.092, 0.28);
       } else {
@@ -1351,7 +1326,8 @@ return {
       gun.position.y += (targetY - gun.position.y) * Math.min(1, dt * 16);
       gun.position.z += (targetZ - gun.position.z) * Math.min(1, dt * 16);
 
-      crosshairEl.classList.toggle("hidden", state.ads);
+      const hideCrosshair = state.ads && state.weaponIndex !== 1;
+      crosshairEl.classList.toggle("hidden", hideCrosshair);
 
       weaponRoot.position.set(bobX + reloadX, -state.recoil - bobY + reloadY, 0);
       weaponRoot.rotation.set(
