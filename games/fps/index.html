@@ -944,7 +944,7 @@ return {
         gunGroup.add(mag);
 
         gunGroup.position.set(0.25, -0.22, -0.80);
-        adsOffset.set(-0.155, 0.092, 0.28);
+        adsOffset.set(-0.205, 0.135, 0.40);
       } else {
         const body = new THREE.Mesh(
           new THREE.BoxGeometry(0.18, 0.16, 0.92),
@@ -1315,6 +1315,9 @@ return {
       const gun = activeWeapon.userData.gun;
       const basePos = activeWeapon.userData.basePos;
       const adsOffset = activeWeapon.userData.adsOffset;
+      const targetScale = (state.ads && state.weaponIndex === 1 && !state.reloading) ? 1.12 : 1.0;
+      const scaleVec = new THREE.Vector3(targetScale, targetScale, targetScale);
+      activeWeapon.scale.lerp(scaleVec, Math.min(1, dt * 12));
 
       const adsBlend = (state.ads && !state.reloading) ? 1 : 0;
 
