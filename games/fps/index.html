@@ -439,9 +439,9 @@
         spreadBloomMax: 0.026,
         recover: 0.024,
         recoil: 0.052,
-        damageHead: 70,
-        damageBody: 36,
-        damageLegs: 22,
+        damageHead: 100,
+        damageBody: 20,
+        damageLegs: 15,
         color: 0xffe08a,
         magSize: 12,
         ammo: 12,
@@ -460,9 +460,9 @@
         spreadBloomMax: 0.080,
         recover: 0.035,
         recoil: 0.042,
-        damageHead: 26,
-        damageBody: 15,
-        damageLegs: 10,
+        damageHead: 30,
+        damageBody: 22,
+        damageLegs: 18,
         color: 0x8fdcff,
         magSize: 30,
         ammo: 30,
@@ -1177,6 +1177,7 @@ return {
       if (player.health <= 0) return;
       const now = performance.now();
       const w = weapon();
+      const shootingAds = (state.ads || keys.shift) && !state.reloading && player.health > 0;
 
       if (state.reloading) return;
       if (w.ammo <= 0) {
@@ -1192,19 +1193,16 @@ return {
       let recoilMultiplier = 1;
          
       if (state.weaponIndex === 0) {
-      // 手枪
-        spreadMultiplier = state.ads ? 0.52 : 2.10;
-        recoilMultiplier = state.ads ? 0.82 : 1.35;
-           
+        spreadMultiplier = shootingAds ? 0.52 : 2.10;
+        recoilMultiplier = shootingAds ? 0.82 : 1.35;
+
       } else if (state.weaponIndex === 1) {
-        // 步枪（已削弱）
-        spreadMultiplier = state.ads ? 0.25 : 2.50;
-        recoilMultiplier = state.ads ? 0.60 : 1.50;
-            
+        spreadMultiplier = shootingAds ? 0.25 : 2.50;
+        recoilMultiplier = shootingAds ? 0.60 : 1.50;
+
       } else {
-           // 喷子（你已经调过）
-        spreadMultiplier = state.ads ? 0.50 : 1.10;
-        recoilMultiplier = state.ads ? 0.90 : 1.15;
+        spreadMultiplier = shootingAds ? 0.50 : 1.10;
+        recoilMultiplier = shootingAds ? 0.90 : 1.15;
       }
       state.recoil += w.recoil * recoilMultiplier;
       state.spreadBloom = Math.min(
@@ -1219,7 +1217,7 @@ return {
 
       for (let i = 0; i < w.pellets; i++) {
         const movingPenalty = (keys.w || keys.a || keys.s || keys.d) ? 1.60 : 1;
-        const adsPenalty = state.ads ? 1 : 2.8;  // 不开镜扩散×2.8
+        const adsPenalty = shootingAds ? 1 : 2.8;  // 不开镜扩散×2.8
         const totalSpread = (w.spreadBase + state.spreadBloom) * spreadMultiplier * movingPenalty * adsPenalty;
         const dir = getWeaponDirection(totalSpread);
         const ray = new THREE.Raycaster(camera.position, dir, 0, 160);
