@@ -876,42 +876,50 @@ return {
       let adsOffset = new THREE.Vector3();
 
       if (type === 0) {
-        const frame = new THREE.Mesh(
-          new THREE.BoxGeometry(0.12, 0.16, 0.46),
-          new THREE.MeshStandardMaterial({ color: 0x3b4450 })
-        );
-        gunGroup.add(frame);
+                const frame = new THREE.Mesh(
+                  new THREE.BoxGeometry(0.085, 0.13, 0.46),
+                  new THREE.MeshStandardMaterial({ color: 0x3b4450 })
+                );
+                gunGroup.add(frame);
 
-        const slide = new THREE.Mesh(
-          new THREE.BoxGeometry(0.11, 0.06, 0.24),
-          new THREE.MeshStandardMaterial({ color: 0x8891a0 })
-        );
-        slide.position.set(0, 0.08, -0.05);
-        gunGroup.add(slide);
+                const slide = new THREE.Mesh(
+                  new THREE.BoxGeometry(0.070, 0.045, 0.26),
+                  new THREE.MeshStandardMaterial({ color: 0x8891a0 })
+                );
+                slide.position.set(0, 0.055, -0.04);
+                gunGroup.add(slide);
 
-        const rearSight = new THREE.Mesh(
-          new THREE.BoxGeometry(0.06, 0.04, 0.02),
-          new THREE.MeshStandardMaterial({ color: 0xd1d5db })
-        );
-        rearSight.position.set(0, 0.10, 0.08);
-        gunGroup.add(rearSight);
+                const rearSight = new THREE.Mesh(
+                  new THREE.BoxGeometry(0.065, 0.020, 0.020),
+                  new THREE.MeshStandardMaterial({ color: 0xd1d5db })
+                );
+                rearSight.position.set(0, 0.078, 0.085);
+                gunGroup.add(rearSight);
 
-        const frontSight = new THREE.Mesh(
-          new THREE.BoxGeometry(0.03, 0.06, 0.02),
-          new THREE.MeshStandardMaterial({ color: 0xd1d5db })
-        );
-        frontSight.position.set(0, 0.11, -0.18);
-        gunGroup.add(frontSight);
+                const frontSight = new THREE.Mesh(
+                  new THREE.BoxGeometry(0.010, 0.060, 0.018),
+                  new THREE.MeshStandardMaterial({ color: 0xd1d5db })
+                );
+                frontSight.position.set(0, 0.092, -0.19);
+                gunGroup.add(frontSight);
 
-        const grip = new THREE.Mesh(
-          new THREE.BoxGeometry(0.10, 0.22, 0.12),
-          new THREE.MeshStandardMaterial({ color: 0x20242c })
-        );
-        grip.position.set(0, -0.17, 0.08);
-        gunGroup.add(grip);
+                const frontDot = new THREE.Mesh(
+                  new THREE.SphereGeometry(0.005, 8, 8),
+                  new THREE.MeshBasicMaterial({ color: 0xff2d2d })
+                );
+                frontDot.position.set(0, 0.118, -0.19);
+                gunGroup.add(frontDot);
 
-        gunGroup.position.set(0.28, -0.22, -0.70);
-        adsOffset.set(-0.28, 0.05, 0.26);
+                const grip = new THREE.Mesh(
+                  new THREE.BoxGeometry(0.10, 0.22, 0.12),
+                  new THREE.MeshStandardMaterial({ color: 0x20242c })
+                );
+                grip.position.set(0, -0.17, 0.08);
+                gunGroup.add(grip);
+
+                gunGroup.position.set(0.26, 0.4, -0.72);
+                adsOffset.set(-0.28, 0.05, 0.26);
+      }
       } else if (type === 1) {
         const body = new THREE.Mesh(
           new THREE.BoxGeometry(0.14, 0.16, 0.90),
@@ -1197,7 +1205,7 @@ return {
         recoilMultiplier = shootingAds ? 0.82 : 1.35;
 
       } else if (state.weaponIndex === 1) {
-        spreadMultiplier = shootingAds ? 0.02 : 2.50;
+        spreadMultiplier = shootingAds ? 0.005 : 2.50;
         recoilMultiplier = shootingAds ? 0.45 : 1.50;
 
       } else {
