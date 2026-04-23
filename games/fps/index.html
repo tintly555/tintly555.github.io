@@ -439,7 +439,7 @@
         spreadBloomMax: 0.026,
         recover: 0.024,
         recoil: 0.052,
-        damageHead: 100,
+        damageHead: 50,
         damageBody: 8,
         damageLegs: 5,
         color: 0xffe08a,
@@ -491,6 +491,27 @@
         soundBase: 260,
         adsFov: 63,
         adsSpeed: 6,
+      },
+      {
+        name: "SMG",
+        fireDelay: 78,
+        auto: true,
+        pellets: 1,
+        spreadBase: 0.016,
+        spreadBloomAdd: 0.010,
+        spreadBloomMax: 0.095,
+        recover: 0.055,
+        recoil: 0.030,
+        damageHead: 34,
+        damageBody: 19,
+        damageLegs: 13,
+        color: 0xb8ff9a,
+        magSize: 36,
+        ammo: 36,
+        reloadTime: 1450,
+        soundBase: 900,
+        adsFov: 60,
+        adsSpeed: 10,
       }
     ];
     function weapon() {
@@ -502,7 +523,7 @@
       hud.innerHTML = `
         3D Zombie FPS<br>
         W A S D 移动 | 空格跳跃 | R换弹<br>
-        鼠标自由视角 | 右键瞄准 | 1 2 3 切枪<br>
+        鼠标自由视角 | 右键瞄准 | 1 2 3 4 切枪<br>
         地图: ${CURRENT_MAP}<br>
         武器: ${w.name}<br>
         弹匣: ${w.ammo} / ${w.magSize}${state.reloading ? "（换弹中）" : ""}<br>
@@ -957,7 +978,7 @@ return {
 
         gunGroup.position.set(0.25, -0.22, -0.80);
         adsOffset.set(-0.25, 0.10, 0.28);
-      } else {
+      } else if (type === 2) {
         const body = new THREE.Mesh(
           new THREE.BoxGeometry(0.18, 0.16, 0.92),
           new THREE.MeshStandardMaterial({ color: 0x6b7280 })
@@ -995,6 +1016,58 @@ return {
         gunGroup.position.set(0.23, -0.20, -0.82);
         adsOffset.set(-0.175, 0.105, 0.24);
       }
+      } else if (type === 3) {
+        const body = new THREE.Mesh(
+          new THREE.BoxGeometry(0.12, 0.14, 0.72),
+          new THREE.MeshStandardMaterial({ color: 0x4b5563 })
+        );
+        gunGroup.add(body);
+
+        const top = new THREE.Mesh(
+          new THREE.BoxGeometry(0.08, 0.05, 0.34),
+          new THREE.MeshStandardMaterial({ color: 0x1f2937 })
+        );
+        top.position.set(0, 0.07, -0.06);
+        gunGroup.add(top);
+
+        const stock = new THREE.Mesh(
+          new THREE.BoxGeometry(0.10, 0.10, 0.18),
+          new THREE.MeshStandardMaterial({ color: 0x232a34 })
+        );
+        stock.position.set(0, 0.01, 0.40);
+        gunGroup.add(stock);
+
+        const grip = new THREE.Mesh(
+          new THREE.BoxGeometry(0.08, 0.20, 0.10),
+          new THREE.MeshStandardMaterial({ color: 0x1f2937 })
+        );
+        grip.position.set(0, -0.16, 0.10);
+        gunGroup.add(grip);
+
+        const mag = new THREE.Mesh(
+          new THREE.BoxGeometry(0.07, 0.24, 0.10),
+          new THREE.MeshStandardMaterial({ color: 0x20242c })
+        );
+        mag.position.set(0, -0.12, -0.02);
+        gunGroup.add(mag);
+
+        const frontSight = new THREE.Mesh(
+          new THREE.BoxGeometry(0.02, 0.05, 0.02),
+          new THREE.MeshStandardMaterial({ color: 0xd1d5db })
+        );
+        frontSight.position.set(0, 0.08, -0.28);
+        gunGroup.add(frontSight);
+
+        const rearSight = new THREE.Mesh(
+          new THREE.BoxGeometry(0.05, 0.02, 0.02),
+          new THREE.MeshStandardMaterial({ color: 0xd1d5db })
+        );
+        rearSight.position.set(0, 0.07, 0.14);
+        gunGroup.add(rearSight);
+
+        gunGroup.position.set(0.24, -0.22, -0.76);
+        adsOffset.set(-0.22, 0.085, 0.24);
+    }
 
       root.add(gunGroup);
       root.userData.gun = gunGroup;
@@ -1007,7 +1080,8 @@ return {
     const weaponModels = [
       makeWeaponModel(0),
       makeWeaponModel(1),
-      makeWeaponModel(2)
+      makeWeaponModel(2),
+      makeWeaponModel(3)
     ];
 
     weaponModels.forEach((w, i) => {
@@ -1046,6 +1120,7 @@ return {
       if (k === "1") setWeapon(0);
       if (k === "2") setWeapon(1);
       if (k === "3") setWeapon(2);
+      if (k === "4") setWeapon(3);
       if (k === "r") startReload();
     });
 
@@ -1201,16 +1276,20 @@ return {
       let recoilMultiplier = 1;
          
       if (state.weaponIndex === 0) {
-        spreadMultiplier = shootingAds ? 0.52 : 2.10;
-        recoilMultiplier = shootingAds ? 0.82 : 1.35;
+        spreadMultiplier = shootingAds ? 0.55 : 1.65;
+        recoilMultiplier = shootingAds ? 0.80 : 1.15;
 
       } else if (state.weaponIndex === 1) {
-        spreadMultiplier = shootingAds ? 0.005 : 2.50;
-        recoilMultiplier = shootingAds ? 0.45 : 1.50;
-
-      } else {
-        spreadMultiplier = shootingAds ? 0.50 : 1.10;
-        recoilMultiplier = shootingAds ? 0.90 : 1.15;
+        spreadMultiplier = shootingAds ? 0.75 : 1.90;
+        recoilMultiplier = shootingAds ? 0.75 : 1.25;
+        
+      } else if (state.weaponIndex === 2) {
+        spreadMultiplier = shootingAds ? 0.75 : 1.05;
+        recoilMultiplier = shootingAds ? 0.95 : 1.10;
+          
+      } else if (state.weaponIndex === 3) {
+        spreadMultiplier = shootingAds ? 0.85 : 1.00;
+        recoilMultiplier = shootingAds ? 0.80 : 0.95;
       }
       state.recoil += w.recoil * recoilMultiplier;
       state.spreadBloom = Math.min(
