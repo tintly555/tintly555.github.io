@@ -193,6 +193,7 @@
     <button id="btnRespawn">重新开始</button>
   </div>
 </div>
+  <script src="http://localhost:3000/socket.io/socket.io.js"></script>
   <script type="module">
     import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.182.0/build/three.module.js";
 
@@ -210,6 +211,25 @@
     const btnRespawn = document.getElementById("btnRespawn");
     let CURRENT_MAP = "arena";
     let started = false;
+    const socket = io("http://localhost:3000");
+    const ROOM_ID = "room1";
+
+    socket.on("connect", () => {
+      console.log("已连接到联机服务器:", socket.id);
+    });
+    socket.on("enemyMove", (data) => {
+      remoteState.x = data.x;
+      remoteState.y = data.y;
+      remoteState.z = data.z;
+      remoteState.yaw = data.yaw || 0;
+      remoteState.connected = true;
+      remotePlayer.visible = true;
+    });
+
+    socket.on("enemyLeft", () => {
+      remoteState.connected = false;
+      remotePlayer.visible = false;
+    });
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x0d111b);
@@ -875,6 +895,32 @@ return {
 
     const weaponRoot = new THREE.Group();
     camera.add(weaponRoot);
+    const remotePlayer = new THREE.Group();
+
+    const remoteBody = new THREE.Mesh(
+      new THREE.BoxGeometry(0.7, 1.0, 0.4),
+      new THREE.MeshStandardMaterial({ color: 0x4fd1ff })
+    );
+    remoteBody.position.y = 1.1;
+    remotePlayer.add(remoteBody);
+
+    const remoteHead = new THREE.Mesh(
+      new THREE.BoxGeometry(0.42, 0.42, 0.42),
+      new THREE.MeshStandardMaterial({ color: 0xf1c27d })
+    );
+    remoteHead.position.y = 1.85;
+    remotePlayer.add(remoteHead);
+
+    remotePlayer.visible = false;
+    scene.add(remotePlayer);
+
+    const remoteState = {
+      x: 0,
+      y: 1.65,
+      z: 0,
+      yaw: 0,
+      connected: false
+    };
 
     function makeWeaponModel(type) {
       const root = new THREE.Group();
@@ -1512,6 +1558,14 @@ return {
       camera.position.y += headBob;
       camera.rotation.y = player.yaw;
       camera.rotation.x = player.pitch;
+      if (CURRENT_MAP === "crossfire") {
+        socket.emit("move", {
+          x: player.position.x,
+          y: player.position.y,
+          z: player.position.z,
+          yaw: player.yaw
+        });
+      }
     }
     function showDeathScreen() {
       deathText.textContent = `本局得分：${state.score}`;
@@ -1663,8 +1717,18 @@ return {
 
       updatePlayer(dt);
       updateWeapon(dt);
-      updateEnemies(dt);
+
+      if (CURRENT_MAP !== "crossfire") {
+        updateEnemies(dt);
+      }
+
       updateEffects(dt);
+
+      if (CURRENT_MAP === "crossfire" && remoteState.connected) {
+        remotePlayer.position.set(remoteState.x, 0, remoteState.z);
+        remotePlayer.rotation.y = remoteState.yaw;
+      }
+
       updateHud();
 
       if (player.health > 0 && state.mouseDown && weapon().auto) {
@@ -1682,6 +1746,9 @@ return {
       CURRENT_MAP = mapName;
       menuEl.style.display = "none";
       rebuildMapAndEnemies();
+      if (mapName === "crossfire") {
+        socket.emit("joinRoom", ROOM_ID);
+      }
       state.score = 0;
       player.health = 100;
       state.ads = false;
