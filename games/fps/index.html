@@ -510,7 +510,7 @@
         ammo: 36,
         reloadTime: 1450,
         soundBase: 900,
-        adsFov: 60,
+        adsFov: 75,
         adsSpeed: 10,
       }
     ];
@@ -1288,8 +1288,8 @@ return {
         recoilMultiplier = shootingAds ? 0.95 : 1.10;
           
       } else if (state.weaponIndex === 3) {
-        spreadMultiplier = shootingAds ? 0.85 : 1.00;
-        recoilMultiplier = shootingAds ? 0.80 : 0.95;
+        spreadMultiplier = 1.00;
+        recoilMultiplier = 0.95;
       }
       state.recoil += w.recoil * recoilMultiplier;
       state.spreadBloom = Math.min(
@@ -1364,7 +1364,7 @@ return {
     function updateWeaponVisuals(dt, isMoving) {
       const t = performance.now() * 0.001;
 
-      const usingAds = (state.ads || keys.shift) && !state.reloading && player.health > 0;
+      const usingAds = (state.ads || keys.shift) && !state.reloading && player.health > 0 && state.weaponIndex !== 3;
         
       let bobX = 0;
       let bobY = 0;
