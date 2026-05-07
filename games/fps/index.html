@@ -193,7 +193,7 @@
     <button id="btnRespawn">重新开始</button>
   </div>
 </div>
-  <script src="https://fpsgame.fly.dev/socket.io/socket.io.js"></script>
+  <script src="SERVER_SOCKET.IO_SCRIPT"></script>
   <script type="module">
     import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.182.0/build/three.module.js";
 
@@ -211,11 +211,12 @@
     const btnRespawn = document.getElementById("btnRespawn");
     let CURRENT_MAP = "arena";
     let started = false;
-    const socket = io("https://fpsgame.fly.dev");
+    // chat.jimmyqrg.com is the server cloud domain
+    const socket = io("chat.jimmyqrg.com");
     const ROOM_ID = "room1";
 
     socket.on("connect", () => {
-      console.log("已连接到联机服务器:", socket.id);
+      console.log("Connected to server:", socket.id);
     });
     socket.on("enemyMove", (data) => {
       remoteState.x = data.x;
@@ -542,13 +543,13 @@
       const w = weapon();
       hud.innerHTML = `
         3D Zombie FPS<br>
-        W A S D 移动 | 空格跳跃 | R换弹<br>
-        鼠标自由视角 | 右键瞄准 | 1 2 3 4 切枪<br>
-        地图: ${CURRENT_MAP}<br>
-        武器: ${w.name}<br>
-        弹匣: ${w.ammo} / ${w.magSize}${state.reloading ? "（换弹中）" : ""}<br>
-        ❤️ Health: ${Math.max(0, Math.floor(player.health))}<br>
-        🎯 Score: ${state.score}
+        Move with WASD | Space to jump | R to refill bullets<br>
+        Move mouse | Right click zoomin | Switch weapons: 1 2 3 4<br>
+        Map: ${CURRENT_MAP}<br>
+        Weapon: ${w.name}<br>
+        Bullets: ${w.ammo} / ${w.magSize}${state.reloading ? "（Refilling...）" : ""}<br>
+        Health: ${Math.max(0, Math.floor(player.health))}<br>
+        Score: ${state.score}
       `;
     }
     updateHud();
