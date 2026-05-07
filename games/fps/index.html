@@ -1024,9 +1024,9 @@
         fireDelay: 520,
         auto: false,
         pellets: 7,
-        spreadBase: 0.055,
-        spreadBloomAdd: 0.010,
-        spreadBloomMax: 0.080,
+        spreadBase: 0.028,
+        spreadBloomAdd: 0.006,
+        spreadBloomMax: 0.045,
         recover: 0.050,
         recoil: 0.055,
         damageHead: 26,
@@ -1933,15 +1933,15 @@ return {
       let recoilMultiplier = 1;
          
       if (state.weaponIndex === 0) {
-        spreadMultiplier = shootingAds ? 0.4 : 1.0;
+        spreadMultiplier = shootingAds ? 0.25 : 1.5;
         recoilMultiplier = shootingAds ? 0.75 : 1.0;
 
       } else if (state.weaponIndex === 1) {
-        spreadMultiplier = shootingAds ? 0.5 : 1.2;
+        spreadMultiplier = shootingAds ? 0.35 : 1.6;
         recoilMultiplier = shootingAds ? 0.70 : 1.0;
         
       } else if (state.weaponIndex === 2) {
-        spreadMultiplier = shootingAds ? 0.7 : 1.0;
+        spreadMultiplier = shootingAds ? 0.7 : 1.5;
         recoilMultiplier = shootingAds ? 0.90 : 1.0;
           
       } else if (state.weaponIndex === 3) {
