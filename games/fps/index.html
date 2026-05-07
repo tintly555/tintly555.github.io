@@ -1933,19 +1933,19 @@ return {
       let recoilMultiplier = 1;
          
       if (state.weaponIndex === 0) {
-        spreadMultiplier = shootingAds ? 0.25 : 2.0;
+        spreadMultiplier = shootingAds ? 0.25 : 3.0;
         recoilMultiplier = shootingAds ? 0.75 : 1.0;
 
       } else if (state.weaponIndex === 1) {
-        spreadMultiplier = shootingAds ? 0.25 : 1.6;
+        spreadMultiplier = shootingAds ? 0.25 : 2.3;
         recoilMultiplier = shootingAds ? 0.70 : 1.0;
         
       } else if (state.weaponIndex === 2) {
-        spreadMultiplier = shootingAds ? 0.77 : 1.6;
+        spreadMultiplier = shootingAds ? 1.8 : 3.0;
         recoilMultiplier = shootingAds ? 0.90 : 1.0;
           
       } else if (state.weaponIndex === 3) {
-        spreadMultiplier = shootingAds ? 0.5 : 0.8;
+        spreadMultiplier = shootingAds ? 0.5 : 1.1;
         recoilMultiplier = 0.90;
       }
       state.recoil += w.recoil * recoilMultiplier;
