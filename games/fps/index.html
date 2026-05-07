@@ -175,25 +175,25 @@
 <body>
   <div id="menu" class="menu">
     <h1>3D Zombie FPS</h1>
-    <p>单文件完整版基线</p>
+    <p>by Tintly555 and JimmyQrg</p>
     <button id="btnArena">Zombie Arena</button>
     <button id="btnCrossfire">Crossfire</button>
   </div>
 
   <div id="app"></div>
   <div class="hud" id="hud"></div>
-  <div class="hint" id="hint">点击画面锁定鼠标并开始</div>
+  <div class="hint" id="hint">Click anywhere</div>
   <div class="flash" id="flash"></div>
   <div class="crosshair" id="crosshair"></div>
   <div class="hitmarker" id="hitmarker"></div>
   <div id="deathScreen" class="death-screen" style="display:none;">
   <div class="death-card">
-    <h1>你死了</h1>
-    <p id="deathText">本局得分：0</p>
-    <button id="btnRespawn">重新开始</button>
+    <h1>Defeated</h1>
+    <p id="deathText">Score：0</p>
+    <button id="btnRespawn">Restart</button>
   </div>
 </div>
-  <script src="/socket.io/socket.io.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/socket.io-client@4/dist/socket.io.min.js"></script>
   <script type="module">
     import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.182.0/build/three.module.js";
 
@@ -211,7 +211,7 @@
     const btnRespawn = document.getElementById("btnRespawn");
     let CURRENT_MAP = "arena";
     let started = false;
-    const socket = io("/game");
+    const socket = io("https://chat.jimmyqrg.com/game");
     const ROOM_ID = "room1";
 
     const remotePlayers = new Map();
