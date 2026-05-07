@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -193,7 +193,7 @@
     <button id="btnRespawn">重新开始</button>
   </div>
 </div>
-  <script src="SERVER_SOCKET.IO_SCRIPT"></script>
+  <script src="/socket.io/socket.io.js"></script>
   <script type="module">
     import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.182.0/build/three.module.js";
 
@@ -211,26 +211,55 @@
     const btnRespawn = document.getElementById("btnRespawn");
     let CURRENT_MAP = "arena";
     let started = false;
-    // chat.jimmyqrg.com is the server cloud domain
-    const socket = io("chat.jimmyqrg.com");
+    const socket = io("/game");
     const ROOM_ID = "room1";
+
+    const remotePlayers = new Map();
 
     socket.on("connect", () => {
       console.log("Connected to server:", socket.id);
     });
     socket.on("enemyMove", (data) => {
-      remoteState.x = data.x;
-      remoteState.y = data.y;
-      remoteState.z = data.z;
-      remoteState.yaw = data.yaw || 0;
-      remoteState.connected = true;
-      remotePlayer.visible = true;
+      let rp = remotePlayers.get(data.id);
+      if (!rp) {
+        rp = createRemotePlayer();
+        remotePlayers.set(data.id, rp);
+        scene.add(rp.group);
+      }
+      rp.x = data.x;
+      rp.y = data.y;
+      rp.z = data.z;
+      rp.yaw = data.yaw || 0;
+      rp.group.visible = true;
     });
 
-    socket.on("enemyLeft", () => {
-      remoteState.connected = false;
-      remotePlayer.visible = false;
+    socket.on("enemyLeft", (data) => {
+      const rp = remotePlayers.get(data.id);
+      if (rp) {
+        scene.remove(rp.group);
+        remotePlayers.delete(data.id);
+      }
     });
+
+    function createRemotePlayer() {
+      const group = new THREE.Group();
+      const body = new THREE.Mesh(
+        new THREE.BoxGeometry(0.7, 1.0, 0.4),
+        new THREE.MeshStandardMaterial({ color: 0x4fd1ff })
+      );
+      body.position.y = 1.1;
+      group.add(body);
+
+      const head = new THREE.Mesh(
+        new THREE.BoxGeometry(0.42, 0.42, 0.42),
+        new THREE.MeshStandardMaterial({ color: 0xf1c27d })
+      );
+      head.position.y = 1.85;
+      group.add(head);
+
+      group.visible = false;
+      return { group, x: 0, y: 1.65, z: 0, yaw: 0 };
+    }
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x0d111b);
@@ -896,32 +925,6 @@ return {
 
     const weaponRoot = new THREE.Group();
     camera.add(weaponRoot);
-    const remotePlayer = new THREE.Group();
-
-    const remoteBody = new THREE.Mesh(
-      new THREE.BoxGeometry(0.7, 1.0, 0.4),
-      new THREE.MeshStandardMaterial({ color: 0x4fd1ff })
-    );
-    remoteBody.position.y = 1.1;
-    remotePlayer.add(remoteBody);
-
-    const remoteHead = new THREE.Mesh(
-      new THREE.BoxGeometry(0.42, 0.42, 0.42),
-      new THREE.MeshStandardMaterial({ color: 0xf1c27d })
-    );
-    remoteHead.position.y = 1.85;
-    remotePlayer.add(remoteHead);
-
-    remotePlayer.visible = false;
-    scene.add(remotePlayer);
-
-    const remoteState = {
-      x: 0,
-      y: 1.65,
-      z: 0,
-      yaw: 0,
-      connected: false
-    };
 
     function makeWeaponModel(type) {
       const root = new THREE.Group();
@@ -1351,7 +1354,7 @@ return {
 
       for (let i = 0; i < w.pellets; i++) {
         const movingPenalty = (keys.w || keys.a || keys.s || keys.d) ? 1.60 : 1;
-        const adsPenalty = shootingAds ? 1 : 2.8;  // 不开镜扩散×2.8
+        const adsPenalty = shootingAds ? 1 : 2.8;
         const totalSpread = (w.spreadBase + state.spreadBloom) * spreadMultiplier * movingPenalty * adsPenalty;
         const dir = getWeaponDirection(totalSpread);
         const ray = new THREE.Raycaster(camera.position, dir, 0, 160);
@@ -1725,9 +1728,11 @@ return {
 
       updateEffects(dt);
 
-      if (CURRENT_MAP === "crossfire" && remoteState.connected) {
-        remotePlayer.position.set(remoteState.x, 0, remoteState.z);
-        remotePlayer.rotation.y = remoteState.yaw;
+      if (CURRENT_MAP === "crossfire") {
+        for (const rp of remotePlayers.values()) {
+          rp.group.position.set(rp.x, 0, rp.z);
+          rp.group.rotation.y = rp.yaw;
+        }
       }
 
       updateHud();
@@ -1750,13 +1755,11 @@ return {
       clearMap();
       MAP_BUILDERS[CURRENT_MAP]();
 
-      // 先把旧敌人彻底移除
       for (const enemy of state.enemies) {
         scene.remove(enemy.group);
       }
       state.enemies.length = 0;
 
-      // 根据模式决定是否刷僵尸
       if (mapName !== "crossfire") {
         rebuildEnemyRoster();
       } else {
