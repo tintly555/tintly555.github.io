@@ -439,12 +439,12 @@
 
     const MAP_SPAWNS = {
       arena: [
-        [-22, -22], [22, -22], [-22, 22], [22, 22],
-        [0, -30], [0, 30], [-30, 0], [30, 0]
+        [30, 30], [35, 20], [20, 35], [38, 0],
+        [0, 38], [30, -30], [-30, 30], [35, 10]
       ],
       crossfire: [
-        [-30, -30], [30, 30], [-30, 30], [30, -30],
-        [0, -34], [0, 34], [-34, 0], [34, 0]
+        [38, 38], [-38, 38], [38, -38], [-38, -38],
+        [0, 40], [0, -40], [40, 0], [-40, 0]
       ]
     };
 
@@ -1222,6 +1222,27 @@ return {
     document.addEventListener("pointerlockchange", () => {
       state.locked = document.pointerLockElement === renderer.domElement;
       hint.style.display = state.locked ? "none" : "block";
+      if (!state.locked) {
+        keys.w = false;
+        keys.a = false;
+        keys.s = false;
+        keys.d = false;
+        keys.space = false;
+        keys.shift = false;
+        state.mouseDown = false;
+        state.ads = false;
+      }
+    });
+
+    window.addEventListener("blur", () => {
+      keys.w = false;
+      keys.a = false;
+      keys.s = false;
+      keys.d = false;
+      keys.space = false;
+      keys.shift = false;
+      state.mouseDown = false;
+      state.ads = false;
     });
 
     document.addEventListener("mousemove", (e) => {
