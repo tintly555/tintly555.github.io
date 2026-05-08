@@ -1,10 +1,17 @@
 <!DOCTYPE html>
+<!--
+  Source-of-truth deployment: https://tintly555.github.io/games/fps/
+  This copy in the chat repo is for editing; multiplayer hits chat.jimmyqrg.com via meta below when hosted on static Pages.
+-->
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <base href="https://chat.jimmyqrg.com/"
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>3D Zombie FPS Prototype</title>
+  <meta name="game-multiplayer-origin" content="https://chat.jimmyqrg.com" />
+  <!-- Socket.IO browser client from CDN (same approach as working fps deploy); connects via game-multiplayer-origin + /game -->
+  <script src="https://cdn.jsdelivr.net/npm/socket.io-client@4/dist/socket.io.min.js"></script>
+  <base href="https://chat.jimmyqrg.com/" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Audiowide&display=swap" rel="stylesheet">
   <style>
@@ -261,8 +268,6 @@
       <button class="overlay-btn" id="btnNameOk" style="margin-top:16px;">JOIN</button>
     </div>
   </div>
-  <!-- Sync load so `io` exists before the module runs (defer can race; absolute URL can 404). -->
-  <script src="/socket.io.min.js"></script>
   <script type="module">
     import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.182.0/build/three.module.js";
 
@@ -320,6 +325,11 @@
     let playerName = "Player";
     let killerEnemy = null;
     const hitIndicators = [];
+    const HIT_DIR_SVG_W = 100;
+    const HIT_DIR_SVG_H = Math.round((HIT_DIR_SVG_W * 81) / 256);
+    /** Chevron points upward in viewBox (+y down); rotation aligns tip toward screen center. */
+    const HIT_DIR_SVG_PATH =
+      "M133.333 13.0913C184.371 14.8246 229.131 41.3388 256 81C226.143 45.1073 179.905 22.0718 128 22.0718C76.096 22.0718 29.8567 45.107 0 81C26.8684 41.339 71.6293 14.8249 122.666 13.0913L128 0L133.333 13.0913Z";
     let deathAnimTime = 0;
     const DEATH_ANIM_DURATION = 2.0;
     let deathCamYaw = 0;
@@ -360,8 +370,20 @@
       };
     }
 
+    function getMultiplayerOrigin() {
+      try {
+        const m = document.querySelector('meta[name="game-multiplayer-origin"]');
+        const raw = m && m.content != null ? String(m.content).trim() : "";
+        return (raw || window.location.origin).replace(/\/$/, "");
+      } catch (_) {
+        return window.location.origin.replace(/\/$/, "");
+      }
+    }
+
+    const multiplayerOrigin = getMultiplayerOrigin();
+
     const socket = typeof io === "function"
-      ? io(`${window.location.origin}/game`, {
+      ? io(`${multiplayerOrigin}/game`, {
           transports: ["websocket", "polling"],
           reconnection: true,
           reconnectionAttempts: 10,
@@ -375,6 +397,9 @@
 
     socket.on("connect", () => {
       console.log("Connected to server:", socket.id);
+    });
+    socket.on("connect_error", (err) => {
+      console.warn("Socket connect_error:", err?.message || err);
     });
     socket.on("enemyMove", (data) => {
       let rp = remotePlayers.get(data.id);
@@ -517,7 +542,20 @@
       const worldAngle = Math.atan2(dx, dz);
       const relAngle = worldAngle - player.yaw;
       const el = document.createElement("div");
-      el.style.cssText = "position:absolute;width:60px;height:12px;border-radius:6px;background:rgba(255,40,40,0.7);pointer-events:none;transition:opacity 0.3s;";
+      el.style.cssText = [
+        "position:absolute",
+        `width:${HIT_DIR_SVG_W}px`,
+        `height:${HIT_DIR_SVG_H}px`,
+        "pointer-events:none",
+        "transition:opacity 0.3s",
+        "display:flex",
+        "align-items:center",
+        "justify-content:center",
+      ].join(";");
+      el.innerHTML =
+        `<svg width="${HIT_DIR_SVG_W}" height="${HIT_DIR_SVG_H}" viewBox="0 0 256 81" fill="none" xmlns="http://www.w3.org/2000/svg">` +
+        `<path d="${HIT_DIR_SVG_PATH}" fill="#FF0000"/>` +
+        "</svg>";
       hitDirContainer.appendChild(el);
       const indicator = { el, relAngle, life: 1.5 };
       hitIndicators.push(indicator);
@@ -529,7 +567,12 @@
       const r = 90;
       const cx = r * Math.sin(angle);
       const cy = -r * Math.cos(angle);
-      ind.el.style.transform = `translate(${cx - 30}px, ${cy - 6}px) rotate(${angle}rad)`;
+      const hw = HIT_DIR_SVG_W / 2;
+      const hh = HIT_DIR_SVG_H / 2;
+      // SVG asset points upward (−y). Aim that axis at screen center (where damage “reads” inward).
+      const inward = Math.atan2(-cy, -cx);
+      const rot = inward + Math.PI / 2;
+      ind.el.style.transform = `translate(${cx - hw}px, ${cy - hh}px) rotate(${rot}rad)`;
     }
 
     function updateHitIndicators(dt) {
