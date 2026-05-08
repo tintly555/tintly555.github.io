@@ -260,7 +260,8 @@
       <button class="overlay-btn" id="btnNameOk" style="margin-top:16px;">JOIN</button>
     </div>
   </div>
-  <script src="https://chat.jimmyqrg.com/socket.io.min.js" defer></script>
+  <!-- Sync load so `io` exists before the module runs (defer can race; absolute URL can 404). -->
+  <script src="https://chat.jimmyqrg.com/socket.io.min.js"></script>
   <script type="module">
     import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.182.0/build/three.module.js";
 
@@ -324,6 +325,13 @@
     let deathCamPitch = 0;
     let deathBaseFov = 75;
 
+    const PLAYER_FLASH_COLOR = 0xfff6ec;
+    const PLAYER_FLASH_INTENSITY = 3.05;
+    const PLAYER_FLASH_DISTANCE = 62;
+    const PLAYER_FLASH_ANGLE = Math.PI / 4.05;
+    const PLAYER_FLASH_PEN = 0.44;
+    const PLAYER_FLASH_DECAY = 1.28;
+
     function createOfflineSocketStub() {
       return {
         id: "offline",
@@ -346,7 +354,7 @@
           reconnectionAttempts: 10,
           reconnectionDelay: 800,
         })
-      : (console.warn("Socket.IO client not loaded — single-player only."), createOfflineSocketStub());
+      : createOfflineSocketStub();
 
     let activeRoomId = "";
 
@@ -726,16 +734,34 @@
       ns.sprite.position.set(0, 2.55, 0);
       group.add(ns.sprite);
 
+      const flashTarget = new THREE.Object3D();
+      flashTarget.position.set(0, 0, -1);
+      const flashSpot = new THREE.SpotLight(
+        PLAYER_FLASH_COLOR,
+        PLAYER_FLASH_INTENSITY,
+        PLAYER_FLASH_DISTANCE,
+        PLAYER_FLASH_ANGLE,
+        PLAYER_FLASH_PEN,
+        PLAYER_FLASH_DECAY
+      );
+      flashSpot.position.set(0, 0.16, 0.14);
+      const flashMount = new THREE.Group();
+      flashMount.position.set(0, 1.62, 0);
+      flashMount.add(flashSpot);
+      flashMount.add(flashTarget);
+      flashSpot.target = flashTarget;
+      group.add(flashMount);
+
       group.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
       group.visible = false;
       return { group, x: 0, y: 1.65, z: 0, yaw: 0, name: name || "Player",
                nameSprite: ns.sprite, nameCanvas: ns.canvas, nameCtx: ns.ctx, nameTex: ns.tex,
-               rightArm, leftArm, gunModel, currentWeapon: 1 };
+               rightArm, leftArm, gunModel, currentWeapon: 1, flashSpot };
     }
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x121820);
-    scene.fog = new THREE.Fog(0x121820, 28, 125);
+    scene.background = new THREE.Color(0x020305);
+    scene.fog = new THREE.Fog(0x020305, 16, 72);
 
     const camera = new THREE.PerspectiveCamera(
       75,
@@ -745,20 +771,20 @@
     );
     camera.rotation.order = "YXZ";
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     app.appendChild(renderer.domElement);
 
-    const hemi = new THREE.HemisphereLight(0x8899bb, 0x353540, 1.05);
+    const hemi = new THREE.HemisphereLight(0x2c3848, 0x0f1114, 0.14);
     scene.add(hemi);
 
-    const moon = new THREE.DirectionalLight(0xd8dcff, 0.88);
+    const moon = new THREE.DirectionalLight(0x5a6880, 0.11);
     moon.position.set(28, 34, 22);
     moon.castShadow = true;
-    moon.shadow.mapSize.set(2048, 2048);
+    moon.shadow.mapSize.set(1024, 1024);
     moon.shadow.camera.left = -100;
     moon.shadow.camera.right = 100;
     moon.shadow.camera.top = 100;
@@ -1256,9 +1282,9 @@
       const eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.07, 0.05), eyeGlowMat);
       eyeL.position.set(-0.10, 0.06, 0.215); headGroup.add(eyeL);
       const eyeR = eyeL.clone(); eyeR.position.x = 0.10; headGroup.add(eyeR);
-      const glowL = new THREE.PointLight(new THREE.Color(eyeColor), 1.75, 9.0, 2);
+      const glowL = new THREE.PointLight(new THREE.Color(eyeColor), 1.15, 6.5, 2);
       glowL.position.set(-0.10, 0.06, 0.24); headGroup.add(glowL);
-      const glowR = new THREE.PointLight(new THREE.Color(eyeColor), 1.75, 9.0, 2);
+      const glowR = new THREE.PointLight(new THREE.Color(eyeColor), 1.15, 6.5, 2);
       glowR.position.set(0.10, 0.06, 0.24); headGroup.add(glowR);
 
       const brow = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.06, 0.08), matSkinD);
@@ -1562,7 +1588,14 @@ return {
 
     const playerLightTarget = new THREE.Object3D();
     playerLightTarget.position.set(0, 0, -1);
-    const playerSpot = new THREE.SpotLight(0xfff1e0, 2.4, 48, Math.PI / 4.2, 0.48, 1.35);
+    const playerSpot = new THREE.SpotLight(
+      PLAYER_FLASH_COLOR,
+      PLAYER_FLASH_INTENSITY,
+      PLAYER_FLASH_DISTANCE,
+      PLAYER_FLASH_ANGLE,
+      PLAYER_FLASH_PEN,
+      PLAYER_FLASH_DECAY
+    );
     playerSpot.position.set(0, 0.18, 0.12);
     camera.add(playerSpot);
     camera.add(playerLightTarget);
@@ -2422,6 +2455,8 @@ return {
     const VIS_OFFSETS = [[0, 1.8], [0, 1.1], [0, 0.5], [-0.3, 1.3], [0.3, 1.3]];
     const _visOrigin = new THREE.Vector3();
     const _visDir = new THREE.Vector3();
+    const _enemyShotDir = new THREE.Vector3();
+    const _tracerEnd = new THREE.Vector3();
     const _visRay = new THREE.Raycaster();
     let visFrameCounter = 0;
 
@@ -2435,6 +2470,10 @@ return {
       _visRay.near = 0;
       _visRay.far = d;
       return _visRay.intersectObjects(wallMeshes, false).length === 0;
+    }
+
+    function clearLosToTarget(ex, ez, tx, tz, ty = 1.65) {
+      return canSeePoint(ex, 1.6, ez, tx, ty, tz);
     }
 
     function computeVisibility(ex, ez, px, pz) {
@@ -2531,8 +2570,8 @@ return {
         }
       }
 
-      rebuildFlowField();
       visFrameCounter++;
+      if ((visFrameCounter & 1) === 0) rebuildFlowField();
 
       for (let ei = 0; ei < state.enemies.length; ei++) {
         const enemy = state.enemies[ei];
@@ -2580,8 +2619,34 @@ return {
           if (!shouldStopForRanged && dist > 1.8) {
             const step = enemy.speed * dt;
             const dLen = Math.sqrt(dx * dx + dz * dz);
-            let sx = (dx / dLen) * step;
-            let sz = (dz / dLen) * step;
+            let sx;
+            let sz;
+            const flow = getFlowDirection(enemy.group.position.x, enemy.group.position.z);
+            const losClear = clearLosToTarget(
+              enemy.group.position.x,
+              enemy.group.position.z,
+              target.x,
+              target.z,
+              target.y ?? 1.65
+            );
+
+            if (!losClear && flow) {
+              const fLen = Math.sqrt(flow.x * flow.x + flow.z * flow.z);
+              if (fLen > 0.015) {
+                sx = (flow.x / fLen) * step;
+                sz = (flow.z / fLen) * step;
+              }
+            }
+            if (losClear || sx === undefined) {
+              if (dLen > 0.01) {
+                sx = (dx / dLen) * step;
+                sz = (dz / dLen) * step;
+              } else {
+                sx = 0;
+                sz = 0;
+              }
+            }
+
             let nx = enemy.group.position.x + sx;
             let nz = enemy.group.position.z + sz;
 
@@ -2592,23 +2657,20 @@ return {
               enemy.group.position.x = nx;
             } else if (!enemyCollidesWall(enemy.group.position.x, nz)) {
               enemy.group.position.z = nz;
-            } else {
-              const flow = getFlowDirection(enemy.group.position.x, enemy.group.position.z);
-              if (flow) {
-                const fLen = Math.sqrt(flow.x * flow.x + flow.z * flow.z);
-                if (fLen > 0.01) {
-                  sx = (flow.x / fLen) * step;
-                  sz = (flow.z / fLen) * step;
-                  nx = enemy.group.position.x + sx;
-                  nz = enemy.group.position.z + sz;
-                  if (!enemyCollidesWall(nx, nz)) {
-                    enemy.group.position.x = nx;
-                    enemy.group.position.z = nz;
-                  } else if (!enemyCollidesWall(nx, enemy.group.position.z)) {
-                    enemy.group.position.x = nx;
-                  } else if (!enemyCollidesWall(enemy.group.position.x, nz)) {
-                    enemy.group.position.z = nz;
-                  }
+            } else if (flow) {
+              const fLen = Math.sqrt(flow.x * flow.x + flow.z * flow.z);
+              if (fLen > 0.01) {
+                sx = (flow.x / fLen) * step;
+                sz = (flow.z / fLen) * step;
+                nx = enemy.group.position.x + sx;
+                nz = enemy.group.position.z + sz;
+                if (!enemyCollidesWall(nx, nz)) {
+                  enemy.group.position.x = nx;
+                  enemy.group.position.z = nz;
+                } else if (!enemyCollidesWall(nx, enemy.group.position.z)) {
+                  enemy.group.position.x = nx;
+                } else if (!enemyCollidesWall(enemy.group.position.x, nz)) {
+                  enemy.group.position.z = nz;
                 }
               }
             }
@@ -2627,15 +2689,24 @@ return {
             }
           } else if (enemy.ranged && dist < enemy.rangeDistance && enemy.attackCooldownTimer <= 0 && isTargetLocal) {
             _visOrigin.set(enemy.group.position.x, 1.6, enemy.group.position.z);
-            _visDir.set(dx, player.position.y - 0.3 - 1.6, dz).normalize();
-            _visRay.set(_visOrigin, _visDir);
+            _enemyShotDir.set(dx, player.position.y - 0.3 - 1.6, dz);
+            const spr = 0.16 + Math.random() * 0.14;
+            _enemyShotDir.x += (Math.random() - 0.5) * spr * 2;
+            _enemyShotDir.z += (Math.random() - 0.5) * spr * 2;
+            _enemyShotDir.y += (Math.random() - 0.5) * spr * 0.5;
+            _enemyShotDir.normalize();
+            _visRay.set(_visOrigin, _enemyShotDir);
             _visRay.near = 0;
             _visRay.far = Math.min(dist, enemy.rangeDistance);
             if (_visRay.intersectObjects(wallMeshes, false).length === 0) {
               enemy.attackCooldownTimer = enemy.attackCooldown;
               damagePlayer(enemy.attackDamage, enemy);
-              const end = player.position.clone().add(new THREE.Vector3(0, 1.3, 0));
-              createTracer(_visOrigin.clone(), end, 0xff6666);
+              _tracerEnd.set(
+                player.position.x + (Math.random() - 0.5) * 0.45,
+                player.position.y + 1.25 + (Math.random() - 0.5) * 0.45,
+                player.position.z + (Math.random() - 0.5) * 0.45
+              );
+              createTracer(_visOrigin.clone(), _tracerEnd.clone(), 0xff6666);
             }
           }
         } else {
