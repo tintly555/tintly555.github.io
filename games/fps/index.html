@@ -234,6 +234,10 @@
 
   <div id="app"></div>
   <div class="hud" id="hud"></div>
+  <div id="fpsOverlay" style="position:fixed;top:10px;right:14px;z-index:45;pointer-events:none;text-align:right;font-family:'Audiowide',sans-serif;font-size:13px;color:rgba(245,248,255,0.92);text-shadow:0 1px 5px rgba(0,0,0,0.85);line-height:1.4;">
+    <div id="fpsValue">— FPS</div>
+    <div style="opacity:0.72;font-size:11px;margin-top:3px;letter-spacing:0.02em;">Press T to chat</div>
+  </div>
   <div class="hint" id="hint">Click anywhere</div>
   <div class="flash" id="flash"></div>
   <div class="crosshair" id="crosshair"></div>
@@ -273,6 +277,7 @@
 
     const app = document.getElementById("app");
     const hud = document.getElementById("hud");
+    const fpsValueEl = document.getElementById("fpsValue");
     const hint = document.getElementById("hint");
     const flash = document.getElementById("flash");
     const crosshairEl = document.getElementById("crosshair");
@@ -335,6 +340,19 @@
     let deathCamYaw = 0;
     let deathCamPitch = 0;
     let deathBaseFov = 75;
+
+    let _renderTick = 0;
+    let _fpsFrames = 0;
+    let _fpsTimeAccum = 0;
+    function tickFpsMeter(dt) {
+      _fpsFrames++;
+      _fpsTimeAccum += dt;
+      if (_fpsTimeAccum >= 0.5 && fpsValueEl) {
+        fpsValueEl.textContent = `${Math.round(_fpsFrames / _fpsTimeAccum)} FPS`;
+        _fpsFrames = 0;
+        _fpsTimeAccum = 0;
+      }
+    }
 
     const PLAYER_LIGHT_COLOR = 0xfff6ec;
     // Soft body halo — only attached to the local camera (not replicated on remote avatars).
@@ -569,9 +587,9 @@
       const cy = -r * Math.cos(angle);
       const hw = HIT_DIR_SVG_W / 2;
       const hh = HIT_DIR_SVG_H / 2;
-      // SVG asset points upward (−y). Aim that axis at screen center (where damage “reads” inward).
-      const inward = Math.atan2(-cy, -cx);
-      const rot = inward + Math.PI / 2;
+      // Chevron points toward damage source (same direction as ring offset from center): atan2(cy,cx), SVG up needs +π/2.
+      const towardThreat = Math.atan2(cy, cx);
+      const rot = towardThreat + Math.PI / 2;
       ind.el.style.transform = `translate(${cx - hw}px, ${cy - hh}px) rotate(${rot}rad)`;
     }
 
@@ -841,7 +859,7 @@
       75,
       window.innerWidth / window.innerHeight,
       0.1,
-      1000
+      240
     );
     camera.rotation.order = "YXZ";
 
@@ -852,7 +870,7 @@
       depth: true,
     });
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1));
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.BasicShadowMap;
     renderer.sortObjects = false;
@@ -864,7 +882,7 @@
     const moon = new THREE.DirectionalLight(0x5a6880, 0.11);
     moon.position.set(28, 34, 22);
     moon.castShadow = true;
-    moon.shadow.mapSize.set(512, 512);
+    moon.shadow.mapSize.set(256, 256);
     moon.shadow.camera.left = -100;
     moon.shadow.camera.right = 100;
     moon.shadow.camera.top = 100;
@@ -924,7 +942,7 @@
 
     const floorMat = makeWallMaterial(32, 32, 0x666670);
     const floor = new THREE.Mesh(
-      new THREE.PlaneGeometry(worldSize, worldSize, 80, 80),
+      new THREE.PlaneGeometry(worldSize, worldSize, 1, 1),
       floorMat
     );
     floor.rotation.x = -Math.PI / 2;
@@ -950,8 +968,8 @@
     const bloodGroup = new THREE.Group();
     scene.add(decalGroup, sparkGroup, tracerGroup, bloodGroup);
 
-    const MAX_BLOOD_MESHES = 56;
-    const MAX_SPARK_MESHES = 48;
+    const MAX_BLOOD_MESHES = 36;
+    const MAX_SPARK_MESHES = 36;
     const SPARK_GEO_SHARED = new THREE.SphereGeometry(0.022, 4, 4);
     const BLOOD_GEO_SHARED = new THREE.SphereGeometry(0.028, 4, 4);
 
@@ -1242,7 +1260,7 @@
       hud.innerHTML = `
         ${roomLine}
         3D Zombie FPS<br>
-        WASD move | Space jump | R reload | T chat<br>
+        WASD move | Space jump | R reload<br>
         Mouse aim | RMB zoom | Weapons: 1 2 3 4<br>
         Map: ${CURRENT_MAP}${MULTIPLAYER ? " (MP)" : ""}<br>
         Weapon: ${w.name}<br>
@@ -1577,7 +1595,7 @@ return {
     }
 
     function createBulletMark(point, normal) {
-      if (decalGroup.children.length > 140) {
+      if (decalGroup.children.length > 80) {
         const old = decalGroup.children[0];
         decalGroup.remove(old);
         old.geometry.dispose();
@@ -1585,7 +1603,7 @@ return {
       }
 
       const mark = new THREE.Mesh(
-        new THREE.CircleGeometry(0.08, 12),
+        new THREE.CircleGeometry(0.08, 8),
         new THREE.MeshBasicMaterial({
           color: 0x1a1a1a,
           transparent: true,
@@ -2573,7 +2591,7 @@ return {
     const LOSE_RATIO = 0.10;
     const LOSE_TIME = 15.0;
     const RETARGET_INTERVAL = 2.0;
-    const VIS_OFFSETS = [[0, 1.8], [0, 1.1], [0, 0.5], [-0.3, 1.3], [0.3, 1.3]];
+    const VIS_OFFSETS = [[0, 1.8], [0, 1.1], [0, 0.5], [0.28, 1.35]];
     const _visOrigin = new THREE.Vector3();
     const _visDir = new THREE.Vector3();
     const _enemyShotDir = new THREE.Vector3();
@@ -2692,7 +2710,7 @@ return {
       }
 
       visFrameCounter++;
-      if ((visFrameCounter % 3) === 0) rebuildFlowField();
+      if ((visFrameCounter % 5) === 0) rebuildFlowField();
 
       for (let ei = 0; ei < state.enemies.length; ei++) {
         const enemy = state.enemies[ei];
@@ -2740,8 +2758,8 @@ return {
           if (!shouldStopForRanged && dist > 1.8) {
             const step = enemy.speed * dt;
             const dLen = Math.sqrt(dx * dx + dz * dz);
-            let sx;
-            let sz;
+            let sx = 0;
+            let sz = 0;
             const flow = getFlowDirection(enemy.group.position.x, enemy.group.position.z);
             const losClear = clearLosToTarget(
               enemy.group.position.x,
@@ -2751,20 +2769,27 @@ return {
               target.y ?? 1.65
             );
 
-            if (!losClear && flow) {
+            if (losClear && dLen > 0.02) {
+              const inv = 1 / dLen;
+              const fx = dx * inv;
+              const fz = dz * inv;
+              const rx = -fz;
+              const rz = fx;
+              const dodge = Math.sin(enemy.walkTime * 4.2 + ei * 2.31) * 0.48;
+              let mx = fx + rx * dodge;
+              let mz = fz + rz * dodge;
+              const ml = Math.hypot(mx, mz);
+              if (ml > 1e-5) {
+                mx /= ml;
+                mz /= ml;
+              }
+              sx = mx * step;
+              sz = mz * step;
+            } else if (flow) {
               const fLen = Math.sqrt(flow.x * flow.x + flow.z * flow.z);
               if (fLen > 0.015) {
                 sx = (flow.x / fLen) * step;
                 sz = (flow.z / fLen) * step;
-              }
-            }
-            if (losClear || sx === undefined) {
-              if (dLen > 0.01) {
-                sx = (dx / dLen) * step;
-                sz = (dz / dLen) * step;
-              } else {
-                sx = 0;
-                sz = 0;
               }
             }
 
@@ -2912,6 +2937,7 @@ return {
         if (MULTIPLAYER) {
           updatePlayer(dt);
         }
+        tickFpsMeter(dt);
         renderer.render(scene, camera);
         return;
       }
@@ -2936,7 +2962,11 @@ return {
       }
 
       updateEffects(dt);
-      updateHud();
+      tickFpsMeter(dt);
+      _renderTick++;
+      if ((_renderTick & 1) === 0) {
+        updateHud();
+      }
 
       if (player.health > 0 && state.mouseDown && weapon().auto) {
         tryShoot();
