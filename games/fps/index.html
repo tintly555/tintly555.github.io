@@ -1,4 +1,4 @@
-<!doctype html>
+<!DOCTYPE html>
 <!--
   Source-of-truth deployment: https://tintly555.github.io/games/fps/
   This copy in the chat repo is for editing; multiplayer hits chat.jimmyqrg.com via meta below when hosted on static Pages.
@@ -716,9 +716,6 @@
   <script type="module">
     import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.182.0/build/three.module.js";
 
-    // ── Flashlight state ──
-    let flashlightOn = true;   // initially on (game starts with light on)
-
     const app = document.getElementById("app");
     const hud = document.getElementById("hud");
     const fpsValueEl = document.getElementById("fpsValue");
@@ -865,32 +862,34 @@
     const PLAYER_LIGHT_COLOR = 0xfff6ec;
     // Soft body halo (local camera only) — stronger so it still reads in the arena next to many maze lights.
     const PLAYER_BODY_INTENSITY = 20;
-    const PLAYER_BODY_DISTANCE = 500;
+    const PLAYER_BODY_DISTANCE = 300;
 
     // Dual-cone flashlight: wide flood + tight hotspot (bumped for parity with pre–maze / crossfire contrast).
-    const FLASH_OUTER_INTENSITY = 10;
-    const FLASH_OUTER_DISTANCE = 1024;
+    const FLASH_OUTER_INTENSITY = 50;
+    const FLASH_OUTER_DISTANCE = 350;
     const FLASH_OUTER_ANGLE = Math.PI / 1.95;
     const FLASH_OUTER_PEN = 0.84;
 
-    const FLASH_INNER_INTENSITY = 32;
-    const FLASH_INNER_DISTANCE = 160;
+    const FLASH_INNER_INTENSITY = 250;
+    const FLASH_INNER_DISTANCE = 100;
     const FLASH_INNER_ANGLE = Math.PI / 10.5;
     const FLASH_INNER_PEN = 0.12;
 
     /**
-     * One punctual-light model for Point / Spot: inverse-square falloff (decay = 2).
+     * Punctual lights only (Point / Spot). Hemisphere & directional lights have no decay in Three.js.
      * https://threejs.org/docs/#api/en/lights/PointLight
      * https://threejs.org/docs/#api/en/lights/SpotLight
      */
-    const PHYSICAL_LIGHT_DECAY = 2;
+    const ENVIRONMENT_LIGHT_DECAY = 3;
+    const PLAYER_BODY_LIGHT_DECAY = 3;
+    const FLASHLIGHT_LIGHT_DECAY = 0.2;
 
-    function createPhysicalPointLight(color, intensity, distance) {
-      return new THREE.PointLight(color, intensity, distance, PHYSICAL_LIGHT_DECAY);
+    function createPhysicalPointLight(color, intensity, distance, decay = ENVIRONMENT_LIGHT_DECAY) {
+      return new THREE.PointLight(color, intensity, distance, decay);
     }
 
-    function createPhysicalSpotLight(color, intensity, distance, angle, penumbra) {
-      return new THREE.SpotLight(color, intensity, distance, angle, penumbra, PHYSICAL_LIGHT_DECAY);
+    function createPhysicalSpotLight(color, intensity, distance, angle, penumbra, decay = ENVIRONMENT_LIGHT_DECAY) {
+      return new THREE.SpotLight(color, intensity, distance, angle, penumbra, decay);
     }
 
     function createOfflineSocketStub() {
@@ -1439,14 +1438,16 @@
         FLASH_OUTER_INTENSITY,
         FLASH_OUTER_DISTANCE,
         FLASH_OUTER_ANGLE,
-        FLASH_OUTER_PEN
+        FLASH_OUTER_PEN,
+        FLASHLIGHT_LIGHT_DECAY
       );
       const flashInner = createPhysicalSpotLight(
         PLAYER_LIGHT_COLOR,
         FLASH_INNER_INTENSITY,
         FLASH_INNER_DISTANCE,
         FLASH_INNER_ANGLE,
-        FLASH_INNER_PEN
+        FLASH_INNER_PEN,
+        FLASHLIGHT_LIGHT_DECAY
       );
       flashOuter.position.set(0, 0.16, 0.14);
       flashInner.position.set(0, 0.16, 0.14);
@@ -2826,13 +2827,12 @@
       hud.innerHTML = `
         ${roomLine}
         3D Zombie FPS<br>
-        WASD move | Space jump | R reload | F flashlight<br>
+        WASD move | Space jump | R reload<br>
         Mouse aim | RMB zoom | Weapons: 1 2 3 4<br>
         Map: ${mapLabel}${MULTIPLAYER ? " (MP)" : ""}<br>
         Weapon: ${w.name}<br>
         Bullets: ${w.ammo} / ${w.magSize}${state.reloading ? "（Refilling...）" : ""}<br>
         Health: ${Math.max(0, Math.floor(player.health))} / ${player.maxHealth}<br>
-        Flashlight: ${flashlightOn ? "ON" : "OFF"}<br>
         Score: ${state.score}
       `;
     }
@@ -3372,7 +3372,8 @@
     const playerBodyLight = createPhysicalPointLight(
       PLAYER_LIGHT_COLOR,
       PLAYER_BODY_INTENSITY,
-      PLAYER_BODY_DISTANCE
+      PLAYER_BODY_DISTANCE,
+      PLAYER_BODY_LIGHT_DECAY
     );
     playerBodyLight.position.set(0, -0.22, 0.08);
     camera.add(playerBodyLight);
@@ -3382,14 +3383,16 @@
       FLASH_OUTER_INTENSITY,
       FLASH_OUTER_DISTANCE,
       FLASH_OUTER_ANGLE,
-      FLASH_OUTER_PEN
+      FLASH_OUTER_PEN,
+      FLASHLIGHT_LIGHT_DECAY
     );
     const flashInnerLocal = createPhysicalSpotLight(
       PLAYER_LIGHT_COLOR,
       FLASH_INNER_INTENSITY,
       FLASH_INNER_DISTANCE,
       FLASH_INNER_ANGLE,
-      FLASH_INNER_PEN
+      FLASH_INNER_PEN,
+      FLASHLIGHT_LIGHT_DECAY
     );
     flashOuterLocal.position.set(0, 0.18, 0.12);
     flashInnerLocal.position.set(0, 0.18, 0.12);
@@ -3399,13 +3402,11 @@
     flashOuterLocal.target = playerLightTarget;
     flashInnerLocal.target = playerLightTarget;
 
-    /** Flashlight control uses global `flashlightOn` and this helper. */
     function setLocalPlayerLights(on) {
       playerBodyLight.visible = on;
       flashOuterLocal.visible = on;
       flashInnerLocal.visible = on;
     }
-    // Initially off (menu / before game), turned on when game starts and flashlightOn=true.
     setLocalPlayerLights(false);
 
     const weaponRoot = new THREE.Group();
@@ -3576,12 +3577,6 @@
       if (k === "d") keys.d = true;
       if (k === " ") keys.space = true;
       if (k === "shift") keys.shift = true;
-      // Flashlight toggle (F key)
-      if (k === "f") {
-        flashlightOn = !flashlightOn;
-        setLocalPlayerLights(flashlightOn);
-        updateHud();
-      }
       if (k === "1") setWeapon(0);
       if (k === "2") setWeapon(1);
       if (k === "3") setWeapon(2);
@@ -4178,7 +4173,6 @@
       state.mouseDown = false;
       state.ads = false;
       weaponRoot.visible = false;
-      // Turn off flashlight on death
       setLocalPlayerLights(false);
 
       if (document.pointerLockElement) {
@@ -4254,8 +4248,7 @@
       btnDeathRestart.textContent = "RESTART";
       killerEnemy = null;
       weaponRoot.visible = true;
-      // Restore flashlight according to state
-      setLocalPlayerLights(flashlightOn);
+      setLocalPlayerLights(true);
       camera.fov = 75;
       camera.updateProjectionMatrix();
     }
@@ -5045,9 +5038,6 @@
       }
       _zombieSyncAcc = 0;
       state.camShake = 0;
-      // Turn flashlight on for new game (if the user had it on)
-      flashlightOn = true;
-      setLocalPlayerLights(flashlightOn);
       ensureAmbientWindLoop();
       menuEl.style.display = "none";
 
