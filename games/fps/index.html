@@ -805,7 +805,9 @@
         lg.position.set(px, 0.62, 0);
         return lg;
       };
-      group.add(makePlayerLeg(0.15), makePlayerLeg(-0.15));
+      const legR = makePlayerLeg(0.15);
+      const legL = makePlayerLeg(-0.15);
+      group.add(legR, legL);
 
       const gunModel = makeThirdPersonGun(1);
       gunModel.position.set(0.08, -0.68, -0.18);
@@ -848,7 +850,8 @@
       group.visible = false;
       return { group, x: 0, y: 1.65, z: 0, yaw: 0, name: name || "Player",
                nameSprite: ns.sprite, nameCanvas: ns.canvas, nameCtx: ns.ctx, nameTex: ns.tex,
-               rightArm, leftArm, gunModel, currentWeapon: 1 };
+               rightArm, leftArm, rightLeg: legR, leftLeg: legL, walkPhase: 0,
+               gunModel, currentWeapon: 1 };
     }
 
     const scene = new THREE.Scene();
@@ -865,6 +868,7 @@
 
     const renderer = new THREE.WebGLRenderer({
       antialias: false,
+      alpha: false,
       powerPreference: "high-performance",
       stencil: false,
       depth: true,
@@ -875,6 +879,11 @@
     renderer.shadowMap.type = THREE.BasicShadowMap;
     renderer.sortObjects = false;
     app.appendChild(renderer.domElement);
+
+    /** Precompile programs after scene/map changes so gameplay avoids shader hitch spikes. */
+    function compileSceneShaders() {
+      renderer.compile(scene, camera);
+    }
 
     const hemi = new THREE.HemisphereLight(0x2c3848, 0x0f1114, 0.14);
     scene.add(hemi);
@@ -903,9 +912,13 @@
         tex.wrapT = THREE.RepeatWrapping;
         tex.magFilter = THREE.LinearFilter;
         tex.minFilter = THREE.LinearMipmapLinearFilter;
+        tex.colorSpace = THREE.SRGBColorSpace;
+        tex.generateMipmaps = true;
+        tex.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
         wallTexture = tex;
         wallTextureLoaded = true;
         applyWallTexture();
+        compileSceneShaders();
       },
       undefined,
       () => { wallTextureLoaded = false; }
@@ -914,15 +927,17 @@
     const _texturedMeshes = [];
 
     function makeWallMaterial(repeatX, repeatY, color) {
+      const tint = color || fallbackWallColor;
       if (wallTextureLoaded && wallTexture) {
         const t = wallTexture.clone();
         t.needsUpdate = true;
         t.wrapS = THREE.RepeatWrapping;
         t.wrapT = THREE.RepeatWrapping;
         t.repeat.set(repeatX, repeatY);
-        return new THREE.MeshStandardMaterial({ map: t, color: color || 0xaaaaaa, roughness: 0.92, metalness: 0.03 });
+        t.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
+        return new THREE.MeshLambertMaterial({ map: t, color: tint });
       }
-      return new THREE.MeshStandardMaterial({ color: color || fallbackWallColor, roughness: 0.88, metalness: 0.04 });
+      return new THREE.MeshLambertMaterial({ color: tint });
     }
 
     function applyWallTexture() {
@@ -934,6 +949,7 @@
         t.wrapS = THREE.RepeatWrapping;
         t.wrapT = THREE.RepeatWrapping;
         t.repeat.set(rx, ry);
+        t.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
         mesh.material.map = t;
         mesh.material.color.set(tint || 0xaaaaaa);
         mesh.material.needsUpdate = true;
@@ -952,7 +968,7 @@
 
     const ceilingMat = makeWallMaterial(24, 24, 0x333344);
     const ceiling = new THREE.Mesh(
-      new THREE.PlaneGeometry(worldSize, worldSize),
+      new THREE.PlaneGeometry(worldSize, worldSize, 1, 1),
       ceilingMat
     );
     ceiling.position.y = 4.5;
@@ -1161,7 +1177,12 @@
       tracers: [],
       reloading: false,
       reloadEnd: 0,
-      hitmarkerTimer: 0
+      hitmarkerTimer: 0,
+      walkPhase: 0,
+      smoothHeadBob: 0,
+      weaponBobX: 0,
+      weaponBobY: 0,
+      weaponBobRotZ: 0
     };
 
     const weapons = [
@@ -1291,6 +1312,17 @@
       if (!collidesWithWalls(tryZ)) result.z = tryZ.z;
 
       return result;
+    }
+
+    function dampScalar(cur, tgt, dt, lambda = 14) {
+      return cur + (tgt - cur) * (1 - Math.exp(-lambda * dt));
+    }
+
+    function dampAngle(cur, tgt, dt, lambda = 14) {
+      let d = tgt - cur;
+      while (d > Math.PI) d -= Math.PI * 2;
+      while (d < -Math.PI) d += Math.PI * 2;
+      return cur + d * (1 - Math.exp(-lambda * dt));
     }
 
     function makeZombie(x, z, type = "normal") {
@@ -1493,6 +1525,7 @@
       makeLeg(leftLegRoot, "left"); makeLeg(rightLegRoot, "right");
 
       root.add(torsoRoot, leftArmRoot, rightArmRoot, leftLegRoot, rightLegRoot);
+      const fy0 = Math.random() * Math.PI * 2;
       root.position.set(x, 0, z);
       root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
 
@@ -1544,7 +1577,16 @@ return {
         speed,
         aware: false,
         hiddenTimer: 0,
-        facingYaw: Math.random() * Math.PI * 2,
+        facingYaw: fy0,
+        visYaw: fy0,
+        armLV: -0.2,
+        armRV: -0.2,
+        legLV: 0,
+        legRV: 0,
+        torsoBobYV: 0,
+        torsoXV: 0,
+        torsoZV: 0,
+        torsoPitchV: 0,
         targetId: null,
         retargetTimer: 0,
         moveYaw: 0
@@ -2005,6 +2047,7 @@ return {
       player.velocityY = 0;
       player.onGround = true;
       camera.position.copy(player.position);
+      compileSceneShaders();
     }
 
     function enemyCollidesWall(nextX, nextZ, radius = 0.34) {
@@ -2044,11 +2087,52 @@ return {
       return dir;
     }
 
-    function getBodyZone(enemy, point) {
-      const local = enemy.group.worldToLocal(point.clone());
-      if (local.y > 1.55) return "head";
-      if (local.y < 0.95) return "leg";
-      return "body";
+    const _invEnemyMat = new THREE.Matrix4();
+    const _ehLo = new THREE.Vector3();
+    const _ehLd = new THREE.Vector3();
+    const _ehHitWorld = new THREE.Vector3();
+
+    function raySphereParam(O, D, cx, cy, cz, r) {
+      const Lx = O.x - cx;
+      const Ly = O.y - cy;
+      const Lz = O.z - cz;
+      const a = D.x * D.x + D.y * D.y + D.z * D.z;
+      const b = 2 * (Lx * D.x + Ly * D.y + Lz * D.z);
+      const c = Lx * Lx + Ly * Ly + Lz * Lz - r * r;
+      const disc = b * b - 4 * a * c;
+      if (disc < 0) return null;
+      const s = Math.sqrt(disc);
+      const inv2a = 1 / (2 * a);
+      const t1 = (-b - s) * inv2a;
+      const t2 = (-b + s) * inv2a;
+      const eps = 1e-4;
+      if (t1 >= eps) return t1;
+      if (t2 >= eps) return t2;
+      return null;
+    }
+
+    /** Hit volumes are fixed in zombie root space so torso sway does not move hitboxes. */
+    function enemyHitAlongRay(raycaster, enemy) {
+      _invEnemyMat.copy(enemy.group.matrixWorld).invert();
+      _ehLo.copy(raycaster.ray.origin).applyMatrix4(_invEnemyMat);
+      _ehLd.copy(raycaster.ray.direction).transformDirection(_invEnemyMat).normalize();
+      const volumes = [
+        { cx: 0, cy: 1.82, cz: 0, r: 0.27, zone: "head" },
+        { cx: 0, cy: 1.12, cz: 0, r: 0.46, zone: "body" },
+        { cx: 0, cy: 0.42, cz: 0, r: 0.42, zone: "leg" },
+      ];
+      let bestT = Infinity;
+      let zone = null;
+      for (let vi = 0; vi < volumes.length; vi++) {
+        const v = volumes[vi];
+        const t = raySphereParam(_ehLo, _ehLd, v.cx, v.cy, v.cz, v.r);
+        if (t !== null && t < bestT) {
+          bestT = t;
+          zone = v.zone;
+        }
+      }
+      if (bestT === Infinity || zone === null) return null;
+      return { t: bestT, zone };
     }
 
     function applyDamage(enemy, zone, w) {
@@ -2113,16 +2197,16 @@ return {
         ray.camera = camera;
 
         let bestEnemy = null;
-        let bestEnemyHit = null;
+        let bestEnemyHitT = Infinity;
+        let bestEnemyZone = "body";
 
         for (const enemy of state.enemies) {
           if (!enemy.alive) continue;
-          const hits = ray.intersectObject(enemy.group, true);
-          if (hits.length > 0) {
-            if (!bestEnemyHit || hits[0].distance < bestEnemyHit.distance) {
-              bestEnemy = enemy;
-              bestEnemyHit = hits[0];
-            }
+          const hit = enemyHitAlongRay(ray, enemy);
+          if (hit && hit.t < bestEnemyHitT) {
+            bestEnemy = enemy;
+            bestEnemyHitT = hit.t;
+            bestEnemyZone = hit.zone;
           }
         }
 
@@ -2144,15 +2228,14 @@ return {
         const wallHits = ray.intersectObjects(wallMeshes, false);
         const wallHit = wallHits.length > 0 ? wallHits[0] : null;
 
-        const enemyDist = bestEnemyHit ? bestEnemyHit.distance : Infinity;
+        const enemyDist = bestEnemy ? bestEnemyHitT : Infinity;
         const rpDist = bestRpHit ? bestRpHit.distance : Infinity;
         const wallDist = wallHit ? wallHit.distance : Infinity;
         const closestDist = Math.min(enemyDist, rpDist, wallDist);
 
-        if (closestDist === enemyDist && bestEnemy && bestEnemyHit) {
-          const zone = getBodyZone(bestEnemy, bestEnemyHit.point);
-          applyDamage(bestEnemy, zone, w);
-          const bp = bestEnemyHit.point.clone();
+        if (closestDist === enemyDist && bestEnemy && bestEnemyHitT < Infinity) {
+          applyDamage(bestEnemy, bestEnemyZone, w);
+          const bp = _ehHitWorld.copy(ray.ray.origin).addScaledVector(ray.ray.direction, bestEnemyHitT);
           createBlood(bp);
           createTracer(muzzleStart, bp.clone(), w.color);
           state.hitmarkerTimer = 0.08;
@@ -2206,6 +2289,10 @@ return {
         bobY = Math.abs(Math.cos(t * 11)) * 0.007;
         bobRotZ = Math.sin(t * 5.5) * 0.008;
       }
+
+      state.weaponBobX = dampScalar(state.weaponBobX, bobX, dt, 16);
+      state.weaponBobY = dampScalar(state.weaponBobY, bobY, dt, 16);
+      state.weaponBobRotZ = dampScalar(state.weaponBobRotZ, bobRotZ, dt, 16);
 
       let reloadX = 0;
       let reloadY = 0;
@@ -2262,11 +2349,11 @@ return {
       const hideCrosshair = usingAds && state.weaponIndex !== 1;
       crosshairEl.classList.toggle("hidden", hideCrosshair);
 
-      weaponRoot.position.set(bobX + reloadX, -state.recoil - bobY + reloadY, 0);
+      weaponRoot.position.set(state.weaponBobX + reloadX, -state.recoil - state.weaponBobY + reloadY, 0);
       weaponRoot.rotation.set(
         state.recoil * (usingAds ? 0.7 : 1.0),
         reloadRotY,
-        bobRotZ + reloadRotZ
+        state.weaponBobRotZ + reloadRotZ
       );
 
       const targetFov = usingAds ? 38 : 75;
@@ -2335,12 +2422,16 @@ return {
       }
 
       const movingNow = keys.w || keys.a || keys.s || keys.d;
-      const headBob = (movingNow && player.onGround)
-        ? Math.abs(Math.sin(performance.now() * 0.012)) * 0.02
+      if (movingNow && player.onGround) {
+        state.walkPhase += dt * 10.5;
+      }
+      const bobTarget = (movingNow && player.onGround)
+        ? Math.abs(Math.sin(state.walkPhase)) * 0.026
         : 0;
+      state.smoothHeadBob = dampScalar(state.smoothHeadBob, bobTarget, dt, 11);
 
       camera.position.copy(player.position);
-      camera.position.y += headBob;
+      camera.position.y += state.smoothHeadBob;
       camera.rotation.y = player.yaw;
       camera.rotation.x = player.pitch;
       if (MULTIPLAYER) {
@@ -2379,13 +2470,16 @@ return {
       deathFade.style.background = "rgba(0,0,0,0)";
       deathUI.style.display = "none";
 
+      btnDeathQuit.textContent = "QUIT";
+      btnDeathRestart.textContent = MULTIPLAYER ? "RESPAWN" : "RESTART";
+
       if (CURRENT_MAP === "crossfire") {
         deathUI.style.display = "flex";
         deathUI.style.opacity = "0.25";
         deathTitle.textContent = "DEFEATED";
         deathTitle.style.color = "#e53e3e";
         deathScore.textContent = "";
-        btnDeathRestart.style.display = "none";
+        btnDeathRestart.style.display = "";
         deathOverlay.style.pointerEvents = "auto";
         deathUI.addEventListener("mouseenter", () => { deathUI.style.opacity = "1"; });
         deathUI.addEventListener("mouseleave", () => { deathUI.style.opacity = "0.25"; });
@@ -2428,6 +2522,7 @@ return {
       deathUI.style.display = "none";
       deathFade.style.background = "rgba(0,0,0,0)";
       deathOverlay.style.pointerEvents = "none";
+      btnDeathRestart.textContent = "RESTART";
       killerEnemy = null;
       weaponRoot.visible = true;
       setLocalPlayerLights(true);
@@ -2727,6 +2822,11 @@ return {
             enemy.targetId = null;
             enemy.retargetTimer = 0;
             enemy.facingYaw = Math.random() * Math.PI * 2;
+            enemy.visYaw = enemy.facingYaw;
+            enemy.armLV = -0.2;
+            enemy.armRV = -0.2;
+            enemy.legLV = 0;
+            enemy.legRV = 0;
             drawEnemyHp(enemy);
           }
           continue;
@@ -2751,7 +2851,6 @@ return {
 
         if (enemy.aware) {
           enemy.facingYaw = Math.atan2(dx, dz);
-          enemy.group.rotation.y = enemy.facingYaw;
 
           const shouldStopForRanged = enemy.ranged && dist < enemy.rangeDistance && dist > 4.8;
 
@@ -2773,11 +2872,8 @@ return {
               const inv = 1 / dLen;
               const fx = dx * inv;
               const fz = dz * inv;
-              const rx = -fz;
-              const rz = fx;
-              const dodge = Math.sin(enemy.walkTime * 4.2 + ei * 2.31) * 0.48;
-              let mx = fx + rx * dodge;
-              let mz = fz + rz * dodge;
+              let mx = fx;
+              let mz = fz;
               const ml = Math.hypot(mx, mz);
               if (ml > 1e-5) {
                 mx /= ml;
@@ -2858,11 +2954,18 @@ return {
         } else {
           enemy.moving = false;
           enemy.facingYaw += dt * 0.3;
-          enemy.group.rotation.y = enemy.facingYaw;
         }
+
+        enemy.visYaw = dampAngle(enemy.visYaw, enemy.facingYaw, dt, 14);
+        enemy.group.rotation.y = enemy.visYaw;
 
         const walk = Math.sin(enemy.walkTime) * 0.55;
         const bob = Math.abs(Math.sin(enemy.walkTime * 2)) * 0.05;
+        const shakePhase = enemy.walkTime * 4.35 + ei * 2.31;
+        const sway = enemy.moving
+          ? Math.sin(shakePhase) * 0.13 + Math.sin(enemy.walkTime * 6.2 + ei) * 0.04
+          : Math.sin(shakePhase * 0.35) * 0.035;
+        const bobble = enemy.moving ? Math.cos(enemy.walkTime * 5.1 + ei * 1.2) * 0.028 : 0;
 
         if (enemy.aware && dist < 2.2 && !enemy.ranged) {
           enemy.attackPhase += dt * 10;
@@ -2873,11 +2976,31 @@ return {
         }
 
         const attackSwing = enemy.attackPhase > 0 ? Math.max(0, Math.sin(enemy.attackPhase)) * 0.6 : 0;
-        enemy.leftArmRoot.rotation.x = (enemy.aware ? -1.0 : -0.2) + attackSwing + (enemy.moving ? walk * 0.15 : 0);
-        enemy.rightArmRoot.rotation.x = (enemy.aware ? -1.0 : -0.2) + attackSwing - (enemy.moving ? walk * 0.15 : 0);
-        enemy.leftLegRoot.rotation.x = enemy.moving ? -walk : 0;
-        enemy.rightLegRoot.rotation.x = enemy.moving ? walk : 0;
-        enemy.torsoRoot.position.y = bob;
+        const tgtArmL = (enemy.aware ? -1.0 : -0.2) + attackSwing + (enemy.moving ? walk * 0.15 : 0);
+        const tgtArmR = (enemy.aware ? -1.0 : -0.2) + attackSwing - (enemy.moving ? walk * 0.15 : 0);
+        const tgtLegL = enemy.moving ? -walk : 0;
+        const tgtLegR = enemy.moving ? walk : 0;
+        const torsoXTgt = enemy.moving
+          ? Math.sin(shakePhase * 1.12) * 0.075
+          : Math.sin(shakePhase * 0.42) * 0.022;
+
+        enemy.armLV = dampScalar(enemy.armLV, tgtArmL, dt, 19);
+        enemy.armRV = dampScalar(enemy.armRV, tgtArmR, dt, 19);
+        enemy.legLV = dampScalar(enemy.legLV, tgtLegL, dt, 15);
+        enemy.legRV = dampScalar(enemy.legRV, tgtLegR, dt, 15);
+        enemy.leftArmRoot.rotation.x = enemy.armLV;
+        enemy.rightArmRoot.rotation.x = enemy.armRV;
+        enemy.leftLegRoot.rotation.x = enemy.legLV;
+        enemy.rightLegRoot.rotation.x = enemy.legRV;
+
+        enemy.torsoBobYV = dampScalar(enemy.torsoBobYV, bob, dt, 16);
+        enemy.torsoXV = dampScalar(enemy.torsoXV, torsoXTgt, dt, 14);
+        enemy.torsoZV = dampScalar(enemy.torsoZV, sway, dt, 15);
+        enemy.torsoPitchV = dampScalar(enemy.torsoPitchV, bobble, dt, 16);
+        enemy.torsoRoot.position.y = enemy.torsoBobYV;
+        enemy.torsoRoot.position.x = enemy.torsoXV;
+        enemy.torsoRoot.rotation.z = enemy.torsoZV;
+        enemy.torsoRoot.rotation.x = enemy.torsoPitchV;
       }
     }
 
@@ -2927,9 +3050,34 @@ return {
       if (document.visibilityState === "hidden") return;
 
       if (MULTIPLAYER) {
+        const k = 1 - Math.exp(-17 * dt);
         for (const rp of remotePlayers.values()) {
-          rp.group.position.set(rp.x, 0, rp.z);
-          rp.group.rotation.y = rp.yaw + Math.PI;
+          if (rp.visX === undefined) {
+            rp.visX = rp.x;
+            rp.visZ = rp.z;
+            rp.visYaw = rp.yaw + Math.PI;
+          }
+          rp.visX += (rp.x - rp.visX) * k;
+          rp.visZ += (rp.z - rp.visZ) * k;
+          rp.visYaw = dampAngle(rp.visYaw, rp.yaw + Math.PI, dt, 18);
+          rp.group.position.set(rp.visX, 0, rp.visZ);
+          rp.group.rotation.y = rp.visYaw;
+
+          const spx = rp._prevVisX ?? rp.visX;
+          const spz = rp._prevVisZ ?? rp.visZ;
+          const gSpeed = Math.hypot(rp.visX - spx, rp.visZ - spz) / Math.max(dt, 1e-5);
+          rp._prevVisX = rp.visX;
+          rp._prevVisZ = rp.visZ;
+          rp.walkPhase = (rp.walkPhase || 0) + dt * Math.min(gSpeed * 4.2, 14);
+          const wSin = Math.sin(rp.walkPhase) * 0.52;
+          const moving = gSpeed > 0.06;
+          if (rp.leftLeg && rp.rightLeg) {
+            rp.leftLeg.rotation.x = dampScalar(rp.leftLeg.rotation.x, moving ? -wSin : 0, dt, 12);
+            rp.rightLeg.rotation.x = dampScalar(rp.rightLeg.rotation.x, moving ? wSin : 0, dt, 12);
+          }
+          const armBase = -0.82;
+          rp.leftArm.rotation.x = dampScalar(rp.leftArm.rotation.x, armBase + (moving ? wSin * 0.14 : 0), dt, 10);
+          rp.rightArm.rotation.x = dampScalar(rp.rightArm.rotation.x, armBase - (moving ? wSin * 0.14 : 0), dt, 10);
         }
       }
 
@@ -2955,8 +3103,10 @@ return {
       if (CURRENT_MAP === "crossfire" && MULTIPLAYER && player.health <= 0) {
         const first = remotePlayers.values().next().value;
         if (first) {
-          camera.position.set(first.x, first.y, first.z);
-          camera.rotation.y = first.yaw;
+          const sx = first.visX ?? first.x;
+          const sz = first.visZ ?? first.z;
+          camera.position.set(sx, first.y, sz);
+          camera.rotation.y = first.visYaw ?? (first.yaw + Math.PI);
           camera.rotation.x = 0;
         }
       }
@@ -3026,6 +3176,11 @@ return {
       state.reloading = false;
       state.recoil = 0;
       state.spreadBloom = 0;
+      state.walkPhase = 0;
+      state.smoothHeadBob = 0;
+      state.weaponBobX = 0;
+      state.weaponBobY = 0;
+      state.weaponBobRotZ = 0;
       killerEnemy = null;
       deathAnimTime = 0;
       weaponRoot.visible = true;
@@ -3036,6 +3191,8 @@ return {
     
       setWeapon(1);
       updateHud();
+
+      compileSceneShaders();
 
       if (!started) {
         started = true;
