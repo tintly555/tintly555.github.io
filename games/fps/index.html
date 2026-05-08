@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <!--
   Source-of-truth deployment: https://tintly555.github.io/games/fps/
   This copy in the chat repo is for editing; multiplayer hits chat.jimmyqrg.com via meta below when hosted on static Pages.
@@ -715,6 +715,9 @@
 
   <script type="module">
     import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.182.0/build/three.module.js";
+
+    // ── Flashlight state ──
+    let flashlightOn = true;   // initially on (game starts with light on)
 
     const app = document.getElementById("app");
     const hud = document.getElementById("hud");
@@ -2823,12 +2826,13 @@
       hud.innerHTML = `
         ${roomLine}
         3D Zombie FPS<br>
-        WASD move | Space jump | R reload<br>
+        WASD move | Space jump | R reload | F flashlight<br>
         Mouse aim | RMB zoom | Weapons: 1 2 3 4<br>
         Map: ${mapLabel}${MULTIPLAYER ? " (MP)" : ""}<br>
         Weapon: ${w.name}<br>
         Bullets: ${w.ammo} / ${w.magSize}${state.reloading ? "（Refilling...）" : ""}<br>
         Health: ${Math.max(0, Math.floor(player.health))} / ${player.maxHealth}<br>
+        Flashlight: ${flashlightOn ? "ON" : "OFF"}<br>
         Score: ${state.score}
       `;
     }
@@ -3395,11 +3399,13 @@
     flashOuterLocal.target = playerLightTarget;
     flashInnerLocal.target = playerLightTarget;
 
+    /** Flashlight control uses global `flashlightOn` and this helper. */
     function setLocalPlayerLights(on) {
       playerBodyLight.visible = on;
       flashOuterLocal.visible = on;
       flashInnerLocal.visible = on;
     }
+    // Initially off (menu / before game), turned on when game starts and flashlightOn=true.
     setLocalPlayerLights(false);
 
     const weaponRoot = new THREE.Group();
@@ -3570,6 +3576,12 @@
       if (k === "d") keys.d = true;
       if (k === " ") keys.space = true;
       if (k === "shift") keys.shift = true;
+      // Flashlight toggle (F key)
+      if (k === "f") {
+        flashlightOn = !flashlightOn;
+        setLocalPlayerLights(flashlightOn);
+        updateHud();
+      }
       if (k === "1") setWeapon(0);
       if (k === "2") setWeapon(1);
       if (k === "3") setWeapon(2);
@@ -4166,6 +4178,7 @@
       state.mouseDown = false;
       state.ads = false;
       weaponRoot.visible = false;
+      // Turn off flashlight on death
       setLocalPlayerLights(false);
 
       if (document.pointerLockElement) {
@@ -4241,7 +4254,8 @@
       btnDeathRestart.textContent = "RESTART";
       killerEnemy = null;
       weaponRoot.visible = true;
-      setLocalPlayerLights(true);
+      // Restore flashlight according to state
+      setLocalPlayerLights(flashlightOn);
       camera.fov = 75;
       camera.updateProjectionMatrix();
     }
@@ -5031,6 +5045,9 @@
       }
       _zombieSyncAcc = 0;
       state.camShake = 0;
+      // Turn flashlight on for new game (if the user had it on)
+      flashlightOn = true;
+      setLocalPlayerLights(flashlightOn);
       ensureAmbientWindLoop();
       menuEl.style.display = "none";
 
