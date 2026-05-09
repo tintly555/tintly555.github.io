@@ -376,6 +376,11 @@
       pointer-events: none;
     }
 
+    /* In-game must hide menu backdrop canvas; otherwise it can cover #app and look like black/frozen screen. */
+    body.in-game #menuWallBackdrop {
+      display: none;
+    }
+
     .menu {
       position: fixed;
       inset: 0;
@@ -2109,6 +2114,18 @@
       camera.updateProjectionMatrix();
       renderer.setPixelRatio(getPixelRatioForQuality());
       renderer.setSize(vp.w, vp.h);
+    }
+
+    const MIN_GAME_VIEWPORT_PX = 24;
+    async function waitForRenderableViewport() {
+      for (let i = 0; i < 360; i++) {
+        syncGameRendererSize();
+        const el = renderer.domElement;
+        const w = el.clientWidth | 0;
+        const h = el.clientHeight | 0;
+        if (w >= MIN_GAME_VIEWPORT_PX && h >= MIN_GAME_VIEWPORT_PX) return;
+        await new Promise((r) => requestAnimationFrame(r));
+      }
     }
 
     applyGraphicsQuality();
@@ -6710,6 +6727,7 @@
       state.camShake = 0;
       ensureAmbientWindLoop();
       menuEl.style.display = "none";
+      document.body.classList.add("in-game");
       stopMenuBackdropLoop();
       pauseMenuBgm();
 
@@ -6802,6 +6820,10 @@
       compileSceneShaders();
 
       weaponRoot.visible = true;
+      await waitForRenderableViewport();
+      syncGameRendererSize();
+      renderer.render(scene, camera);
+      await new Promise((r) => requestAnimationFrame(r));
       gameWorldReady = true;
       refreshLocalPlayerLightsForCurrentState();
       gameBootOverlay.style.display = "none";
@@ -6827,6 +6849,7 @@
       gameBootOverlay.style.display = "none";
       gameBootOverlay.setAttribute("aria-busy", "false");
       menuEl.style.display = "flex";
+      document.body.classList.remove("in-game");
       showMenuPanel("menuMain");
       menuBgmPeakSessionMax = 1e-6;
       menuBackdropLightSmooth = 0;
