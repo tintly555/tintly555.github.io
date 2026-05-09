@@ -25,18 +25,6 @@
             var segs = String(path || "").replace(/\/+$/, "").split("/").filter(Boolean);
             return segs.length === 1 && segs[0].toLowerCase() === "game";
           }
-          /**
-           * Some hosts/proxies put game.html under .../html/ while assets remain one level up; treat that path as if it
-           * pointed to the parent directory so relative URLs do NOT produce …/html/walls.png 404s.
-           */
-          function stripHtmlSegment(path) {
-            var segs = String(path || "").replace(/\/+$/, "").split("/").filter(Boolean);
-            if (segs.length && segs[segs.length - 1].toLowerCase() === "html") {
-              segs.pop();
-              return "/" + segs.join("/") + (segs.length ? "/" : "");
-            }
-            return path;
-          }
           if (!p || p === "/") {
             return u.origin + "/";
           }
@@ -44,13 +32,10 @@
             return u.origin + "/";
           }
           if (p.endsWith("/")) {
-            var stripped = stripHtmlSegment(p);
-            return u.origin + (stripped || "/");
+            return u.origin + p;
           }
           var li = p.lastIndexOf("/");
-          var dirPath = li >= 0 ? p.slice(0, li + 1) : "/";
-          dirPath = stripHtmlSegment(dirPath) || "/";
-          return u.origin + dirPath;
+          return li >= 0 ? u.origin + p.slice(0, li + 1) : u.origin + "/";
         } catch (e1) {
           var schemeRest = page.indexOf("/", page.indexOf("//") + 2);
           var slash = page.lastIndexOf("/");
@@ -366,11 +351,6 @@
       pointer-events: none;
     }
 
-    /* When in-game, the menu backdrop canvas must NOT cover #app — its last frame would otherwise sit on top of the game and look like a black screen until the user resizes. */
-    body.in-game #menuWallBackdrop {
-      display: none;
-    }
-
     .menu {
       position: fixed;
       inset: 0;
@@ -383,12 +363,7 @@
       gap: 12px;
       box-sizing: border-box;
       padding: 28px 16px 22px;
-      /** Painted PNG menu art lives here; --game-ui-menu-bg is set by JS once the file is found. */
-      background-color: #070504;
-      background-image: var(--game-ui-menu-bg);
-      background-size: cover;
-      background-position: center;
-      background-repeat: no-repeat;
+      background: transparent;
     }
 
     .menu h1 {
@@ -820,6 +795,13 @@
       <button type="button" id="btnArenaCoop">CO-OP MODE</button>
       <button type="button" id="btnArenaBack">← BACK</button>
     </div>
+    <div id="menuPvpMaps" style="display:none;flex-direction:column;align-items:center;gap:10px;">
+      <h2 style="font-family:'Audiowide',sans-serif;font-size:24px;margin:0 0 10px 0;letter-spacing:2px;">CROSSFIRE — MAP</h2>
+      <p style="font-family:'Audiowide',sans-serif;font-size:12px;opacity:0.78;margin:0 0 8px 0;max-width:300px;text-align:center;line-height:1.45;">Choose the PVP layout, then use Quick Play / Create / Join.</p>
+      <button type="button" id="btnPvpMapClassic">CLASSIC (ORIGINAL)</button>
+      <button type="button" id="btnPvpMapGrid">GRID KILLHOUSE</button>
+      <button type="button" id="btnPvpMapBack">← BACK</button>
+    </div>
     <div id="menuLobby" style="display:none;flex-direction:column;align-items:center;gap:10px;">
       <h2 id="lobbyTitle" style="font-family:'Audiowide',sans-serif;font-size:24px;margin:0 0 10px 0;letter-spacing:2px;">MULTIPLAYER</h2>
       <button type="button" id="btnQuickplay">QUICK PLAY</button>
@@ -925,8 +907,8 @@
               <input type="range" id="rngMasterVol" min="0" max="100" value="100" />
             </div>
             <div class="settings-row">
-              <label>Music volume <span class="value-pill" id="lblMusicVol">70%</span></label>
-              <input type="range" id="rngMusicVol" min="0" max="100" value="70" />
+              <label>Music volume <span class="value-pill" id="lblMusicVol">35%</span></label>
+              <input type="range" id="rngMusicVol" min="0" max="100" value="35" />
             </div>
             <div class="settings-row">
               <label>Sound volume <span class="value-pill" id="lblSfxVol">100%</span></label>
@@ -990,6 +972,10 @@
     const menuLobby = document.getElementById("menuLobby");
     const lobbyTitle = document.getElementById("lobbyTitle");
     const menuJoinCode = document.getElementById("menuJoinCode");
+    const menuPvpMaps = document.getElementById("menuPvpMaps");
+    const btnPvpMapClassic = document.getElementById("btnPvpMapClassic");
+    const btnPvpMapGrid = document.getElementById("btnPvpMapGrid");
+    const btnPvpMapBack = document.getElementById("btnPvpMapBack");
     const gameBootOverlay = document.getElementById("gameBootOverlay");
     const gameBootLabel = document.getElementById("gameBootLabel");
     const codeInput = document.getElementById("codeInput");
@@ -1100,6 +1086,11 @@
     loadGameSettings();
 
     let CURRENT_MAP = "arena";
+    /** Set from PVP map picker; used when `pendingLobbyMode === "crossfire"`. */
+    let PENDING_PVP_MAP = "crossfire";
+    function isPvpCrossfireMap(m) {
+      return m === "crossfire" || m === "crossfire_grid";
+    }
     let MULTIPLAYER = false;
     /** True only for Zombie Arena played via ARENA CO-OP lobby (no damage vs other players). */
     let ARENA_COOP = false;
@@ -1337,7 +1328,7 @@
     });
 
     socket.on("damaged", (data) => {
-      if (!gameWorldReady || menuEl.style.display !== "none") return;
+      if (!gameWorldReady) return;
       if (player.health <= 0) return;
       player.health = Math.max(0, player.health - (data.damage || 0));
       player.regenTimer = 0;
@@ -1356,14 +1347,12 @@
     });
 
     socket.on("zombieSync", (data) => {
-      if (!gameWorldReady) return;
       if (!MULTIPLAYER || !ARENA_COOP || CURRENT_MAP !== "arena") return;
       if (ZOMBIE_AUTHORITY) return;
       applyZombieSyncPayload(data);
     });
 
     socket.on("zombieDamaged", (data) => {
-      if (!gameWorldReady) return;
       if (!MULTIPLAYER || !ARENA_COOP || CURRENT_MAP !== "arena") return;
       if (!ZOMBIE_AUTHORITY || !data) return;
       if (data.by === socket.id) return;
@@ -1765,24 +1754,28 @@
     function getSafeViewportSize() {
       try {
         const vv = window.visualViewport;
-        const de = typeof document !== "undefined" ? document.documentElement : null;
-        const iw = window.innerWidth || 0;
-        const ih = window.innerHeight || 0;
-        const vw = vv && vv.width ? vv.width : 0;
-        const vh = vv && vv.height ? vv.height : 0;
-        const cw = de ? de.clientWidth || 0 : 0;
-        const ch = de ? de.clientHeight || 0 : 0;
-        /** Fullscreen / macOS: one of these is often 0 until layout; take the max so we never setSize(0). */
-        let w = Math.max(iw, vw, cw);
-        let h = Math.max(ih, vh, ch);
-        if (w < 4 || h < 4) {
-          const aw = typeof screen !== "undefined" && screen.availWidth ? screen.availWidth : 0;
-          const ah = typeof screen !== "undefined" && screen.availHeight ? screen.availHeight : 0;
-          w = Math.max(w, aw);
-          h = Math.max(h, ah);
+        let w = window.innerWidth;
+        let h = window.innerHeight;
+        if (vv && vv.width >= 2 && vv.height >= 2) {
+          w = vv.width;
+          h = vv.height;
         }
-        w = Math.max(1, w);
-        h = Math.max(1, h);
+        w = Math.max(
+          1,
+          w ||
+            (typeof document !== "undefined" &&
+              document.documentElement &&
+              document.documentElement.clientWidth) ||
+            1
+        );
+        h = Math.max(
+          1,
+          h ||
+            (typeof document !== "undefined" &&
+              document.documentElement &&
+              document.documentElement.clientHeight) ||
+            1
+        );
         return { w, h };
       } catch (_) {
         return { w: 1, h: 1 };
@@ -1971,27 +1964,6 @@
       camera.updateProjectionMatrix();
       renderer.setPixelRatio(getPixelRatioForQuality());
       renderer.setSize(vp.w, vp.h);
-    }
-
-    /**
-     * Keep boot overlay up until the WebGL canvas has real dimensions. Otherwise gameplay (zombies, MP damage)
-     * runs while the framebuffer is 0×0 or stale — resizing then “starts” the picture but the player may already be dead.
-     */
-    const MIN_GAME_VIEWPORT_PX = 24;
-    async function waitForRenderableViewport() {
-      const MAX_FRAMES = 360;
-      for (let i = 0; i < MAX_FRAMES; i++) {
-        syncGameRendererSize();
-        try {
-          resizeMenuWallBackdrop();
-        } catch (_) {}
-        const el = renderer.domElement;
-        void el.offsetHeight;
-        const w = el.clientWidth | 0;
-        const h = el.clientHeight | 0;
-        if (w >= MIN_GAME_VIEWPORT_PX && h >= MIN_GAME_VIEWPORT_PX) return;
-        await new Promise((r) => requestAnimationFrame(r));
-      }
     }
 
     applyGraphicsQuality();
@@ -2528,7 +2500,7 @@
     let mazeChunkPollAcc = 0;
     /** WebGL forward shading has a hard limit on fragment light uniforms — register maze lamps and cull visibility each frame. */
     const mazeCullableLights = [];
-    const MAX_MAZE_LIGHTS_ACTIVE = 40;
+    const MAX_MAZE_LIGHTS_ACTIVE = 34;
 
     function mazeHashSeed(cx, cz, salt = 0) {
       let h = mazeWorldSeed ^ salt ^ (cx * 73856093) ^ (cz * 19349663) ^ (cx * cz * 83492791);
@@ -3263,8 +3235,12 @@
     }
 
     function buildMapArena() {
-      mazeWorldSeed =
-        (Math.imul(1103515245, (performance.now() ^ (Math.random() * 0x7fffffff)) | 0) + 12345) >>> 0;
+      if (MULTIPLAYER && ARENA_COOP && activeRoomId) {
+        mazeWorldSeed = hashRoomSeed(activeRoomId);
+      } else {
+        mazeWorldSeed =
+          (Math.imul(1103515245, (performance.now() ^ (Math.random() * 0x7fffffff)) | 0) + 12345) >>> 0;
+      }
       mazeChunkPollAcc = 0;
       mazeNavAnchorCx = null;
       mazeNavAnchorCz = null;
@@ -3317,9 +3293,46 @@
       addWindowWallX( 28,-28, 14, H, 1.0, 4, 1.2, 3.0);
     }
 
+    /** PVP alt layout: perimeter + line walls + small cube cover (top-down sketch style). */
+    function buildMapCrossfireGrid() {
+      const H = 4.5;
+      const thick = 1.0;
+      const trim = 0x70798a;
+
+      addWallBox(90, H, thick, 0, H / 2, -45);
+      addWallBox(90, H, thick, 0, H / 2, 45);
+      addWallBox(thick, H, 90, -45, H / 2, 0);
+      addWallBox(thick, H, 90, 45, H / 2, 0);
+
+      function pillar(px, pz, s = 2.4) {
+        addWallBox(s, H, s, px, H / 2, pz, trim);
+      }
+
+      addWallBox(52, H, thick, 0, H / 2, -12);
+      addWallBox(52, H, thick, 0, H / 2, 12);
+      addWallBox(thick, H, 52, -12, H / 2, 0);
+      addWallBox(thick, H, 52, 12, H / 2, 0);
+
+      addWallBox(22, H, thick, -18, H / 2, -28);
+      addWallBox(22, H, thick, 18, H / 2, 28);
+      addWallBox(thick, H, 22, -28, H / 2, -18);
+      addWallBox(thick, H, 22, 28, H / 2, 18);
+
+      addWallBox(30, H, thick, -8, H / 2, 32);
+      addWallBox(30, H, thick, 8, H / 2, -32);
+
+      const posts = [
+        [-32, -32], [32, -32], [-32, 32], [32, 32],
+        [-24, 0], [24, 0], [0, -24], [0, 24],
+        [-18, 18], [18, -18], [-10, -20], [10, 20],
+      ];
+      for (const [px, pz] of posts) pillar(px, pz);
+    }
+
     const MAP_BUILDERS = {
       arena: buildMapArena,
-      crossfire: buildMapCrossfire
+      crossfire: buildMapCrossfire,
+      crossfire_grid: buildMapCrossfireGrid,
     };
 
     const ZOMBIE_COUNT = 32;
@@ -3390,7 +3403,7 @@
         return { x, z, usedDist: 0 };
       }
 
-      const S = CURRENT_MAP === "crossfire" ? 43 : 40;
+      const S = isPvpCrossfireMap(CURRENT_MAP) ? 43 : 40;
       const players = getAllPlayerPositions();
       let dist = minDist;
       for (let attempt = 0; attempt < 60; attempt++) {
@@ -3574,11 +3587,13 @@
       const w = weapon();
       const roomLine = (MULTIPLAYER && ROOM_CODE) ? `<b style="color:#4fd1ff;">Room: ${ROOM_CODE}</b><br>` : "";
       const mapLabel =
-        CURRENT_MAP === "crossfire"
-          ? "crossfire (PVP)"
-          : CURRENT_MAP === "arena"
-            ? "zombie arena"
-            : CURRENT_MAP;
+        CURRENT_MAP === "arena"
+          ? "zombie arena"
+          : CURRENT_MAP === "crossfire_grid"
+            ? "crossfire PVP — grid killhouse"
+            : isPvpCrossfireMap(CURRENT_MAP)
+              ? "crossfire PVP — classic"
+              : CURRENT_MAP;
       hud.innerHTML = `
         ${roomLine}
         Abandoned Orphanage<br>
@@ -3914,25 +3929,23 @@
     audioMaster.connect(audioCtx.destination);
 
     let menuBgmAudio = null;
-    /** Set on first pointer/key/touch in the page; required for menu.mp3 (autoplay) and to resume after game. */
-    let menuBgmUnlocked = false;
 
     function applyAudioVolumes() {
       audioMaster.gain.value = gameSettings.masterVolume;
       audioSfx.gain.value = gameSettings.soundVolume;
       audioMusic.gain.value = gameSettings.musicVolume;
-      if (menuBgmAudio) {
-        if (_menuBgmGapTimer != null) {
-          menuBgmAudio.volume = 0;
-        } else if (typeof _menuBgmHandleTimeUpdate === "function") {
-          _menuBgmHandleTimeUpdate();
-        } else {
-          menuBgmAudio.volume = THREE.MathUtils.clamp(
-            gameSettings.masterVolume * gameSettings.musicVolume,
-            0,
-            1
-          );
-        }
+      if (menuBgmMenuGain) {
+        menuBgmMenuGain.gain.value = THREE.MathUtils.clamp(
+          gameSettings.masterVolume * gameSettings.musicVolume,
+          0,
+          1
+        );
+      } else if (menuBgmAudio) {
+        menuBgmAudio.volume = THREE.MathUtils.clamp(
+          gameSettings.masterVolume * gameSettings.musicVolume,
+          0,
+          1
+        );
       }
     }
     applyAudioVolumes();
@@ -3959,139 +3972,65 @@
       }
     }
 
-    /** All possible menu.mp3 URLs to try; first that loads wins. */
-    function getMenuBgmUrlList() {
-      const urls = [];
+    function getMenuBgmUrl() {
       for (const base of getGameAssetBaseCandidates()) {
         try {
-          urls.push(new URL("menu.mp3", normalizeGameAssetBase(base)).href);
+          return new URL("menu.mp3", normalizeGameAssetBase(base)).href;
         } catch (_) {}
       }
       try {
-        urls.push(new URL("menu.mp3", pageDirFromLocation()).href);
-      } catch (_) {}
-      return [...new Set(urls)];
-    }
-
-    let _menuBgmFallbackIdx = 0;
-    let _menuBgmCandidates = null;
-    function _menuBgmTrySrc(idx) {
-      if (!_menuBgmCandidates || idx >= _menuBgmCandidates.length) return;
-      const url = _menuBgmCandidates[idx];
-      try {
-        if (new URL(url).origin !== window.location.origin) {
-          menuBgmAudio.crossOrigin = "anonymous";
-        }
-      } catch (_) {}
-      menuBgmAudio.src = url;
-      try { menuBgmAudio.load(); } catch (_) {}
-    }
-
-    /**
-     * Custom loop with a fade tail: fade volume to 0 over the final FADE_SECS, then hold silent for GAP_SECS,
-     * then restart from 0 at the user-configured volume. Native `audio.loop` is disabled so we can shape the tail.
-     */
-    const MENU_BGM_FADE_SECS = 8;
-    const MENU_BGM_GAP_SECS = 2;
-    let _menuBgmGapTimer = null;
-    function _menuBgmTargetVolume() {
-      return THREE.MathUtils.clamp(gameSettings.masterVolume * gameSettings.musicVolume, 0, 1);
-    }
-    function _menuBgmClearGapTimer() {
-      if (_menuBgmGapTimer != null) {
-        clearTimeout(_menuBgmGapTimer);
-        _menuBgmGapTimer = null;
+        return new URL("menu.mp3", pageDirFromLocation()).href;
+      } catch (_) {
+        return "menu.mp3";
       }
-    }
-    function _menuBgmHandleTimeUpdate() {
-      if (!menuBgmAudio) return;
-      const dur = Number(menuBgmAudio.duration);
-      if (!Number.isFinite(dur) || dur <= MENU_BGM_FADE_SECS) {
-        menuBgmAudio.volume = _menuBgmTargetVolume();
-        return;
-      }
-      const remaining = dur - menuBgmAudio.currentTime;
-      const target = _menuBgmTargetVolume();
-      if (remaining <= MENU_BGM_FADE_SECS) {
-        const k = Math.max(0, Math.min(1, remaining / MENU_BGM_FADE_SECS));
-        menuBgmAudio.volume = target * k;
-      } else {
-        menuBgmAudio.volume = target;
-      }
-    }
-    function _menuBgmHandleEnded() {
-      if (!menuBgmAudio) return;
-      _menuBgmClearGapTimer();
-      menuBgmAudio.volume = 0;
-      _menuBgmGapTimer = setTimeout(() => {
-        _menuBgmGapTimer = null;
-        if (!menuBgmAudio) return;
-        if (!menuBgmUnlocked) return;
-        if (menuEl.style.display === "none") return;
-        try {
-          menuBgmAudio.currentTime = 0;
-        } catch (_) {}
-        menuBgmAudio.volume = _menuBgmTargetVolume();
-        const p = menuBgmAudio.play();
-        if (p && typeof p.catch === "function") p.catch(() => {});
-      }, MENU_BGM_GAP_SECS * 1000);
     }
     function ensureMenuBgmAudio() {
       if (menuBgmAudio) return;
-      _menuBgmCandidates = getMenuBgmUrlList();
-      _menuBgmFallbackIdx = 0;
+      const bgmUrl = getMenuBgmUrl();
       menuBgmAudio = new Audio();
-      menuBgmAudio.loop = false;
+      try {
+        if (new URL(bgmUrl).origin !== window.location.origin) {
+          menuBgmAudio.crossOrigin = "anonymous";
+        }
+      } catch (_) {}
+      menuBgmAudio.src = bgmUrl;
+      menuBgmAudio.loop = true;
       menuBgmAudio.preload = "auto";
-      menuBgmAudio.volume = _menuBgmTargetVolume();
-      menuBgmAudio.addEventListener("error", () => {
-        _menuBgmFallbackIdx++;
-        if (_menuBgmFallbackIdx < _menuBgmCandidates.length) {
-          _menuBgmTrySrc(_menuBgmFallbackIdx);
-          if (menuBgmUnlocked && menuEl.style.display !== "none") {
-            const p = menuBgmAudio.play();
-            if (p && typeof p.catch === "function") p.catch(() => {});
-          }
-        } else {
-          console.warn("[menu bgm] all sources failed", _menuBgmCandidates);
-        }
-      });
-      menuBgmAudio.addEventListener("canplay", () => {
-        if (menuBgmUnlocked && menuEl.style.display !== "none") {
-          const p = menuBgmAudio.play();
-          if (p && typeof p.catch === "function") p.catch(() => {});
-        }
-      });
-      menuBgmAudio.addEventListener("timeupdate", _menuBgmHandleTimeUpdate);
-      menuBgmAudio.addEventListener("ended", _menuBgmHandleEnded);
-      _menuBgmTrySrc(0);
+      wireMenuBgmThroughAnalyser();
+      if (!menuBgmMenuGain) {
+        menuBgmAudio.volume = THREE.MathUtils.clamp(
+          gameSettings.masterVolume * gameSettings.musicVolume,
+          0,
+          1
+        );
+      } else {
+        applyAudioVolumes();
+      }
     }
     function pauseMenuBgm() {
       if (!menuBgmAudio) return;
-      _menuBgmClearGapTimer();
       try {
         menuBgmAudio.pause();
       } catch (_) {}
     }
-    /**
-     * Menu music: play only while the main menu is visible, and only after any user gesture this session.
-     * In-game: pause. Return to menu: play again (goToMenu + prior unlock from playing / menu use).
-     */
+    /** Browser autoplay policy: start only after a user gesture; safe to call repeatedly. */
     function tryPlayMenuBgm() {
       if (menuEl.style.display === "none") return;
-      if (!menuBgmUnlocked) return;
       ensureMenuBgmAudio();
-      if (_menuBgmGapTimer != null) return;
-      _menuBgmHandleTimeUpdate();
-      const p = menuBgmAudio.play();
-      if (p && typeof p.catch === "function") {
-        p.catch((err) => {
-          console.warn("[menu bgm] play() rejected", err && err.message);
-        });
+      wireMenuBgmThroughAnalyser();
+      if (!menuBgmMenuGain) {
+        menuBgmAudio.volume = THREE.MathUtils.clamp(
+          gameSettings.masterVolume * gameSettings.musicVolume,
+          0,
+          1
+        );
+      } else {
+        applyAudioVolumes();
       }
+      const p = menuBgmAudio.play();
+      if (p && typeof p.catch === "function") p.catch(() => {});
     }
     function onMenuBgmUserGesture() {
-      menuBgmUnlocked = true;
       void (async () => {
         try {
           if (audioCtx.state === "suspended") {
@@ -4131,31 +4070,88 @@
       ambientWindNode = { src, g };
     }
 
+    const _gunNoiseBuf = {};
+    function getGunNoiseBuffer(durationSec) {
+      const key = durationSec.toFixed(4);
+      if (_gunNoiseBuf[key]) return _gunNoiseBuf[key];
+      const rate = audioCtx.sampleRate;
+      const n = Math.max(64, (rate * durationSec) | 0);
+      const buf = audioCtx.createBuffer(1, n, rate);
+      const d = buf.getChannelData(0);
+      let brown = 0;
+      for (let i = 0; i < n; i++) {
+        const w = Math.random() * 2 - 1;
+        brown = 0.985 * brown + 0.015 * w;
+        d[i] = brown * 2.4;
+      }
+      _gunNoiseBuf[key] = buf;
+      return buf;
+    }
+
+    /** Layered transient (noise + tail + click) — closer to tac-FPS mixes than oscillator sweeps. */
     function playGunSound(w) {
-      if (audioCtx.state === "suspended") audioCtx.resume();
-
+      if (audioCtx.state === "suspended") void audioCtx.resume();
+      void w;
       const now = audioCtx.currentTime;
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      const filter = audioCtx.createBiquadFilter();
+      const idx = state.weaponIndex;
 
-      osc.type = "square";
-      osc.frequency.setValueAtTime(w.soundBase, now);
-      osc.frequency.exponentialRampToValueAtTime(w.soundBase * 0.45, now + 0.08);
+      const presets = [
+        { nMs: 38, fc: 4200, Q: 0.9, g: 0.55, tailMs: 22, tailFc: 900, tailG: 0.08 },
+        { nMs: 48, fc: 3200, Q: 0.75, g: 0.62, tailMs: 55, tailFc: 650, tailG: 0.11 },
+        { nMs: 72, fc: 2400, Q: 0.55, g: 0.72, tailMs: 70, tailFc: 420, tailG: 0.14 },
+        { nMs: 34, fc: 5200, Q: 0.85, g: 0.48, tailMs: 28, tailFc: 1100, tailG: 0.07 },
+      ];
+      const p = presets[idx] || presets[1];
 
-      filter.type = "lowpass";
-      filter.frequency.setValueAtTime(2200, now);
+      const src = audioCtx.createBufferSource();
+      src.buffer = getGunNoiseBuffer(p.nMs / 1000);
+      const bp = audioCtx.createBiquadFilter();
+      bp.type = "bandpass";
+      bp.frequency.setValueAtTime(p.fc, now);
+      bp.Q.setValueAtTime(p.Q, now);
+      const env = audioCtx.createGain();
+      env.gain.setValueAtTime(0.0001, now);
+      env.gain.exponentialRampToValueAtTime(p.g, now + 0.0035);
+      env.gain.exponentialRampToValueAtTime(0.0001, now + p.nMs / 1000);
+      src.connect(bp);
+      bp.connect(env);
+      env.connect(audioSfx);
+      src.start(now);
+      src.stop(now + p.nMs / 1000 + 0.02);
 
-      gain.gain.setValueAtTime(0.0001, now);
-      gain.gain.exponentialRampToValueAtTime(0.10, now + 0.01);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.11);
+      const src2 = audioCtx.createBufferSource();
+      src2.buffer = getGunNoiseBuffer(p.tailMs / 1000);
+      const bp2 = audioCtx.createBiquadFilter();
+      bp2.type = "lowpass";
+      bp2.frequency.setValueAtTime(p.tailFc, now);
+      const env2 = audioCtx.createGain();
+      env2.gain.setValueAtTime(0.0001, now);
+      env2.gain.exponentialRampToValueAtTime(p.tailG, now + 0.006);
+      env2.gain.exponentialRampToValueAtTime(0.0001, now + p.tailMs / 1000);
+      src2.connect(bp2);
+      bp2.connect(env2);
+      env2.connect(audioSfx);
+      src2.start(now + 0.001);
+      src2.stop(now + p.tailMs / 1000 + 0.03);
 
-      osc.connect(filter);
-      filter.connect(gain);
-      gain.connect(audioSfx);
-
-      osc.start(now);
-      osc.stop(now + 0.12);
+      if (idx !== 2) {
+        const click = audioCtx.createOscillator();
+        click.type = "triangle";
+        const cf = idx === 0 ? 820 : idx === 3 ? 940 : 640;
+        click.frequency.setValueAtTime(cf, now);
+        const cg = audioCtx.createGain();
+        cg.gain.setValueAtTime(0.0001, now);
+        cg.gain.exponentialRampToValueAtTime(0.045, now + 0.0012);
+        cg.gain.exponentialRampToValueAtTime(0.0001, now + 0.012);
+        const clp = audioCtx.createBiquadFilter();
+        clp.type = "highpass";
+        clp.frequency.value = 500;
+        click.connect(clp);
+        clp.connect(cg);
+        cg.connect(audioSfx);
+        click.start(now);
+        click.stop(now + 0.015);
+      }
     }
 
     let flashlightAudioBuffer = null;
@@ -4741,7 +4737,7 @@
     /* ==== PART 2 STARTS HERE ==== */
     function rebuildMapAndEnemies() {
       clearMap();
-      if (CURRENT_MAP === "crossfire") {
+      if (isPvpCrossfireMap(CURRENT_MAP)) {
         player.position.set(0, 1.65, 34);
         floor.visible = true;
         ceiling.visible = true;
@@ -5328,7 +5324,7 @@
       }
       document.body.classList.add("show-cursor");
 
-      if (CURRENT_MAP !== "crossfire" && killerEnemy) {
+      if (!isPvpCrossfireMap(CURRENT_MAP) && killerEnemy) {
         const ex = killerEnemy.group.position.x;
         const ez = killerEnemy.group.position.z;
         deathCamYaw = Math.atan2(ex - player.position.x, ez - player.position.z);
@@ -5344,7 +5340,7 @@
       btnDeathRestart.textContent = MULTIPLAYER ? "RESPAWN" : "RESTART";
       btnDeathSettings.style.display = "";
 
-      if (CURRENT_MAP === "crossfire") {
+      if (isPvpCrossfireMap(CURRENT_MAP)) {
         deathUI.style.display = "flex";
         deathUI.style.opacity = "0.25";
         deathTitle.textContent = "DEFEATED";
@@ -5364,7 +5360,7 @@
     }
 
     function updateDeathAnim(dt) {
-      if (player.health > 0 || CURRENT_MAP === "crossfire") return;
+      if (player.health > 0 || isPvpCrossfireMap(CURRENT_MAP)) return;
       deathAnimTime += dt;
       const t = Math.min(deathAnimTime / DEATH_ANIM_DURATION, 1);
       const fadeOpacity = t * 0.5;
@@ -5442,7 +5438,7 @@
       keys.space = false;
       keys.shift = false;
       pauseOverlay.style.display = "flex";
-      btnPauseRestart.style.display = (CURRENT_MAP !== "crossfire") ? "" : "none";
+      btnPauseRestart.style.display = isPvpCrossfireMap(CURRENT_MAP) ? "none" : "";
       crosshairEl.classList.add("hidden");
     }
 
@@ -5525,7 +5521,7 @@
         );
         return;
       }
-      const S = CURRENT_MAP === "crossfire" ? 45 : 42;
+      const S = isPvpCrossfireMap(CURRENT_MAP) ? 45 : 42;
       navMinX = -S;
       navMinZ = -S;
       navCols = Math.ceil((S * 2) / NAV_CELL);
@@ -5791,7 +5787,7 @@
       }
 
       visFrameCounter++;
-      if ((visFrameCounter % 5) === 0) rebuildFlowField();
+      if ((visFrameCounter % 6) === 0) rebuildFlowField();
 
       for (let ei = 0; ei < state.enemies.length; ei++) {
         const enemy = state.enemies[ei];
@@ -6104,7 +6100,6 @@
       }
 
       if (started && menuEl.style.display === "none" && !gameWorldReady) {
-        syncGameRendererSize();
         tickFpsMeter(dt);
         renderer.render(scene, camera);
         return;
@@ -6169,7 +6164,7 @@
         cullMazeLightsNearCamera();
       }
 
-      if (CURRENT_MAP === "crossfire" && MULTIPLAYER && player.health <= 0) {
+      if (isPvpCrossfireMap(CURRENT_MAP) && MULTIPLAYER && player.health <= 0) {
         const first = remotePlayers.values().next().value;
         if (first) {
           const sx = first.visX ?? first.x;
@@ -6285,7 +6280,6 @@
       state.camShake = 0;
       ensureAmbientWindLoop();
       menuEl.style.display = "none";
-      document.body.classList.add("in-game");
       stopMenuBackdropLoop();
       pauseMenuBgm();
 
@@ -6296,7 +6290,7 @@
         queueMicrotask(() => emitJoinRoomWithAck());
       }
 
-      if (CURRENT_MAP === "crossfire") {
+      if (isPvpCrossfireMap(CURRENT_MAP)) {
         player.position.set(0, 1.65, 34);
         floor.visible = true;
         ceiling.visible = true;
@@ -6377,12 +6371,6 @@
       compileSceneShaders();
 
       weaponRoot.visible = true;
-      gameBootLabel.textContent = "Preparing display…";
-      /** Force a fresh layout + size sync before flipping gameWorldReady so the first rendered frame already fills the screen. */
-      await waitForRenderableViewport();
-      syncGameRendererSize();
-      renderer.render(scene, camera);
-      await new Promise((r) => requestAnimationFrame(r));
       gameWorldReady = true;
       refreshLocalPlayerLightsForCurrentState();
       gameBootOverlay.style.display = "none";
@@ -6408,8 +6396,6 @@
       gameBootOverlay.style.display = "none";
       gameBootOverlay.setAttribute("aria-busy", "false");
       menuEl.style.display = "flex";
-      document.body.classList.remove("in-game");
-      try { resizeMenuWallBackdrop(); } catch (_) {}
       showMenuPanel("menuMain");
       menuBgmPeakSessionMax = 1e-6;
       menuBackdropLightSmooth = 0;
@@ -6433,7 +6419,7 @@
     }
 
     function showMenuPanel(id) {
-      for (const p of [menuMain, menuArenaMode, menuLobby, menuJoinCode]) p.style.display = "none";
+      for (const p of [menuMain, menuArenaMode, menuPvpMaps, menuLobby, menuJoinCode]) p.style.display = "none";
       document.getElementById(id).style.display = "flex";
     }
 
@@ -6462,12 +6448,22 @@
     btnArenaCoop.addEventListener("click", () => showLobby("arena-coop", "ARENA CO-OP"));
     btnArenaBack.addEventListener("click", () => showMenuPanel("menuMain"));
 
-    btnCrossfire.addEventListener("click", () => showLobby("crossfire", "CROSSFIRE (PVP)"));
+    btnCrossfire.addEventListener("click", () => showMenuPanel("menuPvpMaps"));
+
+    btnPvpMapClassic.addEventListener("click", () => {
+      PENDING_PVP_MAP = "crossfire";
+      showLobby("crossfire", "CROSSFIRE (PVP) — CLASSIC");
+    });
+    btnPvpMapGrid.addEventListener("click", () => {
+      PENDING_PVP_MAP = "crossfire_grid";
+      showLobby("crossfire", "CROSSFIRE (PVP) — GRID");
+    });
+    btnPvpMapBack.addEventListener("click", () => showMenuPanel("menuMain"));
 
     btnQuickplay.addEventListener("click", () => {
       socket.emit("quickplay", pendingLobbyMode, (res) => {
         if (res.error) { codeError.textContent = res.error; return; }
-        const map = pendingLobbyMode === "crossfire" ? "crossfire" : "arena";
+        const map = pendingLobbyMode === "crossfire" ? PENDING_PVP_MAP : "arena";
         beginMultiplayerGame(map, { roomKey: res.roomKey, roomCode: res.room });
       });
     });
@@ -6475,7 +6471,7 @@
     btnCreateRoom.addEventListener("click", () => {
       socket.emit("createRoom", pendingLobbyMode, (res) => {
         if (res.error) { codeError.textContent = res.error; return; }
-        const map = pendingLobbyMode === "crossfire" ? "crossfire" : "arena";
+        const map = pendingLobbyMode === "crossfire" ? PENDING_PVP_MAP : "arena";
         beginMultiplayerGame(map, { roomKey: res.roomKey, roomCode: res.code });
       });
     });
@@ -6491,7 +6487,7 @@
       if (!code) { codeError.textContent = "Enter a code"; return; }
       socket.emit("joinByCode", { code, mode: pendingLobbyMode }, (res) => {
         if (res.error) { codeError.textContent = res.error; return; }
-        const map = pendingLobbyMode === "crossfire" ? "crossfire" : "arena";
+        const map = pendingLobbyMode === "crossfire" ? PENDING_PVP_MAP : "arena";
         beginMultiplayerGame(map, { roomKey: res.roomKey, roomCode: code });
       });
     });
@@ -6502,7 +6498,7 @@
 
     btnCodeBack.addEventListener("click", () => showMenuPanel("menuLobby"));
     btnLobbyBack.addEventListener("click", () => {
-      if (pendingLobbyMode === "crossfire") showMenuPanel("menuMain");
+      if (pendingLobbyMode === "crossfire") showMenuPanel("menuPvpMaps");
       else showMenuPanel("menuArenaMode");
     });
 
