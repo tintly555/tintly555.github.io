@@ -285,6 +285,11 @@
     .hitmarker.show {
       opacity: 1;
     }
+    .hitmarker.critical::before,
+    .hitmarker.critical::after {
+      background: rgba(255, 86, 86, 0.96);
+      box-shadow: 0 0 10px rgba(255, 86, 86, 0.72);
+    }
 
     .hitmarker::before,
     .hitmarker::after {
@@ -305,6 +310,26 @@
 
     .hitmarker::after {
       transform: translate(-50%, -50%) rotate(-45deg);
+    }
+
+    #combatFeedback {
+      position: fixed;
+      left: 50%;
+      top: calc(50% + 36px);
+      transform: translate(-50%, 0);
+      z-index: 29;
+      pointer-events: none;
+      font-family: "Audiowide", sans-serif;
+      font-size: 18px;
+      letter-spacing: 0.14em;
+      color: rgba(255, 255, 255, 0);
+      text-shadow: 0 0 10px rgba(0, 0, 0, 0.9);
+      transition: opacity 0.09s linear, transform 0.09s linear, color 0.09s linear;
+      opacity: 0;
+    }
+    #combatFeedback.show {
+      opacity: 1;
+      transform: translate(-50%, -7px);
     }
 
     /* Full-screen boot: map gen + asset preload before gameplay */
@@ -859,6 +884,7 @@
     <span class="medkit-hold-txt">HOLD</span>
   </div>
   <div class="hitmarker" id="hitmarker"></div>
+  <div id="combatFeedback"></div>
   <div id="deathOverlay" style="position:fixed;inset:0;z-index:50;pointer-events:none;display:none;">
     <div id="deathFade" style="position:absolute;inset:0;background:rgba(0,0,0,0);transition:none;"></div>
     <div id="deathUI" style="position:absolute;inset:0;display:none;flex-direction:column;justify-content:center;align-items:center;gap:14px;pointer-events:auto;">
@@ -981,6 +1007,16 @@
     const medKitReticleEl = document.getElementById("medkitReticle");
     const medKitRingProgEl = document.getElementById("medkitRingProg");
     const hitmarkerEl = document.getElementById("hitmarker");
+    const combatFeedbackEl = (() => {
+      let el = document.getElementById("combatFeedback");
+      if (el) return el;
+      el = document.createElement("div");
+      el.id = "combatFeedback";
+      el.style.cssText = "position:fixed;left:50%;top:calc(50% + 36px);transform:translate(-50%, 0);z-index:29;pointer-events:none;font-family:'Audiowide',sans-serif;font-size:18px;letter-spacing:0.14em;color:rgba(255,255,255,0);text-shadow:0 0 10px rgba(0,0,0,0.9);opacity:0;transition:opacity 0.09s linear, transform 0.09s linear, color 0.09s linear;";
+      document.body.appendChild(el);
+      return el;
+    })();
+    const combatFeedbackEl = document.getElementById("combatFeedback");
     const menuWallBackdropCanvas = document.getElementById("menuWallBackdrop");
     const menuEl = document.getElementById("menu");
     const menuMain = document.getElementById("menuMain");
@@ -1226,6 +1262,11 @@
     const FLASH_INNER_DISTANCE = 100;
     const FLASH_INNER_ANGLE = Math.PI / 16;
     const FLASH_INNER_PEN = 0.08;
+    const FLASHLIGHT_ZOOM_LEVELS = [
+      { name: "WIDE", outerIntensity: 24, outerDistance: 350, outerAngle: Math.PI / 5.2, innerIntensity: 115, innerDistance: 95, innerAngle: Math.PI / 12.8 },
+      { name: "NORMAL", outerIntensity: FLASH_OUTER_INTENSITY, outerDistance: FLASH_OUTER_DISTANCE, outerAngle: FLASH_OUTER_ANGLE, innerIntensity: FLASH_INNER_INTENSITY, innerDistance: FLASH_INNER_DISTANCE, innerAngle: FLASH_INNER_ANGLE },
+      { name: "FOCUS", outerIntensity: 19, outerDistance: 390, outerAngle: Math.PI / 10, innerIntensity: 210, innerDistance: 145, innerAngle: Math.PI / 23 },
+    ];
 
     /**
      * Punctual lights only (Point / Spot). Hemisphere & directional lights have no decay in Three.js.
@@ -2523,12 +2564,15 @@
     const sparkGroup = new THREE.Group();
     const tracerGroup = new THREE.Group();
     const bloodGroup = new THREE.Group();
-    scene.add(decalGroup, sparkGroup, tracerGroup, bloodGroup);
+    const muzzleFlashGroup = new THREE.Group();
+    scene.add(decalGroup, sparkGroup, tracerGroup, bloodGroup, muzzleFlashGroup);
 
     const MAX_BLOOD_MESHES = 36;
     const MAX_SPARK_MESHES = 36;
+    const MAX_MUZZLE_FLASHES = 30;
     const SPARK_GEO_SHARED = new THREE.SphereGeometry(0.022, 4, 4);
     const BLOOD_GEO_SHARED = new THREE.SphereGeometry(0.028, 4, 4);
+    const MUZZLE_FLASH_GEO = new THREE.SphereGeometry(0.085, 6, 6);
 
     function trimEffectGroup(group, max, disposeMaterial, incoming = 0) {
       while (group.children.length + incoming > max && group.children.length > 0) {
@@ -3395,7 +3439,8 @@
       addWallBox(thick, H, 90, 45, H / 2, 0);
 
       function pillar(px, pz, s = 2.4) {
-        addWallBox(s, H, s, px, H / 2, pz, trim);
+        const coverH = 1.75;
+        addWallBox(s, coverH, s, px, coverH / 2, pz, trim);
       }
 
       addWallBox(52, H, thick, 0, H / 2, -12);
@@ -3430,6 +3475,8 @@
         scene.add(L);
         pvpMapLights.push(L);
       }
+      // New duel map should feel open/bright: force no ceiling regardless of previous map state.
+      ceiling.visible = false;
     }
 
     const MAP_BUILDERS = {
@@ -3561,6 +3608,7 @@
       reloading: false,
       reloadEnd: 0,
       hitmarkerTimer: 0,
+      combatFeedbackTimer: 0,
       walkPhase: 0,
       smoothHeadBob: 0,
       weaponBobX: 0,
@@ -4398,8 +4446,58 @@
         drop.userData.life = 0.26;
         bloodGroup.add(drop);
       }
-      state.hitmarkerTimer = 0.08;
+    }
+
+    function showCombatFeedback(text, color, dur = 0.18) {
+      if (!combatFeedbackEl) return;
+      combatFeedbackEl.textContent = text;
+      combatFeedbackEl.style.color = color;
+      combatFeedbackEl.classList.add("show");
+      state.combatFeedbackTimer = Math.max(state.combatFeedbackTimer, dur);
+    }
+
+    function triggerHitFeedback(isKill = false) {
+      state.hitmarkerTimer = isKill ? 0.16 : 0.09;
       hitmarkerEl.classList.add("show");
+      hitmarkerEl.classList.toggle("critical", !!isKill);
+      showCombatFeedback(isKill ? "KILL!" : "HIT", isKill ? "rgba(255,88,88,0.98)" : "rgba(255,255,255,0.95)", isKill ? 0.34 : 0.12);
+    }
+
+    function createMuzzleFlash(point, color = 0xfff4d2) {
+      trimEffectGroup(muzzleFlashGroup, MAX_MUZZLE_FLASHES, (o) => { o.material.dispose(); }, 2);
+      for (let i = 0; i < 2; i++) {
+        const m = new THREE.MeshBasicMaterial({
+          color,
+          transparent: true,
+          opacity: i === 0 ? 0.95 : 0.52,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+        });
+        const f = new THREE.Mesh(MUZZLE_FLASH_GEO, m);
+        f.position.copy(point);
+        f.scale.setScalar(i === 0 ? 1.0 : 1.55);
+        f.position.x += (Math.random() - 0.5) * 0.04;
+        f.position.y += (Math.random() - 0.5) * 0.04;
+        f.position.z += (Math.random() - 0.5) * 0.04;
+        f.userData.life = i === 0 ? 0.055 : 0.08;
+        f.userData.maxLife = f.userData.life;
+        muzzleFlashGroup.add(f);
+      }
+    }
+
+    function updateMuzzleFlashes(dt) {
+      const dead = [];
+      for (const flash of muzzleFlashGroup.children) {
+        flash.userData.life -= dt;
+        const k = Math.max(0, flash.userData.life / flash.userData.maxLife);
+        flash.material.opacity = (flash.userData.maxLife > 0.06 ? 0.52 : 0.95) * k;
+        flash.scale.multiplyScalar(1 + dt * 7);
+        if (flash.userData.life <= 0) dead.push(flash);
+      }
+      for (const flash of dead) {
+        muzzleFlashGroup.remove(flash);
+        flash.material.dispose();
+      }
     }
 
     function updateBlood(dt) {
@@ -4523,6 +4621,20 @@
     camera.add(playerLightTarget);
     flashOuterLocal.target = playerLightTarget;
     flashInnerLocal.target = playerLightTarget;
+    let flashlightZoomIndex = 1;
+
+    function applyFlashlightZoomProfile(index) {
+      const n = FLASHLIGHT_ZOOM_LEVELS.length;
+      flashlightZoomIndex = ((index % n) + n) % n;
+      const p = FLASHLIGHT_ZOOM_LEVELS[flashlightZoomIndex];
+      flashOuterLocal.intensity = p.outerIntensity;
+      flashOuterLocal.distance = p.outerDistance;
+      flashOuterLocal.angle = p.outerAngle;
+      flashInnerLocal.intensity = p.innerIntensity;
+      flashInnerLocal.distance = p.innerDistance;
+      flashInnerLocal.angle = p.innerAngle;
+    }
+    applyFlashlightZoomProfile(flashlightZoomIndex);
 
     function setLocalPlayerLights(on) {
       playerBodyLight.visible = on;
@@ -4535,6 +4647,10 @@
 
     function refreshLocalPlayerLightsForCurrentState() {
       if (!gameWorldReady || menuEl.style.display !== "none") {
+        setLocalPlayerLights(false);
+        return;
+      }
+      if (CURRENT_MAP === "crossfire_grid") {
         setLocalPlayerLights(false);
         return;
       }
@@ -4754,8 +4870,27 @@
         !chatOpen &&
         !settingsModalOpen
       ) {
+        if (CURRENT_MAP === "crossfire_grid") {
+          playerLightsPreference = false;
+          refreshLocalPlayerLightsForCurrentState();
+          e.preventDefault();
+          return;
+        }
         playerLightsPreference = !playerLightsPreference;
         refreshLocalPlayerLightsForCurrentState();
+        playFlashlightToggleSound();
+        e.preventDefault();
+        return;
+      }
+      if (
+        k === "z" &&
+        started &&
+        gameWorldReady &&
+        menuEl.style.display === "none" &&
+        !chatOpen &&
+        !settingsModalOpen
+      ) {
+        applyFlashlightZoomProfile(flashlightZoomIndex + 1);
         playFlashlightToggleSound();
         e.preventDefault();
         return;
@@ -4875,7 +5010,8 @@
       if (isPvpCrossfireMap(CURRENT_MAP)) {
         player.position.set(0, 1.65, 34);
         floor.visible = true;
-        ceiling.visible = true;
+        ceiling.visible = CURRENT_MAP !== "crossfire_grid";
+        if (CURRENT_MAP === "crossfire_grid") playerLightsPreference = false;
       } else {
         floor.visible = false;
         ceiling.visible = false;
@@ -5090,6 +5226,7 @@
       weaponModels[state.weaponIndex].userData.gun.getWorldPosition(muzzleStart);
 
       playGunSound(w);
+      createMuzzleFlash(muzzleStart.clone(), w.color);
 
       for (let i = 0; i < w.pellets; i++) {
         const movingPenalty = (keys.w || keys.a || keys.s || keys.d) ? 1.25 : 1;
@@ -5141,8 +5278,7 @@
           createBlood(bp);
           createBulletTrail(muzzleStart.clone(), bp.clone(), w.color);
           emitShootNetwork(muzzleStart, bp, w.color, "blood");
-          state.hitmarkerTimer = 0.08;
-          hitmarkerEl.classList.add("show");
+          triggerHitFeedback(false);
 
           const coopArena = MULTIPLAYER && ARENA_COOP && CURRENT_MAP === "arena";
           if (coopArena && !ZOMBIE_AUTHORITY) {
@@ -5159,6 +5295,8 @@
               bestEnemy.respawnTimer = 3.0;
               bestEnemy.group.visible = false;
               state.score += 1;
+              triggerHitFeedback(true);
+              createSparks(bp.clone(), 0xff5555);
             }
           }
         } else if (closestDist === rpDist && bestRpId && bestRpHit) {
@@ -5166,8 +5304,7 @@
           createBlood(bp);
           createBulletTrail(muzzleStart.clone(), bp.clone(), w.color);
           emitShootNetwork(muzzleStart, bp, w.color, "blood");
-          state.hitmarkerTimer = 0.08;
-          hitmarkerEl.classList.add("show");
+          triggerHitFeedback(false);
           const dmg = w.damageBody;
           socket.emit("hit", { target: bestRpId, damage: dmg, x: player.position.x, z: player.position.z });
         } else if (wallHit) {
@@ -6172,6 +6309,7 @@
     function updateEffects(dt) {
       updateBlood(dt);
       updateSparks(dt);
+      updateMuzzleFlashes(dt);
       updateTracers(dt);
       updateHitIndicators(dt);
       const now = performance.now();
@@ -6191,6 +6329,13 @@
         state.hitmarkerTimer -= dt;
       } else {
         hitmarkerEl.classList.remove("show");
+        hitmarkerEl.classList.remove("critical");
+      }
+
+      if (state.combatFeedbackTimer > 0) {
+        state.combatFeedbackTimer -= dt;
+      } else if (combatFeedbackEl) {
+        combatFeedbackEl.classList.remove("show");
       }
     }
 
@@ -6468,7 +6613,8 @@
       if (isPvpCrossfireMap(CURRENT_MAP)) {
         player.position.set(0, 1.65, 34);
         floor.visible = true;
-        ceiling.visible = true;
+        ceiling.visible = CURRENT_MAP !== "crossfire_grid";
+        if (CURRENT_MAP === "crossfire_grid") playerLightsPreference = false;
       } else {
         floor.visible = false;
         ceiling.visible = false;
