@@ -1764,11 +1764,20 @@
 
     function getRemoteWeaponStancePreset(weaponIndex) {
       return [
-        { lx: -0.64, rx: -0.76, ly: -0.62, ry: 0.42, lz: -0.74, rz: 0.46, torso: 0.11 }, // pistol
-        { lx: -0.70, rx: -0.84, ly: -0.68, ry: 0.46, lz: -0.80, rz: 0.50, torso: 0.15 }, // rifle
-        { lx: -0.68, rx: -0.80, ly: -0.66, ry: 0.44, lz: -0.78, rz: 0.50, torso: 0.14 }, // shotgun
-        { lx: -0.69, rx: -0.82, ly: -0.67, ry: 0.45, lz: -0.79, rz: 0.50, torso: 0.15 }, // smg
-      ][weaponIndex | 0] || { lx: -0.70, rx: -0.84, ly: -0.68, ry: 0.46, lz: -0.80, rz: 0.50, torso: 0.14 };
+        { lx: -0.58, rx: -0.72, ly: -0.78, ry: 0.40, lz: -0.92, rz: 0.44, torso: 0.10 }, // pistol
+        { lx: -0.64, rx: -0.80, ly: -0.86, ry: 0.44, lz: -1.02, rz: 0.48, torso: 0.14 }, // rifle
+        { lx: -0.62, rx: -0.78, ly: -0.84, ry: 0.43, lz: -0.98, rz: 0.48, torso: 0.13 }, // shotgun
+        { lx: -0.63, rx: -0.79, ly: -0.85, ry: 0.44, lz: -1.00, rz: 0.48, torso: 0.14 }, // smg
+      ][weaponIndex | 0] || { lx: -0.64, rx: -0.80, ly: -0.86, ry: 0.44, lz: -1.02, rz: 0.48, torso: 0.14 };
+    }
+
+    function getRemoteSupportGripPreset(weaponIndex) {
+      return [
+        { leftBiasX: -0.08, leftBiasY: -0.10, leftBiasZ: -0.14, rightBiasX: 0.02 }, // pistol
+        { leftBiasX: -0.12, leftBiasY: -0.12, leftBiasZ: -0.20, rightBiasX: 0.03 }, // rifle
+        { leftBiasX: -0.10, leftBiasY: -0.11, leftBiasZ: -0.18, rightBiasX: 0.03 }, // shotgun
+        { leftBiasX: -0.11, leftBiasY: -0.12, leftBiasZ: -0.19, rightBiasX: 0.03 }, // smg
+      ][weaponIndex | 0] || { leftBiasX: -0.12, leftBiasY: -0.12, leftBiasZ: -0.20, rightBiasX: 0.03 };
     }
 
     function applyRemoteReloadPose(rp, dt, basePose) {
@@ -1813,11 +1822,12 @@
       }
 
       const basePose = getRemoteWeaponStancePreset(rp.currentWeapon | 0);
-      let targetLX = basePose.lx + idleBreath + (moving ? walkSin * 0.66 : 0);
-      let targetRX = basePose.rx - idleBreath * 0.9 - (moving ? walkSin * 0.70 : 0);
-      let targetLY = basePose.ly + (moving ? walkCos * 0.10 : 0);
-      let targetRY = basePose.ry - (moving ? walkCos * 0.10 : 0);
-      let targetLZ = basePose.lz + (moving ? walkCos * 0.42 : idleBreath * 0.32);
+      const grip = getRemoteSupportGripPreset(rp.currentWeapon | 0);
+      let targetLX = basePose.lx + grip.leftBiasX + idleBreath + (moving ? walkSin * 0.46 : 0);
+      let targetRX = basePose.rx + grip.rightBiasX - idleBreath * 0.9 - (moving ? walkSin * 0.54 : 0);
+      let targetLY = basePose.ly + grip.leftBiasY + (moving ? walkCos * 0.07 : 0);
+      let targetRY = basePose.ry - (moving ? walkCos * 0.08 : 0);
+      let targetLZ = basePose.lz + grip.leftBiasZ + (moving ? walkCos * 0.28 : idleBreath * 0.26);
       let targetRZ = basePose.rz - (moving ? walkCos * 0.40 : idleBreath * 0.30);
 
       if (rp.isReloading) {
@@ -1856,17 +1866,17 @@
 
     function createRemotePlayer(name) {
       const group = new THREE.Group();
-      const mCamo1 = new THREE.MeshStandardMaterial({ color: 0x3b5a3e, roughness: 0.85 });
-      const mCamo2 = new THREE.MeshStandardMaterial({ color: 0x2d4a30, roughness: 0.85 });
+      const mCamo1 = new THREE.MeshStandardMaterial({ color: 0x4f7652, roughness: 0.83 });
+      const mCamo2 = new THREE.MeshStandardMaterial({ color: 0x3f6444, roughness: 0.83 });
       const mSkin = new THREE.MeshStandardMaterial({ color: 0xe0b890, roughness: 0.7 });
       const mSkinD = new THREE.MeshStandardMaterial({ color: 0xc49a70, roughness: 0.7 });
-      const mPants = new THREE.MeshStandardMaterial({ color: 0x3a3d32, roughness: 0.9 });
+      const mPants = new THREE.MeshStandardMaterial({ color: 0x4a4f42, roughness: 0.88 });
       const mBoot = new THREE.MeshStandardMaterial({ color: 0x2a2218, roughness: 0.9 });
       const mBootS = new THREE.MeshStandardMaterial({ color: 0x1a1610, roughness: 0.9 });
-      const mHelm = new THREE.MeshStandardMaterial({ color: 0x4a5a4e, roughness: 0.7 });
+      const mHelm = new THREE.MeshStandardMaterial({ color: 0x5a6d5d, roughness: 0.68 });
       const mVisor = new THREE.MeshStandardMaterial({ color: 0x80ddff, transparent: true, opacity: 0.45, roughness: 0.2, metalness: 0.8 });
-      const mVest = new THREE.MeshStandardMaterial({ color: 0x5c6b54, roughness: 0.8 });
-      const mGear = new THREE.MeshStandardMaterial({ color: 0x2e3028, roughness: 0.9 });
+      const mVest = new THREE.MeshStandardMaterial({ color: 0x6d7d64, roughness: 0.78 });
+      const mGear = new THREE.MeshStandardMaterial({ color: 0x3d4136, roughness: 0.88 });
       const mMetal = new THREE.MeshStandardMaterial({ color: 0x7a7a7a, roughness: 0.4, metalness: 0.6 });
       const mGlove = new THREE.MeshStandardMaterial({ color: 0x3a3528, roughness: 0.9 });
       const mKnee = new THREE.MeshStandardMaterial({ color: 0x505548, roughness: 0.8 });
