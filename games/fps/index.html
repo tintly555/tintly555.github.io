@@ -25,18 +25,6 @@
             var segs = String(path || "").replace(/\/+$/, "").split("/").filter(Boolean);
             return segs.length === 1 && segs[0].toLowerCase() === "game";
           }
-          /**
-           * Some hosts/proxies put game.html under .../html/ while assets remain one level up; treat that path as if it
-           * pointed to the parent directory so relative URLs do NOT produce …/html/walls.png 404s.
-           */
-          function stripHtmlSegment(path) {
-            var segs = String(path || "").replace(/\/+$/, "").split("/").filter(Boolean);
-            if (segs.length && segs[segs.length - 1].toLowerCase() === "html") {
-              segs.pop();
-              return "/" + segs.join("/") + (segs.length ? "/" : "");
-            }
-            return path;
-          }
           if (!p || p === "/") {
             return u.origin + "/";
           }
@@ -44,13 +32,10 @@
             return u.origin + "/";
           }
           if (p.endsWith("/")) {
-            var stripped = stripHtmlSegment(p);
-            return u.origin + (stripped || "/");
+            return u.origin + p;
           }
           var li = p.lastIndexOf("/");
-          var dirPath = li >= 0 ? p.slice(0, li + 1) : "/";
-          dirPath = stripHtmlSegment(dirPath) || "/";
-          return u.origin + dirPath;
+          return li >= 0 ? u.origin + p.slice(0, li + 1) : u.origin + "/";
         } catch (e1) {
           var schemeRest = page.indexOf("/", page.indexOf("//") + 2);
           var slash = page.lastIndexOf("/");
@@ -366,11 +351,6 @@
       pointer-events: none;
     }
 
-    /* When in-game, the menu backdrop canvas must NOT cover #app — its last frame would otherwise sit on top of the game and look like a black screen until the user resizes. */
-    body.in-game #menuWallBackdrop {
-      display: none;
-    }
-
     .menu {
       position: fixed;
       inset: 0;
@@ -383,12 +363,7 @@
       gap: 12px;
       box-sizing: border-box;
       padding: 28px 16px 22px;
-      /** Painted PNG menu art lives here; --game-ui-menu-bg is set by JS once the file is found. */
-      background-color: #070504;
-      background-image: var(--game-ui-menu-bg);
-      background-size: cover;
-      background-position: center;
-      background-repeat: no-repeat;
+      background: transparent;
     }
 
     .menu h1 {
@@ -811,7 +786,7 @@
       <h1>Abandoned Orphanage</h1>
       <p>by Tintly555 and JimmyQrg</p>
       <button type="button" id="btnArena">Zombie Arena</button>
-      <button type="button" id="btnCrossfire">Crossfire (PVP)</button>
+      <button type="button" id="btnCrossfire">Crossfire (PVP - Select Map)</button>
       <button type="button" id="btnMenuSettings">SETTINGS</button>
     </div>
     <div id="menuArenaMode" style="display:none;flex-direction:column;align-items:center;gap:10px;">
@@ -820,7 +795,13 @@
       <button type="button" id="btnArenaCoop">CO-OP MODE</button>
       <button type="button" id="btnArenaBack">← BACK</button>
     </div>
-    
+    <div id="menuPvpMaps" style="display:none;flex-direction:column;align-items:center;gap:10px;">
+      <h2 style="font-family:'Audiowide',sans-serif;font-size:24px;margin:0 0 10px 0;letter-spacing:2px;">CROSSFIRE — MAP</h2>
+      <p style="font-family:'Audiowide',sans-serif;font-size:12px;opacity:0.78;margin:0 0 8px 0;max-width:300px;text-align:center;line-height:1.45;">Choose the PVP layout, then use Quick Play / Create / Join.</p>
+      <button type="button" id="btnPvpMapClassic">CLASSIC (ORIGINAL)</button>
+      <button type="button" id="btnPvpMapGrid">GRID KILLHOUSE</button>
+      <button type="button" id="btnPvpMapBack">← BACK</button>
+    </div>
     <div id="menuLobby" style="display:none;flex-direction:column;align-items:center;gap:10px;">
       <h2 id="lobbyTitle" style="font-family:'Audiowide',sans-serif;font-size:24px;margin:0 0 10px 0;letter-spacing:2px;">MULTIPLAYER</h2>
       <button type="button" id="btnQuickplay">QUICK PLAY</button>
@@ -850,6 +831,7 @@
     <div id="fpsValue">— FPS</div>
     <div style="opacity:0.72;font-size:11px;margin-top:3px;letter-spacing:0.02em;">Press T to chat</div>
     <div style="opacity:0.72;font-size:11px;margin-top:3px;letter-spacing:0.02em;">Press L to toggle light &amp; flashlight</div>
+    <div style="opacity:0.72;font-size:11px;margin-top:3px;letter-spacing:0.02em;">Press Z to zoom flashlight</div>
   </div>
   <div class="hint" id="hint">Click anywhere</div>
   <div class="flash" id="flash"></div>
@@ -913,21 +895,22 @@
   <div id="settingsModal">
     <div class="settings-shell">
       <aside class="settings-tabs">
-        <button type="button" class="settings-tab active" data-scroll-target="settingsSectionAudio">AUDIO</button>
-        <button type="button" class="settings-tab" data-scroll-target="settingsSectionGraphics">GRAPHICS</button>
+        <button type="button" class="settings-tab active" id="settingsTabAudio" data-scroll-target="settingsSectionAudio">AUDIO</button>
+        <button type="button" class="settings-tab" id="settingsTabGraphics" data-scroll-target="settingsSectionGraphics">GRAPHICS</button>
+        <button type="button" class="settings-tab" id="settingsTabLanguage" data-scroll-target="settingsSectionLanguage">LANGUAGE</button>
       </aside>
       <div class="settings-modal-inner-wrap">
         <button type="button" class="settings-close" id="btnCloseSettings" title="Close">×</button>
         <div class="settings-scroll" id="settingsScroll">
           <section class="settings-section" id="settingsSectionAudio">
-            <h2>AUDIO</h2>
+            <h2 id="settingsHeadingAudio">AUDIO</h2>
             <div class="settings-row">
               <label>Master volume <span class="value-pill" id="lblMasterVol">100%</span></label>
               <input type="range" id="rngMasterVol" min="0" max="100" value="100" />
             </div>
             <div class="settings-row">
-              <label>Music volume <span class="value-pill" id="lblMusicVol">70%</span></label>
-              <input type="range" id="rngMusicVol" min="0" max="100" value="70" />
+              <label>Music volume <span class="value-pill" id="lblMusicVol">35%</span></label>
+              <input type="range" id="rngMusicVol" min="0" max="100" value="35" />
             </div>
             <div class="settings-row">
               <label>Sound volume <span class="value-pill" id="lblSfxVol">100%</span></label>
@@ -935,7 +918,7 @@
             </div>
           </section>
           <section class="settings-section" id="settingsSectionGraphics">
-            <h2>GRAPHICS</h2>
+            <h2 id="settingsHeadingGraphics">GRAPHICS</h2>
             <div class="settings-row">
               <label>Quality <span class="value-pill">performance / fidelity</span></label>
               <div class="settings-cycle">
@@ -967,6 +950,20 @@
               </p>
             </div>
           </section>
+          <section class="settings-section" id="settingsSectionLanguage">
+            <h2 id="settingsHeadingLanguage">LANGUAGE</h2>
+            <div class="settings-row">
+              <label id="languageLabel">Game language</label>
+              <div class="settings-cycle">
+                <button type="button" class="cycle-arrow" id="btnLangPrev" aria-label="Previous language">◀</button>
+                <div class="cycle-value" id="languageValue">ENGLISH</div>
+                <button type="button" class="cycle-arrow" id="btnLangNext" aria-label="Next language">▶</button>
+              </div>
+              <p id="languageHint" style="font-size:11px;opacity:0.65;margin-top:10px;max-width:480px;line-height:1.45;">
+                Switches menu and HUD labels immediately.
+              </p>
+            </div>
+          </section>
         </div>
       </div>
     </div>
@@ -991,6 +988,10 @@
     const menuLobby = document.getElementById("menuLobby");
     const lobbyTitle = document.getElementById("lobbyTitle");
     const menuJoinCode = document.getElementById("menuJoinCode");
+    const menuPvpMaps = document.getElementById("menuPvpMaps");
+    const btnPvpMapClassic = document.getElementById("btnPvpMapClassic");
+    const btnPvpMapGrid = document.getElementById("btnPvpMapGrid");
+    const btnPvpMapBack = document.getElementById("btnPvpMapBack");
     const gameBootOverlay = document.getElementById("gameBootOverlay");
     const gameBootLabel = document.getElementById("gameBootLabel");
     const codeInput = document.getElementById("codeInput");
@@ -1025,7 +1026,7 @@
     const btnMenuSettings = document.getElementById("btnMenuSettings");
     const settingsModal = document.getElementById("settingsModal");
     const settingsScroll = document.getElementById("settingsScroll");
-    const SETTINGS_SECTION_IDS = ["settingsSectionAudio", "settingsSectionGraphics"];
+    const SETTINGS_SECTION_IDS = ["settingsSectionAudio", "settingsSectionGraphics", "settingsSectionLanguage"];
     const btnCloseSettings = document.getElementById("btnCloseSettings");
     const rngMasterVol = document.getElementById("rngMasterVol");
     const rngMusicVol = document.getElementById("rngMusicVol");
@@ -1042,6 +1043,9 @@
     const btnRenderDistPrev = document.getElementById("btnRenderDistPrev");
     const btnRenderDistNext = document.getElementById("btnRenderDistNext");
     const renderDistanceLabel = document.getElementById("renderDistanceLabel");
+    const btnLangPrev = document.getElementById("btnLangPrev");
+    const btnLangNext = document.getElementById("btnLangNext");
+    const languageValue = document.getElementById("languageValue");
     const warFilmOverlay = document.getElementById("warFilmOverlay");
     const shadeOverlay = document.getElementById("shadeOverlay");
     const chatBox = document.getElementById("chatBox");
@@ -1053,6 +1057,34 @@
     const SETTINGS_STORAGE_KEY = "fpsGameSettingsV1";
     const QUALITY_LEVELS = ["potato", "regular", "high", "extreme"];
     const QUALITY_LABELS = ["POTATO", "REGULAR", "HIGH", "EXTREME"];
+    const LANGUAGE_OPTIONS = ["en", "zh"];
+    const LANGUAGE_LABELS = { en: "ENGLISH", zh: "简体中文" };
+    const I18N = {
+      en: {
+        menuSettings: "SETTINGS",
+        pvpMapDesc: "Choose the PVP layout, then use Quick Play / Create / Join.",
+        pvpMapClassic: "CLASSIC (ORIGINAL)",
+        pvpMapGrid: "GRID KILLHOUSE",
+        pvpMapBack: "← BACK",
+        hudHelpLight: "Press L to toggle light & flashlight",
+        hudHelpZoom: "Press Z to zoom flashlight",
+        settingsLangTitle: "LANGUAGE",
+        settingsLangLabel: "Game language",
+        settingsLangHint: "Switches menu and HUD labels immediately.",
+      },
+      zh: {
+        menuSettings: "设置",
+        pvpMapDesc: "选择 PVP 地图后，再进行快速匹配/创建/加入。",
+        pvpMapClassic: "经典地图（原版）",
+        pvpMapGrid: "新单挑地图（亮）",
+        pvpMapBack: "← 返回",
+        hudHelpLight: "按 L 开关灯光与手电",
+        hudHelpZoom: "按 Z 调整手电变焦",
+        settingsLangTitle: "语言",
+        settingsLangLabel: "游戏语言",
+        settingsLangHint: "菜单与 HUD 文案会立即切换。",
+      }
+    };
     /** Scales fog far plane (and matching near) — lower = darkness closes in sooner. */
     const RENDER_DISTANCE_LEVELS = [
       { label: "SHORT", scale: 0.62 },
@@ -1069,6 +1101,7 @@
       qualityIndex: 1,
       texturesOn: true,
       renderDistanceIndex: 2,
+      language: "en",
     };
     let settingsModalOpen = false;
 
@@ -1089,6 +1122,9 @@
             RENDER_DISTANCE_LEVELS.length - 1
           );
         }
+        if (typeof o.language === "string" && LANGUAGE_OPTIONS.includes(o.language)) {
+          gameSettings.language = o.language;
+        }
       } catch (_) {}
     }
 
@@ -1100,9 +1136,37 @@
 
     loadGameSettings();
 
+    function tr(key, fallback = "") {
+      const lang = LANGUAGE_OPTIONS.includes(gameSettings.language) ? gameSettings.language : "en";
+      const dict = I18N[lang] || I18N.en;
+      return dict[key] || I18N.en[key] || fallback;
+    }
+
+    function applyLanguageUI() {
+      const menuSettingsBtn = document.getElementById("btnMenuSettings");
+      const pvpDesc = document.querySelector("#menuPvpMaps p");
+      if (menuSettingsBtn) menuSettingsBtn.textContent = tr("menuSettings", "SETTINGS");
+      if (pvpDesc) pvpDesc.textContent = tr("pvpMapDesc", pvpDesc.textContent);
+      if (btnPvpMapClassic) btnPvpMapClassic.textContent = tr("pvpMapClassic", btnPvpMapClassic.textContent);
+      if (btnPvpMapGrid) btnPvpMapGrid.textContent = tr("pvpMapGrid", btnPvpMapGrid.textContent);
+      if (btnPvpMapBack) btnPvpMapBack.textContent = tr("pvpMapBack", btnPvpMapBack.textContent);
+      const fpsOverlay = document.getElementById("fpsOverlay");
+      const fpsHelpRows = fpsOverlay?.querySelectorAll("div");
+      if (fpsHelpRows && fpsHelpRows[2]) fpsHelpRows[2].textContent = tr("hudHelpLight", fpsHelpRows[2].textContent);
+      if (fpsHelpRows && fpsHelpRows[3]) fpsHelpRows[3].textContent = tr("hudHelpZoom", fpsHelpRows[3].textContent);
+      const hLang = document.getElementById("settingsHeadingLanguage");
+      const lLang = document.getElementById("languageLabel");
+      const pLang = document.getElementById("languageHint");
+      if (hLang) hLang.textContent = tr("settingsLangTitle", hLang.textContent);
+      if (lLang) lLang.textContent = tr("settingsLangLabel", lLang.textContent);
+      if (pLang) pLang.textContent = tr("settingsLangHint", pLang.textContent);
+    }
+
     let CURRENT_MAP = "arena";
+    /** Set from PVP map picker; used when `pendingLobbyMode === "crossfire"`. */
+    let PENDING_PVP_MAP = "crossfire";
     function isPvpCrossfireMap(m) {
-      return m === "crossfire";
+      return m === "crossfire" || m === "crossfire_grid";
     }
     let MULTIPLAYER = false;
     /** True only for Zombie Arena played via ARENA CO-OP lobby (no damage vs other players). */
@@ -1162,36 +1226,6 @@
     const FLASH_INNER_DISTANCE = 100;
     const FLASH_INNER_ANGLE = Math.PI / 16;
     const FLASH_INNER_PEN = 0.08;
-
-    const FLASHLIGHT_ZOOM_LEVELS = [
-      {
-        name: "WIDE",
-        outerIntensity: 24,
-        outerDistance: 300,
-        outerAngle: Math.PI / 4.2,
-        innerIntensity: 120,
-        innerDistance: 90,
-        innerAngle: Math.PI / 14,
-      },
-      {
-        name: "NORMAL",
-        outerIntensity: FLASH_OUTER_INTENSITY,
-        outerDistance: FLASH_OUTER_DISTANCE,
-        outerAngle: FLASH_OUTER_ANGLE,
-        innerIntensity: FLASH_INNER_INTENSITY,
-        innerDistance: FLASH_INNER_DISTANCE,
-        innerAngle: FLASH_INNER_ANGLE,
-      },
-      {
-        name: "FOCUS",
-        outerIntensity: 42,
-        outerDistance: 420,
-        outerAngle: Math.PI / 12,
-        innerIntensity: 190,
-        innerDistance: 150,
-        innerAngle: Math.PI / 24,
-      },
-    ];
 
     /**
      * Punctual lights only (Point / Spot). Hemisphere & directional lights have no decay in Three.js.
@@ -1297,10 +1331,11 @@
       if (data.weapon != null && data.weapon !== rp.currentWeapon) {
         rp.rightArm.remove(rp.gunModel);
         rp.gunModel = makeThirdPersonGun(data.weapon);
-        rp.gunModel.position.set(0.15, -0.42, -0.28);
+        rp.gunModel.position.set(0.08, -0.68, -0.18);
         rp.rightArm.add(rp.gunModel);
         rp.currentWeapon = data.weapon;
       }
+      rp.isReloading = !!data.reloading;
       rp.group.visible = true;
     });
 
@@ -1371,7 +1406,7 @@
     });
 
     socket.on("damaged", (data) => {
-      if (!gameWorldReady || menuEl.style.display !== "none") return;
+      if (!gameWorldReady) return;
       if (player.health <= 0) return;
       player.health = Math.max(0, player.health - (data.damage || 0));
       player.regenTimer = 0;
@@ -1390,14 +1425,12 @@
     });
 
     socket.on("zombieSync", (data) => {
-      if (!gameWorldReady) return;
       if (!MULTIPLAYER || !ARENA_COOP || CURRENT_MAP !== "arena") return;
       if (ZOMBIE_AUTHORITY) return;
       applyZombieSyncPayload(data);
     });
 
     socket.on("zombieDamaged", (data) => {
-      if (!gameWorldReady) return;
       if (!MULTIPLAYER || !ARENA_COOP || CURRENT_MAP !== "arena") return;
       if (!ZOMBIE_AUTHORITY || !data) return;
       if (data.by === socket.id) return;
@@ -1793,30 +1826,35 @@
       return { group, x: 0, y: 1.65, z: 0, yaw: 0, name: name || "Player",
                nameSprite: ns.sprite, nameCanvas: ns.canvas, nameCtx: ns.ctx, nameTex: ns.tex,
                rightArm, leftArm, rightLeg: legR, leftLeg: legL, walkPhase: 0,
-               gunModel, currentWeapon: 1 };
+               gunModel, currentWeapon: 1, isReloading: false, reloadPhase: 0,
+               torsoMesh: chest, headGroup };
     }
 
     function getSafeViewportSize() {
       try {
         const vv = window.visualViewport;
-        const de = typeof document !== "undefined" ? document.documentElement : null;
-        const iw = window.innerWidth || 0;
-        const ih = window.innerHeight || 0;
-        const vw = vv && vv.width ? vv.width : 0;
-        const vh = vv && vv.height ? vv.height : 0;
-        const cw = de ? de.clientWidth || 0 : 0;
-        const ch = de ? de.clientHeight || 0 : 0;
-        /** Fullscreen / macOS: one of these is often 0 until layout; take the max so we never setSize(0). */
-        let w = Math.max(iw, vw, cw);
-        let h = Math.max(ih, vh, ch);
-        if (w < 4 || h < 4) {
-          const aw = typeof screen !== "undefined" && screen.availWidth ? screen.availWidth : 0;
-          const ah = typeof screen !== "undefined" && screen.availHeight ? screen.availHeight : 0;
-          w = Math.max(w, aw);
-          h = Math.max(h, ah);
+        let w = window.innerWidth;
+        let h = window.innerHeight;
+        if (vv && vv.width >= 2 && vv.height >= 2) {
+          w = vv.width;
+          h = vv.height;
         }
-        w = Math.max(1, w);
-        h = Math.max(1, h);
+        w = Math.max(
+          1,
+          w ||
+            (typeof document !== "undefined" &&
+              document.documentElement &&
+              document.documentElement.clientWidth) ||
+            1
+        );
+        h = Math.max(
+          1,
+          h ||
+            (typeof document !== "undefined" &&
+              document.documentElement &&
+              document.documentElement.clientHeight) ||
+            1
+        );
         return { w, h };
       } catch (_) {
         return { w: 1, h: 1 };
@@ -2005,27 +2043,6 @@
       camera.updateProjectionMatrix();
       renderer.setPixelRatio(getPixelRatioForQuality());
       renderer.setSize(vp.w, vp.h);
-    }
-
-    /**
-     * Keep boot overlay up until the WebGL canvas has real dimensions. Otherwise gameplay (zombies, MP damage)
-     * runs while the framebuffer is 0×0 or stale — resizing then “starts” the picture but the player may already be dead.
-     */
-    const MIN_GAME_VIEWPORT_PX = 24;
-    async function waitForRenderableViewport() {
-      const MAX_FRAMES = 360;
-      for (let i = 0; i < MAX_FRAMES; i++) {
-        syncGameRendererSize();
-        try {
-          resizeMenuWallBackdrop();
-        } catch (_) {}
-        const el = renderer.domElement;
-        void el.offsetHeight;
-        const w = el.clientWidth | 0;
-        const h = el.clientHeight | 0;
-        if (w >= MIN_GAME_VIEWPORT_PX && h >= MIN_GAME_VIEWPORT_PX) return;
-        await new Promise((r) => requestAnimationFrame(r));
-      }
     }
 
     applyGraphicsQuality();
@@ -3255,6 +3272,14 @@
       flowPlayerR = -1;
     }
 
+    const pvpMapLights = [];
+    function clearPvpMapLights() {
+      while (pvpMapLights.length) {
+        const L = pvpMapLights.pop();
+        scene.remove(L);
+      }
+    }
+
     function clearMap() {
       clearAllMazeChunks();
       clearPvpMapLights();
@@ -3335,57 +3360,72 @@
       if (pickCx !== null) buildMazeChunk(pickCx, pickCz);
     }
 
-    const pvpMapLights = [];
-    function clearPvpMapLights() {
-      while (pvpMapLights.length) {
-        const L = pvpMapLights.pop();
-        scene.remove(L);
-      }
-    }
-
     function buildMapCrossfire() {
       clearPvpMapLights();
       const H = 4.5;
-      const T = 1.0;
 
-      // Arena boundary
-      addWallBox(90, H, T, 0, H / 2, -45);
-      addWallBox(90, H, T, 0, H / 2, 45);
-      addWallBox(T, H, 90, -45, H / 2, 0);
-      addWallBox(T, H, 90, 45, H / 2, 0);
+      addWallBox(90, H, 1.0, 0, H / 2, -45);
+      addWallBox(90, H, 1.0, 0, H / 2,  45);
+      addWallBox(1.0, H, 90, -45, H / 2, 0);
+      addWallBox(1.0, H, 90,  45, H / 2, 0);
 
-      // Symmetric duel lanes + center pocket (Valorant TDM inspired flow)
-      addWallBox(58, H, T, 0, H / 2, -20);
-      addWallBox(58, H, T, 0, H / 2, 20);
-      addWallBox(T, H, 24, -16, H / 2, -2);
-      addWallBox(T, H, 24, 16, H / 2, 2);
+      addWindowWallX(0, 0, 24, H, 1.0, 8, 1.4, 3.1);
+      addWindowWallZ(0, 0, 24, H, 1.0, 8, 1.4, 3.1);
 
-      addWindowWallX(0, 0, 22, H, T, 8, 1.2, 3.1);
-      addWindowWallZ(0, 0, 22, H, T, 8, 1.2, 3.1);
+      addWallBox(18, 2.4, 1.0, -22, 1.2, -14, 0x70798a);
+      addWallBox(18, 2.4, 1.0,  22, 1.2,  14, 0x70798a);
 
-      // Side catwalk cover walls
-      addWallBox(16, 2.6, T, -26, 1.3, -30, 0x70798a);
-      addWallBox(16, 2.6, T, 26, 1.3, 30, 0x70798a);
-      addWallBox(16, 2.6, T, 26, 1.3, -30, 0x70798a);
-      addWallBox(16, 2.6, T, -26, 1.3, 30, 0x70798a);
+      addWallBox(1.0, 2.4, 18, -14, 1.2, 22, 0x70798a);
+      addWallBox(1.0, 2.4, 18,  14, 1.2,-22, 0x70798a);
 
-      // Pillar covers (small cube style)
-      const pillars = [
-        [-30, -10], [-30, 10], [30, -10], [30, 10],
-        [-10, -10], [-10, 10], [10, -10], [10, 10],
-        [-22, 0], [22, 0], [0, -28], [0, 28],
+      addWindowWallX(-28, 28, 14, H, 1.0, 4, 1.2, 3.0);
+      addWindowWallX( 28,-28, 14, H, 1.0, 4, 1.2, 3.0);
+    }
+
+    /** PVP alt layout: perimeter + line walls + small cube cover (top-down sketch style). */
+    function buildMapCrossfireGrid() {
+      clearPvpMapLights();
+      const H = 4.5;
+      const thick = 1.0;
+      const trim = 0x70798a;
+
+      addWallBox(90, H, thick, 0, H / 2, -45);
+      addWallBox(90, H, thick, 0, H / 2, 45);
+      addWallBox(thick, H, 90, -45, H / 2, 0);
+      addWallBox(thick, H, 90, 45, H / 2, 0);
+
+      function pillar(px, pz, s = 2.4) {
+        addWallBox(s, H, s, px, H / 2, pz, trim);
+      }
+
+      addWallBox(52, H, thick, 0, H / 2, -12);
+      addWallBox(52, H, thick, 0, H / 2, 12);
+      addWallBox(thick, H, 52, -12, H / 2, 0);
+      addWallBox(thick, H, 52, 12, H / 2, 0);
+
+      addWallBox(22, H, thick, -18, H / 2, -28);
+      addWallBox(22, H, thick, 18, H / 2, 28);
+      addWallBox(thick, H, 22, -28, H / 2, -18);
+      addWallBox(thick, H, 22, 28, H / 2, 18);
+
+      addWallBox(30, H, thick, -8, H / 2, 32);
+      addWallBox(30, H, thick, 8, H / 2, -32);
+
+      const posts = [
+        [-32, -32], [32, -32], [-32, 32], [32, 32],
+        [-24, 0], [24, 0], [0, -24], [0, 24],
+        [-18, 18], [18, -18], [-10, -20], [10, 20],
       ];
-      for (const [px, pz] of pillars) addWallBox(2.8, H, 2.8, px, H / 2, pz, 0x6f7788);
+      for (const [px, pz] of posts) pillar(px, pz);
 
-      // Bright arena lighting so flashlight has little practical impact on this map.
       const lightPos = [
-        [-28, -28], [0, -28], [28, -28],
-        [-28, 0], [0, 0], [28, 0],
-        [-28, 28], [0, 28], [28, 28],
+        [-30, -30], [0, -30], [30, -30],
+        [-30, 0], [0, 0], [30, 0],
+        [-30, 30], [0, 30], [30, 30],
       ];
       for (const [lx, lz] of lightPos) {
-        const L = createPhysicalPointLight(0xfff4e2, 95 * Math.PI, 40, 2.6);
-        L.position.set(lx, H - 0.3, lz);
+        const L = createPhysicalPointLight(0xfff4e2, 95 * Math.PI, 44, 2.6);
+        L.position.set(lx, H - 0.35, lz);
         L.castShadow = false;
         scene.add(L);
         pvpMapLights.push(L);
@@ -3395,6 +3435,7 @@
     const MAP_BUILDERS = {
       arena: buildMapArena,
       crossfire: buildMapCrossfire,
+      crossfire_grid: buildMapCrossfireGrid,
     };
 
     const ZOMBIE_COUNT = 32;
@@ -3648,12 +3689,15 @@
     function updateHud() {
       const w = weapon();
       const roomLine = (MULTIPLAYER && ROOM_CODE) ? `<b style="color:#4fd1ff;">Room: ${ROOM_CODE}</b><br>` : "";
+      const lang = LANGUAGE_OPTIONS.includes(gameSettings.language) ? gameSettings.language : "en";
       const mapLabel =
         CURRENT_MAP === "arena"
-          ? "zombie arena"
-          : isPvpCrossfireMap(CURRENT_MAP)
-            ? "crossfire (PVP)"
-            : CURRENT_MAP;
+          ? (lang === "zh" ? "僵尸竞技场" : "zombie arena")
+          : CURRENT_MAP === "crossfire_grid"
+            ? (lang === "zh" ? "单挑 PVP - 新地图" : "crossfire PVP - bright duel map")
+            : isPvpCrossfireMap(CURRENT_MAP)
+              ? (lang === "zh" ? "单挑 PVP - 经典地图" : "crossfire PVP - classic")
+              : CURRENT_MAP;
       hud.innerHTML = `
         ${roomLine}
         Abandoned Orphanage<br>
@@ -3990,25 +4034,23 @@
     audioMaster.connect(audioCtx.destination);
 
     let menuBgmAudio = null;
-    /** Set on first pointer/key/touch in the page; required for menu.mp3 (autoplay) and to resume after game. */
-    let menuBgmUnlocked = false;
 
     function applyAudioVolumes() {
       audioMaster.gain.value = gameSettings.masterVolume;
       audioSfx.gain.value = gameSettings.soundVolume;
       audioMusic.gain.value = gameSettings.musicVolume;
-      if (menuBgmAudio) {
-        if (_menuBgmGapTimer != null) {
-          menuBgmAudio.volume = 0;
-        } else if (typeof _menuBgmHandleTimeUpdate === "function") {
-          _menuBgmHandleTimeUpdate();
-        } else {
-          menuBgmAudio.volume = THREE.MathUtils.clamp(
-            gameSettings.masterVolume * gameSettings.musicVolume,
-            0,
-            1
-          );
-        }
+      if (menuBgmMenuGain) {
+        menuBgmMenuGain.gain.value = THREE.MathUtils.clamp(
+          gameSettings.masterVolume * gameSettings.musicVolume,
+          0,
+          1
+        );
+      } else if (menuBgmAudio) {
+        menuBgmAudio.volume = THREE.MathUtils.clamp(
+          gameSettings.masterVolume * gameSettings.musicVolume,
+          0,
+          1
+        );
       }
     }
     applyAudioVolumes();
@@ -4035,139 +4077,65 @@
       }
     }
 
-    /** All possible menu.mp3 URLs to try; first that loads wins. */
-    function getMenuBgmUrlList() {
-      const urls = [];
+    function getMenuBgmUrl() {
       for (const base of getGameAssetBaseCandidates()) {
         try {
-          urls.push(new URL("menu.mp3", normalizeGameAssetBase(base)).href);
+          return new URL("menu.mp3", normalizeGameAssetBase(base)).href;
         } catch (_) {}
       }
       try {
-        urls.push(new URL("menu.mp3", pageDirFromLocation()).href);
-      } catch (_) {}
-      return [...new Set(urls)];
-    }
-
-    let _menuBgmFallbackIdx = 0;
-    let _menuBgmCandidates = null;
-    function _menuBgmTrySrc(idx) {
-      if (!_menuBgmCandidates || idx >= _menuBgmCandidates.length) return;
-      const url = _menuBgmCandidates[idx];
-      try {
-        if (new URL(url).origin !== window.location.origin) {
-          menuBgmAudio.crossOrigin = "anonymous";
-        }
-      } catch (_) {}
-      menuBgmAudio.src = url;
-      try { menuBgmAudio.load(); } catch (_) {}
-    }
-
-    /**
-     * Custom loop with a fade tail: fade volume to 0 over the final FADE_SECS, then hold silent for GAP_SECS,
-     * then restart from 0 at the user-configured volume. Native `audio.loop` is disabled so we can shape the tail.
-     */
-    const MENU_BGM_FADE_SECS = 8;
-    const MENU_BGM_GAP_SECS = 2;
-    let _menuBgmGapTimer = null;
-    function _menuBgmTargetVolume() {
-      return THREE.MathUtils.clamp(gameSettings.masterVolume * gameSettings.musicVolume, 0, 1);
-    }
-    function _menuBgmClearGapTimer() {
-      if (_menuBgmGapTimer != null) {
-        clearTimeout(_menuBgmGapTimer);
-        _menuBgmGapTimer = null;
+        return new URL("menu.mp3", pageDirFromLocation()).href;
+      } catch (_) {
+        return "menu.mp3";
       }
-    }
-    function _menuBgmHandleTimeUpdate() {
-      if (!menuBgmAudio) return;
-      const dur = Number(menuBgmAudio.duration);
-      if (!Number.isFinite(dur) || dur <= MENU_BGM_FADE_SECS) {
-        menuBgmAudio.volume = _menuBgmTargetVolume();
-        return;
-      }
-      const remaining = dur - menuBgmAudio.currentTime;
-      const target = _menuBgmTargetVolume();
-      if (remaining <= MENU_BGM_FADE_SECS) {
-        const k = Math.max(0, Math.min(1, remaining / MENU_BGM_FADE_SECS));
-        menuBgmAudio.volume = target * k;
-      } else {
-        menuBgmAudio.volume = target;
-      }
-    }
-    function _menuBgmHandleEnded() {
-      if (!menuBgmAudio) return;
-      _menuBgmClearGapTimer();
-      menuBgmAudio.volume = 0;
-      _menuBgmGapTimer = setTimeout(() => {
-        _menuBgmGapTimer = null;
-        if (!menuBgmAudio) return;
-        if (!menuBgmUnlocked) return;
-        if (menuEl.style.display === "none") return;
-        try {
-          menuBgmAudio.currentTime = 0;
-        } catch (_) {}
-        menuBgmAudio.volume = _menuBgmTargetVolume();
-        const p = menuBgmAudio.play();
-        if (p && typeof p.catch === "function") p.catch(() => {});
-      }, MENU_BGM_GAP_SECS * 1000);
     }
     function ensureMenuBgmAudio() {
       if (menuBgmAudio) return;
-      _menuBgmCandidates = getMenuBgmUrlList();
-      _menuBgmFallbackIdx = 0;
+      const bgmUrl = getMenuBgmUrl();
       menuBgmAudio = new Audio();
-      menuBgmAudio.loop = false;
+      try {
+        if (new URL(bgmUrl).origin !== window.location.origin) {
+          menuBgmAudio.crossOrigin = "anonymous";
+        }
+      } catch (_) {}
+      menuBgmAudio.src = bgmUrl;
+      menuBgmAudio.loop = true;
       menuBgmAudio.preload = "auto";
-      menuBgmAudio.volume = _menuBgmTargetVolume();
-      menuBgmAudio.addEventListener("error", () => {
-        _menuBgmFallbackIdx++;
-        if (_menuBgmFallbackIdx < _menuBgmCandidates.length) {
-          _menuBgmTrySrc(_menuBgmFallbackIdx);
-          if (menuBgmUnlocked && menuEl.style.display !== "none") {
-            const p = menuBgmAudio.play();
-            if (p && typeof p.catch === "function") p.catch(() => {});
-          }
-        } else {
-          console.warn("[menu bgm] all sources failed", _menuBgmCandidates);
-        }
-      });
-      menuBgmAudio.addEventListener("canplay", () => {
-        if (menuBgmUnlocked && menuEl.style.display !== "none") {
-          const p = menuBgmAudio.play();
-          if (p && typeof p.catch === "function") p.catch(() => {});
-        }
-      });
-      menuBgmAudio.addEventListener("timeupdate", _menuBgmHandleTimeUpdate);
-      menuBgmAudio.addEventListener("ended", _menuBgmHandleEnded);
-      _menuBgmTrySrc(0);
+      wireMenuBgmThroughAnalyser();
+      if (!menuBgmMenuGain) {
+        menuBgmAudio.volume = THREE.MathUtils.clamp(
+          gameSettings.masterVolume * gameSettings.musicVolume,
+          0,
+          1
+        );
+      } else {
+        applyAudioVolumes();
+      }
     }
     function pauseMenuBgm() {
       if (!menuBgmAudio) return;
-      _menuBgmClearGapTimer();
       try {
         menuBgmAudio.pause();
       } catch (_) {}
     }
-    /**
-     * Menu music: play only while the main menu is visible, and only after any user gesture this session.
-     * In-game: pause. Return to menu: play again (goToMenu + prior unlock from playing / menu use).
-     */
+    /** Browser autoplay policy: start only after a user gesture; safe to call repeatedly. */
     function tryPlayMenuBgm() {
       if (menuEl.style.display === "none") return;
-      if (!menuBgmUnlocked) return;
       ensureMenuBgmAudio();
-      if (_menuBgmGapTimer != null) return;
-      _menuBgmHandleTimeUpdate();
-      const p = menuBgmAudio.play();
-      if (p && typeof p.catch === "function") {
-        p.catch((err) => {
-          console.warn("[menu bgm] play() rejected", err && err.message);
-        });
+      wireMenuBgmThroughAnalyser();
+      if (!menuBgmMenuGain) {
+        menuBgmAudio.volume = THREE.MathUtils.clamp(
+          gameSettings.masterVolume * gameSettings.musicVolume,
+          0,
+          1
+        );
+      } else {
+        applyAudioVolumes();
       }
+      const p = menuBgmAudio.play();
+      if (p && typeof p.catch === "function") p.catch(() => {});
     }
     function onMenuBgmUserGesture() {
-      menuBgmUnlocked = true;
       void (async () => {
         try {
           if (audioCtx.state === "suspended") {
@@ -4225,70 +4193,100 @@
       return buf;
     }
 
-    /** Layered transient (noise + tail + click) — closer to tac-FPS mixes than oscillator sweeps. */
+    /** Layered tactical gunshots: bright crack + body + mechanical tail + short room echo. */
     function playGunSound(w) {
       if (audioCtx.state === "suspended") void audioCtx.resume();
       void w;
       const now = audioCtx.currentTime;
       const idx = state.weaponIndex;
-
       const presets = [
-        { nMs: 38, fc: 4200, Q: 0.9, g: 0.55, tailMs: 22, tailFc: 900, tailG: 0.08 },
-        { nMs: 48, fc: 3200, Q: 0.75, g: 0.62, tailMs: 55, tailFc: 650, tailG: 0.11 },
-        { nMs: 72, fc: 2400, Q: 0.55, g: 0.72, tailMs: 70, tailFc: 420, tailG: 0.14 },
-        { nMs: 34, fc: 5200, Q: 0.85, g: 0.48, tailMs: 28, tailFc: 1100, tailG: 0.07 },
+        { crackMs: 64, crackFc: 4300, crackQ: 0.84, crackG: 0.52, bodyMs: 170, bodyFc: 980, bodyG: 0.2, mechHz: 980, mechG: 0.03, tailMs: 260, tailFc: 1200, tailG: 0.08, echoDelay: 0.072, echoFb: 0.26, echoG: 0.08 },
+        { crackMs: 88, crackFc: 3600, crackQ: 0.72, crackG: 0.68, bodyMs: 250, bodyFc: 740, bodyG: 0.28, mechHz: 760, mechG: 0.045, tailMs: 330, tailFc: 900, tailG: 0.12, echoDelay: 0.082, echoFb: 0.31, echoG: 0.11 },
+        { crackMs: 110, crackFc: 2500, crackQ: 0.56, crackG: 0.82, bodyMs: 330, bodyFc: 520, bodyG: 0.38, mechHz: 520, mechG: 0.02, tailMs: 420, tailFc: 760, tailG: 0.18, echoDelay: 0.094, echoFb: 0.36, echoG: 0.16 },
+        { crackMs: 56, crackFc: 5200, crackQ: 0.92, crackG: 0.45, bodyMs: 185, bodyFc: 1200, bodyG: 0.17, mechHz: 1080, mechG: 0.03, tailMs: 240, tailFc: 1600, tailG: 0.07, echoDelay: 0.064, echoFb: 0.22, echoG: 0.06 },
       ];
       const p = presets[idx] || presets[1];
 
-      const src = audioCtx.createBufferSource();
-      src.buffer = getGunNoiseBuffer(p.nMs / 1000);
-      const bp = audioCtx.createBiquadFilter();
-      bp.type = "bandpass";
-      bp.frequency.setValueAtTime(p.fc, now);
-      bp.Q.setValueAtTime(p.Q, now);
-      const env = audioCtx.createGain();
-      env.gain.setValueAtTime(0.0001, now);
-      env.gain.exponentialRampToValueAtTime(p.g, now + 0.0035);
-      env.gain.exponentialRampToValueAtTime(0.0001, now + p.nMs / 1000);
-      src.connect(bp);
-      bp.connect(env);
-      env.connect(audioSfx);
-      src.start(now);
-      src.stop(now + p.nMs / 1000 + 0.02);
+      const crackSrc = audioCtx.createBufferSource();
+      crackSrc.buffer = getGunNoiseBuffer(p.crackMs / 1000);
+      const crackBp = audioCtx.createBiquadFilter();
+      crackBp.type = "bandpass";
+      crackBp.frequency.setValueAtTime(p.crackFc, now);
+      crackBp.Q.setValueAtTime(p.crackQ, now);
+      const crackGain = audioCtx.createGain();
+      crackGain.gain.setValueAtTime(0.0001, now);
+      crackGain.gain.exponentialRampToValueAtTime(p.crackG, now + 0.003);
+      crackGain.gain.exponentialRampToValueAtTime(0.0001, now + p.crackMs / 1000);
+      crackSrc.connect(crackBp);
+      crackBp.connect(crackGain);
+      crackGain.connect(audioSfx);
+      crackSrc.start(now);
+      crackSrc.stop(now + p.crackMs / 1000 + 0.03);
 
-      const src2 = audioCtx.createBufferSource();
-      src2.buffer = getGunNoiseBuffer(p.tailMs / 1000);
-      const bp2 = audioCtx.createBiquadFilter();
-      bp2.type = "lowpass";
-      bp2.frequency.setValueAtTime(p.tailFc, now);
-      const env2 = audioCtx.createGain();
-      env2.gain.setValueAtTime(0.0001, now);
-      env2.gain.exponentialRampToValueAtTime(p.tailG, now + 0.006);
-      env2.gain.exponentialRampToValueAtTime(0.0001, now + p.tailMs / 1000);
-      src2.connect(bp2);
-      bp2.connect(env2);
-      env2.connect(audioSfx);
-      src2.start(now + 0.001);
-      src2.stop(now + p.tailMs / 1000 + 0.03);
+      const bodySrc = audioCtx.createBufferSource();
+      bodySrc.buffer = getGunNoiseBuffer(p.bodyMs / 1000);
+      const bodyLp = audioCtx.createBiquadFilter();
+      bodyLp.type = "lowpass";
+      bodyLp.frequency.setValueAtTime(p.bodyFc, now);
+      const bodyGain = audioCtx.createGain();
+      bodyGain.gain.setValueAtTime(0.0001, now + 0.002);
+      bodyGain.gain.exponentialRampToValueAtTime(p.bodyG, now + 0.014);
+      bodyGain.gain.exponentialRampToValueAtTime(0.0001, now + p.bodyMs / 1000);
+      bodySrc.connect(bodyLp);
+      bodyLp.connect(bodyGain);
+      bodyGain.connect(audioSfx);
+      bodySrc.start(now + 0.0015);
+      bodySrc.stop(now + p.bodyMs / 1000 + 0.05);
 
-      if (idx !== 2) {
-        const click = audioCtx.createOscillator();
-        click.type = "triangle";
-        const cf = idx === 0 ? 820 : idx === 3 ? 940 : 640;
-        click.frequency.setValueAtTime(cf, now);
-        const cg = audioCtx.createGain();
-        cg.gain.setValueAtTime(0.0001, now);
-        cg.gain.exponentialRampToValueAtTime(0.045, now + 0.0012);
-        cg.gain.exponentialRampToValueAtTime(0.0001, now + 0.012);
-        const clp = audioCtx.createBiquadFilter();
-        clp.type = "highpass";
-        clp.frequency.value = 500;
-        click.connect(clp);
-        clp.connect(cg);
-        cg.connect(audioSfx);
-        click.start(now);
-        click.stop(now + 0.015);
-      }
+      const mech = audioCtx.createOscillator();
+      mech.type = idx === 2 ? "sawtooth" : "triangle";
+      mech.frequency.setValueAtTime(p.mechHz, now);
+      mech.frequency.exponentialRampToValueAtTime(Math.max(180, p.mechHz * 0.55), now + 0.08);
+      const mechHp = audioCtx.createBiquadFilter();
+      mechHp.type = "highpass";
+      mechHp.frequency.setValueAtTime(450, now);
+      const mechGain = audioCtx.createGain();
+      mechGain.gain.setValueAtTime(0.0001, now);
+      mechGain.gain.exponentialRampToValueAtTime(p.mechG, now + 0.005);
+      mechGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.1);
+      mech.connect(mechHp);
+      mechHp.connect(mechGain);
+      mechGain.connect(audioSfx);
+      mech.start(now + 0.001);
+      mech.stop(now + 0.105);
+
+      const tailSrc = audioCtx.createBufferSource();
+      tailSrc.buffer = getGunNoiseBuffer(p.tailMs / 1000);
+      const tailBp = audioCtx.createBiquadFilter();
+      tailBp.type = "bandpass";
+      tailBp.frequency.setValueAtTime(p.tailFc, now);
+      tailBp.Q.setValueAtTime(0.5, now);
+      const tailGain = audioCtx.createGain();
+      tailGain.gain.setValueAtTime(0.0001, now + 0.006);
+      tailGain.gain.exponentialRampToValueAtTime(p.tailG, now + 0.035);
+      tailGain.gain.exponentialRampToValueAtTime(0.0001, now + p.tailMs / 1000);
+      tailSrc.connect(tailBp);
+      tailBp.connect(tailGain);
+      tailGain.connect(audioSfx);
+      tailSrc.start(now + 0.006);
+      tailSrc.stop(now + p.tailMs / 1000 + 0.06);
+
+      const echoIn = audioCtx.createGain();
+      echoIn.gain.setValueAtTime(p.echoG, now);
+      const delay = audioCtx.createDelay(0.22);
+      delay.delayTime.setValueAtTime(p.echoDelay, now);
+      const feedback = audioCtx.createGain();
+      feedback.gain.setValueAtTime(p.echoFb, now);
+      const echoLp = audioCtx.createBiquadFilter();
+      echoLp.type = "lowpass";
+      echoLp.frequency.setValueAtTime(Math.max(700, p.tailFc * 1.1), now);
+      bodyGain.connect(echoIn);
+      echoIn.connect(delay);
+      delay.connect(echoLp);
+      echoLp.connect(audioSfx);
+      delay.connect(feedback);
+      feedback.connect(delay);
+      feedback.gain.exponentialRampToValueAtTime(0.0001, now + 0.5);
     }
 
     let flashlightAudioBuffer = null;
@@ -4526,22 +4524,6 @@
     flashOuterLocal.target = playerLightTarget;
     flashInnerLocal.target = playerLightTarget;
 
-    let flashlightZoomIndex = 1;
-    function applyFlashlightZoomProfile(index) {
-      const i = ((index % FLASHLIGHT_ZOOM_LEVELS.length) + FLASHLIGHT_ZOOM_LEVELS.length) % FLASHLIGHT_ZOOM_LEVELS.length;
-      const z = FLASHLIGHT_ZOOM_LEVELS[i];
-      flashlightZoomIndex = i;
-      flashOuterLocal.intensity = z.outerIntensity;
-      flashOuterLocal.distance = z.outerDistance;
-      flashOuterLocal.angle = z.outerAngle;
-      flashInnerLocal.intensity = z.innerIntensity;
-      flashInnerLocal.distance = z.innerDistance;
-      flashInnerLocal.angle = z.innerAngle;
-      flashOuterLocal.updateMatrixWorld();
-      flashInnerLocal.updateMatrixWorld();
-    }
-    applyFlashlightZoomProfile(flashlightZoomIndex);
-
     function setLocalPlayerLights(on) {
       playerBodyLight.visible = on;
       flashOuterLocal.visible = on;
@@ -4774,19 +4756,6 @@
       ) {
         playerLightsPreference = !playerLightsPreference;
         refreshLocalPlayerLightsForCurrentState();
-        playFlashlightToggleSound();
-        e.preventDefault();
-        return;
-      }
-      if (
-        k === "z" &&
-        started &&
-        gameWorldReady &&
-        menuEl.style.display === "none" &&
-        !chatOpen &&
-        !settingsModalOpen
-      ) {
-        applyFlashlightZoomProfile(flashlightZoomIndex + 1);
         playFlashlightToggleSound();
         e.preventDefault();
         return;
@@ -5471,7 +5440,8 @@
           z: player.position.z,
           yaw: player.yaw,
           name: playerName,
-          weapon: state.weaponIndex
+          weapon: state.weaponIndex,
+          reloading: state.reloading
         });
       }
     }
@@ -5653,6 +5623,8 @@
         RENDER_DISTANCE_LEVELS.length - 1
       );
       renderDistanceLabel.textContent = RENDER_DISTANCE_LEVELS[rdi].label;
+      languageValue.textContent = LANGUAGE_LABELS[gameSettings.language] || "ENGLISH";
+      applyLanguageUI();
     }
 
     function openSettingsModal() {
@@ -6249,13 +6221,50 @@
           rp.walkPhase = (rp.walkPhase || 0) + dt * Math.min(gSpeed * 4.2, 14);
           const wSin = Math.sin(rp.walkPhase) * 0.52;
           const moving = gSpeed > 0.06;
+          const wCos = Math.cos(rp.walkPhase * 2) * 0.055;
           if (rp.leftLeg && rp.rightLeg) {
-            rp.leftLeg.rotation.x = dampScalar(rp.leftLeg.rotation.x, moving ? -wSin : 0, dt, 12);
-            rp.rightLeg.rotation.x = dampScalar(rp.rightLeg.rotation.x, moving ? wSin : 0, dt, 12);
+            rp.leftLeg.rotation.x = dampScalar(rp.leftLeg.rotation.x, moving ? -wSin * 1.28 : 0, dt, 14);
+            rp.rightLeg.rotation.x = dampScalar(rp.rightLeg.rotation.x, moving ? wSin * 1.28 : 0, dt, 14);
+            rp.leftLeg.position.y = dampScalar(rp.leftLeg.position.y, moving ? 0.62 + Math.max(0, wSin) * 0.06 : 0.62, dt, 12);
+            rp.rightLeg.position.y = dampScalar(rp.rightLeg.position.y, moving ? 0.62 + Math.max(0, -wSin) * 0.06 : 0.62, dt, 12);
           }
-          const armBase = -0.82;
-          rp.leftArm.rotation.x = dampScalar(rp.leftArm.rotation.x, armBase + (moving ? wSin * 0.14 : 0), dt, 10);
-          rp.rightArm.rotation.x = dampScalar(rp.rightArm.rotation.x, armBase - (moving ? wSin * 0.14 : 0), dt, 10);
+          const weaponStance = [
+            { l: -0.8, r: -1.12 },
+            { l: -0.88, r: -1.22 },
+            { l: -0.97, r: -1.3 },
+            { l: -0.84, r: -1.14 },
+            { l: -0.7, r: -0.98 },
+          ][rp.currentWeapon | 0] || { l: -0.88, r: -1.18 };
+          let targetLX = weaponStance.l + (moving ? wSin * 0.26 : 0);
+          let targetRX = weaponStance.r - (moving ? wSin * 0.24 : 0);
+          if (rp.isReloading) {
+            rp.reloadPhase = (rp.reloadPhase || 0) + dt * 6.5;
+            const rSin = Math.sin(rp.reloadPhase);
+            targetRX = -0.18 + rSin * 0.75;
+            targetLX = -0.26 + Math.sin(rp.reloadPhase + 0.8) * 0.5;
+            if (rp.gunModel) {
+              rp.gunModel.rotation.z = dampScalar(rp.gunModel.rotation.z, 0.72 + rSin * 0.38, dt, 16);
+              rp.gunModel.rotation.x = dampScalar(rp.gunModel.rotation.x, -0.38 + Math.cos(rp.reloadPhase * 1.35) * 0.14, dt, 14);
+            }
+          } else {
+            rp.reloadPhase = 0;
+            if (rp.gunModel) {
+              rp.gunModel.rotation.z = dampScalar(rp.gunModel.rotation.z, 0, dt, 14);
+              rp.gunModel.rotation.x = dampScalar(rp.gunModel.rotation.x, 0, dt, 14);
+            }
+          }
+          if (rp.torsoMesh) {
+            rp.torsoMesh.rotation.y = dampScalar(rp.torsoMesh.rotation.y, moving ? Math.sin(rp.walkPhase * 0.5) * 0.13 : 0, dt, 10);
+            rp.torsoMesh.position.y = dampScalar(rp.torsoMesh.position.y, 1.24 + (moving ? Math.abs(wCos) * 0.08 : 0), dt, 10);
+          }
+          if (rp.headGroup) {
+            rp.headGroup.rotation.y = dampScalar(rp.headGroup.rotation.y, moving ? -Math.sin(rp.walkPhase * 0.5) * 0.08 : 0, dt, 10);
+            rp.headGroup.rotation.x = dampScalar(rp.headGroup.rotation.x, moving ? Math.cos(rp.walkPhase) * 0.06 : 0, dt, 10);
+          }
+          rp.leftArm.rotation.x = dampScalar(rp.leftArm.rotation.x, targetLX, dt, 13);
+          rp.rightArm.rotation.x = dampScalar(rp.rightArm.rotation.x, targetRX, dt, 13);
+          rp.leftArm.rotation.z = dampScalar(rp.leftArm.rotation.z, moving ? Math.cos(rp.walkPhase) * 0.12 : 0, dt, 12);
+          rp.rightArm.rotation.z = dampScalar(rp.rightArm.rotation.z, moving ? -Math.cos(rp.walkPhase) * 0.12 : 0, dt, 12);
         }
       }
 
@@ -6266,7 +6275,6 @@
       }
 
       if (started && menuEl.style.display === "none" && !gameWorldReady) {
-        syncGameRendererSize();
         tickFpsMeter(dt);
         renderer.render(scene, camera);
         return;
@@ -6447,7 +6455,6 @@
       state.camShake = 0;
       ensureAmbientWindLoop();
       menuEl.style.display = "none";
-      document.body.classList.add("in-game");
       stopMenuBackdropLoop();
       pauseMenuBgm();
 
@@ -6539,12 +6546,6 @@
       compileSceneShaders();
 
       weaponRoot.visible = true;
-      gameBootLabel.textContent = "Preparing display…";
-      /** Force a fresh layout + size sync before flipping gameWorldReady so the first rendered frame already fills the screen. */
-      await waitForRenderableViewport();
-      syncGameRendererSize();
-      renderer.render(scene, camera);
-      await new Promise((r) => requestAnimationFrame(r));
       gameWorldReady = true;
       refreshLocalPlayerLightsForCurrentState();
       gameBootOverlay.style.display = "none";
@@ -6570,8 +6571,6 @@
       gameBootOverlay.style.display = "none";
       gameBootOverlay.setAttribute("aria-busy", "false");
       menuEl.style.display = "flex";
-      document.body.classList.remove("in-game");
-      try { resizeMenuWallBackdrop(); } catch (_) {}
       showMenuPanel("menuMain");
       menuBgmPeakSessionMax = 1e-6;
       menuBackdropLightSmooth = 0;
@@ -6595,7 +6594,7 @@
     }
 
     function showMenuPanel(id) {
-      for (const p of [menuMain, menuArenaMode, menuLobby, menuJoinCode]) p.style.display = "none";
+      for (const p of [menuMain, menuArenaMode, menuPvpMaps, menuLobby, menuJoinCode]) p.style.display = "none";
       document.getElementById(id).style.display = "flex";
     }
 
@@ -6624,12 +6623,22 @@
     btnArenaCoop.addEventListener("click", () => showLobby("arena-coop", "ARENA CO-OP"));
     btnArenaBack.addEventListener("click", () => showMenuPanel("menuMain"));
 
-    btnCrossfire.addEventListener("click", () => showLobby("crossfire", "CROSSFIRE (PVP)"));
+    btnCrossfire.addEventListener("click", () => showMenuPanel("menuPvpMaps"));
+
+    btnPvpMapClassic.addEventListener("click", () => {
+      PENDING_PVP_MAP = "crossfire";
+      showLobby("crossfire", "CROSSFIRE (PVP) — CLASSIC");
+    });
+    btnPvpMapGrid.addEventListener("click", () => {
+      PENDING_PVP_MAP = "crossfire_grid";
+      showLobby("crossfire", "CROSSFIRE (PVP) — GRID");
+    });
+    btnPvpMapBack.addEventListener("click", () => showMenuPanel("menuMain"));
 
     btnQuickplay.addEventListener("click", () => {
       socket.emit("quickplay", pendingLobbyMode, (res) => {
         if (res.error) { codeError.textContent = res.error; return; }
-        const map = pendingLobbyMode === "crossfire" ? "crossfire" : "arena";
+        const map = pendingLobbyMode === "crossfire" ? PENDING_PVP_MAP : "arena";
         beginMultiplayerGame(map, { roomKey: res.roomKey, roomCode: res.room });
       });
     });
@@ -6637,7 +6646,7 @@
     btnCreateRoom.addEventListener("click", () => {
       socket.emit("createRoom", pendingLobbyMode, (res) => {
         if (res.error) { codeError.textContent = res.error; return; }
-        const map = pendingLobbyMode === "crossfire" ? "crossfire" : "arena";
+        const map = pendingLobbyMode === "crossfire" ? PENDING_PVP_MAP : "arena";
         beginMultiplayerGame(map, { roomKey: res.roomKey, roomCode: res.code });
       });
     });
@@ -6653,7 +6662,7 @@
       if (!code) { codeError.textContent = "Enter a code"; return; }
       socket.emit("joinByCode", { code, mode: pendingLobbyMode }, (res) => {
         if (res.error) { codeError.textContent = res.error; return; }
-        const map = pendingLobbyMode === "crossfire" ? "crossfire" : "arena";
+        const map = pendingLobbyMode === "crossfire" ? PENDING_PVP_MAP : "arena";
         beginMultiplayerGame(map, { roomKey: res.roomKey, roomCode: code });
       });
     });
@@ -6664,7 +6673,7 @@
 
     btnCodeBack.addEventListener("click", () => showMenuPanel("menuLobby"));
     btnLobbyBack.addEventListener("click", () => {
-      if (pendingLobbyMode === "crossfire") showMenuPanel("menuMain");
+      if (pendingLobbyMode === "crossfire") showMenuPanel("menuPvpMaps");
       else showMenuPanel("menuArenaMode");
     });
 
@@ -6763,6 +6772,17 @@
     }
     btnRenderDistPrev.addEventListener("click", () => cycleRenderDistance(-1));
     btnRenderDistNext.addEventListener("click", () => cycleRenderDistance(1));
+
+    function cycleLanguage(delta) {
+      const i = LANGUAGE_OPTIONS.indexOf(gameSettings.language);
+      const next = (i + delta + LANGUAGE_OPTIONS.length) % LANGUAGE_OPTIONS.length;
+      gameSettings.language = LANGUAGE_OPTIONS[next];
+      syncSettingsUI();
+      saveGameSettings();
+      updateHud();
+    }
+    btnLangPrev?.addEventListener("click", () => cycleLanguage(-1));
+    btnLangNext?.addEventListener("click", () => cycleLanguage(1));
 
     syncSettingsUI();
 
