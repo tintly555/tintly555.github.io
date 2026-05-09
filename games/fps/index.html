@@ -1736,11 +1736,11 @@
     function applyRemoteWeaponMount(rp) {
       if (!rp || !rp.gunModel) return;
       const mount = [
-        { x: 0.02, y: -0.56, z: -0.48, rx: 0.04, ry: 0.00, rz: 0.02 }, // pistol
-        { x: 0.01, y: -0.58, z: -0.58, rx: 0.03, ry: 0.00, rz: 0.00 }, // rifle
-        { x: 0.01, y: -0.60, z: -0.55, rx: 0.05, ry: 0.00, rz: 0.01 }, // shotgun
-        { x: 0.01, y: -0.58, z: -0.56, rx: 0.03, ry: 0.00, rz: 0.00 }, // smg
-      ][rp.currentWeapon | 0] || { x: 0.01, y: -0.58, z: -0.58, rx: 0.03, ry: 0.00, rz: 0.00 };
+        { x: 0.02, y: -0.48, z: -0.34, rx: 0.02, ry: 0.00, rz: 0.00 }, // pistol
+        { x: 0.02, y: -0.50, z: -0.44, rx: 0.02, ry: 0.00, rz: 0.00 }, // rifle
+        { x: 0.02, y: -0.52, z: -0.41, rx: 0.04, ry: 0.00, rz: 0.00 }, // shotgun
+        { x: 0.02, y: -0.50, z: -0.42, rx: 0.02, ry: 0.00, rz: 0.00 }, // smg
+      ][rp.currentWeapon | 0] || { x: 0.02, y: -0.50, z: -0.44, rx: 0.02, ry: 0.00, rz: 0.00 };
       rp.gunModel.position.set(mount.x, mount.y, mount.z);
       rp.gunModel.rotation.set(mount.rx, mount.ry, mount.rz);
     }
@@ -1848,12 +1848,12 @@
         fng.position.set(0, -0.78, 0.12); ag.add(fng);
       };
       makePlayerArm(rightArm); makePlayerArm(leftArm);
-      rightArm.position.set(0.34, 1.42, -0.02); rightArm.rotation.x = -0.98;
-      leftArm.position.set(-0.34, 1.42, -0.01); leftArm.rotation.x = -0.94;
+      rightArm.position.set(0.34, 1.42, -0.02); rightArm.rotation.x = -0.72;
+      leftArm.position.set(-0.34, 1.42, -0.01); leftArm.rotation.x = -0.68;
       rightArm.rotation.y = 0.04;
       leftArm.rotation.y = -0.08;
-      rightArm.rotation.z = 0.14;
-      leftArm.rotation.z = -0.20;
+      rightArm.rotation.z = 0.10;
+      leftArm.rotation.z = -0.14;
       group.add(rightArm, leftArm);
 
       const makePlayerLeg = (px) => {
@@ -6554,27 +6554,27 @@
           const idlePhase = performance.now() * 0.0025 + rp.walkPhase * 0.12;
           const idleBreath = Math.sin(idlePhase) * 0.06;
           const weaponStance = [
-            { l: -0.94, r: -1.02, ly: -0.18, ry: 0.12, lz: -0.34, rz: 0.24 },
-            { l: -0.98, r: -1.08, ly: -0.20, ry: 0.14, lz: -0.38, rz: 0.28 },
-            { l: -0.96, r: -1.06, ly: -0.19, ry: 0.13, lz: -0.36, rz: 0.26 },
-            { l: -0.97, r: -1.07, ly: -0.20, ry: 0.14, lz: -0.37, rz: 0.27 },
-            { l: -0.80, r: -0.90, ly: -0.14, ry: 0.10, lz: -0.26, rz: 0.20 },
-          ][rp.currentWeapon | 0] || { l: -0.98, r: -1.08, ly: -0.20, ry: 0.14, lz: -0.38, rz: 0.28 };
-          let targetLX = weaponStance.l + idleBreath + (moving ? wSin * 0.34 : 0);
-          let targetRX = weaponStance.r - idleBreath * 0.7 - (moving ? wSin * 0.30 : 0);
+            { l: -0.64, r: -0.74, ly: -0.14, ry: 0.10, lz: -0.18, rz: 0.14 },
+            { l: -0.70, r: -0.82, ly: -0.16, ry: 0.12, lz: -0.22, rz: 0.18 },
+            { l: -0.68, r: -0.80, ly: -0.15, ry: 0.11, lz: -0.20, rz: 0.16 },
+            { l: -0.69, r: -0.81, ly: -0.16, ry: 0.12, lz: -0.21, rz: 0.17 },
+            { l: -0.56, r: -0.66, ly: -0.12, ry: 0.08, lz: -0.15, rz: 0.12 },
+          ][rp.currentWeapon | 0] || { l: -0.70, r: -0.82, ly: -0.16, ry: 0.12, lz: -0.22, rz: 0.18 };
+          let targetLX = weaponStance.l + idleBreath + (moving ? wSin * 0.36 : 0);
+          let targetRX = weaponStance.r - idleBreath * 0.7 - (moving ? wSin * 0.32 : 0);
           let targetLY = weaponStance.ly;
           let targetRY = weaponStance.ry;
-          let targetLZ = weaponStance.lz + (moving ? Math.cos(rp.walkPhase) * 0.12 : idleBreath * 0.24);
-          let targetRZ = weaponStance.rz - (moving ? Math.cos(rp.walkPhase) * 0.12 : idleBreath * 0.20);
+          let targetLZ = weaponStance.lz + (moving ? Math.cos(rp.walkPhase) * 0.14 : idleBreath * 0.24);
+          let targetRZ = weaponStance.rz - (moving ? Math.cos(rp.walkPhase) * 0.14 : idleBreath * 0.20);
           if (rp.isReloading) {
             rp.reloadPhase = (rp.reloadPhase || 0) + dt * 6.5;
             const rSin = Math.sin(rp.reloadPhase);
-            targetRX = -0.28 + rSin * 0.74;
-            targetLX = -0.56 + Math.sin(rp.reloadPhase + 0.8) * 0.44;
-            targetRY = 0.42;
-            targetLY = -0.34;
-            targetRZ = 0.62;
-            targetLZ = -0.58;
+            targetRX = -0.18 + rSin * 0.78;
+            targetLX = -0.42 + Math.sin(rp.reloadPhase + 0.8) * 0.52;
+            targetRY = 0.36;
+            targetLY = -0.30;
+            targetRZ = 0.56;
+            targetLZ = -0.52;
             if (rp.gunModel) {
               rp.gunModel.rotation.z = dampScalar(rp.gunModel.rotation.z, 0.28 + rSin * 0.42, dt, 16);
               rp.gunModel.rotation.x = dampScalar(rp.gunModel.rotation.x, -0.10 + Math.cos(rp.reloadPhase * 1.35) * 0.16, dt, 14);
