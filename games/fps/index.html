@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
-  Source-of-truth deployment: https://tintly555.github.io/games/fps/
-  This copy in the chat repo is for editing; multiplayer hits chat.jimmyqrg.com via meta below when hosted on static Pages.
+  Same as game.html but does not point game-multiplayer-origin at chat.jimmyqrg.com.
+  Socket.IO and asset fallbacks use this page’s origin only (unless you set meta below).
   Crossfire mode is PVP (player vs player); Arena is PVE / co-op vs zombies.
 -->
 <html lang="en">
@@ -25,6 +25,18 @@
             var segs = String(path || "").replace(/\/+$/, "").split("/").filter(Boolean);
             return segs.length === 1 && segs[0].toLowerCase() === "game";
           }
+          /**
+           * Some hosts/proxies put game.html under .../html/ while assets remain one level up; treat that path as if it
+           * pointed to the parent directory so relative URLs do NOT produce …/html/walls.png 404s.
+           */
+          function stripHtmlSegment(path) {
+            var segs = String(path || "").replace(/\/+$/, "").split("/").filter(Boolean);
+            if (segs.length && segs[segs.length - 1].toLowerCase() === "html") {
+              segs.pop();
+              return "/" + segs.join("/") + (segs.length ? "/" : "");
+            }
+            return path;
+          }
           if (!p || p === "/") {
             return u.origin + "/";
           }
@@ -32,10 +44,13 @@
             return u.origin + "/";
           }
           if (p.endsWith("/")) {
-            return u.origin + p;
+            var stripped = stripHtmlSegment(p);
+            return u.origin + (stripped || "/");
           }
           var li = p.lastIndexOf("/");
-          return li >= 0 ? u.origin + p.slice(0, li + 1) : u.origin + "/";
+          var dirPath = li >= 0 ? p.slice(0, li + 1) : "/";
+          dirPath = stripHtmlSegment(dirPath) || "/";
+          return u.origin + dirPath;
         } catch (e1) {
           var schemeRest = page.indexOf("/", page.indexOf("//") + 2);
           var slash = page.lastIndexOf("/");
@@ -56,20 +71,37 @@
         if (cs && cs.nextSibling) document.head.insertBefore(b, cs.nextSibling);
         else document.head.appendChild(b);
       } catch (e) {}
+      try {
+        window.__gameComputeAssetBaseDir = computeAssetBaseDir;
+      } catch (eExp) {}
     })();
   </script>
-  <title>Abandoned Orphanage</title>
+  <title>Zone No Light</title>
   <!-- Only the script-injected <base> above should set the document base (folder of this HTML).
        A second fixed base (e.g. chat origin) breaks relative game-ui/ + walls.png when the page is not at site root or when assets live beside this file. -->
   <!-- Socket.IO / multiplayer API host only — do not use as primary CDN for game-ui / menu.mp3 (same-origin loads avoid 404 + Web Audio CORS). -->
-  <meta name="game-multiplayer-origin" content="https://chat.jimmyqrg.com" />
+  <meta name="game-multiplayer-origin" content="" />
   <!-- Optional absolute base for walls.png + game-ui/ when this HTML is embedded or hosted away from those files (empty = auto-detect). -->
   <meta name="game-asset-base" content="" />
   <!-- Where static files from public/ are mounted: empty = site root (e.g. Fly: /walls.png). GitHub Pages subpath: content="/games/fps" -->
   <meta name="game-static-prefix" content="" />
   <script>
     (function () {
+      function normRoot(u) {
+        if (!u) return "";
+        var s = String(u).trim();
+        return s.endsWith("/") ? s : s + "/";
+      }
       function deployedPublicRoot() {
+        try {
+          var ab = document.querySelector('meta[name="game-asset-base"]');
+          var abt = ab && ab.content != null ? String(ab.content).trim() : "";
+          if (abt) {
+            try {
+              return normRoot(new URL(abt, location.href).href);
+            } catch (eAb) {}
+          }
+        } catch (e0) {}
         try {
           var m = document.querySelector('meta[name="game-static-prefix"]');
           var pre = m && m.content != null ? String(m.content).trim() : "";
@@ -78,15 +110,20 @@
           if (pre) {
             return location.origin + pre + "/";
           }
-        } catch (e) {}
+        } catch (e1) {}
         try {
           if (typeof window.__GAME_ASSET_BASE_DIR__ === "string" && window.__GAME_ASSET_BASE_DIR__) {
             return window.__GAME_ASSET_BASE_DIR__;
           }
         } catch (e2) {}
         try {
+          if (typeof window.__gameComputeAssetBaseDir === "function") {
+            return window.__gameComputeAssetBaseDir(location.href);
+          }
+        } catch (e3) {}
+        try {
           return location.origin + "/";
-        } catch (e3) {
+        } catch (e4) {
           return "/";
         }
       }
@@ -98,28 +135,43 @@
         var el = document.documentElement;
         el.style.setProperty(
           "--game-ui-menu-bg",
-          'url("' + new URL("game-ui/game-ui-menu-background.png", R).href + '")'
+          'url("' + new URL("background.png", R).href + '")'
         );
         el.style.setProperty(
           "--game-ui-btn-texture",
-          'url("' + new URL("game-ui/game-ui-button-texture.png", R).href + '")'
+          'url("' + new URL("game-ui-button-texture.png", R).href + '")'
         );
         el.style.setProperty(
           "--game-ui-settings-bg",
-          'url("' + new URL("game-ui/game-ui-settings-panel-bg.png", R).href + '")'
+          'url("' + new URL("game-ui-settings-panel-bg.png", R).href + '")'
         );
       } catch (e1) {}
     })();
+  </script>
+  <!-- three/examples/jsm modules import the bare specifier "three"; import maps are required in the browser. -->
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.182.0/build/three.module.js"
+      }
+    }
   </script>
   <!-- Socket.IO from CDN so menu/game always initialize even when socket.io.min.js isn’t deployed beside this file. -->
   <script defer src="https://cdn.jsdelivr.net/npm/socket.io-client@4/dist/socket.io.min.js" crossorigin="anonymous"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Audiowide&display=swap" rel="stylesheet">
   <style>
+    /**
+     * Do not set --game-ui-* urls here: an earlier head script assigns absolute URLs from __GAME_ASSET_BASE_DIR__.
+     * Relative urls in :root would override those and break loading when <base href> or deploy path ≠ asset root.
+     */
     :root {
-      --game-ui-menu-bg: url("game-ui/game-ui-menu-background.png");
-      --game-ui-btn-texture: url("game-ui/game-ui-button-texture.png");
-      --game-ui-settings-bg: url("game-ui/game-ui-settings-panel-bg.png");
+      --game-ui-menu-bg: none;
+      --game-ui-btn-texture: none;
+      --game-ui-settings-bg: none;
+      /** Menu / UI overlays: arrow cursor PNG (64×42), hotspot at tip */
+      --game-ui-menu-pointer: url("mouse.png") 6 4, default;
+      --game-ui-menu-pointer-action: url("mouse.png") 6 4, pointer;
     }
 
     #app {
@@ -285,11 +337,6 @@
     .hitmarker.show {
       opacity: 1;
     }
-    .hitmarker.critical::before,
-    .hitmarker.critical::after {
-      background: rgba(255, 86, 86, 0.96);
-      box-shadow: 0 0 10px rgba(255, 86, 86, 0.72);
-    }
 
     .hitmarker::before,
     .hitmarker::after {
@@ -310,26 +357,6 @@
 
     .hitmarker::after {
       transform: translate(-50%, -50%) rotate(-45deg);
-    }
-
-    #combatFeedback {
-      position: fixed;
-      left: 50%;
-      top: calc(50% + 36px);
-      transform: translate(-50%, 0);
-      z-index: 29;
-      pointer-events: none;
-      font-family: "Audiowide", sans-serif;
-      font-size: 18px;
-      letter-spacing: 0.14em;
-      color: rgba(255, 255, 255, 0);
-      text-shadow: 0 0 10px rgba(0, 0, 0, 0.9);
-      transition: opacity 0.09s linear, transform 0.09s linear, color 0.09s linear;
-      opacity: 0;
-    }
-    #combatFeedback.show {
-      opacity: 1;
-      transform: translate(-50%, -7px);
     }
 
     /* Full-screen boot: map gen + asset preload before gameplay */
@@ -376,7 +403,7 @@
       pointer-events: none;
     }
 
-    /* In-game must hide menu backdrop canvas; otherwise it can cover #app and look like black/frozen screen. */
+    /* When in-game, the menu backdrop canvas must NOT cover #app — its last frame would otherwise sit on top of the game and look like a black screen until the user resizes. */
     body.in-game #menuWallBackdrop {
       display: none;
     }
@@ -393,7 +420,27 @@
       gap: 12px;
       box-sizing: border-box;
       padding: 28px 16px 22px;
-      background: transparent;
+      /** Painted PNG menu art lives here; --game-ui-menu-bg is set by JS once the file is found. */
+      background-color: #070504;
+      background-image: var(--game-ui-menu-bg);
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+      cursor: var(--game-ui-menu-pointer);
+    }
+
+    .menu button,
+    .menu h1,
+    .menu h2,
+    .menu p,
+    .menu .menu-panels-wrap {
+      cursor: var(--game-ui-menu-pointer-action);
+    }
+
+    .menu input[type="text"],
+    .menu input[type="search"],
+    .menu textarea {
+      cursor: text;
     }
 
     .menu h1 {
@@ -413,7 +460,7 @@
       padding: 14px 18px;
       font-size: 18px;
       border-radius: 10px;
-      cursor: pointer;
+      cursor: var(--game-ui-menu-pointer-action);
       font-weight: 600;
       font-family: 'Audiowide', sans-serif;
       text-transform: uppercase;
@@ -481,6 +528,31 @@
       align-items: center;
       background: rgba(0,0,0,0.72);
       backdrop-filter: blur(6px);
+      cursor: var(--game-ui-menu-pointer);
+    }
+
+    #settingsModal button,
+    #settingsModal .settings-tab,
+    #settingsModal .settings-close,
+    #settingsModal .cycle-arrow {
+      cursor: var(--game-ui-menu-pointer-action);
+    }
+
+    #settingsModal input[type="range"] {
+      cursor: ew-resize;
+    }
+
+    #nameModal {
+      cursor: var(--game-ui-menu-pointer);
+    }
+
+    #nameModal .overlay-btn,
+    #nameModal h2 {
+      cursor: var(--game-ui-menu-pointer-action);
+    }
+
+    #nameModal input[type="text"] {
+      cursor: text;
     }
 
     .settings-shell {
@@ -714,24 +786,33 @@
         return s.endsWith("/") ? s : s + "/";
       }
       try {
-        var dir =
-          typeof window.__GAME_ASSET_BASE_DIR__ === "string" && window.__GAME_ASSET_BASE_DIR__
-            ? window.__GAME_ASSET_BASE_DIR__
-            : (function () {
-                var page = String(location.href).split(/[#?]/)[0];
-                try {
-                  var u = new URL(page);
-                  var p = u.pathname || "/";
-                  if (!p || p === "/") return u.origin + "/";
-                  if (p.endsWith("/")) return u.origin + p;
-                  var li = p.lastIndexOf("/");
-                  return li >= 0 ? u.origin + p.slice(0, li + 1) : u.origin + "/";
-                } catch (e0) {
-                  var sr = page.indexOf("/", page.indexOf("//") + 2);
-                  var slash = page.lastIndexOf("/");
-                  return sr >= 0 && slash > sr ? page.slice(0, slash + 1) : page.endsWith("/") ? page : page + "/";
-                }
-              })();
+        var dir;
+        if (typeof window.__GAME_ASSET_BASE_DIR__ === "string" && window.__GAME_ASSET_BASE_DIR__) {
+          dir = window.__GAME_ASSET_BASE_DIR__;
+        } else if (typeof window.__gameComputeAssetBaseDir === "function") {
+          try {
+            dir = window.__gameComputeAssetBaseDir(location.href);
+          } catch (eC) {
+            dir = null;
+          }
+        }
+        if (!dir) {
+          dir = (function () {
+            var page = String(location.href).split(/[#?]/)[0];
+            try {
+              var u = new URL(page);
+              var p = u.pathname || "/";
+              if (!p || p === "/") return u.origin + "/";
+              if (p.endsWith("/")) return u.origin + p;
+              var li = p.lastIndexOf("/");
+              return li >= 0 ? u.origin + p.slice(0, li + 1) : u.origin + "/";
+            } catch (e0) {
+              var sr = page.indexOf("/", page.indexOf("//") + 2);
+              var slash = page.lastIndexOf("/");
+              return sr >= 0 && slash > sr ? page.slice(0, slash + 1) : page.endsWith("/") ? page : page + "/";
+            }
+          })();
+        }
         var bases = [];
         var meta = document.querySelector('meta[name="game-asset-base"]');
         var mb = meta && meta.content != null ? String(meta.content).trim() : "";
@@ -778,15 +859,15 @@
           var b = normBase(base);
           root.style.setProperty(
             "--game-ui-menu-bg",
-            'url("' + new URL("game-ui/game-ui-menu-background.png", b).href + '")'
+            'url("' + new URL("background.png", b).href + '")'
           );
           root.style.setProperty(
             "--game-ui-btn-texture",
-            'url("' + new URL("game-ui/game-ui-button-texture.png", b).href + '")'
+            'url("' + new URL("game-ui-button-texture.png", b).href + '")'
           );
           root.style.setProperty(
             "--game-ui-settings-bg",
-            'url("' + new URL("game-ui/game-ui-settings-panel-bg.png", b).href + '")'
+            'url("' + new URL("game-ui-settings-panel-bg.png", b).href + '")'
           );
         }
         function tryNext() {
@@ -798,7 +879,7 @@
           };
           img.onerror = tryNext;
           try {
-            img.src = new URL("game-ui/game-ui-menu-background.png", normBase(base)).href;
+            img.src = new URL("background.png", normBase(base)).href;
           } catch (e3) {
             tryNext();
           }
@@ -813,57 +894,49 @@
   <div id="menu" class="menu">
     <div class="menu-panels-wrap">
     <div id="menuMain" style="display:flex;flex-direction:column;align-items:center;gap:10px;">
-      <h1>Abandoned Orphanage</h1>
-      <p>by Tintly555 and JimmyQrg</p>
-      <button type="button" id="btnArena">Zombie Arena</button>
-      <button type="button" id="btnCrossfire">Crossfire (PVP - Select Map)</button>
-      <button type="button" id="btnMenuSettings">SETTINGS</button>
+      <h1 data-i18n="gameTitle">Zone No Light</h1>
+      <p data-i18n="creditsBy">by Tintly555 and JimmyQrg</p>
+      <button type="button" id="btnArena" data-i18n="btnZombieArena">Zombie Arena</button>
+      <button type="button" id="btnCrossfire" data-i18n="btnCrossfire">Crossfire (PVP)</button>
+      <button type="button" id="btnMenuSettings" data-i18n="btnSettings">SETTINGS</button>
     </div>
     <div id="menuArenaMode" style="display:none;flex-direction:column;align-items:center;gap:10px;">
-      <h2 style="font-family:'Audiowide',sans-serif;font-size:28px;margin:0 0 14px 0;letter-spacing:3px;">ZOMBIE ARENA</h2>
-      <button type="button" id="btnArenaSingle">SINGLEPLAYER</button>
-      <button type="button" id="btnArenaCoop">CO-OP MODE</button>
-      <button type="button" id="btnArenaBack">← BACK</button>
-    </div>
-    <div id="menuPvpMaps" style="display:none;flex-direction:column;align-items:center;gap:10px;">
-      <h2 style="font-family:'Audiowide',sans-serif;font-size:24px;margin:0 0 10px 0;letter-spacing:2px;">CROSSFIRE — MAP</h2>
-      <p style="font-family:'Audiowide',sans-serif;font-size:12px;opacity:0.78;margin:0 0 8px 0;max-width:300px;text-align:center;line-height:1.45;">Choose the PVP layout, then use Quick Play / Create / Join.</p>
-      <button type="button" id="btnPvpMapClassic">CLASSIC (ORIGINAL)</button>
-      <button type="button" id="btnPvpMapGrid">GRID KILLHOUSE</button>
-      <button type="button" id="btnPvpMapBack">← BACK</button>
+      <h2 style="font-family:'Audiowide',sans-serif;font-size:28px;margin:0 0 14px 0;letter-spacing:3px;" data-i18n="zombieArenaTitle">ZOMBIE ARENA</h2>
+      <button type="button" id="btnArenaSingle" data-i18n="btnSingleplayer">SINGLEPLAYER</button>
+      <button type="button" id="btnArenaCoop" data-i18n="btnCoopMode">CO-OP MODE</button>
+      <button type="button" id="btnArenaBack" data-i18n="btnBack">← BACK</button>
     </div>
     <div id="menuLobby" style="display:none;flex-direction:column;align-items:center;gap:10px;">
       <h2 id="lobbyTitle" style="font-family:'Audiowide',sans-serif;font-size:24px;margin:0 0 10px 0;letter-spacing:2px;">MULTIPLAYER</h2>
-      <button type="button" id="btnQuickplay">QUICK PLAY</button>
-      <button type="button" id="btnCreateRoom">CREATE A ROOM</button>
-      <button type="button" id="btnJoinCode">JOIN VIA CODE</button>
-      <button type="button" id="btnLobbyBack">← BACK</button>
+      <button type="button" id="btnQuickplay" data-i18n="btnQuickPlay">QUICK PLAY</button>
+      <button type="button" id="btnCreateRoom" data-i18n="btnCreateRoom">CREATE A ROOM</button>
+      <button type="button" id="btnJoinCode" data-i18n="btnJoinViaCode">JOIN VIA CODE</button>
+      <button type="button" id="btnLobbyBack" data-i18n="btnBack">← BACK</button>
     </div>
     <div id="menuJoinCode" style="display:none;flex-direction:column;align-items:center;gap:10px;">
-      <h2 style="font-family:'Audiowide',sans-serif;font-size:24px;margin:0 0 6px 0;letter-spacing:2px;">JOIN VIA CODE</h2>
-      <input id="codeInput" type="text" maxlength="10" placeholder="ROOM CODE" style="font-family:'Audiowide',sans-serif;width:180px;padding:10px 14px;font-size:18px;border:2px solid #4fd1ff;border-radius:8px;background:#0d111b;color:#fff;outline:none;text-align:center;text-transform:uppercase;letter-spacing:4px;">
+      <h2 style="font-family:'Audiowide',sans-serif;font-size:24px;margin:0 0 6px 0;letter-spacing:2px;" data-i18n="joinViaCodeTitle">JOIN VIA CODE</h2>
+      <input id="codeInput" type="text" maxlength="10" data-i18n-placeholder="roomCodePlaceholder" placeholder="ROOM CODE" style="font-family:'Audiowide',sans-serif;width:180px;padding:10px 14px;font-size:18px;border:2px solid #4fd1ff;border-radius:8px;background:#0d111b;color:#fff;outline:none;text-align:center;text-transform:uppercase;letter-spacing:4px;">
       <p id="codeError" style="font-family:'Audiowide',sans-serif;color:#e53e3e;font-size:13px;margin:4px 0 0 0;min-height:18px;"></p>
-      <button type="button" id="btnCodeJoin">JOIN</button>
-      <button type="button" id="btnCodeBack">← BACK</button>
+      <button type="button" id="btnCodeJoin" data-i18n="btnJoin">JOIN</button>
+      <button type="button" id="btnCodeBack" data-i18n="btnBack">← BACK</button>
     </div>
     </div>
   </div>
 
   <div id="app"></div>
   <div id="gameBootOverlay" aria-live="polite" aria-busy="true" style="display:none;">
-    <div class="game-boot-spinner" role="status" aria-label="Loading"></div>
-    <p id="gameBootLabel" class="game-boot-text">Loading world…</p>
+    <div class="game-boot-spinner" role="status" data-i18n-aria-label="ariaLoading" aria-label="Loading"></div>
+    <p id="gameBootLabel" class="game-boot-text" data-i18n="loadingWorld">Loading world…</p>
   </div>
   <div id="shadeOverlay" aria-hidden="true"></div>
   <div id="warFilmOverlay" aria-hidden="true"></div>
   <div class="hud" id="hud"></div>
   <div id="fpsOverlay" style="position:fixed;top:10px;right:14px;z-index:45;pointer-events:none;text-align:right;font-family:'Audiowide',sans-serif;font-size:13px;color:rgba(245,248,255,0.92);text-shadow:0 1px 5px rgba(0,0,0,0.85);line-height:1.4;">
     <div id="fpsValue">— FPS</div>
-    <div style="opacity:0.72;font-size:11px;margin-top:3px;letter-spacing:0.02em;">Press T to chat</div>
-    <div style="opacity:0.72;font-size:11px;margin-top:3px;letter-spacing:0.02em;">Press L to toggle light &amp; flashlight</div>
-    <div style="opacity:0.72;font-size:11px;margin-top:3px;letter-spacing:0.02em;">Press Z to zoom flashlight</div>
+    <div id="fpsChatHint" style="opacity:0.72;font-size:11px;margin-top:3px;letter-spacing:0.02em;" data-i18n="fpsChatHint">Press T to chat</div>
+    <div id="fpsLightHint" style="opacity:0.72;font-size:11px;margin-top:3px;letter-spacing:0.02em;" data-i18n="fpsLightHint">Press L to toggle light &amp; flashlight</div>
   </div>
-  <div class="hint" id="hint">Click anywhere</div>
+  <div class="hint" id="hint" data-i18n="hintClick">Click anywhere</div>
   <div class="flash" id="flash"></div>
   <div class="crosshair" id="crosshair"></div>
   <div id="medkitReticle" class="medkit-reticle hidden" aria-hidden="true">
@@ -886,113 +959,109 @@
         />
       </g>
     </svg>
-    <span class="medkit-hold-txt">HOLD</span>
+    <span class="medkit-hold-txt" data-i18n="medkitHold">HOLD</span>
   </div>
   <div class="hitmarker" id="hitmarker"></div>
-  <div id="combatFeedback"></div>
   <div id="deathOverlay" style="position:fixed;inset:0;z-index:50;pointer-events:none;display:none;">
     <div id="deathFade" style="position:absolute;inset:0;background:rgba(0,0,0,0);transition:none;"></div>
     <div id="deathUI" style="position:absolute;inset:0;display:none;flex-direction:column;justify-content:center;align-items:center;gap:14px;pointer-events:auto;">
-      <h1 id="deathTitle" style="font-family:'Audiowide',sans-serif;font-size:52px;margin:0 0 6px 0;color:#e53e3e;text-shadow:0 0 30px rgba(229,62,62,0.5);letter-spacing:4px;">DEFEAT</h1>
+      <h1 id="deathTitle" style="font-family:'Audiowide',sans-serif;font-size:52px;margin:0 0 6px 0;color:#e53e3e;text-shadow:0 0 30px rgba(229,62,62,0.5);letter-spacing:4px;" data-i18n="deathDefeat">DEFEAT</h1>
       <p id="deathScore" style="font-family:'Audiowide',sans-serif;font-size:16px;margin:0 0 18px 0;opacity:0.8;">Score: 0</p>
-      <button type="button" class="overlay-btn" id="btnDeathRestart">RESTART</button>
-      <button type="button" class="overlay-btn overlay-btn-accent" id="btnDeathSettings">SETTINGS</button>
-      <button type="button" class="overlay-btn" id="btnDeathQuit">QUIT</button>
+      <button type="button" class="overlay-btn" id="btnDeathRestart" data-i18n="btnRestart">RESTART</button>
+      <button type="button" class="overlay-btn overlay-btn-accent" id="btnDeathSettings" data-i18n="btnSettings">SETTINGS</button>
+      <button type="button" class="overlay-btn" id="btnDeathQuit" data-i18n="btnQuit">QUIT</button>
     </div>
   </div>
   <div id="pauseOverlay" style="position:fixed;inset:0;z-index:55;display:none;flex-direction:column;justify-content:center;align-items:center;gap:14px;background:rgba(0,0,0,0.5);">
-    <h1 style="font-family:'Audiowide',sans-serif;font-size:48px;margin:0 0 10px 0;color:#fff;letter-spacing:4px;">PAUSED</h1>
-    <button type="button" class="overlay-btn" id="btnResume">RESUME</button>
-    <button type="button" class="overlay-btn overlay-btn-accent" id="btnPauseSettings">SETTINGS</button>
-    <button type="button" class="overlay-btn" id="btnPauseRestart" style="display:none;">RESTART</button>
-    <button type="button" class="overlay-btn" id="btnPauseQuit">QUIT</button>
+    <h1 id="pauseTitle" style="font-family:'Audiowide',sans-serif;font-size:48px;margin:0 0 10px 0;color:#fff;letter-spacing:4px;" data-i18n="paused">PAUSED</h1>
+    <button type="button" class="overlay-btn" id="btnResume" data-i18n="btnResume">RESUME</button>
+    <button type="button" class="overlay-btn overlay-btn-accent" id="btnPauseSettings" data-i18n="btnSettings">SETTINGS</button>
+    <button type="button" class="overlay-btn" id="btnPauseRestart" style="display:none;" data-i18n="pauseRestart">RESTART</button>
+    <button type="button" class="overlay-btn" id="btnPauseQuit" data-i18n="pauseQuit">QUIT</button>
   </div>
   <div id="chatBox" style="position:fixed;bottom:10px;left:10px;z-index:40;pointer-events:none;font-family:'Audiowide',sans-serif;display:flex;flex-direction:column;justify-content:flex-end;">
     <div id="chatMessages" style="display:flex;flex-direction:column;gap:2px;margin-bottom:6px;overflow:hidden;"></div>
     <div id="chatInputWrap" style="display:none;pointer-events:auto;">
-      <input id="chatInput" type="text" maxlength="200" placeholder="Type a message..." style="font-family:'Audiowide',sans-serif;width:280px;padding:6px 10px;font-size:13px;border:1px solid rgba(79,209,255,0.5);border-radius:6px;background:rgba(13,17,27,0.8);color:#fff;outline:none;">
+      <input id="chatInput" type="text" maxlength="200" data-i18n-placeholder="chatPlaceholder" placeholder="Type a message..." style="font-family:'Audiowide',sans-serif;width:280px;padding:6px 10px;font-size:13px;border:1px solid rgba(79,209,255,0.5);border-radius:6px;background:rgba(13,17,27,0.8);color:#fff;outline:none;">
     </div>
   </div>
   <div id="hitDirContainer" style="position:fixed;inset:0;z-index:35;pointer-events:none;display:flex;justify-content:center;align-items:center;"></div>
   <div id="nameModal" style="position:fixed;inset:0;z-index:110;display:none;justify-content:center;align-items:center;background:rgba(0,0,0,0.7);">
     <div style="background:#1a2236;border-radius:14px;padding:32px 38px;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.5);">
-      <h2 style="font-family:'Audiowide',sans-serif;margin:0 0 16px 0;font-size:22px;">ENTER YOUR NAME</h2>
-      <input id="nameInput" type="text" maxlength="16" placeholder="Player" style="font-family:'Audiowide',sans-serif;width:200px;padding:10px 14px;font-size:16px;border:2px solid #4fd1ff;border-radius:8px;background:#0d111b;color:#fff;outline:none;text-align:center;">
+      <h2 style="font-family:'Audiowide',sans-serif;margin:0 0 16px 0;font-size:22px;" data-i18n="nameModalTitle">ENTER YOUR NAME</h2>
+      <input id="nameInput" type="text" maxlength="16" data-i18n-placeholder="namePlaceholder" placeholder="Player" style="font-family:'Audiowide',sans-serif;width:200px;padding:10px 14px;font-size:16px;border:2px solid #4fd1ff;border-radius:8px;background:#0d111b;color:#fff;outline:none;text-align:center;">
       <br>
-      <button class="overlay-btn" type="button" id="btnNameOk" style="margin-top:16px;">JOIN</button>
+      <button class="overlay-btn" type="button" id="btnNameOk" style="margin-top:16px;" data-i18n="btnNameJoin">JOIN</button>
     </div>
   </div>
 
   <div id="settingsModal">
     <div class="settings-shell">
       <aside class="settings-tabs">
-        <button type="button" class="settings-tab active" id="settingsTabAudio" data-scroll-target="settingsSectionAudio">AUDIO</button>
-        <button type="button" class="settings-tab" id="settingsTabGraphics" data-scroll-target="settingsSectionGraphics">GRAPHICS</button>
-        <button type="button" class="settings-tab" id="settingsTabLanguage" data-scroll-target="settingsSectionLanguage">LANGUAGE</button>
+        <button type="button" class="settings-tab active" data-scroll-target="settingsSectionAudio" data-i18n="settingsTabAudio">AUDIO</button>
+        <button type="button" class="settings-tab" data-scroll-target="settingsSectionGraphics" data-i18n="settingsTabGraphics">GRAPHICS</button>
+        <button type="button" class="settings-tab" data-scroll-target="settingsSectionLanguage" data-i18n="settingsTabLanguage">LANGUAGE</button>
       </aside>
       <div class="settings-modal-inner-wrap">
-        <button type="button" class="settings-close" id="btnCloseSettings" title="Close">×</button>
+        <button type="button" class="settings-close" id="btnCloseSettings" data-i18n-title="closeTitle" title="Close">×</button>
         <div class="settings-scroll" id="settingsScroll">
           <section class="settings-section" id="settingsSectionAudio">
-            <h2 id="settingsHeadingAudio">AUDIO</h2>
+            <h2 data-i18n="settingsAudioH">AUDIO</h2>
             <div class="settings-row">
-              <label>Master volume <span class="value-pill" id="lblMasterVol">100%</span></label>
+              <label><span data-i18n="masterVol">Master volume</span> <span class="value-pill" id="lblMasterVol">100%</span></label>
               <input type="range" id="rngMasterVol" min="0" max="100" value="100" />
             </div>
             <div class="settings-row">
-              <label>Music volume <span class="value-pill" id="lblMusicVol">35%</span></label>
-              <input type="range" id="rngMusicVol" min="0" max="100" value="35" />
+              <label><span data-i18n="musicVol">Music volume</span> <span class="value-pill" id="lblMusicVol">70%</span></label>
+              <input type="range" id="rngMusicVol" min="0" max="100" value="70" />
             </div>
             <div class="settings-row">
-              <label>Sound volume <span class="value-pill" id="lblSfxVol">100%</span></label>
+              <label><span data-i18n="sfxVol">Sound volume</span> <span class="value-pill" id="lblSfxVol">100%</span></label>
               <input type="range" id="rngSfxVol" min="0" max="100" value="100" />
             </div>
           </section>
           <section class="settings-section" id="settingsSectionGraphics">
-            <h2 id="settingsHeadingGraphics">GRAPHICS</h2>
+            <h2 data-i18n="settingsGraphicsH">GRAPHICS</h2>
             <div class="settings-row">
-              <label>Quality <span class="value-pill">performance / fidelity</span></label>
+              <label><span data-i18n="qualityHeader">Quality</span> <span class="value-pill" data-i18n="qualityPerfFidelity">performance / fidelity</span></label>
               <div class="settings-cycle">
-                <button type="button" class="cycle-arrow" id="btnQualityPrev" aria-label="Lower quality">◀</button>
+                <button type="button" class="cycle-arrow" id="btnQualityPrev" data-i18n-aria-label="ariaLowerQ" aria-label="Lower quality">◀</button>
                 <div class="cycle-value" id="qualityLabel">REGULAR</div>
-                <button type="button" class="cycle-arrow" id="btnQualityNext" aria-label="Higher quality">▶</button>
+                <button type="button" class="cycle-arrow" id="btnQualityNext" data-i18n-aria-label="ariaHigherQ" aria-label="Higher quality">▶</button>
               </div>
-              <p style="font-size:11px;opacity:0.65;margin-top:10px;max-width:480px;line-height:1.45;">
+              <p style="font-size:11px;opacity:0.65;margin-top:10px;max-width:480px;line-height:1.45;" data-i18n="qualityBlurb">
                 Does not change zombie sync or gameplay — rendering only. Brightness is matched across tiers so difficulty stays fair.
               </p>
             </div>
             <div class="settings-row">
-              <label>Texture detail</label>
+              <label data-i18n="textureDetail">Texture detail</label>
               <div class="settings-cycle">
-                <button type="button" class="cycle-arrow" id="btnTexturePrev" aria-label="Previous">◀</button>
+                <button type="button" class="cycle-arrow" id="btnTexturePrev" data-i18n-aria-label="ariaTexPrev" aria-label="Previous">◀</button>
                 <div class="cycle-value" id="textureLabel">ON</div>
-                <button type="button" class="cycle-arrow" id="btnTextureNext" aria-label="Next">▶</button>
+                <button type="button" class="cycle-arrow" id="btnTextureNext" data-i18n-aria-label="ariaTexNext" aria-label="Next">▶</button>
               </div>
             </div>
             <div class="settings-row">
-              <label>Render distance</label>
+              <label data-i18n="renderDistHeader">Render distance</label>
               <div class="settings-cycle">
-                <button type="button" class="cycle-arrow" id="btnRenderDistPrev" aria-label="Shorter render distance">◀</button>
+                <button type="button" class="cycle-arrow" id="btnRenderDistPrev" data-i18n-aria-label="ariaDistShorter" aria-label="Shorter render distance">◀</button>
                 <div class="cycle-value" id="renderDistanceLabel">NORMAL</div>
-                <button type="button" class="cycle-arrow" id="btnRenderDistNext" aria-label="Longer render distance">▶</button>
+                <button type="button" class="cycle-arrow" id="btnRenderDistNext" data-i18n-aria-label="ariaDistLonger" aria-label="Longer render distance">▶</button>
               </div>
-              <p style="font-size:11px;opacity:0.65;margin-top:10px;max-width:480px;line-height:1.45;">
+              <p style="font-size:11px;opacity:0.65;margin-top:10px;max-width:480px;line-height:1.45;" data-i18n="renderDistBlurb">
                 Beyond this distance the world fades into darkness (distance fog). Lights dim with the fog. Does not affect gameplay.
               </p>
             </div>
           </section>
           <section class="settings-section" id="settingsSectionLanguage">
-            <h2 id="settingsHeadingLanguage">LANGUAGE</h2>
+            <h2 data-i18n="settingsLanguageH">LANGUAGE</h2>
             <div class="settings-row">
-              <label id="languageLabel">Game language</label>
+              <label data-i18n="languagePickLabel">Language</label>
               <div class="settings-cycle">
-                <button type="button" class="cycle-arrow" id="btnLangPrev" aria-label="Previous language">◀</button>
-                <div class="cycle-value" id="languageValue">ENGLISH</div>
-                <button type="button" class="cycle-arrow" id="btnLangNext" aria-label="Next language">▶</button>
+                <button type="button" class="cycle-arrow" id="btnLangPrev" data-i18n-aria-label="ariaLangPrev" aria-label="Previous language">◀</button>
+                <div class="cycle-value" id="languageUiLabel">English</div>
+                <button type="button" class="cycle-arrow" id="btnLangNext" data-i18n-aria-label="ariaLangNext" aria-label="Next language">▶</button>
               </div>
-              <p id="languageHint" style="font-size:11px;opacity:0.65;margin-top:10px;max-width:480px;line-height:1.45;">
-                Switches menu and HUD labels immediately.
-              </p>
             </div>
           </section>
         </div>
@@ -1002,6 +1071,8 @@
 
   <script type="module">
     import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.182.0/build/three.module.js";
+    import { Reflector } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/objects/Reflector.js";
+    import { LANGUAGE_OPTIONS, GAME_I18N } from "translation.js";
 
     const app = document.getElementById("app");
     const hud = document.getElementById("hud");
@@ -1012,15 +1083,6 @@
     const medKitReticleEl = document.getElementById("medkitReticle");
     const medKitRingProgEl = document.getElementById("medkitRingProg");
     const hitmarkerEl = document.getElementById("hitmarker");
-    const combatFeedbackEl = (() => {
-      let el = document.getElementById("combatFeedback");
-      if (el) return el;
-      el = document.createElement("div");
-      el.id = "combatFeedback";
-      el.style.cssText = "position:fixed;left:50%;top:calc(50% + 36px);transform:translate(-50%, 0);z-index:29;pointer-events:none;font-family:'Audiowide',sans-serif;font-size:18px;letter-spacing:0.14em;color:rgba(255,255,255,0);text-shadow:0 0 10px rgba(0,0,0,0.9);opacity:0;transition:opacity 0.09s linear, transform 0.09s linear, color 0.09s linear;";
-      document.body.appendChild(el);
-      return el;
-    })();
     const menuWallBackdropCanvas = document.getElementById("menuWallBackdrop");
     const menuEl = document.getElementById("menu");
     const menuMain = document.getElementById("menuMain");
@@ -1028,10 +1090,6 @@
     const menuLobby = document.getElementById("menuLobby");
     const lobbyTitle = document.getElementById("lobbyTitle");
     const menuJoinCode = document.getElementById("menuJoinCode");
-    const menuPvpMaps = document.getElementById("menuPvpMaps");
-    const btnPvpMapClassic = document.getElementById("btnPvpMapClassic");
-    const btnPvpMapGrid = document.getElementById("btnPvpMapGrid");
-    const btnPvpMapBack = document.getElementById("btnPvpMapBack");
     const gameBootOverlay = document.getElementById("gameBootOverlay");
     const gameBootLabel = document.getElementById("gameBootLabel");
     const codeInput = document.getElementById("codeInput");
@@ -1082,11 +1140,9 @@
     const textureLabel = document.getElementById("textureLabel");
     const btnRenderDistPrev = document.getElementById("btnRenderDistPrev");
     const btnRenderDistNext = document.getElementById("btnRenderDistNext");
-    const renderDistanceLabel = document.getElementById("renderDistanceLabel");
     const btnLangPrev = document.getElementById("btnLangPrev");
     const btnLangNext = document.getElementById("btnLangNext");
-    const languageValue = document.getElementById("languageValue");
-    const warFilmOverlay = document.getElementById("warFilmOverlay");
+    const languageUiLabel = document.getElementById("languageUiLabel");
     const shadeOverlay = document.getElementById("shadeOverlay");
     const chatBox = document.getElementById("chatBox");
     const chatMessages = document.getElementById("chatMessages");
@@ -1096,35 +1152,6 @@
 
     const SETTINGS_STORAGE_KEY = "fpsGameSettingsV1";
     const QUALITY_LEVELS = ["potato", "regular", "high", "extreme"];
-    const QUALITY_LABELS = ["POTATO", "REGULAR", "HIGH", "EXTREME"];
-    const LANGUAGE_OPTIONS = ["en", "zh"];
-    const LANGUAGE_LABELS = { en: "ENGLISH", zh: "简体中文" };
-    const I18N = {
-      en: {
-        menuSettings: "SETTINGS",
-        pvpMapDesc: "Choose the PVP layout, then use Quick Play / Create / Join.",
-        pvpMapClassic: "CLASSIC (ORIGINAL)",
-        pvpMapGrid: "GRID KILLHOUSE",
-        pvpMapBack: "← BACK",
-        hudHelpLight: "Press L to toggle light & flashlight",
-        hudHelpZoom: "Press Z to zoom flashlight",
-        settingsLangTitle: "LANGUAGE",
-        settingsLangLabel: "Game language",
-        settingsLangHint: "Switches menu and HUD labels immediately.",
-      },
-      zh: {
-        menuSettings: "设置",
-        pvpMapDesc: "选择 PVP 地图后，再进行快速匹配/创建/加入。",
-        pvpMapClassic: "经典地图（原版）",
-        pvpMapGrid: "新单挑地图（亮）",
-        pvpMapBack: "← 返回",
-        hudHelpLight: "按 L 开关灯光与手电",
-        hudHelpZoom: "按 Z 调整手电变焦",
-        settingsLangTitle: "语言",
-        settingsLangLabel: "游戏语言",
-        settingsLangHint: "菜单与 HUD 文案会立即切换。",
-      }
-    };
     /** Scales fog far plane (and matching near) — lower = darkness closes in sooner. */
     const RENDER_DISTANCE_LEVELS = [
       { label: "SHORT", scale: 0.62 },
@@ -1162,9 +1189,8 @@
             RENDER_DISTANCE_LEVELS.length - 1
           );
         }
-        if (typeof o.language === "string" && LANGUAGE_OPTIONS.includes(o.language)) {
-          gameSettings.language = o.language;
-        }
+        const allowedLang = new Set(LANGUAGE_OPTIONS.map((x) => x.code));
+        if (typeof o.language === "string" && allowedLang.has(o.language)) gameSettings.language = o.language;
       } catch (_) {}
     }
 
@@ -1176,38 +1202,402 @@
 
     loadGameSettings();
 
-    function tr(key, fallback = "") {
-      const lang = LANGUAGE_OPTIONS.includes(gameSettings.language) ? gameSettings.language : "en";
-      const dict = I18N[lang] || I18N.en;
-      return dict[key] || I18N.en[key] || fallback;
+    function t(key) {
+      const lang = gameSettings.language || "en";
+      const pack = GAME_I18N[lang] || GAME_I18N.en;
+      const v = pack[key];
+      if (v != null && v !== "") return v;
+      return GAME_I18N.en[key] ?? key;
     }
 
-    function applyLanguageUI() {
-      const menuSettingsBtn = document.getElementById("btnMenuSettings");
-      const pvpDesc = document.querySelector("#menuPvpMaps p");
-      if (menuSettingsBtn) menuSettingsBtn.textContent = tr("menuSettings", "SETTINGS");
-      if (pvpDesc) pvpDesc.textContent = tr("pvpMapDesc", pvpDesc.textContent);
-      if (btnPvpMapClassic) btnPvpMapClassic.textContent = tr("pvpMapClassic", btnPvpMapClassic.textContent);
-      if (btnPvpMapGrid) btnPvpMapGrid.textContent = tr("pvpMapGrid", btnPvpMapGrid.textContent);
-      if (btnPvpMapBack) btnPvpMapBack.textContent = tr("pvpMapBack", btnPvpMapBack.textContent);
-      const fpsOverlay = document.getElementById("fpsOverlay");
-      const fpsHelpRows = fpsOverlay?.querySelectorAll("div");
-      if (fpsHelpRows && fpsHelpRows[2]) fpsHelpRows[2].textContent = tr("hudHelpLight", fpsHelpRows[2].textContent);
-      if (fpsHelpRows && fpsHelpRows[3]) fpsHelpRows[3].textContent = tr("hudHelpZoom", fpsHelpRows[3].textContent);
-      const hLang = document.getElementById("settingsHeadingLanguage");
-      const lLang = document.getElementById("languageLabel");
-      const pLang = document.getElementById("languageHint");
-      if (hLang) hLang.textContent = tr("settingsLangTitle", hLang.textContent);
-      if (lLang) lLang.textContent = tr("settingsLangLabel", lLang.textContent);
-      if (pLang) pLang.textContent = tr("settingsLangHint", pLang.textContent);
+    function languageIndexFromSettings() {
+      const code = gameSettings.language || "en";
+      const i = LANGUAGE_OPTIONS.findIndex((o) => o.code === code);
+      return i >= 0 ? i : 0;
     }
+
+    function applyGameLanguage() {
+      const lang = gameSettings.language || "en";
+      document.documentElement.lang = lang;
+      document.documentElement.dir = lang === "ar" ? "rtl" : "ltr";
+      try {
+        document.title = t("gameTitle");
+      } catch (_) {}
+
+      document.querySelectorAll("[data-i18n]").forEach((el) => {
+        const k = el.getAttribute("data-i18n");
+        if (k) el.textContent = t(k);
+      });
+      document.querySelectorAll("[data-i18n-placeholder]").forEach((el) => {
+        const k = el.getAttribute("data-i18n-placeholder");
+        if (k && el instanceof HTMLInputElement) el.placeholder = t(k);
+      });
+      document.querySelectorAll("[data-i18n-title]").forEach((el) => {
+        const k = el.getAttribute("data-i18n-title");
+        if (k) el.title = t(k);
+      });
+      document.querySelectorAll("[data-i18n-aria-label]").forEach((el) => {
+        const k = el.getAttribute("data-i18n-aria-label");
+        if (k) el.setAttribute("aria-label", t(k));
+      });
+
+      syncSettingsUI();
+      updateHud();
+      refreshOverlayTexts();
+    }
+
+    /** Resolve static assets (walls, game-ui, menu.mp3). Declared before WebGL so menu BGM still loads if the renderer throws. */
+    function pageDirFromLocation() {
+      try {
+        if (typeof window.__GAME_ASSET_BASE_DIR__ === "string" && window.__GAME_ASSET_BASE_DIR__) {
+          return window.__GAME_ASSET_BASE_DIR__;
+        }
+      } catch (_) {}
+      const page = String(window.location.href).split(/[#?]/)[0];
+      try {
+        const u = new URL(page);
+        const p = u.pathname || "/";
+        const segs0 = p.replace(/\/+$/, "").split("/").filter(Boolean);
+        const bareGame = segs0.length === 1 && segs0[0].toLowerCase() === "game";
+        if (!p || p === "/") {
+          return u.origin + "/";
+        }
+        if (bareGame) {
+          return u.origin + "/";
+        }
+        if (p.endsWith("/")) {
+          return u.origin + p;
+        }
+        const li = p.lastIndexOf("/");
+        return li >= 0 ? u.origin + p.slice(0, li + 1) : u.origin + "/";
+      } catch (_) {
+        const schemeRest = page.indexOf("/", page.indexOf("//") + 2);
+        const slash = page.lastIndexOf("/");
+        if (schemeRest >= 0 && slash > schemeRest) {
+          return page.slice(0, slash + 1);
+        }
+        return page.endsWith("/") ? page : page + "/";
+      }
+    }
+
+    function normalizeGameAssetBase(b) {
+      if (!b) return "";
+      const s = String(b).trim();
+      return s.endsWith("/") ? s : s + "/";
+    }
+
+    function getDeployedPublicRootHref() {
+      try {
+        if (typeof window.__GAME_STATIC_ROOT__ === "string" && window.__GAME_STATIC_ROOT__) {
+          return window.__GAME_STATIC_ROOT__;
+        }
+      } catch (_) {}
+      try {
+        const meta = document.querySelector('meta[name="game-static-prefix"]');
+        let pre = meta && meta.content != null ? String(meta.content).trim() : "";
+        if (pre && !pre.startsWith("/")) pre = "/" + pre;
+        pre = pre.replace(/\/+$/, "");
+        if (pre) {
+          return window.location.origin + pre + "/";
+        }
+      } catch (_) {}
+      try {
+        if (typeof window.__GAME_ASSET_BASE_DIR__ === "string" && window.__GAME_ASSET_BASE_DIR__) {
+          return window.__GAME_ASSET_BASE_DIR__;
+        }
+      } catch (_) {}
+      try {
+        return window.location.origin + "/";
+      } catch (_) {
+        return "/";
+      }
+    }
+
+    function getGameAssetBaseCandidates() {
+      const explicit = [];
+      const meta = document.querySelector('meta[name="game-asset-base"]');
+      const raw = meta && meta.content != null ? String(meta.content).trim() : "";
+      if (raw) explicit.push(normalizeGameAssetBase(raw));
+
+      const dir = pageDirFromLocation();
+      let parent = null;
+      let grandparent = null;
+      try {
+        parent = new URL("../", dir).href;
+        grandparent = new URL("../../", dir).href;
+      } catch (_) {}
+
+      let lastSeg = "";
+      try {
+        const segs = new URL(dir).pathname.replace(/\/+$/, "").split("/").filter(Boolean);
+        lastSeg = (segs[segs.length - 1] || "").toLowerCase();
+      } catch (_) {}
+
+      const pageOrder = [];
+      if (lastSeg === "html") {
+        if (parent) pageOrder.push(parent);
+        if (grandparent) pageOrder.push(grandparent);
+        pageOrder.push(dir);
+      } else {
+        pageOrder.push(dir);
+        if (parent) pageOrder.push(parent);
+        if (grandparent) pageOrder.push(grandparent);
+      }
+
+      let here = "";
+      try {
+        here = window.location.origin;
+      } catch (_) {}
+
+      const nearOrigin = [];
+      const farOrigin = [];
+      for (const b of pageOrder) {
+        try {
+          if (here && new URL(b).origin === here) nearOrigin.push(b);
+          else farOrigin.push(b);
+        } catch (_) {
+          farOrigin.push(b);
+        }
+      }
+
+      const remoteFallbacks = [];
+      const mpMeta = document.querySelector('meta[name="game-multiplayer-origin"]');
+      const mpRaw = mpMeta && mpMeta.content != null ? String(mpMeta.content).trim() : "";
+      if (mpRaw) {
+        try {
+          remoteFallbacks.push(new URL("/", mpRaw).href);
+        } catch (_) {}
+      }
+      remoteFallbacks.push("https://tintly555.github.io/games/fps/");
+
+      const merged = [
+        ...explicit,
+        dir,
+        getDeployedPublicRootHref(),
+        ...nearOrigin,
+        ...farOrigin,
+        ...remoteFallbacks,
+      ];
+      return [...new Set(merged)];
+    }
+
+    let menuBgmAnalyser = null;
+    let menuBgmMenuGain = null;
+    let menuBgmMediaSrc = null;
+    let menuBgmTimeBuf = null;
+    let menuBgmPeakSessionMax = 1e-6;
+
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const audioMaster = audioCtx.createGain();
+    const audioSfx = audioCtx.createGain();
+    const audioMusic = audioCtx.createGain();
+    audioSfx.connect(audioMaster);
+    audioMusic.connect(audioMaster);
+    audioMaster.connect(audioCtx.destination);
+
+    let menuBgmAudio = null;
+    let menuBgmUnlocked = false;
+
+    function applyAudioVolumes() {
+      audioMaster.gain.value = gameSettings.masterVolume;
+      audioSfx.gain.value = gameSettings.soundVolume;
+      audioMusic.gain.value = gameSettings.musicVolume;
+      if (menuBgmAudio) {
+        if (_menuBgmGapTimer != null) {
+          menuBgmAudio.volume = 0;
+        } else if (typeof _menuBgmHandleTimeUpdate === "function") {
+          _menuBgmHandleTimeUpdate();
+        } else {
+          menuBgmAudio.volume = THREE.MathUtils.clamp(
+            gameSettings.masterVolume * gameSettings.musicVolume,
+            0,
+            1
+          );
+        }
+      }
+    }
+    applyAudioVolumes();
+
+    function wireMenuBgmThroughAnalyser() {
+      if (!menuBgmAudio || menuBgmMediaSrc) return;
+      try {
+        menuBgmMediaSrc = audioCtx.createMediaElementSource(menuBgmAudio);
+        menuBgmAnalyser = audioCtx.createAnalyser();
+        menuBgmAnalyser.fftSize = 2048;
+        menuBgmAnalyser.smoothingTimeConstant = 0.42;
+        menuBgmMenuGain = audioCtx.createGain();
+        menuBgmMediaSrc.connect(menuBgmAnalyser);
+        menuBgmAnalyser.connect(menuBgmMenuGain);
+        menuBgmMenuGain.connect(audioMaster);
+        menuBgmTimeBuf = new Uint8Array(menuBgmAnalyser.fftSize);
+        menuBgmAudio.volume = 0;
+        applyAudioVolumes();
+      } catch (err) {
+        menuBgmMediaSrc = null;
+        menuBgmAnalyser = null;
+        menuBgmMenuGain = null;
+        menuBgmTimeBuf = null;
+      }
+    }
+
+    /** menu.mp3: same-origin first (real file); do not use game-multiplayer-origin — that host often serves SPA HTML for /menu.mp3. */
+    function getMenuBgmUrlList() {
+      const urls = [];
+      const push = (href) => {
+        try {
+          if (href) urls.push(typeof href === "string" ? href : new URL(href).href);
+        } catch (_) {}
+      };
+      try {
+        push(new URL("menu.mp3", window.location.origin + "/").href);
+      } catch (_) {}
+      for (const base of getGameAssetBaseCandidates()) {
+        try {
+          push(new URL("menu.mp3", normalizeGameAssetBase(base)).href);
+        } catch (_) {}
+      }
+      try {
+        push(new URL("menu.mp3", pageDirFromLocation()).href);
+      } catch (_) {}
+      push("https://tintly555.github.io/games/fps/menu.mp3");
+      return [...new Set(urls)];
+    }
+
+    let _menuBgmFallbackIdx = 0;
+    let _menuBgmCandidates = null;
+    function _menuBgmTrySrc(idx) {
+      if (!_menuBgmCandidates || idx >= _menuBgmCandidates.length) return;
+      const url = _menuBgmCandidates[idx];
+      try {
+        const u = new URL(url, window.location.href);
+        if (u.origin === window.location.origin) {
+          menuBgmAudio.removeAttribute("crossOrigin");
+        } else {
+          menuBgmAudio.crossOrigin = "anonymous";
+        }
+      } catch (_) {
+        try {
+          menuBgmAudio.removeAttribute("crossOrigin");
+        } catch (__) {}
+      }
+      menuBgmAudio.src = url;
+      try {
+        menuBgmAudio.load();
+      } catch (_) {}
+    }
+
+    const MENU_BGM_FADE_SECS = 8;
+    const MENU_BGM_GAP_SECS = 2;
+    let _menuBgmGapTimer = null;
+    function _menuBgmTargetVolume() {
+      return THREE.MathUtils.clamp(gameSettings.masterVolume * gameSettings.musicVolume, 0, 1);
+    }
+    function _menuBgmClearGapTimer() {
+      if (_menuBgmGapTimer != null) {
+        clearTimeout(_menuBgmGapTimer);
+        _menuBgmGapTimer = null;
+      }
+    }
+    function _menuBgmHandleTimeUpdate() {
+      if (!menuBgmAudio) return;
+      const dur = Number(menuBgmAudio.duration);
+      if (!Number.isFinite(dur) || dur <= MENU_BGM_FADE_SECS) {
+        menuBgmAudio.volume = _menuBgmTargetVolume();
+        return;
+      }
+      const remaining = dur - menuBgmAudio.currentTime;
+      const target = _menuBgmTargetVolume();
+      if (remaining <= MENU_BGM_FADE_SECS) {
+        const k = Math.max(0, Math.min(1, remaining / MENU_BGM_FADE_SECS));
+        menuBgmAudio.volume = target * k;
+      } else {
+        menuBgmAudio.volume = target;
+      }
+    }
+    function _menuBgmHandleEnded() {
+      if (!menuBgmAudio) return;
+      _menuBgmClearGapTimer();
+      menuBgmAudio.volume = 0;
+      _menuBgmGapTimer = setTimeout(() => {
+        _menuBgmGapTimer = null;
+        if (!menuBgmAudio) return;
+        if (!menuBgmUnlocked) return;
+        if (menuEl.style.display === "none") return;
+        try {
+          menuBgmAudio.currentTime = 0;
+        } catch (_) {}
+        menuBgmAudio.volume = _menuBgmTargetVolume();
+        const p = menuBgmAudio.play();
+        if (p && typeof p.catch === "function") p.catch(() => {});
+      }, MENU_BGM_GAP_SECS * 1000);
+    }
+    function ensureMenuBgmAudio() {
+      if (menuBgmAudio) return;
+      _menuBgmCandidates = getMenuBgmUrlList();
+      _menuBgmFallbackIdx = 0;
+      menuBgmAudio = new Audio();
+      menuBgmAudio.loop = false;
+      menuBgmAudio.preload = "auto";
+      menuBgmAudio.volume = _menuBgmTargetVolume();
+      menuBgmAudio.addEventListener("error", () => {
+        _menuBgmFallbackIdx++;
+        if (_menuBgmFallbackIdx < _menuBgmCandidates.length) {
+          _menuBgmTrySrc(_menuBgmFallbackIdx);
+          if (menuBgmUnlocked && menuEl.style.display !== "none") {
+            const p = menuBgmAudio.play();
+            if (p && typeof p.catch === "function") p.catch(() => {});
+          }
+        } else {
+          const code = menuBgmAudio.error ? menuBgmAudio.error.code : "";
+          console.warn("[menu bgm] all sources failed", _menuBgmCandidates, "lastMediaError", code);
+        }
+      });
+      menuBgmAudio.addEventListener("canplay", () => {
+        if (menuBgmUnlocked && menuEl.style.display !== "none") {
+          const p = menuBgmAudio.play();
+          if (p && typeof p.catch === "function") p.catch(() => {});
+        }
+      });
+      menuBgmAudio.addEventListener("timeupdate", _menuBgmHandleTimeUpdate);
+      menuBgmAudio.addEventListener("ended", _menuBgmHandleEnded);
+      _menuBgmTrySrc(0);
+    }
+    function pauseMenuBgm() {
+      if (!menuBgmAudio) return;
+      _menuBgmClearGapTimer();
+      try {
+        menuBgmAudio.pause();
+      } catch (_) {}
+    }
+    function tryPlayMenuBgm() {
+      if (menuEl.style.display === "none") return;
+      if (!menuBgmUnlocked) return;
+      ensureMenuBgmAudio();
+      if (_menuBgmGapTimer != null) return;
+      _menuBgmHandleTimeUpdate();
+      const p = menuBgmAudio.play();
+      if (p && typeof p.catch === "function") {
+        p.catch((err) => {
+          console.warn("[menu bgm] play() rejected", err && err.message);
+        });
+      }
+    }
+    function onMenuBgmUserGesture() {
+      menuBgmUnlocked = true;
+      void (async () => {
+        try {
+          if (audioCtx.state === "suspended") {
+            await audioCtx.resume();
+          }
+        } catch (_) {}
+        tryPlayMenuBgm();
+      })();
+    }
+    ["pointerdown", "keydown", "touchstart"].forEach((ev) => {
+      window.addEventListener(ev, onMenuBgmUserGesture, { capture: true });
+    });
 
     let CURRENT_MAP = "arena";
-    /** Set from PVP map picker; used when `pendingLobbyMode === "crossfire"`. */
-    let PENDING_PVP_MAP = "crossfire";
-    function isPvpCrossfireMap(m) {
-      return m === "crossfire" || m === "crossfire_grid";
-    }
     let MULTIPLAYER = false;
     /** True only for Zombie Arena played via ARENA CO-OP lobby (no damage vs other players). */
     let ARENA_COOP = false;
@@ -1241,6 +1631,8 @@
     let _renderTick = 0;
     let _fpsFrames = 0;
     let _fpsTimeAccum = 0;
+    /** Must exist before `applyGraphicsQuality()` (called early); maze culling uses this budget. */
+    let MAX_MAZE_LIGHTS_ACTIVE = 40;
     function tickFpsMeter(dt) {
       _fpsFrames++;
       _fpsTimeAccum += dt;
@@ -1264,28 +1656,85 @@
 
     const FLASH_INNER_INTENSITY = 150;
     const FLASH_INNER_DISTANCE = 100;
-    const FLASH_INNER_ANGLE = Math.PI / 16;
-    const FLASH_INNER_PEN = 0.08;
-    const FLASHLIGHT_ZOOM_LEVELS = [
-      { name: "WIDE", outerIntensity: 24, outerDistance: 350, outerAngle: Math.PI / 5.2, innerIntensity: 115, innerDistance: 95, innerAngle: Math.PI / 12.8 },
-      { name: "NORMAL", outerIntensity: FLASH_OUTER_INTENSITY, outerDistance: FLASH_OUTER_DISTANCE, outerAngle: FLASH_OUTER_ANGLE, innerIntensity: FLASH_INNER_INTENSITY, innerDistance: FLASH_INNER_DISTANCE, innerAngle: FLASH_INNER_ANGLE },
-      { name: "FOCUS", outerIntensity: 19, outerDistance: 390, outerAngle: Math.PI / 10, innerIntensity: 210, innerDistance: 145, innerAngle: Math.PI / 23 },
-    ];
+    const FLASH_INNER_ANGLE = Math.PI / 28;
+    const FLASH_INNER_PEN = 0.055;
 
     /**
      * Punctual lights only (Point / Spot). Hemisphere & directional lights have no decay in Three.js.
      * https://threejs.org/docs/#api/en/lights/PointLight
      * https://threejs.org/docs/#api/en/lights/SpotLight
+     *
+     * Environment lights (sconces, ceiling lamps, area panels) are tracked in a registry so
+     * `retuneEnvironmentLights()` can rescale intensity / range / decay / shadow softness when the
+     * graphics quality changes — this is what makes the shade dissolve smoothly at distance on high tiers.
      */
     const ENVIRONMENT_LIGHT_DECAY = 3;
     const PLAYER_BODY_LIGHT_DECAY = 3;
     const FLASHLIGHT_LIGHT_DECAY = 0.1;
 
+    const environmentLights = [];
+
+    function trackEnvLight(L, baseIntensity, baseDistance, baseDecay) {
+      L.userData = L.userData || {};
+      L.userData.envLight = true;
+      L.userData.baseIntensity = baseIntensity;
+      L.userData.baseDistance = baseDistance;
+      L.userData.baseDecay = baseDecay;
+      environmentLights.push(L);
+      tuneEnvLight(L);
+      return L;
+    }
+
+    /** Apply the current quality profile to a single environment light (intensity / range / decay / soft shadow). */
+    function tuneEnvLight(L) {
+      if (!L || !L.userData || !L.userData.envLight) return;
+      const lp = getQualityLightProfile();
+      L.intensity = L.userData.baseIntensity * lp.intensityScale;
+      L.distance = L.userData.baseDistance * lp.rangeScale;
+      L.decay = L.userData.baseDecay * lp.decayBoost;
+      if (L.isSpotLight && lp.punctualShadows && !L.userData._punctualShadowSetUp) {
+        L.castShadow = true;
+        L.shadow.mapSize.set(512, 512);
+        L.shadow.bias = -0.0008;
+        L.shadow.normalBias = 0.012;
+        L.shadow.radius = lp.shadowRadius;
+        try { L.shadow.blurSamples = lp.shadowBlurSamples; } catch (_) {}
+        L.userData._punctualShadowSetUp = true;
+      }
+      if (L.castShadow && L.shadow) {
+        L.shadow.radius = lp.shadowRadius;
+        try { L.shadow.blurSamples = lp.shadowBlurSamples; } catch (_) {}
+      }
+    }
+
+    function retuneEnvironmentLights() {
+      for (let i = 0; i < environmentLights.length; i++) {
+        tuneEnvLight(environmentLights[i]);
+      }
+    }
+
+    /**
+     * Forward-assignable hooks. The real implementations are defined later, after their dependencies exist.
+     * Using assignable refs (instead of function declarations) avoids redefinition issues caused by hoisting.
+     */
+    let retuneZombieEyeLights = () => {};
+    let applyPuddlesForQuality = () => {};
+
     function createPhysicalPointLight(color, intensity, distance, decay = ENVIRONMENT_LIGHT_DECAY) {
-      return new THREE.PointLight(color, intensity, distance, decay);
+      const L = new THREE.PointLight(color, intensity, distance, decay);
+      return trackEnvLight(L, intensity, distance, decay);
     }
 
     function createPhysicalSpotLight(color, intensity, distance, angle, penumbra, decay = ENVIRONMENT_LIGHT_DECAY) {
+      const L = new THREE.SpotLight(color, intensity, distance, angle, penumbra, decay);
+      return trackEnvLight(L, intensity, distance, decay);
+    }
+
+    /** Player flashlight / body halo: NOT scaled by tier — it's local to the camera and already tuned. */
+    function createPlayerPointLight(color, intensity, distance, decay) {
+      return new THREE.PointLight(color, intensity, distance, decay);
+    }
+    function createPlayerSpotLight(color, intensity, distance, angle, penumbra, decay) {
       return new THREE.SpotLight(color, intensity, distance, angle, penumbra, decay);
     }
 
@@ -1376,11 +1825,10 @@
       if (data.weapon != null && data.weapon !== rp.currentWeapon) {
         rp.rightArm.remove(rp.gunModel);
         rp.gunModel = makeThirdPersonGun(data.weapon);
+        rp.gunModel.position.set(0.15, -0.42, -0.28);
         rp.rightArm.add(rp.gunModel);
         rp.currentWeapon = data.weapon;
-        applyRemoteWeaponMount(rp);
       }
-      rp.isReloading = !!data.reloading;
       rp.group.visible = true;
     });
 
@@ -1395,30 +1843,8 @@
     socket.on("enemyShoot", (data) => {
       if (data.sx != null && data.sy != null && data.sz != null
           && data.x != null && data.y != null && data.z != null) {
-        const start = new THREE.Vector3(data.sx, data.sy, data.sz);
-        let rp = null;
-        if (data.id && remotePlayers.has(data.id)) {
-          rp = remotePlayers.get(data.id);
-        } else {
-          // Fallback when packet omits shooter id: snap to nearest remote avatar.
-          let best = null;
-          let bestD2 = Infinity;
-          for (const cand of remotePlayers.values()) {
-            const dx = (cand.x || 0) - start.x;
-            const dz = (cand.z || 0) - start.z;
-            const d2 = dx * dx + dz * dz;
-            if (d2 < bestD2) {
-              bestD2 = d2;
-              best = cand;
-            }
-          }
-          if (best && bestD2 < 9) rp = best;
-        }
-        if (rp) {
-          getRemoteGunMuzzleWorld(rp, start);
-        }
         createBulletTrail(
-          start,
+          new THREE.Vector3(data.sx, data.sy, data.sz),
           new THREE.Vector3(data.x, data.y, data.z),
           data.color ?? 0xffffff
         );
@@ -1473,7 +1899,7 @@
     });
 
     socket.on("damaged", (data) => {
-      if (!gameWorldReady) return;
+      if (!gameWorldReady || menuEl.style.display !== "none") return;
       if (player.health <= 0) return;
       player.health = Math.max(0, player.health - (data.damage || 0));
       player.regenTimer = 0;
@@ -1492,12 +1918,28 @@
     });
 
     socket.on("zombieSync", (data) => {
+      if (!gameWorldReady) return;
       if (!MULTIPLAYER || !ARENA_COOP || CURRENT_MAP !== "arena") return;
       if (ZOMBIE_AUTHORITY) return;
       applyZombieSyncPayload(data);
     });
 
+    socket.on("zombieShotTrail", (data) => {
+      if (!data) return;
+      if (!MULTIPLAYER || !ARENA_COOP || CURRENT_MAP !== "arena") return;
+      if (ZOMBIE_AUTHORITY) return;
+      const sx = +data.sx;
+      const sy = +data.sy;
+      const sz = +data.sz;
+      const x = +data.x;
+      const y = +data.y;
+      const z = +data.z;
+      if (![sx, sy, sz, x, y, z].every((n) => Number.isFinite(n))) return;
+      createZombieGunnerBulletTrail(new THREE.Vector3(sx, sy, sz), new THREE.Vector3(x, y, z));
+    });
+
     socket.on("zombieDamaged", (data) => {
+      if (!gameWorldReady) return;
       if (!MULTIPLAYER || !ARENA_COOP || CURRENT_MAP !== "arena") return;
       if (!ZOMBIE_AUTHORITY || !data) return;
       if (data.by === socket.id) return;
@@ -1513,6 +1955,7 @@
         enemy.alive = false;
         enemy.respawnTimer = 3.0;
         enemy.group.visible = false;
+        detachEyeLightFrom(enemy);
         state.score += 1;
       }
       updateHud();
@@ -1733,150 +2176,19 @@
       return g;
     }
 
-    function applyRemoteWeaponMount(rp) {
-      if (!rp || !rp.gunModel) return;
-      const mount = [
-        { x: 0.03, y: -0.44, z: -0.30, rx: 0.0, ry: 0.0, rz: 0.0 }, // pistol
-        { x: 0.03, y: -0.46, z: -0.38, rx: 0.0, ry: 0.0, rz: 0.0 }, // rifle
-        { x: 0.03, y: -0.48, z: -0.35, rx: 0.02, ry: 0.0, rz: 0.0 }, // shotgun
-        { x: 0.03, y: -0.46, z: -0.36, rx: 0.0, ry: 0.0, rz: 0.0 }, // smg
-      ][rp.currentWeapon | 0] || { x: 0.03, y: -0.46, z: -0.38, rx: 0.0, ry: 0.0, rz: 0.0 };
-      rp.gunModel.position.set(mount.x, mount.y, mount.z);
-      rp.gunModel.rotation.set(mount.rx, mount.ry, mount.rz);
-    }
-
-    function getRemoteGunMuzzleWorld(rp, out) {
-      if (!rp || !rp.group) return out.set(rp?.x || 0, (rp?.y || 1.65) + 0.15, rp?.z || 0);
-      const q = rp.group.getWorldQuaternion(new THREE.Quaternion());
-      const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(q);
-      const right = new THREE.Vector3(1, 0, 0).applyQuaternion(q);
-      const up = new THREE.Vector3(0, 1, 0).applyQuaternion(q);
-      // Stable remote muzzle anchor from right-hand weapon mount.
-      const origin = rp.rightArm
-        ? rp.rightArm.getWorldPosition(new THREE.Vector3())
-        : new THREE.Vector3(rp.x || 0, (rp.y || 1.65) + 0.1, rp.z || 0);
-      out.copy(origin);
-      out.addScaledVector(fwd, 0.78);
-      out.addScaledVector(right, 0.16);
-      out.addScaledVector(up, -0.03);
-      return out;
-    }
-
-    function getRemoteWeaponStancePreset(weaponIndex) {
-      return [
-        { lx: -0.58, rx: -0.72, ly: -0.78, ry: 0.40, lz: -0.92, rz: 0.44, torso: 0.10 }, // pistol
-        { lx: -0.64, rx: -0.80, ly: -0.86, ry: 0.44, lz: -1.02, rz: 0.48, torso: 0.14 }, // rifle
-        { lx: -0.62, rx: -0.78, ly: -0.84, ry: 0.43, lz: -0.98, rz: 0.48, torso: 0.13 }, // shotgun
-        { lx: -0.63, rx: -0.79, ly: -0.85, ry: 0.44, lz: -1.00, rz: 0.48, torso: 0.14 }, // smg
-      ][weaponIndex | 0] || { lx: -0.64, rx: -0.80, ly: -0.86, ry: 0.44, lz: -1.02, rz: 0.48, torso: 0.14 };
-    }
-
-    function getRemoteSupportGripPreset(weaponIndex) {
-      return [
-        { leftBiasX: -0.08, leftBiasY: -0.10, leftBiasZ: -0.14, rightBiasX: 0.02 }, // pistol
-        { leftBiasX: -0.12, leftBiasY: -0.12, leftBiasZ: -0.20, rightBiasX: 0.03 }, // rifle
-        { leftBiasX: -0.10, leftBiasY: -0.11, leftBiasZ: -0.18, rightBiasX: 0.03 }, // shotgun
-        { leftBiasX: -0.11, leftBiasY: -0.12, leftBiasZ: -0.19, rightBiasX: 0.03 }, // smg
-      ][weaponIndex | 0] || { leftBiasX: -0.12, leftBiasY: -0.12, leftBiasZ: -0.20, rightBiasX: 0.03 };
-    }
-
-    function applyRemoteReloadPose(rp, dt, basePose) {
-      rp.reloadPhase = (rp.reloadPhase || 0) + dt * 8.6;
-      const t = rp.reloadPhase;
-      const s1 = Math.sin(t);
-      const s2 = Math.sin(t * 2.1 + 0.4);
-      const c1 = Math.cos(t * 1.2);
-
-      const pose = {
-        lx: basePose.lx + 0.34 + s1 * 0.74,
-        rx: basePose.rx + 0.90 + s1 * 1.10,
-        ly: basePose.ly + 0.04 + s2 * 0.14,
-        ry: basePose.ry + 0.34 + s2 * 0.20,
-        lz: basePose.lz - 0.28 + c1 * 0.44,
-        rz: basePose.rz + 0.30 + c1 * 0.48,
-      };
-
-      if (rp.gunModel) {
-        rp.gunModel.rotation.x = dampScalar(rp.gunModel.rotation.x, -0.30 + Math.sin(t * 1.5) * 0.34, dt, 18);
-        rp.gunModel.rotation.y = dampScalar(rp.gunModel.rotation.y, Math.cos(t * 1.3) * 0.10, dt, 18);
-        rp.gunModel.rotation.z = dampScalar(rp.gunModel.rotation.z, 0.62 + Math.sin(t * 1.1) * 0.64, dt, 20);
-      }
-      return pose;
-    }
-
-    function updateRemotePlayerRig(rp, dt, gSpeed) {
-      rp.walkPhase = (rp.walkPhase || 0) + dt * Math.min(gSpeed * 4.8, 18);
-      const moveAmp = Math.min(gSpeed / 4.2, 1);
-      const moving = gSpeed > 0.06;
-      const walkSin = Math.sin(rp.walkPhase);
-      const walkCos = Math.cos(rp.walkPhase);
-      const bounce = Math.max(0, Math.sin(rp.walkPhase * 2));
-      const idleBreath = Math.sin(performance.now() * 0.0022 + rp.walkPhase * 0.14) * 0.085;
-
-      if (rp.leftLeg && rp.rightLeg) {
-        const legKick = moving ? walkSin * (1.52 * (0.45 + moveAmp * 0.55)) : 0;
-        rp.leftLeg.rotation.x = dampScalar(rp.leftLeg.rotation.x, -legKick, dt, 15);
-        rp.rightLeg.rotation.x = dampScalar(rp.rightLeg.rotation.x, legKick, dt, 15);
-        rp.leftLeg.position.y = dampScalar(rp.leftLeg.position.y, 0.62 + (moving ? Math.max(0, walkSin) * 0.10 : 0), dt, 13);
-        rp.rightLeg.position.y = dampScalar(rp.rightLeg.position.y, 0.62 + (moving ? Math.max(0, -walkSin) * 0.10 : 0), dt, 13);
-      }
-
-      const basePose = getRemoteWeaponStancePreset(rp.currentWeapon | 0);
-      const grip = getRemoteSupportGripPreset(rp.currentWeapon | 0);
-      let targetLX = basePose.lx + grip.leftBiasX + idleBreath + (moving ? walkSin * 0.46 : 0);
-      let targetRX = basePose.rx + grip.rightBiasX - idleBreath * 0.9 - (moving ? walkSin * 0.54 : 0);
-      let targetLY = basePose.ly + grip.leftBiasY + (moving ? walkCos * 0.07 : 0);
-      let targetRY = basePose.ry - (moving ? walkCos * 0.08 : 0);
-      let targetLZ = basePose.lz + grip.leftBiasZ + (moving ? walkCos * 0.28 : idleBreath * 0.26);
-      let targetRZ = basePose.rz - (moving ? walkCos * 0.40 : idleBreath * 0.30);
-
-      if (rp.isReloading) {
-        const reloadPose = applyRemoteReloadPose(rp, dt, basePose);
-        targetLX = reloadPose.lx;
-        targetRX = reloadPose.rx;
-        targetLY = reloadPose.ly;
-        targetRY = reloadPose.ry;
-        targetLZ = reloadPose.lz;
-        targetRZ = reloadPose.rz;
-      } else {
-        rp.reloadPhase = 0;
-        applyRemoteWeaponMount(rp);
-      }
-
-      if (rp.torsoMesh) {
-        const yawTwist = moving ? Math.sin(rp.walkPhase * 0.55) * (0.24 * (0.4 + moveAmp * 0.6)) : idleBreath * 0.14;
-        const pitchLean = moving ? Math.cos(rp.walkPhase * 0.75) * (0.14 * (0.4 + moveAmp * 0.6)) : idleBreath * 0.10;
-        rp.torsoMesh.rotation.y = dampScalar(rp.torsoMesh.rotation.y, yawTwist, dt, 12);
-        rp.torsoMesh.rotation.x = dampScalar(rp.torsoMesh.rotation.x, pitchLean + (rp.isReloading ? 0.12 : 0), dt, 12);
-        rp.torsoMesh.position.y = dampScalar(rp.torsoMesh.position.y, 1.24 + (moving ? bounce * 0.14 : Math.abs(idleBreath) * 0.05), dt, 11);
-      }
-
-      if (rp.headGroup) {
-        rp.headGroup.rotation.y = dampScalar(rp.headGroup.rotation.y, moving ? -Math.sin(rp.walkPhase * 0.5) * 0.17 : 0, dt, 12);
-        rp.headGroup.rotation.x = dampScalar(rp.headGroup.rotation.x, moving ? Math.cos(rp.walkPhase) * 0.12 : 0, dt, 12);
-      }
-
-      rp.leftArm.rotation.x = dampScalar(rp.leftArm.rotation.x, targetLX, dt, 16);
-      rp.rightArm.rotation.x = dampScalar(rp.rightArm.rotation.x, targetRX, dt, 16);
-      rp.leftArm.rotation.y = dampScalar(rp.leftArm.rotation.y, targetLY, dt, 15);
-      rp.rightArm.rotation.y = dampScalar(rp.rightArm.rotation.y, targetRY, dt, 15);
-      rp.leftArm.rotation.z = dampScalar(rp.leftArm.rotation.z, targetLZ, dt, 15);
-      rp.rightArm.rotation.z = dampScalar(rp.rightArm.rotation.z, targetRZ, dt, 15);
-    }
-
     function createRemotePlayer(name) {
       const group = new THREE.Group();
-      const mCamo1 = new THREE.MeshStandardMaterial({ color: 0x4f7652, roughness: 0.83 });
-      const mCamo2 = new THREE.MeshStandardMaterial({ color: 0x3f6444, roughness: 0.83 });
+      const mCamo1 = new THREE.MeshStandardMaterial({ color: 0x3b5a3e, roughness: 0.85 });
+      const mCamo2 = new THREE.MeshStandardMaterial({ color: 0x2d4a30, roughness: 0.85 });
       const mSkin = new THREE.MeshStandardMaterial({ color: 0xe0b890, roughness: 0.7 });
       const mSkinD = new THREE.MeshStandardMaterial({ color: 0xc49a70, roughness: 0.7 });
-      const mPants = new THREE.MeshStandardMaterial({ color: 0x4a4f42, roughness: 0.88 });
+      const mPants = new THREE.MeshStandardMaterial({ color: 0x3a3d32, roughness: 0.9 });
       const mBoot = new THREE.MeshStandardMaterial({ color: 0x2a2218, roughness: 0.9 });
       const mBootS = new THREE.MeshStandardMaterial({ color: 0x1a1610, roughness: 0.9 });
-      const mHelm = new THREE.MeshStandardMaterial({ color: 0x5a6d5d, roughness: 0.68 });
+      const mHelm = new THREE.MeshStandardMaterial({ color: 0x4a5a4e, roughness: 0.7 });
       const mVisor = new THREE.MeshStandardMaterial({ color: 0x80ddff, transparent: true, opacity: 0.45, roughness: 0.2, metalness: 0.8 });
-      const mVest = new THREE.MeshStandardMaterial({ color: 0x6d7d64, roughness: 0.78 });
-      const mGear = new THREE.MeshStandardMaterial({ color: 0x3d4136, roughness: 0.88 });
+      const mVest = new THREE.MeshStandardMaterial({ color: 0x5c6b54, roughness: 0.8 });
+      const mGear = new THREE.MeshStandardMaterial({ color: 0x2e3028, roughness: 0.9 });
       const mMetal = new THREE.MeshStandardMaterial({ color: 0x7a7a7a, roughness: 0.4, metalness: 0.6 });
       const mGlove = new THREE.MeshStandardMaterial({ color: 0x3a3528, roughness: 0.9 });
       const mKnee = new THREE.MeshStandardMaterial({ color: 0x505548, roughness: 0.8 });
@@ -1956,12 +2268,8 @@
         fng.position.set(0, -0.78, 0.12); ag.add(fng);
       };
       makePlayerArm(rightArm); makePlayerArm(leftArm);
-      rightArm.position.set(0.34, 1.42, -0.02); rightArm.rotation.x = -0.54;
-      leftArm.position.set(-0.34, 1.42, -0.01); leftArm.rotation.x = -0.52;
-      rightArm.rotation.y = 0.22;
-      leftArm.rotation.y = -0.32;
-      rightArm.rotation.z = 0.16;
-      leftArm.rotation.z = -0.30;
+      rightArm.position.set(0.42, 1.46, 0); rightArm.rotation.x = -1.0;
+      leftArm.position.set(-0.42, 1.46, 0); leftArm.rotation.x = -0.8;
       group.add(rightArm, leftArm);
 
       const makePlayerLeg = (px) => {
@@ -1986,9 +2294,8 @@
       group.add(legR, legL);
 
       const gunModel = makeThirdPersonGun(1);
+      gunModel.position.set(0.08, -0.68, -0.18);
       rightArm.add(gunModel);
-      const rpTmp = { gunModel, currentWeapon: 1 };
-      applyRemoteWeaponMount(rpTmp);
 
       const ns = makeNameSprite(name || "Player");
       ns.sprite.position.set(0, 2.55, 0);
@@ -1997,7 +2304,7 @@
       const flashTarget = new THREE.Object3D();
       // Avatar mesh faces +Z; group uses yaw+π so forward is +Z here — unlike camera flash (-Z).
       flashTarget.position.set(0, 0, 1);
-      const flashOuter = createPhysicalSpotLight(
+      const flashOuter = createPlayerSpotLight(
         PLAYER_LIGHT_COLOR,
         FLASH_OUTER_INTENSITY,
         FLASH_OUTER_DISTANCE,
@@ -2005,7 +2312,7 @@
         FLASH_OUTER_PEN,
         FLASHLIGHT_LIGHT_DECAY
       );
-      const flashInner = createPhysicalSpotLight(
+      const flashInner = createPlayerSpotLight(
         PLAYER_LIGHT_COLOR,
         FLASH_INNER_INTENSITY,
         FLASH_INNER_DISTANCE,
@@ -2029,35 +2336,30 @@
       return { group, x: 0, y: 1.65, z: 0, yaw: 0, name: name || "Player",
                nameSprite: ns.sprite, nameCanvas: ns.canvas, nameCtx: ns.ctx, nameTex: ns.tex,
                rightArm, leftArm, rightLeg: legR, leftLeg: legL, walkPhase: 0,
-               gunModel, currentWeapon: 1, isReloading: false, reloadPhase: 0,
-               torsoMesh: chest, headGroup };
+               gunModel, currentWeapon: 1 };
     }
 
     function getSafeViewportSize() {
       try {
         const vv = window.visualViewport;
-        let w = window.innerWidth;
-        let h = window.innerHeight;
-        if (vv && vv.width >= 2 && vv.height >= 2) {
-          w = vv.width;
-          h = vv.height;
+        const de = typeof document !== "undefined" ? document.documentElement : null;
+        const iw = window.innerWidth || 0;
+        const ih = window.innerHeight || 0;
+        const vw = vv && vv.width ? vv.width : 0;
+        const vh = vv && vv.height ? vv.height : 0;
+        const cw = de ? de.clientWidth || 0 : 0;
+        const ch = de ? de.clientHeight || 0 : 0;
+        /** Fullscreen / macOS: one of these is often 0 until layout; take the max so we never setSize(0). */
+        let w = Math.max(iw, vw, cw);
+        let h = Math.max(ih, vh, ch);
+        if (w < 4 || h < 4) {
+          const aw = typeof screen !== "undefined" && screen.availWidth ? screen.availWidth : 0;
+          const ah = typeof screen !== "undefined" && screen.availHeight ? screen.availHeight : 0;
+          w = Math.max(w, aw);
+          h = Math.max(h, ah);
         }
-        w = Math.max(
-          1,
-          w ||
-            (typeof document !== "undefined" &&
-              document.documentElement &&
-              document.documentElement.clientWidth) ||
-            1
-        );
-        h = Math.max(
-          1,
-          h ||
-            (typeof document !== "undefined" &&
-              document.documentElement &&
-              document.documentElement.clientHeight) ||
-            1
-        );
+        w = Math.max(1, w);
+        h = Math.max(1, h);
         return { w, h };
       } catch (_) {
         return { w: 1, h: 1 };
@@ -2101,10 +2403,12 @@
 
     // Same luminance as pre–r155 legacy lights: physically correct shading drops ~π× vs old scaling.
     const _LEGACY_L = Math.PI;
-    const hemi = new THREE.HemisphereLight(0x524838, 0x141008, 0.14 * _LEGACY_L);
+    const HEMI_BASE_INTENSITY = 0.14 * _LEGACY_L;
+    const MOON_BASE_INTENSITY = 0.11 * _LEGACY_L;
+    const hemi = new THREE.HemisphereLight(0x524838, 0x141008, HEMI_BASE_INTENSITY);
     scene.add(hemi);
 
-    const moon = new THREE.DirectionalLight(0xc8b078, 0.11 * _LEGACY_L);
+    const moon = new THREE.DirectionalLight(0xc8b078, MOON_BASE_INTENSITY);
     moon.position.set(28, 34, 22);
     moon.castShadow = true;
     moon.shadow.mapSize.set(256, 256);
@@ -2112,6 +2416,7 @@
     moon.shadow.camera.right = 100;
     moon.shadow.camera.top = 100;
     moon.shadow.camera.bottom = -100;
+    moon.shadow.radius = 1;
     scene.add(moon);
 
     const fallbackColor = "#13151d";
@@ -2159,12 +2464,132 @@
       return { near: 19, far: 96 };
     }
 
-    function getCurrentMapFogColor() {
-      return CURRENT_MAP === "crossfire_grid" ? 0x8ea6c6 : 0x070504;
+    /**
+     * Per-quality light realism profile.
+     * - intensityScale: extra punch for environment lamps (subtle for potato, brighter for high/extreme).
+     * - rangeScale: how far each lamp reaches before its falloff fully fades — bigger = softer dissolve at the edge.
+     *   Real luminaires don't have a hard cutoff; range is just the distance where intensity reaches 0, so larger
+     *   values let high/extreme tiers behave more like physical lights with smooth long-distance attenuation.
+     * - decayBoost: how aggressively intensity drops with distance. Lower = closer to inverse-square reality;
+     *   slightly higher decay on potato keeps perf cost down.
+     * - shadowRadius: PCF blur radius for soft shadow penumbra (only used for soft shadow types).
+     * - shadowBlurSamples: how many taps for the percentage-closer filter (PCFSoftShadowMap).
+     * - moonIntensityMul / hemiIntensityMul: multipliers applied on top of the legacy values.
+     * - punctualShadows: true = sconce / area lamps cast shadows (PCF) for a near-photoreal look.
+     * - mazeLightBudget: how many of the maze's per-chunk lights stay visible to the GPU at once.
+     */
+    function getQualityLightProfile() {
+      const q = getQualityId();
+      if (q === "potato") {
+        return {
+          intensityScale: 1.0,
+          rangeScale: 1.0,
+          decayBoost: 1.05,
+          shadowRadius: 1,
+          shadowBlurSamples: 4,
+          moonIntensityMul: 1.0,
+          hemiIntensityMul: 1.0,
+          punctualShadows: false,
+          mazeLightBudget: 24,
+        };
+      }
+      if (q === "regular") {
+        return {
+          intensityScale: 1.18,
+          rangeScale: 1.45,
+          decayBoost: 0.92,
+          shadowRadius: 2.5,
+          shadowBlurSamples: 8,
+          moonIntensityMul: 1.05,
+          hemiIntensityMul: 1.1,
+          punctualShadows: false,
+          mazeLightBudget: 36,
+        };
+      }
+      if (q === "high") {
+        return {
+          intensityScale: 1.32,
+          rangeScale: 1.75,
+          decayBoost: 0.84,
+          shadowRadius: 4.5,
+          shadowBlurSamples: 16,
+          moonIntensityMul: 1.1,
+          hemiIntensityMul: 1.18,
+          punctualShadows: true,
+          mazeLightBudget: 48,
+        };
+      }
+      // extreme
+      return {
+        intensityScale: 1.48,
+        rangeScale: 2.05,
+        decayBoost: 0.78,
+        shadowRadius: 7,
+        shadowBlurSamples: 24,
+        moonIntensityMul: 1.18,
+        hemiIntensityMul: 1.28,
+        punctualShadows: true,
+        mazeLightBudget: 64,
+      };
     }
 
-    function getCurrentMapBackgroundColor() {
-      return CURRENT_MAP === "crossfire_grid" ? 0xa9c3e6 : 0x070504;
+    /** Tier-specific knobs the wall/floor/water systems consume to look more 3D. */
+    function getQualitySurfaceProfile() {
+      const q = getQualityId();
+      if (q === "potato") {
+        return {
+          surface: "lambert",
+          normalScale: 0,
+          roughness: 1,
+          metalness: 0,
+          envMapIntensity: 0,
+          parallax: 0,
+          extremeDisplacement: 0,
+          wallSegments: 1,
+          floorPuddles: false,
+          puddleReflectorTex: 0,
+        };
+      }
+      if (q === "regular") {
+        return {
+          surface: "standard",
+          normalScale: 0.55,
+          roughness: 0.95,
+          metalness: 0.02,
+          envMapIntensity: 0.5,
+          parallax: 0,
+          extremeDisplacement: 0,
+          wallSegments: 1,
+          floorPuddles: false,
+          puddleReflectorTex: 0,
+        };
+      }
+      if (q === "high") {
+        return {
+          surface: "standard",
+          normalScale: 0.95,
+          roughness: 0.88,
+          metalness: 0.04,
+          envMapIntensity: 0.8,
+          parallax: 0.012,
+          extremeDisplacement: 0,
+          wallSegments: 4,
+          floorPuddles: true,
+          puddleReflectorTex: 384,
+        };
+      }
+      return {
+        surface: "standard",
+        normalScale: 1.4,
+        roughness: 0.78,
+        metalness: 0.06,
+        envMapIntensity: 1.0,
+        parallax: 0.022,
+        extremeDisplacement: 0.16,
+        wallSegments: 12,
+        floorPuddles: true,
+        puddleReflectorTex: 640,
+      };
     }
 
     /** Distance fog + camera far: darkness and light fade beyond render distance (scaled by preset). */
@@ -2181,14 +2606,18 @@
       const near = THREE.MathUtils.clamp(base.near * scale * 0.97, 4, Math.max(8, far - 12));
       scene.fog.near = near;
       scene.fog.far = far;
-      scene.fog.color.set(getCurrentMapFogColor());
-      scene.background.set(getCurrentMapBackgroundColor());
+      scene.fog.color.set(0x070504);
 
       camera.far = THREE.MathUtils.clamp(far + 32, 52, 260);
       camera.updateProjectionMatrix();
     }
 
-    /** Local rendering: tone mapping, capped resolution, shadows, fog distance, textures — each step should look more realistic, not just heavier. */
+    /**
+     * Local rendering: tone mapping, capped resolution, shadows, fog distance, textures, light realism profile.
+     * Higher tiers spend the budget on softer penumbra, longer light reach, and physically-tuned falloff so the
+     * shade dissolves naturally at distance instead of clipping to a hard ring (real punctual lights do not have
+     * a sharp edge — at distance their intensity simply fades through inverse-square attenuation).
+     */
     function applyGraphicsQuality() {
       const q = getQualityId();
       let shadowSz = 256;
@@ -2202,21 +2631,23 @@
         toneMapping = THREE.NoToneMapping;
         toneExposure = 1;
       } else if (q === "regular") {
-        shadowSz = 384;
+        shadowSz = 512;
         shadowType = THREE.PCFSoftShadowMap;
         toneMapping = THREE.ACESFilmicToneMapping;
         toneExposure = 1;
       } else if (q === "high") {
-        shadowSz = 640;
+        shadowSz = 1024;
         shadowType = THREE.PCFSoftShadowMap;
         toneMapping = THREE.ACESFilmicToneMapping;
         toneExposure = 1.05;
       } else if (q === "extreme") {
-        shadowSz = 896;
+        shadowSz = 1536;
         shadowType = THREE.PCFSoftShadowMap;
         toneMapping = THREE.ACESFilmicToneMapping;
         toneExposure = 1.1;
       }
+
+      const lp = getQualityLightProfile();
 
       renderer.toneMapping = toneMapping;
       renderer.toneMappingExposure = toneExposure;
@@ -2225,8 +2656,15 @@
       moon.shadow.mapSize.set(shadowSz, shadowSz);
       moon.shadow.bias = q === "potato" ? -0.0012 : q === "regular" ? -0.0009 : -0.00065;
       moon.shadow.normalBias = q === "potato" ? 0.035 : q === "extreme" ? 0.008 : 0.018;
+      moon.shadow.radius = lp.shadowRadius;
+      try { moon.shadow.blurSamples = lp.shadowBlurSamples; } catch (_) {}
+      moon.intensity = MOON_BASE_INTENSITY * lp.moonIntensityMul;
+      hemi.intensity = HEMI_BASE_INTENSITY * lp.hemiIntensityMul;
+      MAX_MAZE_LIGHTS_ACTIVE = lp.mazeLightBudget;
 
       applySceneFogAndCameraFar();
+      retuneEnvironmentLights();
+      retuneZombieEyeLights();
 
       if (warFilmOverlay) {
         warFilmOverlay.style.opacity = q === "extreme" ? "0.07" : q === "high" ? "0.035" : "0";
@@ -2246,6 +2684,7 @@
 
       syncGameRendererSize();
       applyWallTexture();
+      applyPuddlesForQuality();
       compileSceneShaders();
     }
 
@@ -2257,11 +2696,20 @@
       renderer.setSize(vp.w, vp.h);
     }
 
+    /**
+     * Keep boot overlay up until the WebGL canvas has real dimensions. Otherwise gameplay (zombies, MP damage)
+     * runs while the framebuffer is 0×0 or stale — resizing then “starts” the picture but the player may already be dead.
+     */
     const MIN_GAME_VIEWPORT_PX = 24;
     async function waitForRenderableViewport() {
-      for (let i = 0; i < 360; i++) {
+      const MAX_FRAMES = 360;
+      for (let i = 0; i < MAX_FRAMES; i++) {
         syncGameRendererSize();
+        try {
+          resizeMenuWallBackdrop();
+        } catch (_) {}
         const el = renderer.domElement;
+        void el.offsetHeight;
         const w = el.clientWidth | 0;
         const h = el.clientHeight | 0;
         if (w >= MIN_GAME_VIEWPORT_PX && h >= MIN_GAME_VIEWPORT_PX) return;
@@ -2279,142 +2727,6 @@
 
     const texLoader = new THREE.TextureLoader();
     texLoader.setCrossOrigin("anonymous");
-
-    function pageDirFromLocation() {
-      try {
-        if (typeof window.__GAME_ASSET_BASE_DIR__ === "string" && window.__GAME_ASSET_BASE_DIR__) {
-          return window.__GAME_ASSET_BASE_DIR__;
-        }
-      } catch (_) {}
-      const page = String(window.location.href).split(/[#?]/)[0];
-      try {
-        const u = new URL(page);
-        const p = u.pathname || "/";
-        const segs0 = p.replace(/\/+$/, "").split("/").filter(Boolean);
-        const bareGame = segs0.length === 1 && segs0[0].toLowerCase() === "game";
-        if (!p || p === "/") {
-          return u.origin + "/";
-        }
-        if (bareGame) {
-          return u.origin + "/";
-        }
-        if (p.endsWith("/")) {
-          return u.origin + p;
-        }
-        const li = p.lastIndexOf("/");
-        return li >= 0 ? u.origin + p.slice(0, li + 1) : u.origin + "/";
-      } catch (_) {
-        const schemeRest = page.indexOf("/", page.indexOf("//") + 2);
-        const slash = page.lastIndexOf("/");
-        if (schemeRest >= 0 && slash > schemeRest) {
-          return page.slice(0, slash + 1);
-        }
-        return page.endsWith("/") ? page : page + "/";
-      }
-    }
-
-    function normalizeGameAssetBase(b) {
-      if (!b) return "";
-      const s = String(b).trim();
-      return s.endsWith("/") ? s : s + "/";
-    }
-
-    function getDeployedPublicRootHref() {
-      try {
-        if (typeof window.__GAME_STATIC_ROOT__ === "string" && window.__GAME_STATIC_ROOT__) {
-          return window.__GAME_STATIC_ROOT__;
-        }
-      } catch (_) {}
-      try {
-        const meta = document.querySelector('meta[name="game-static-prefix"]');
-        let pre = meta && meta.content != null ? String(meta.content).trim() : "";
-        if (pre && !pre.startsWith("/")) pre = "/" + pre;
-        pre = pre.replace(/\/+$/, "");
-        if (pre) {
-          return window.location.origin + pre + "/";
-        }
-      } catch (_) {}
-      try {
-        if (typeof window.__GAME_ASSET_BASE_DIR__ === "string" && window.__GAME_ASSET_BASE_DIR__) {
-          return window.__GAME_ASSET_BASE_DIR__;
-        }
-      } catch (_) {}
-      try {
-        return window.location.origin + "/";
-      } catch (_) {
-        return "/";
-      }
-    }
-
-    function getGameAssetBaseCandidates() {
-      const explicit = [];
-      const meta = document.querySelector('meta[name="game-asset-base"]');
-      const raw = meta && meta.content != null ? String(meta.content).trim() : "";
-      if (raw) explicit.push(normalizeGameAssetBase(raw));
-
-      const dir = pageDirFromLocation();
-      let parent = null;
-      let grandparent = null;
-      try {
-        parent = new URL("../", dir).href;
-        grandparent = new URL("../../", dir).href;
-      } catch (_) {}
-
-      let lastSeg = "";
-      try {
-        const segs = new URL(dir).pathname.replace(/\/+$/, "").split("/").filter(Boolean);
-        lastSeg = (segs[segs.length - 1] || "").toLowerCase();
-      } catch (_) {}
-
-      const pageOrder = [];
-      // Common bad deploy: only game.html under .../html/ while walls.png + game-ui/ live one level up.
-      if (lastSeg === "html") {
-        if (parent) pageOrder.push(parent);
-        if (grandparent) pageOrder.push(grandparent);
-        pageOrder.push(dir);
-      } else {
-        pageOrder.push(dir);
-        if (parent) pageOrder.push(parent);
-        if (grandparent) pageOrder.push(grandparent);
-      }
-
-      let here = "";
-      try {
-        here = window.location.origin;
-      } catch (_) {}
-
-      const nearOrigin = [];
-      const farOrigin = [];
-      for (const b of pageOrder) {
-        try {
-          if (here && new URL(b).origin === here) nearOrigin.push(b);
-          else farOrigin.push(b);
-        } catch (_) {
-          farOrigin.push(b);
-        }
-      }
-
-      /** Multiplayer origin last: static files should load from the same host as this HTML when possible (avoids 404 + MediaElementSource CORS). */
-      const remoteFallbacks = [];
-      const mpMeta = document.querySelector('meta[name="game-multiplayer-origin"]');
-      const mpRaw = mpMeta && mpMeta.content != null ? String(mpMeta.content).trim() : "";
-      if (mpRaw) {
-        try {
-          remoteFallbacks.push(new URL("/", mpRaw).href);
-        } catch (_) {}
-      }
-      remoteFallbacks.push("https://tintly555.github.io/games/fps/");
-
-      const merged = [
-        ...explicit,
-        dir,
-        getDeployedPublicRootHref(),
-        ...nearOrigin,
-        ...farOrigin,
-        ...remoteFallbacks,
-      ];
-      return [...new Set(merged)];
-    }
 
     function getWallTextureUrlList() {
       const urls = [];
@@ -2438,11 +2750,6 @@
 
     const MENU_BACKDROP_LIGHT_MIN = 0.38;
     const MENU_BACKDROP_LIGHT_MAX = 6.2;
-    let menuBgmAnalyser = null;
-    let menuBgmMenuGain = null;
-    let menuBgmMediaSrc = null;
-    let menuBgmTimeBuf = null;
-    let menuBgmPeakSessionMax = 1e-6;
     let menuBackdropLightSmooth = 0;
 
     function updateMenuBackdropLightFromMusic() {
@@ -2519,7 +2826,12 @@
       menuBackdropPoint.position.set(0, 6.2, 1.4);
       menuBackdropScene.add(menuBackdropPoint);
 
-      const wallMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
+      // Menu wall: Standard so normal map adds a hint of depth even before any in-game tier change.
+      const wallMat = new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        roughness: 0.92,
+        metalness: 0.04,
+      });
       const wallGeo = new THREE.PlaneGeometry(28, 16);
       menuBackdropWall = new THREE.Mesh(wallGeo, wallMat);
       menuBackdropWall.position.set(0, 6.2, -11);
@@ -2554,6 +2866,21 @@
             tex.repeat.set(5, 3);
             tex.colorSpace = THREE.SRGBColorSpace;
             wallMat.map = tex;
+            if (wallNormalTex) {
+              const nm = wallNormalTex.clone();
+              nm.needsUpdate = true;
+              nm.wrapS = nm.wrapT = THREE.RepeatWrapping;
+              nm.repeat.set(5, 3);
+              wallMat.normalMap = nm;
+              wallMat.normalScale = new THREE.Vector2(0.85, 0.85);
+            }
+            if (wallRoughnessTex) {
+              const rm = wallRoughnessTex.clone();
+              rm.needsUpdate = true;
+              rm.wrapS = rm.wrapT = THREE.RepeatWrapping;
+              rm.repeat.set(5, 3);
+              wallMat.roughnessMap = rm;
+            }
             wallMat.needsUpdate = true;
             menuBackdropReady = true;
             startMenuBackdropLoop();
@@ -2578,15 +2905,15 @@
         const root = document.documentElement;
         root.style.setProperty(
           "--game-ui-menu-bg",
-          `url("${new URL("game-ui/game-ui-menu-background.png", b).href}")`
+          `url("${new URL("background.png", b).href}")`
         );
         root.style.setProperty(
           "--game-ui-btn-texture",
-          `url("${new URL("game-ui/game-ui-button-texture.png", b).href}")`
+          `url("${new URL("game-ui-button-texture.png", b).href}")`
         );
         root.style.setProperty(
           "--game-ui-settings-bg",
-          `url("${new URL("game-ui/game-ui-settings-panel-bg.png", b).href}")`
+          `url("${new URL("game-ui-settings-panel-bg.png", b).href}")`
         );
       } catch (_) {}
     }
@@ -2599,7 +2926,7 @@
         const base = normalizeGameAssetBase(candidates[i++]);
         let testUrl;
         try {
-          testUrl = new URL("game-ui/game-ui-menu-background.png", base).href;
+          testUrl = new URL("background.png", base).href;
         } catch (_) {
           tryNext();
           return;
@@ -2610,6 +2937,145 @@
         img.src = testUrl;
       }
       tryNext();
+    }
+
+    /**
+     * Procedural surface maps generated from walls.png:
+     *  - wallNormalTex: per-pixel surface normal derived from a Sobel gradient on the texture's luminance, so
+     *    bricks / cracks deflect the lighting and walls stop looking like a flat printed sheet.
+     *  - wallRoughnessTex: brighter pixels (mortar / smooth highlights) are slightly less rough than darker
+     *    grout / shadowed pits, giving each region its own micro-specular response.
+     *  - wallDisplacementTex: luminance-based height map used by the EXTREME tier on tessellated wall meshes
+     *    so the geometry actually pushes in/out — that's what removes the lingering 2D feel up close.
+     *
+     * All three are SRGB-decoded into linear; downstream materials assign them as LinearSpace textures.
+     */
+    let wallNormalTex = null;
+    let wallRoughnessTex = null;
+    let wallDisplacementTex = null;
+
+    function _wallTexImageToCanvas(img) {
+      const w = Math.min(512, img.naturalWidth || img.width || 256);
+      const h = Math.min(512, img.naturalHeight || img.height || 256);
+      const cv = document.createElement("canvas");
+      cv.width = w;
+      cv.height = h;
+      const ctx = cv.getContext("2d", { willReadFrequently: true });
+      ctx.drawImage(img, 0, 0, w, h);
+      return { cv, ctx, w, h };
+    }
+
+    function _luminance(r, g, b) {
+      return (r * 0.2126 + g * 0.7152 + b * 0.0722);
+    }
+
+    function generateWallSurfaceMapsFromImage(img) {
+      try {
+        const { ctx, w, h } = _wallTexImageToCanvas(img);
+        const src = ctx.getImageData(0, 0, w, h).data;
+
+        const lum = new Float32Array(w * h);
+        for (let i = 0, p = 0; i < src.length; i += 4, p++) {
+          lum[p] = _luminance(src[i], src[i + 1], src[i + 2]) / 255;
+        }
+
+        // Normal map (RGB) via Sobel — tiles cleanly because walls.png itself tiles.
+        const normalCv = document.createElement("canvas");
+        normalCv.width = w;
+        normalCv.height = h;
+        const nctx = normalCv.getContext("2d");
+        const nimg = nctx.createImageData(w, h);
+        const nstrength = 4.5;
+        const sample = (x, y) => lum[((y + h) % h) * w + ((x + w) % w)];
+        for (let y = 0; y < h; y++) {
+          for (let x = 0; x < w; x++) {
+            const tl = sample(x - 1, y - 1);
+            const t  = sample(x,     y - 1);
+            const tr = sample(x + 1, y - 1);
+            const l  = sample(x - 1, y);
+            const r  = sample(x + 1, y);
+            const bl = sample(x - 1, y + 1);
+            const b  = sample(x,     y + 1);
+            const br = sample(x + 1, y + 1);
+            const dx = (tr + 2 * r + br) - (tl + 2 * l + bl);
+            const dy = (bl + 2 * b + br) - (tl + 2 * t + tr);
+            const nx = -dx * nstrength;
+            const ny = -dy * nstrength;
+            const nz = 1.0;
+            const inv = 1 / Math.sqrt(nx * nx + ny * ny + nz * nz);
+            const i4 = (y * w + x) * 4;
+            nimg.data[i4    ] = ((nx * inv) * 0.5 + 0.5) * 255 | 0;
+            nimg.data[i4 + 1] = ((ny * inv) * 0.5 + 0.5) * 255 | 0;
+            nimg.data[i4 + 2] = ((nz * inv) * 0.5 + 0.5) * 255 | 0;
+            nimg.data[i4 + 3] = 255;
+          }
+        }
+        nctx.putImageData(nimg, 0, 0);
+
+        // Roughness: darker patches = rougher (grout / pits), lighter highlights = slightly smoother.
+        const roughCv = document.createElement("canvas");
+        roughCv.width = w;
+        roughCv.height = h;
+        const rctx = roughCv.getContext("2d");
+        const rimg = rctx.createImageData(w, h);
+        for (let p = 0; p < lum.length; p++) {
+          const k = lum[p];
+          const v = THREE.MathUtils.clamp(0.96 - (k - 0.5) * 0.32, 0.55, 0.99) * 255 | 0;
+          const i4 = p * 4;
+          rimg.data[i4    ] = v;
+          rimg.data[i4 + 1] = v;
+          rimg.data[i4 + 2] = v;
+          rimg.data[i4 + 3] = 255;
+        }
+        rctx.putImageData(rimg, 0, 0);
+
+        // Displacement: luminance-derived height; subtle so seams don't pop.
+        const dispCv = document.createElement("canvas");
+        dispCv.width = w;
+        dispCv.height = h;
+        const dctx = dispCv.getContext("2d");
+        const dimg = dctx.createImageData(w, h);
+        for (let p = 0; p < lum.length; p++) {
+          const v = THREE.MathUtils.clamp(lum[p], 0, 1) * 255 | 0;
+          const i4 = p * 4;
+          dimg.data[i4    ] = v;
+          dimg.data[i4 + 1] = v;
+          dimg.data[i4 + 2] = v;
+          dimg.data[i4 + 3] = 255;
+        }
+        dctx.putImageData(dimg, 0, 0);
+
+        const aniso = getMaxTextureAnisotropy();
+
+        wallNormalTex = new THREE.CanvasTexture(normalCv);
+        wallNormalTex.wrapS = wallNormalTex.wrapT = THREE.RepeatWrapping;
+        wallNormalTex.colorSpace = THREE.NoColorSpace;
+        wallNormalTex.anisotropy = aniso;
+
+        wallRoughnessTex = new THREE.CanvasTexture(roughCv);
+        wallRoughnessTex.wrapS = wallRoughnessTex.wrapT = THREE.RepeatWrapping;
+        wallRoughnessTex.colorSpace = THREE.NoColorSpace;
+        wallRoughnessTex.anisotropy = aniso;
+
+        wallDisplacementTex = new THREE.CanvasTexture(dispCv);
+        wallDisplacementTex.wrapS = wallDisplacementTex.wrapT = THREE.RepeatWrapping;
+        wallDisplacementTex.colorSpace = THREE.NoColorSpace;
+        wallDisplacementTex.anisotropy = aniso;
+      } catch (err) {
+        wallNormalTex = null;
+        wallRoughnessTex = null;
+        wallDisplacementTex = null;
+      }
+    }
+
+    function _cloneTexWithRepeat(tex, rx, ry) {
+      const t = tex.clone();
+      t.needsUpdate = true;
+      t.wrapS = THREE.RepeatWrapping;
+      t.wrapT = THREE.RepeatWrapping;
+      t.repeat.set(rx, ry);
+      t.anisotropy = getMaxTextureAnisotropy();
+      return t;
     }
 
     function tryLoadWallsTexture(urls, index) {
@@ -2629,7 +3095,10 @@
           tex.anisotropy = getMaxTextureAnisotropy();
           wallTexture = tex;
           wallTextureLoaded = true;
-          applyWallTexture();
+          if (tex.image) {
+            generateWallSurfaceMapsFromImage(tex.image);
+          }
+          rebuildAllWallMaterials();
           compileSceneShaders();
         },
         undefined,
@@ -2645,63 +3114,196 @@
     /** Floor / ceiling planes (crossfire + maze chunks): same world-space texture scale. */
     const FLOOR_CEILING_METERS_PER_REPEAT = 5;
 
+    /**
+     * Build a single wall-surface material for the given repeat & tint at the current quality.
+     * Potato uses Lambert (diffuse-only, cheapest path); regular/high/extreme use MeshStandardMaterial with
+     * progressively stronger normal / roughness / displacement contribution — that's what makes the bricks read
+     * with real surface depth instead of a printed-on photo.
+     */
     function makeWallMaterial(repeatX, repeatY, color) {
       const tint = color || fallbackWallColor;
-      if (wallTextureLoaded && wallTexture && gameSettings.texturesOn) {
-        const t = wallTexture.clone();
-        t.needsUpdate = true;
-        t.wrapS = THREE.RepeatWrapping;
-        t.wrapT = THREE.RepeatWrapping;
-        t.repeat.set(repeatX, repeatY);
-        t.anisotropy = getMaxTextureAnisotropy();
-        return new THREE.MeshLambertMaterial({ map: t, color: tint });
+      const sp = getQualitySurfaceProfile();
+      const haveTex = wallTextureLoaded && wallTexture && gameSettings.texturesOn;
+      if (!haveTex || sp.surface === "lambert") {
+        if (haveTex) {
+          return new THREE.MeshLambertMaterial({
+            map: _cloneTexWithRepeat(wallTexture, repeatX, repeatY),
+            color: tint,
+          });
+        }
+        return new THREE.MeshLambertMaterial({ color: tint });
       }
-      // Diffuse-only like textured walls — StandardMaterial still picks up specular/Fresnel even at high roughness.
-      return new THREE.MeshLambertMaterial({ color: tint });
+      const mat = new THREE.MeshStandardMaterial({
+        map: _cloneTexWithRepeat(wallTexture, repeatX, repeatY),
+        color: tint,
+        roughness: sp.roughness,
+        metalness: sp.metalness,
+      });
+      if (wallNormalTex && sp.normalScale > 0) {
+        mat.normalMap = _cloneTexWithRepeat(wallNormalTex, repeatX, repeatY);
+        mat.normalScale = new THREE.Vector2(sp.normalScale, sp.normalScale);
+      }
+      if (wallRoughnessTex) {
+        mat.roughnessMap = _cloneTexWithRepeat(wallRoughnessTex, repeatX, repeatY);
+      }
+      if (wallDisplacementTex && sp.extremeDisplacement > 0) {
+        mat.displacementMap = _cloneTexWithRepeat(wallDisplacementTex, repeatX, repeatY);
+        mat.displacementScale = sp.extremeDisplacement;
+        mat.displacementBias = -sp.extremeDisplacement * 0.5;
+      }
+      mat.envMapIntensity = sp.envMapIntensity;
+      return mat;
     }
 
-    function applyWallTexture() {
+    /**
+     * Rebuild the materials of every tracked wall / floor / ceiling mesh from scratch.
+     * We swap the whole material so that potato↔regular↔high↔extreme transitions can move between Lambert /
+     * Standard / displaced-Standard. Cheap because materials are flyweights and meshes share repeats.
+     */
+    function rebuildAllWallMaterials() {
       if (!wallTexture) return;
+      const sp = getQualitySurfaceProfile();
       for (const entry of _texturedMeshes) {
         const { mesh, rx, ry, tint, faceRepeats } = entry;
-        const baseTint = tint || 0xaaaaaa;
         if (faceRepeats && Array.isArray(mesh.material)) {
-          const mats = mesh.material;
-          for (let i = 0; i < mats.length && i < faceRepeats.length; i++) {
-            const fr = faceRepeats[i];
-            if (gameSettings.texturesOn) {
-              const t = wallTexture.clone();
-              t.needsUpdate = true;
-              t.wrapS = THREE.RepeatWrapping;
-              t.wrapT = THREE.RepeatWrapping;
-              t.repeat.set(fr.rx, fr.ry);
-              t.anisotropy = getMaxTextureAnisotropy();
-              mats[i].map = t;
-              mats[i].color.set(baseTint);
-            } else {
-              mats[i].map = null;
-              mats[i].color.set(tint || fallbackWallColor);
-            }
-            mats[i].needsUpdate = true;
+          const oldMats = mesh.material;
+          const newMats = faceRepeats.map((fr) => makeWallMaterial(fr.rx, fr.ry, tint));
+          mesh.material = newMats;
+          for (const m of oldMats) {
+            try { m.dispose(); } catch (_) {}
           }
         } else {
-          if (gameSettings.texturesOn) {
-            const t = wallTexture.clone();
-            t.needsUpdate = true;
-            t.wrapS = THREE.RepeatWrapping;
-            t.wrapT = THREE.RepeatWrapping;
-            t.repeat.set(rx, ry);
-            t.anisotropy = getMaxTextureAnisotropy();
-            mesh.material.map = t;
-            mesh.material.color.set(baseTint);
-          } else {
-            mesh.material.map = null;
-            mesh.material.color.set(tint || fallbackWallColor);
-          }
-          mesh.material.needsUpdate = true;
+          const old = mesh.material;
+          mesh.material = makeWallMaterial(rx || 1, ry || 1, tint);
+          try { old.dispose(); } catch (_) {}
+        }
+        // Extreme: subdivide the wall geometry on demand so displacementMap actually moves vertices.
+        if (sp.extremeDisplacement > 0 && entry.boxDims && !entry._displacedSegments) {
+          try {
+            mesh.geometry.dispose();
+            mesh.geometry = new THREE.BoxGeometry(
+              entry.boxDims.w, entry.boxDims.h, entry.boxDims.d,
+              sp.wallSegments, sp.wallSegments, sp.wallSegments
+            );
+            entry._displacedSegments = sp.wallSegments;
+          } catch (_) {}
+        } else if (sp.extremeDisplacement === 0 && entry.boxDims && entry._displacedSegments) {
+          try {
+            mesh.geometry.dispose();
+            mesh.geometry = new THREE.BoxGeometry(entry.boxDims.w, entry.boxDims.h, entry.boxDims.d, 1, 1, 1);
+            entry._displacedSegments = 0;
+          } catch (_) {}
         }
       }
     }
+
+    /** Public alias used by older call sites (e.g. applyGraphicsQuality / texturesOn toggle). */
+    function applyWallTexture() {
+      rebuildAllWallMaterials();
+    }
+
+    /**
+     * Standing-water puddles for High / Extreme quality.
+     *
+     * Each puddle is a low-poly quad slightly above the floor that uses a `Reflector` shader to render the
+     * scene from a mirrored virtual camera, then darkens + tints the result so it reads as wet concrete rather
+     * than a literal mirror. Real puddles are mostly Fresnel reflection at grazing angles; we approximate that
+     * with a darker base color and a faint distortion-free render.
+     *
+     * `chunkPuddles` tracks every active puddle Reflector (per maze chunk) so they can be torn down on quality
+     * change or chunk unload, since each Reflector owns a WebGLRenderTarget that must be `dispose()`'d.
+     */
+    const PUDDLE_DARK_COLOR = 0x0e1014;
+    const chunkPuddles = new Map();
+
+    function _puddleSeedRng(cx, cz, salt) {
+      return mazeHashSeed(cx, cz, 0x90123456 ^ (salt | 0));
+    }
+
+    function _placePuddleAt(px, pz, sizeR, sizeC, chunkKey) {
+      const sp = getQualitySurfaceProfile();
+      if (!sp.floorPuddles) return null;
+      const txRes = sp.puddleReflectorTex || 384;
+      const geo = new THREE.PlaneGeometry(sizeR * 2, sizeC * 2, 1, 1);
+      let reflector;
+      try {
+        reflector = new Reflector(geo, {
+          color: PUDDLE_DARK_COLOR,
+          textureWidth: txRes,
+          textureHeight: txRes,
+          clipBias: 0.003,
+          multisample: 0,
+        });
+      } catch (e) {
+        try { geo.dispose(); } catch (_) {}
+        return null;
+      }
+      reflector.rotation.x = -Math.PI / 2;
+      reflector.position.set(px, 0.012, pz);
+      reflector.userData.puddleChunkKey = chunkKey;
+      reflector.userData.isPuddle = true;
+      reflector.renderOrder = -1;
+      scene.add(reflector);
+      return reflector;
+    }
+
+    /** Pick 0–3 puddle anchors from the chunk grid (avoid exterior portal cells; favor open intersections). */
+    function _planChunkPuddles(cx, cz, vert, horiz, w, h) {
+      const rng = _puddleSeedRng(cx, cz, 0x77);
+      const positions = [];
+      const want = 1 + ((rng() * 3) | 0); // 1..3
+      for (let attempt = 0; attempt < 32 && positions.length < want; attempt++) {
+        const gx = 1 + ((rng() * (w - 2)) | 0);
+        const gy = 1 + ((rng() * (h - 2)) | 0);
+        const deg = mazeCellDegreeOpen(gx, gy, vert, horiz, w, h);
+        if (deg < 2) continue;
+        positions.push({ gx, gy, r: 0.55 + rng() * 0.65, c: 0.55 + rng() * 0.65 });
+      }
+      return positions;
+    }
+
+    function buildChunkPuddles(cx, cz, vert, horiz, w, h, chunkKey) {
+      const sp = getQualitySurfaceProfile();
+      if (!sp.floorPuddles) return [];
+      const ox = cx * MAZE_CHUNK_WORLD;
+      const oz = cz * MAZE_CHUNK_WORLD;
+      const cw = MAZE_CELL_SIZE;
+      const plans = _planChunkPuddles(cx, cz, vert, horiz, w, h);
+      const made = [];
+      for (const p of plans) {
+        const px = ox + (p.gx + 0.5) * cw;
+        const pz = oz + (p.gy + 0.5) * cw;
+        const r = _placePuddleAt(px, pz, p.r, p.c, chunkKey);
+        if (r) made.push(r);
+      }
+      return made;
+    }
+
+    function disposeChunkPuddles(chunkKey) {
+      const arr = chunkPuddles.get(chunkKey);
+      if (!arr) return;
+      for (const r of arr) {
+        scene.remove(r);
+        try { if (r.dispose) r.dispose(); } catch (_) {}
+        try { if (r.geometry && r.geometry.dispose) r.geometry.dispose(); } catch (_) {}
+      }
+      chunkPuddles.delete(chunkKey);
+    }
+
+    /** Rebuild all puddles when quality flips between has-puddles ↔ no-puddles, or reflector resolution changes. */
+    applyPuddlesForQuality = function () {
+      for (const [key] of chunkPuddles) {
+        disposeChunkPuddles(key);
+      }
+      const sp = getQualitySurfaceProfile();
+      if (!sp.floorPuddles) return;
+      for (const [key, ch] of mazeChunks) {
+        if (!ch._puddleSpec) continue;
+        const { cx, cz, vert, horiz, w, h } = ch._puddleSpec;
+        const arr = buildChunkPuddles(cx, cz, vert, horiz, w, h, key);
+        if (arr.length) chunkPuddles.set(key, arr);
+      }
+    };
 
     const floorMat = makeWallMaterial(
       worldSize / FLOOR_CEILING_METERS_PER_REPEAT,
@@ -2747,16 +3349,12 @@
     const sparkGroup = new THREE.Group();
     const tracerGroup = new THREE.Group();
     const bloodGroup = new THREE.Group();
-    const muzzleFlashGroup = new THREE.Group();
-    scene.add(decalGroup, sparkGroup, tracerGroup, bloodGroup, muzzleFlashGroup);
+    scene.add(decalGroup, sparkGroup, tracerGroup, bloodGroup);
 
     const MAX_BLOOD_MESHES = 36;
     const MAX_SPARK_MESHES = 36;
-    const MAX_MUZZLE_FLASHES = 30;
     const SPARK_GEO_SHARED = new THREE.SphereGeometry(0.022, 4, 4);
     const BLOOD_GEO_SHARED = new THREE.SphereGeometry(0.028, 4, 4);
-    const MUZZLE_FLASH_GEO = new THREE.SphereGeometry(0.085, 6, 6);
-    const MUZZLE_FLASH_CONE_GEO = new THREE.ConeGeometry(0.058, 0.22, 7, 1, true);
 
     function trimEffectGroup(group, max, disposeMaterial, incoming = 0) {
       while (group.children.length + incoming > max && group.children.length > 0) {
@@ -2781,14 +3379,23 @@
         rep(w, h),
       ];
       const materials = faceRepeats.map((fr) => makeWallMaterial(fr.rx, fr.ry, color));
-      const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), materials);
+      // Subdivide on extreme tier so displacementMap actually pushes vertices.
+      const sp = getQualitySurfaceProfile();
+      const seg = sp.extremeDisplacement > 0 ? sp.wallSegments : 1;
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d, seg, seg, seg), materials);
       mesh.position.set(x, y, z);
       mesh.castShadow = true;
       mesh.receiveShadow = true;
       scene.add(mesh);
       wallMeshes.push(mesh);
       wallBoxes.push(new THREE.Box3().setFromObject(mesh));
-      _texturedMeshes.push({ mesh, faceRepeats, tint: color });
+      _texturedMeshes.push({
+        mesh,
+        faceRepeats,
+        tint: color,
+        boxDims: { w, h, d },
+        _displacedSegments: seg > 1 ? seg : 0,
+      });
       return mesh;
     }
 
@@ -2807,7 +3414,6 @@
     let mazeChunkPollAcc = 0;
     /** WebGL forward shading has a hard limit on fragment light uniforms — register maze lamps and cull visibility each frame. */
     const mazeCullableLights = [];
-    const MAX_MAZE_LIGHTS_ACTIVE = 34;
 
     function mazeHashSeed(cx, cz, salt = 0) {
       let h = mazeWorldSeed ^ salt ^ (cx * 73856093) ^ (cz * 19349663) ^ (cx * cz * 83492791);
@@ -3371,7 +3977,14 @@
         }
       }
 
-      mazeChunks.set(key, { meshes: chunkMeshes, lights: chunkLights });
+      const puddles = buildChunkPuddles(cx, cz, vert, horiz, MAZE_CELLS, MAZE_CELLS, key);
+      if (puddles.length) chunkPuddles.set(key, puddles);
+
+      mazeChunks.set(key, {
+        meshes: chunkMeshes,
+        lights: chunkLights,
+        _puddleSpec: { cx, cz, vert, horiz, w: MAZE_CELLS, h: MAZE_CELLS },
+      });
     }
 
     function registerMazeCullLight(light, chunkKey) {
@@ -3412,6 +4025,7 @@
       const ch = mazeChunks.get(key);
       if (!ch) return;
       pruneMazeCullLightsForChunk(key);
+      disposeChunkPuddles(key);
       for (const mesh of ch.meshes) {
         scene.remove(mesh);
         const wi = wallMeshes.indexOf(mesh);
@@ -3500,17 +4114,8 @@
       flowPlayerR = -1;
     }
 
-    const pvpMapLights = [];
-    function clearPvpMapLights() {
-      while (pvpMapLights.length) {
-        const L = pvpMapLights.pop();
-        scene.remove(L);
-      }
-    }
-
     function clearMap() {
       clearAllMazeChunks();
-      clearPvpMapLights();
       while (wallMeshes.length) {
         const mesh = wallMeshes.pop();
         scene.remove(mesh);
@@ -3551,12 +4156,8 @@
     }
 
     function buildMapArena() {
-      if (MULTIPLAYER && ARENA_COOP && activeRoomId) {
-        mazeWorldSeed = hashRoomSeed(activeRoomId);
-      } else {
-        mazeWorldSeed =
-          (Math.imul(1103515245, (performance.now() ^ (Math.random() * 0x7fffffff)) | 0) + 12345) >>> 0;
-      }
+      mazeWorldSeed =
+        (Math.imul(1103515245, (performance.now() ^ (Math.random() * 0x7fffffff)) | 0) + 12345) >>> 0;
       mazeChunkPollAcc = 0;
       mazeNavAnchorCx = null;
       mazeNavAnchorCz = null;
@@ -3589,7 +4190,6 @@
     }
 
     function buildMapCrossfire() {
-      clearPvpMapLights();
       const H = 4.5;
 
       addWallBox(90, H, 1.0, 0, H / 2, -45);
@@ -3610,62 +4210,9 @@
       addWindowWallX( 28,-28, 14, H, 1.0, 4, 1.2, 3.0);
     }
 
-    /** PVP alt layout: perimeter + line walls + small cube cover (top-down sketch style). */
-    function buildMapCrossfireGrid() {
-      clearPvpMapLights();
-      const H = 4.5;
-      const thick = 1.0;
-      const trim = 0x70798a;
-
-      // Smaller open duel arena: only perimeter walls, no inner full-height enclosures.
-      const half = 30;
-      addWallBox(half * 2, H, thick, 0, H / 2, -half);
-      addWallBox(half * 2, H, thick, 0, H / 2, half);
-      addWallBox(thick, H, half * 2, -half, H / 2, 0);
-      addWallBox(thick, H, half * 2, half, H / 2, 0);
-
-      function pillar(px, pz, s = 2.4) {
-        const coverH = 1.65;
-        addWallBox(s, coverH, s, px, coverH / 2, pz, trim);
-      }
-
-      const posts = [
-        [-22, -22], [22, -22], [-22, 22], [22, 22],
-        [-16, 0], [16, 0], [0, -16], [0, 16],
-        [-10, 10], [10, -10], [-6, -18], [6, 18],
-        [-2, 0], [2, 0],
-      ];
-      for (const [px, pz] of posts) pillar(px, pz);
-
-      const lightPos = [
-        [-20, -20], [0, -20], [20, -20],
-        [-20, 0], [0, 0], [20, 0],
-        [-20, 20], [0, 20], [20, 20],
-      ];
-      for (const [lx, lz] of lightPos) {
-        const L = createPhysicalPointLight(0xfff4e2, 88 * Math.PI, 34, 2.4);
-        L.position.set(lx, H - 0.5, lz);
-        L.castShadow = false;
-        scene.add(L);
-        pvpMapLights.push(L);
-      }
-      // Open-roof duel map needs stable global fill, not flashlight dependence.
-      const hemiFill = new THREE.HemisphereLight(0xdfe9ff, 0x3f3426, 1.05 * Math.PI);
-      scene.add(hemiFill);
-      pvpMapLights.push(hemiFill);
-      const sunFill = new THREE.DirectionalLight(0xfff0dc, 0.84 * Math.PI);
-      sunFill.position.set(14, 30, 10);
-      sunFill.castShadow = false;
-      scene.add(sunFill);
-      pvpMapLights.push(sunFill);
-      // New duel map should feel open/bright: force no ceiling regardless of previous map state.
-      ceiling.visible = false;
-    }
-
     const MAP_BUILDERS = {
       arena: buildMapArena,
-      crossfire: buildMapCrossfire,
-      crossfire_grid: buildMapCrossfireGrid,
+      crossfire: buildMapCrossfire
     };
 
     const ZOMBIE_COUNT = 32;
@@ -3736,7 +4283,7 @@
         return { x, z, usedDist: 0 };
       }
 
-      const S = isPvpCrossfireMap(CURRENT_MAP) ? 43 : 40;
+      const S = CURRENT_MAP === "crossfire" ? 43 : 40;
       const players = getAllPlayerPositions();
       let dist = minDist;
       for (let attempt = 0; attempt < 60; attempt++) {
@@ -3791,7 +4338,6 @@
       reloading: false,
       reloadEnd: 0,
       hitmarkerTimer: 0,
-      combatFeedbackTimer: 0,
       walkPhase: 0,
       smoothHeadBob: 0,
       weaponBobX: 0,
@@ -3919,27 +4465,29 @@
 
     function updateHud() {
       const w = weapon();
-      const roomLine = (MULTIPLAYER && ROOM_CODE) ? `<b style="color:#4fd1ff;">Room: ${ROOM_CODE}</b><br>` : "";
-      const lang = LANGUAGE_OPTIONS.includes(gameSettings.language) ? gameSettings.language : "en";
+      const wName = t(`weapon${state.weaponIndex}`);
+      const roomLine =
+        MULTIPLAYER && ROOM_CODE
+          ? `<b style="color:#4fd1ff;">${t("hudRoom")} ${ROOM_CODE}</b><br>`
+          : "";
       const mapLabel =
-        CURRENT_MAP === "arena"
-          ? (lang === "zh" ? "僵尸竞技场" : "zombie arena")
-          : CURRENT_MAP === "crossfire_grid"
-            ? (lang === "zh" ? "单挑 PVP - 新地图" : "crossfire PVP - bright duel map")
-            : isPvpCrossfireMap(CURRENT_MAP)
-              ? (lang === "zh" ? "单挑 PVP - 经典地图" : "crossfire PVP - classic")
-              : CURRENT_MAP;
+        CURRENT_MAP === "crossfire"
+          ? t("mapCrossfire")
+          : CURRENT_MAP === "arena"
+            ? t("mapArena")
+            : CURRENT_MAP;
+      const mpSuffix = MULTIPLAYER ? ` ${t("hudMpSuffix")}` : "";
+      const reloadParen = state.reloading ? ` (${t("hudRefilling")})` : "";
       hud.innerHTML = `
         ${roomLine}
-        Abandoned Orphanage<br>
-        WASD move | Space jump | R reload<br>
-        Mouse aim | RMB zoom | L flashlight | Z flashlight zoom<br>
-        Weapons: 1 2 3 4 | <b>5</b> Med Kit (hold M1 to heal 10s)<br>
-        Map: ${mapLabel}${MULTIPLAYER ? " (MP)" : ""}<br>
-        Weapon: ${w.name}<br>
-        ${state.weaponIndex === 4 ? "" : `Bullets: ${w.ammo} / ${w.magSize}${state.reloading ? "（Refilling...）" : ""}<br>`}
-        Health: ${Math.max(0, Math.floor(player.health))} / ${player.maxHealth}<br>
-        Score: ${state.score}
+        ${t("gameTitle")}<br>
+        ${t("hudMoveLine")}<br>
+        ${t("hudAimLine")}<br>
+        ${t("hudMapPrefix")} ${mapLabel}${mpSuffix}<br>
+        ${t("hudWeaponPrefix")} ${wName}<br>
+        ${state.weaponIndex === 4 ? "" : `${t("hudBulletsPrefix")} ${w.ammo} / ${w.magSize}${reloadParen}<br>`}
+        ${t("hudHealthPrefix")} ${Math.max(0, Math.floor(player.health))} / ${player.maxHealth}<br>
+        ${t("hudScorePrefix")} ${state.score}
       `;
     }
     updateHud();
@@ -4069,14 +4617,83 @@
       const jawBone = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.12, 0.32), matSkinD);
       jawBone.position.set(0, -0.24, 0.02); headGroup.add(jawBone);
 
-      const eyeGlowMat = new THREE.MeshBasicMaterial({ color: eyeColor });
-      const eyeSocketMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 1, metalness: 0 });
-      const sockL = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.10, 0.04), eyeSocketMat);
-      sockL.position.set(-0.10, 0.06, 0.20); headGroup.add(sockL);
+      /**
+       * Realistic glowing eyes.
+       *
+       *  - Deep socket: dark recessed box inside the skull (sells the depth so the bright pupil reads as 3D).
+       *  - Inner pupil: small sphere, MeshBasicMaterial at full color — unaffected by lighting (looks like an LED).
+       *  - Outer corona: larger transparent additive sphere over the pupil — fakes a soft bloom halo even without
+       *    post-processing, so the glow blends with the surrounding ambient light at distance.
+       *  - Specular cap: tiny shiny sphere with a touch of metalness so the reflection of the room moves across
+       *    the eye when the player walks past (the wet "alive" look).
+       *
+       * The actual coloured point light is created on demand by the eye-light scheduler in `updateEnemies` so we
+       * don't blow the WebGL forward-shading uniform light limit when many zombies exist; only the closest few
+       * zombies project real light at any time.
+       */
+      const eyeColorVec = new THREE.Color(eyeColor);
+
+      const eyeSocketMat = new THREE.MeshStandardMaterial({ color: 0x07080a, roughness: 1, metalness: 0 });
+      const sockL = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.11, 0.06), eyeSocketMat);
+      sockL.position.set(-0.10, 0.06, 0.18); headGroup.add(sockL);
       const sockR = sockL.clone(); sockR.position.x = 0.10; headGroup.add(sockR);
-      const eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.07, 0.05), eyeGlowMat);
-      eyeL.position.set(-0.10, 0.06, 0.215); headGroup.add(eyeL);
-      const eyeR = eyeL.clone(); eyeR.position.x = 0.10; headGroup.add(eyeR);
+
+      const pupilGeo = new THREE.SphereGeometry(0.046, 10, 8);
+      const pupilMat = new THREE.MeshBasicMaterial({
+        color: eyeColorVec.clone().multiplyScalar(1.45),
+        toneMapped: false,
+      });
+      const eyeL = new THREE.Mesh(pupilGeo, pupilMat);
+      eyeL.position.set(-0.10, 0.06, 0.22);
+      headGroup.add(eyeL);
+      const eyeR = new THREE.Mesh(pupilGeo, pupilMat);
+      eyeR.position.set(0.10, 0.06, 0.22);
+      headGroup.add(eyeR);
+
+      const coronaGeo = new THREE.SphereGeometry(0.085, 10, 8);
+      const coronaMat = new THREE.MeshBasicMaterial({
+        color: eyeColorVec.clone().multiplyScalar(0.85),
+        transparent: true,
+        opacity: 0.42,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        toneMapped: false,
+      });
+      const coronaL = new THREE.Mesh(coronaGeo, coronaMat);
+      coronaL.position.copy(eyeL.position);
+      coronaL.renderOrder = 2;
+      headGroup.add(coronaL);
+      const coronaR = new THREE.Mesh(coronaGeo, coronaMat);
+      coronaR.position.copy(eyeR.position);
+      coronaR.renderOrder = 2;
+      headGroup.add(coronaR);
+
+      const specMat = new THREE.MeshStandardMaterial({
+        color: eyeColorVec.clone().lerp(new THREE.Color(0xffffff), 0.55),
+        emissive: eyeColorVec.clone().multiplyScalar(0.4),
+        emissiveIntensity: 1,
+        roughness: 0.18,
+        metalness: 0.55,
+      });
+      const specL = new THREE.Mesh(new THREE.SphereGeometry(0.018, 6, 6), specMat);
+      specL.position.set(-0.10, 0.07, 0.255);
+      headGroup.add(specL);
+      const specR = new THREE.Mesh(new THREE.SphereGeometry(0.018, 6, 6), specMat);
+      specR.position.set(0.10, 0.07, 0.255);
+      headGroup.add(specR);
+
+      const _zombieEyeRefs = {
+        eyeColor: eyeColorVec.clone(),
+        pupilMat,
+        coronaMat,
+        specMat,
+        coronaL,
+        coronaR,
+        baseCoronaOpacity: 0.42,
+        // Real point light is created later (see attachEyeLightTo) only when this zombie is close enough to matter.
+        light: null,
+        wantLight: false,
+      };
 
       const brow = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.06, 0.08), matSkinD);
       brow.position.set(0, 0.15, 0.19); headGroup.add(brow);
@@ -4238,7 +4855,11 @@
         targetId: null,
         retargetTimer: 0,
         moveYaw: 0,
-        rangedLosAcquireTimer: 0
+        rangedLosAcquireTimer: 0,
+        wanderPath: null,
+        wanderPathIdx: 0,
+        wanderCooldown: wanderScheduleNextDelay(),
+        eyeRefs: _zombieEyeRefs,
       };
     }
 
@@ -4254,131 +4875,6 @@
       ctx.strokeRect(4, 8, 120, 8);
       enemy.hpTexture.needsUpdate = true;
     }
-
-    
-    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    const audioMaster = audioCtx.createGain();
-    const audioSfx = audioCtx.createGain();
-    const audioMusic = audioCtx.createGain();
-    audioSfx.connect(audioMaster);
-    audioMusic.connect(audioMaster);
-    audioMaster.connect(audioCtx.destination);
-
-    let menuBgmAudio = null;
-
-    function applyAudioVolumes() {
-      audioMaster.gain.value = gameSettings.masterVolume;
-      audioSfx.gain.value = gameSettings.soundVolume;
-      audioMusic.gain.value = gameSettings.musicVolume;
-      if (menuBgmMenuGain) {
-        menuBgmMenuGain.gain.value = THREE.MathUtils.clamp(
-          gameSettings.masterVolume * gameSettings.musicVolume,
-          0,
-          1
-        );
-      } else if (menuBgmAudio) {
-        menuBgmAudio.volume = THREE.MathUtils.clamp(
-          gameSettings.masterVolume * gameSettings.musicVolume,
-          0,
-          1
-        );
-      }
-    }
-    applyAudioVolumes();
-
-    function wireMenuBgmThroughAnalyser() {
-      if (!menuBgmAudio || menuBgmMediaSrc) return;
-      try {
-        menuBgmMediaSrc = audioCtx.createMediaElementSource(menuBgmAudio);
-        menuBgmAnalyser = audioCtx.createAnalyser();
-        menuBgmAnalyser.fftSize = 2048;
-        menuBgmAnalyser.smoothingTimeConstant = 0.42;
-        menuBgmMenuGain = audioCtx.createGain();
-        menuBgmMediaSrc.connect(menuBgmAnalyser);
-        menuBgmAnalyser.connect(menuBgmMenuGain);
-        menuBgmMenuGain.connect(audioMaster);
-        menuBgmTimeBuf = new Uint8Array(menuBgmAnalyser.fftSize);
-        menuBgmAudio.volume = 0;
-        applyAudioVolumes();
-      } catch (err) {
-        menuBgmMediaSrc = null;
-        menuBgmAnalyser = null;
-        menuBgmMenuGain = null;
-        menuBgmTimeBuf = null;
-      }
-    }
-
-    function getMenuBgmUrl() {
-      for (const base of getGameAssetBaseCandidates()) {
-        try {
-          return new URL("menu.mp3", normalizeGameAssetBase(base)).href;
-        } catch (_) {}
-      }
-      try {
-        return new URL("menu.mp3", pageDirFromLocation()).href;
-      } catch (_) {
-        return "menu.mp3";
-      }
-    }
-    function ensureMenuBgmAudio() {
-      if (menuBgmAudio) return;
-      const bgmUrl = getMenuBgmUrl();
-      menuBgmAudio = new Audio();
-      try {
-        if (new URL(bgmUrl).origin !== window.location.origin) {
-          menuBgmAudio.crossOrigin = "anonymous";
-        }
-      } catch (_) {}
-      menuBgmAudio.src = bgmUrl;
-      menuBgmAudio.loop = true;
-      menuBgmAudio.preload = "auto";
-      wireMenuBgmThroughAnalyser();
-      if (!menuBgmMenuGain) {
-        menuBgmAudio.volume = THREE.MathUtils.clamp(
-          gameSettings.masterVolume * gameSettings.musicVolume,
-          0,
-          1
-        );
-      } else {
-        applyAudioVolumes();
-      }
-    }
-    function pauseMenuBgm() {
-      if (!menuBgmAudio) return;
-      try {
-        menuBgmAudio.pause();
-      } catch (_) {}
-    }
-    /** Browser autoplay policy: start only after a user gesture; safe to call repeatedly. */
-    function tryPlayMenuBgm() {
-      if (menuEl.style.display === "none") return;
-      ensureMenuBgmAudio();
-      wireMenuBgmThroughAnalyser();
-      if (!menuBgmMenuGain) {
-        menuBgmAudio.volume = THREE.MathUtils.clamp(
-          gameSettings.masterVolume * gameSettings.musicVolume,
-          0,
-          1
-        );
-      } else {
-        applyAudioVolumes();
-      }
-      const p = menuBgmAudio.play();
-      if (p && typeof p.catch === "function") p.catch(() => {});
-    }
-    function onMenuBgmUserGesture() {
-      void (async () => {
-        try {
-          if (audioCtx.state === "suspended") {
-            await audioCtx.resume();
-          }
-        } catch (_) {}
-        tryPlayMenuBgm();
-      })();
-    }
-    ["pointerdown", "keydown", "touchstart"].forEach((ev) => {
-      window.addEventListener(ev, onMenuBgmUserGesture, { capture: true });
-    });
 
     let ambientWindNode = null;
     function ensureAmbientWindLoop() {
@@ -4406,118 +4902,31 @@
       ambientWindNode = { src, g };
     }
 
-    const _gunNoiseBuf = {};
-    function getGunNoiseBuffer(durationSec) {
-      const key = durationSec.toFixed(4);
-      if (_gunNoiseBuf[key]) return _gunNoiseBuf[key];
-      const rate = audioCtx.sampleRate;
-      const n = Math.max(64, (rate * durationSec) | 0);
-      const buf = audioCtx.createBuffer(1, n, rate);
-      const d = buf.getChannelData(0);
-      let brown = 0;
-      for (let i = 0; i < n; i++) {
-        const w = Math.random() * 2 - 1;
-        brown = 0.985 * brown + 0.015 * w;
-        d[i] = brown * 2.4;
-      }
-      _gunNoiseBuf[key] = buf;
-      return buf;
-    }
-
-    /** Layered tactical gunshots: bright crack + body + mechanical tail + short room echo. */
     function playGunSound(w) {
-      if (audioCtx.state === "suspended") void audioCtx.resume();
-      void w;
+      if (audioCtx.state === "suspended") audioCtx.resume();
+
       const now = audioCtx.currentTime;
-      const idx = state.weaponIndex;
-      const presets = [
-        { crackMs: 64, crackFc: 4300, crackQ: 0.84, crackG: 0.52, bodyMs: 170, bodyFc: 980, bodyG: 0.2, mechHz: 980, mechG: 0.03, tailMs: 260, tailFc: 1200, tailG: 0.08, echoDelay: 0.072, echoFb: 0.26, echoG: 0.08 },
-        { crackMs: 88, crackFc: 3600, crackQ: 0.72, crackG: 0.68, bodyMs: 250, bodyFc: 740, bodyG: 0.28, mechHz: 760, mechG: 0.045, tailMs: 330, tailFc: 900, tailG: 0.12, echoDelay: 0.082, echoFb: 0.31, echoG: 0.11 },
-        { crackMs: 110, crackFc: 2500, crackQ: 0.56, crackG: 0.82, bodyMs: 330, bodyFc: 520, bodyG: 0.38, mechHz: 520, mechG: 0.02, tailMs: 420, tailFc: 760, tailG: 0.18, echoDelay: 0.094, echoFb: 0.36, echoG: 0.16 },
-        { crackMs: 56, crackFc: 5200, crackQ: 0.92, crackG: 0.45, bodyMs: 185, bodyFc: 1200, bodyG: 0.17, mechHz: 1080, mechG: 0.03, tailMs: 240, tailFc: 1600, tailG: 0.07, echoDelay: 0.064, echoFb: 0.22, echoG: 0.06 },
-      ];
-      const p = presets[idx] || presets[1];
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      const filter = audioCtx.createBiquadFilter();
 
-      const crackSrc = audioCtx.createBufferSource();
-      crackSrc.buffer = getGunNoiseBuffer(p.crackMs / 1000);
-      const crackBp = audioCtx.createBiquadFilter();
-      crackBp.type = "bandpass";
-      crackBp.frequency.setValueAtTime(p.crackFc, now);
-      crackBp.Q.setValueAtTime(p.crackQ, now);
-      const crackGain = audioCtx.createGain();
-      crackGain.gain.setValueAtTime(0.0001, now);
-      crackGain.gain.exponentialRampToValueAtTime(p.crackG, now + 0.003);
-      crackGain.gain.exponentialRampToValueAtTime(0.0001, now + p.crackMs / 1000);
-      crackSrc.connect(crackBp);
-      crackBp.connect(crackGain);
-      crackGain.connect(audioSfx);
-      crackSrc.start(now);
-      crackSrc.stop(now + p.crackMs / 1000 + 0.03);
+      osc.type = "square";
+      osc.frequency.setValueAtTime(w.soundBase, now);
+      osc.frequency.exponentialRampToValueAtTime(w.soundBase * 0.45, now + 0.08);
 
-      const bodySrc = audioCtx.createBufferSource();
-      bodySrc.buffer = getGunNoiseBuffer(p.bodyMs / 1000);
-      const bodyLp = audioCtx.createBiquadFilter();
-      bodyLp.type = "lowpass";
-      bodyLp.frequency.setValueAtTime(p.bodyFc, now);
-      const bodyGain = audioCtx.createGain();
-      bodyGain.gain.setValueAtTime(0.0001, now + 0.002);
-      bodyGain.gain.exponentialRampToValueAtTime(p.bodyG, now + 0.014);
-      bodyGain.gain.exponentialRampToValueAtTime(0.0001, now + p.bodyMs / 1000);
-      bodySrc.connect(bodyLp);
-      bodyLp.connect(bodyGain);
-      bodyGain.connect(audioSfx);
-      bodySrc.start(now + 0.0015);
-      bodySrc.stop(now + p.bodyMs / 1000 + 0.05);
+      filter.type = "lowpass";
+      filter.frequency.setValueAtTime(2200, now);
 
-      const mech = audioCtx.createOscillator();
-      mech.type = idx === 2 ? "sawtooth" : "triangle";
-      mech.frequency.setValueAtTime(p.mechHz, now);
-      mech.frequency.exponentialRampToValueAtTime(Math.max(180, p.mechHz * 0.55), now + 0.08);
-      const mechHp = audioCtx.createBiquadFilter();
-      mechHp.type = "highpass";
-      mechHp.frequency.setValueAtTime(450, now);
-      const mechGain = audioCtx.createGain();
-      mechGain.gain.setValueAtTime(0.0001, now);
-      mechGain.gain.exponentialRampToValueAtTime(p.mechG, now + 0.005);
-      mechGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.1);
-      mech.connect(mechHp);
-      mechHp.connect(mechGain);
-      mechGain.connect(audioSfx);
-      mech.start(now + 0.001);
-      mech.stop(now + 0.105);
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(0.10, now + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.11);
 
-      const tailSrc = audioCtx.createBufferSource();
-      tailSrc.buffer = getGunNoiseBuffer(p.tailMs / 1000);
-      const tailBp = audioCtx.createBiquadFilter();
-      tailBp.type = "bandpass";
-      tailBp.frequency.setValueAtTime(p.tailFc, now);
-      tailBp.Q.setValueAtTime(0.5, now);
-      const tailGain = audioCtx.createGain();
-      tailGain.gain.setValueAtTime(0.0001, now + 0.006);
-      tailGain.gain.exponentialRampToValueAtTime(p.tailG, now + 0.035);
-      tailGain.gain.exponentialRampToValueAtTime(0.0001, now + p.tailMs / 1000);
-      tailSrc.connect(tailBp);
-      tailBp.connect(tailGain);
-      tailGain.connect(audioSfx);
-      tailSrc.start(now + 0.006);
-      tailSrc.stop(now + p.tailMs / 1000 + 0.06);
+      osc.connect(filter);
+      filter.connect(gain);
+      gain.connect(audioSfx);
 
-      const echoIn = audioCtx.createGain();
-      echoIn.gain.setValueAtTime(p.echoG, now);
-      const delay = audioCtx.createDelay(0.22);
-      delay.delayTime.setValueAtTime(p.echoDelay, now);
-      const feedback = audioCtx.createGain();
-      feedback.gain.setValueAtTime(p.echoFb, now);
-      const echoLp = audioCtx.createBiquadFilter();
-      echoLp.type = "lowpass";
-      echoLp.frequency.setValueAtTime(Math.max(700, p.tailFc * 1.1), now);
-      bodyGain.connect(echoIn);
-      echoIn.connect(delay);
-      delay.connect(echoLp);
-      echoLp.connect(audioSfx);
-      delay.connect(feedback);
-      feedback.connect(delay);
-      feedback.gain.exponentialRampToValueAtTime(0.0001, now + 0.5);
+      osc.start(now);
+      osc.stop(now + 0.12);
     }
 
     let flashlightAudioBuffer = null;
@@ -4629,107 +5038,8 @@
         drop.userData.life = 0.26;
         bloodGroup.add(drop);
       }
-    }
-
-    function showCombatFeedback(text, color, dur = 0.18) {
-      if (!combatFeedbackEl) return;
-      combatFeedbackEl.textContent = text;
-      combatFeedbackEl.style.color = color;
-      combatFeedbackEl.classList.add("show");
-      state.combatFeedbackTimer = Math.max(state.combatFeedbackTimer, dur);
-    }
-
-    function triggerHitFeedback(isKill = false) {
-      state.hitmarkerTimer = isKill ? 0.16 : 0.09;
+      state.hitmarkerTimer = 0.08;
       hitmarkerEl.classList.add("show");
-      hitmarkerEl.classList.toggle("critical", !!isKill);
-      showCombatFeedback(isKill ? "KILL!" : "HIT", isKill ? "rgba(255,88,88,0.98)" : "rgba(255,255,255,0.95)", isKill ? 0.34 : 0.12);
-    }
-
-    function createMuzzleFlash(point, color = 0xfff4d2, forward = null) {
-      trimEffectGroup(muzzleFlashGroup, MAX_MUZZLE_FLASHES, (o) => { o.material.dispose(); }, 3);
-      const dir = (forward && forward.lengthSq() > 1e-6)
-        ? forward.clone().normalize()
-        : new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
-      const warm = new THREE.Color(color).lerp(new THREE.Color(0xffb04d), 0.42).getHex();
-
-      const core = new THREE.Mesh(
-        MUZZLE_FLASH_GEO,
-        new THREE.MeshBasicMaterial({
-          color: 0xfff7cf,
-          transparent: true,
-          opacity: 0.88,
-          blending: THREE.AdditiveBlending,
-          depthWrite: false,
-        })
-      );
-      core.position.copy(point);
-      core.userData.life = 0.04;
-      core.userData.maxLife = 0.04;
-      core.userData.kind = "core";
-      muzzleFlashGroup.add(core);
-
-      const cone = new THREE.Mesh(
-        MUZZLE_FLASH_CONE_GEO,
-        new THREE.MeshBasicMaterial({
-          color: warm,
-          transparent: true,
-          opacity: 0.82,
-          blending: THREE.AdditiveBlending,
-          depthWrite: false,
-          side: THREE.DoubleSide,
-        })
-      );
-      cone.position.copy(point).addScaledVector(dir, 0.09);
-      cone.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
-      cone.userData.life = 0.055;
-      cone.userData.maxLife = 0.055;
-      cone.userData.kind = "cone";
-      cone.userData.forward = dir.clone();
-      muzzleFlashGroup.add(cone);
-
-      const smoke = new THREE.Mesh(
-        MUZZLE_FLASH_GEO,
-        new THREE.MeshBasicMaterial({
-          color: 0xffcf8b,
-          transparent: true,
-          opacity: 0.32,
-          blending: THREE.AdditiveBlending,
-          depthWrite: false,
-        })
-      );
-      smoke.position.copy(point).addScaledVector(dir, 0.04);
-      smoke.scale.setScalar(1.4);
-      smoke.userData.life = 0.09;
-      smoke.userData.maxLife = 0.09;
-      smoke.userData.kind = "smoke";
-      smoke.userData.forward = dir.clone();
-      muzzleFlashGroup.add(smoke);
-    }
-
-    function updateMuzzleFlashes(dt) {
-      const dead = [];
-      for (const flash of muzzleFlashGroup.children) {
-        flash.userData.life -= dt;
-        const k = Math.max(0, flash.userData.life / flash.userData.maxLife);
-        if (flash.userData.kind === "cone") {
-          flash.material.opacity = 0.82 * k;
-          flash.scale.z = (flash.scale.z || 1) + dt * 5.2;
-          if (flash.userData.forward) flash.position.addScaledVector(flash.userData.forward, dt * 2.1);
-        } else if (flash.userData.kind === "smoke") {
-          flash.material.opacity = 0.32 * k;
-          flash.scale.multiplyScalar(1 + dt * 4.2);
-          if (flash.userData.forward) flash.position.addScaledVector(flash.userData.forward, dt * 1.1);
-        } else {
-          flash.material.opacity = 0.88 * k;
-          flash.scale.multiplyScalar(1 + dt * 7.5);
-        }
-        if (flash.userData.life <= 0) dead.push(flash);
-      }
-      for (const flash of dead) {
-        muzzleFlashGroup.remove(flash);
-        flash.material.dispose();
-      }
     }
 
     function updateBlood(dt) {
@@ -4762,15 +5072,17 @@
       }
     }
 
-    function createBulletTrail(start, end, color) {
+    /** Short-lived additive line trail (player weapons + synced MP shots). */
+    function pushTracerRibbon(start, end, color, maxLife, opacityMul = 1) {
       const hex = typeof color === "number" ? color : new THREE.Color(color).getHex();
+      const om = THREE.MathUtils.clamp(opacityMul, 0, 2);
       const a = start.clone();
       const b = end.clone();
       const geomCore = new THREE.BufferGeometry().setFromPoints([a, b]);
       const matCore = new THREE.LineBasicMaterial({
         color: hex,
         transparent: true,
-        opacity: 1,
+        opacity: om,
         blending: THREE.AdditiveBlending,
         depthWrite: false,
       });
@@ -4779,7 +5091,7 @@
       const matGlow = new THREE.LineBasicMaterial({
         color: hex,
         transparent: true,
-        opacity: 0.42,
+        opacity: 0.42 * om,
         blending: THREE.AdditiveBlending,
         depthWrite: false,
       });
@@ -4788,16 +5100,47 @@
       trailGroup.add(lineCore);
       trailGroup.add(lineGlow);
       tracerGroup.add(trailGroup);
-      const maxLife = 0.28;
       state.tracers.push({
         group: trailGroup,
         parts: [
-          { geometry: geomCore, material: matCore, baseOpacity: 1 },
-          { geometry: geomGlow, material: matGlow, baseOpacity: 0.42 },
+          { geometry: geomCore, material: matCore, baseOpacity: om },
+          { geometry: geomGlow, material: matGlow, baseOpacity: 0.42 * om },
         ],
         life: maxLife,
         maxLife,
       });
+    }
+
+    function createBulletTrail(start, end, color) {
+      pushTracerRibbon(start, end, color, 0.28, 1);
+    }
+
+    /** Gunner zombie shots: bright red, wider visible “beam” + longer decay; host syncs to co-op peers. */
+    const ZOMBIE_GUNNER_TRAIL_COLOR = 0xff1414;
+    function createZombieGunnerBulletTrail(start, end) {
+      const dir = new THREE.Vector3().subVectors(end, start);
+      const len = dir.length();
+      if (len < 1e-5) return;
+      dir.multiplyScalar(1 / len);
+      let up = new THREE.Vector3(0, 1, 0);
+      if (Math.abs(dir.dot(up)) > 0.9) up = new THREE.Vector3(1, 0, 0);
+      const side = new THREE.Vector3().crossVectors(dir, up).normalize().multiplyScalar(0.048);
+      const life = 0.52;
+      pushTracerRibbon(start, end, ZOMBIE_GUNNER_TRAIL_COLOR, life, 1);
+      pushTracerRibbon(
+        start.clone().add(side),
+        end.clone().add(side),
+        ZOMBIE_GUNNER_TRAIL_COLOR,
+        life * 0.92,
+        0.62
+      );
+      pushTracerRibbon(
+        start.clone().sub(side),
+        end.clone().sub(side),
+        ZOMBIE_GUNNER_TRAIL_COLOR,
+        life * 0.92,
+        0.62
+      );
     }
 
     function emitShootNetwork(muzzle, end, color, hitType, extras = {}) {
@@ -4821,7 +5164,7 @@
     const playerLightTarget = new THREE.Object3D();
     playerLightTarget.position.set(0, 0, -1);
 
-    const playerBodyLight = createPhysicalPointLight(
+    const playerBodyLight = createPlayerPointLight(
       PLAYER_LIGHT_COLOR,
       PLAYER_BODY_INTENSITY,
       PLAYER_BODY_DISTANCE,
@@ -4830,7 +5173,7 @@
     playerBodyLight.position.set(0, -0.22, 0.08);
     camera.add(playerBodyLight);
 
-    const flashOuterLocal = createPhysicalSpotLight(
+    const flashOuterLocal = createPlayerSpotLight(
       PLAYER_LIGHT_COLOR,
       FLASH_OUTER_INTENSITY,
       FLASH_OUTER_DISTANCE,
@@ -4838,7 +5181,7 @@
       FLASH_OUTER_PEN,
       FLASHLIGHT_LIGHT_DECAY
     );
-    const flashInnerLocal = createPhysicalSpotLight(
+    const flashInnerLocal = createPlayerSpotLight(
       PLAYER_LIGHT_COLOR,
       FLASH_INNER_INTENSITY,
       FLASH_INNER_DISTANCE,
@@ -4853,20 +5196,6 @@
     camera.add(playerLightTarget);
     flashOuterLocal.target = playerLightTarget;
     flashInnerLocal.target = playerLightTarget;
-    let flashlightZoomIndex = 1;
-
-    function applyFlashlightZoomProfile(index) {
-      const n = FLASHLIGHT_ZOOM_LEVELS.length;
-      flashlightZoomIndex = ((index % n) + n) % n;
-      const p = FLASHLIGHT_ZOOM_LEVELS[flashlightZoomIndex];
-      flashOuterLocal.intensity = p.outerIntensity;
-      flashOuterLocal.distance = p.outerDistance;
-      flashOuterLocal.angle = p.outerAngle;
-      flashInnerLocal.intensity = p.innerIntensity;
-      flashInnerLocal.distance = p.innerDistance;
-      flashInnerLocal.angle = p.innerAngle;
-    }
-    applyFlashlightZoomProfile(flashlightZoomIndex);
 
     function setLocalPlayerLights(on) {
       playerBodyLight.visible = on;
@@ -4879,10 +5208,6 @@
 
     function refreshLocalPlayerLightsForCurrentState() {
       if (!gameWorldReady || menuEl.style.display !== "none") {
-        setLocalPlayerLights(false);
-        return;
-      }
-      if (CURRENT_MAP === "crossfire_grid") {
         setLocalPlayerLights(false);
         return;
       }
@@ -5102,27 +5427,8 @@
         !chatOpen &&
         !settingsModalOpen
       ) {
-        if (CURRENT_MAP === "crossfire_grid") {
-          playerLightsPreference = false;
-          refreshLocalPlayerLightsForCurrentState();
-          e.preventDefault();
-          return;
-        }
         playerLightsPreference = !playerLightsPreference;
         refreshLocalPlayerLightsForCurrentState();
-        playFlashlightToggleSound();
-        e.preventDefault();
-        return;
-      }
-      if (
-        k === "z" &&
-        started &&
-        gameWorldReady &&
-        menuEl.style.display === "none" &&
-        !chatOpen &&
-        !settingsModalOpen
-      ) {
-        applyFlashlightZoomProfile(flashlightZoomIndex + 1);
         playFlashlightToggleSound();
         e.preventDefault();
         return;
@@ -5239,12 +5545,10 @@
     /* ==== PART 2 STARTS HERE ==== */
     function rebuildMapAndEnemies() {
       clearMap();
-      applySceneFogAndCameraFar();
-      if (isPvpCrossfireMap(CURRENT_MAP)) {
-        player.position.set(0, 1.65, CURRENT_MAP === "crossfire_grid" ? 22 : 34);
+      if (CURRENT_MAP === "crossfire") {
+        player.position.set(0, 1.65, 34);
         floor.visible = true;
-        ceiling.visible = CURRENT_MAP !== "crossfire_grid";
-        if (CURRENT_MAP === "crossfire_grid") playerLightsPreference = false;
+        ceiling.visible = true;
       } else {
         floor.visible = false;
         ceiling.visible = false;
@@ -5327,6 +5631,7 @@
 
     function rebuildEnemyRoster() {
       for (const enemy of state.enemies) {
+        detachEyeLightFrom(enemy);
         scene.remove(enemy.group);
       }
       state.enemies.length = 0;
@@ -5406,66 +5711,11 @@
       return { t: bestT, zone };
     }
 
-    function remotePlayerHitAlongRay(raycaster, rp) {
-      if (!rp || !rp.group) return null;
-      _invEnemyMat.copy(rp.group.matrixWorld).invert();
-      _ehLo.copy(raycaster.ray.origin).applyMatrix4(_invEnemyMat);
-      _ehLd.copy(raycaster.ray.direction).transformDirection(_invEnemyMat).normalize();
-      const volumes = [
-        { cx: 0, cy: 1.82, cz: 0, r: 0.24, zone: "head" },
-        { cx: 0, cy: 1.14, cz: 0, r: 0.44, zone: "body" },
-        { cx: 0, cy: 0.44, cz: 0, r: 0.38, zone: "leg" },
-      ];
-      let bestT = Infinity;
-      let zone = null;
-      for (let i = 0; i < volumes.length; i++) {
-        const v = volumes[i];
-        const t = raySphereParam(_ehLo, _ehLd, v.cx, v.cy, v.cz, v.r);
-        if (t !== null && t < bestT) {
-          bestT = t;
-          zone = v.zone;
-        }
-      }
-      if (bestT === Infinity || !zone) return null;
-      return { t: bestT, zone };
-    }
-
     function applyDamage(enemy, zone, w) {
       if (zone === "head") enemy.hp -= w.damageHead;
       else if (zone === "leg") enemy.hp -= w.damageLegs;
       else enemy.hp -= w.damageBody;
       drawEnemyHp(enemy);
-    }
-
-    const _muzzleTmpForward = new THREE.Vector3();
-    const _muzzleTmpRight = new THREE.Vector3();
-    const _muzzleTmpUp = new THREE.Vector3();
-    const _muzzleTmpQuat = new THREE.Quaternion();
-    const _muzzleLocal = new THREE.Vector3();
-    function getWeaponMuzzleWorldPoint(out) {
-      const wm = weaponModels[state.weaponIndex];
-      if (!wm || !wm.userData || !wm.userData.gun) {
-        return out.copy(camera.position);
-      }
-      // Visual tracer origin = barrel tip of first-person weapon model (not camera center / scope).
-      const barrelLocal = [
-        { x: 0.00, y: 0.01, z: -0.27 }, // pistol
-        { x: 0.00, y: 0.01, z: -0.50 }, // rifle
-        { x: 0.00, y: 0.00, z: -0.52 }, // shotgun
-        { x: 0.00, y: 0.01, z: -0.40 }, // smg
-      ][state.weaponIndex | 0] || { x: 0.00, y: 0.01, z: -0.46 };
-      _muzzleLocal.set(barrelLocal.x, barrelLocal.y, barrelLocal.z);
-      wm.userData.gun.localToWorld(out.copy(_muzzleLocal));
-      camera.getWorldQuaternion(_muzzleTmpQuat);
-      _muzzleTmpForward.set(0, 0, -1).applyQuaternion(_muzzleTmpQuat);
-      _muzzleTmpRight.set(1, 0, 0).applyQuaternion(_muzzleTmpQuat);
-      _muzzleTmpUp.set(0, 1, 0).applyQuaternion(_muzzleTmpQuat);
-      out.addScaledVector(_muzzleTmpForward, 0.035);
-      // Reduce extreme up/down tracer slope: keep origin near weapon but partially converge to camera axis.
-      const adsK = THREE.MathUtils.clamp(state.adsProgress || 0, 0, 1);
-      const keepWeapon = THREE.MathUtils.lerp(0.62, 0.78, adsK);
-      out.lerp(camera.position.clone().addScaledVector(_muzzleTmpForward, 0.18), 1 - keepWeapon);
-      return out;
     }
 
     function tryShoot() {
@@ -5511,10 +5761,9 @@
       );
 
       const muzzleStart = new THREE.Vector3();
-      getWeaponMuzzleWorldPoint(muzzleStart);
+      weaponModels[state.weaponIndex].userData.gun.getWorldPosition(muzzleStart);
 
       playGunSound(w);
-      // Per request: disable muzzle flash effect.
 
       for (let i = 0; i < w.pellets; i++) {
         const movingPenalty = (keys.w || keys.a || keys.s || keys.d) ? 1.25 : 1;
@@ -5540,16 +5789,14 @@
 
         let bestRpId = null;
         let bestRpHit = null;
-        let bestRpZone = "body";
         if (MULTIPLAYER && !ARENA_COOP) {
           for (const [rpId, rp] of remotePlayers) {
             if (!rp.group.visible) continue;
-            const hit = remotePlayerHitAlongRay(ray, rp);
-            if (hit) {
-              if (!bestRpHit || hit.t < bestRpHit.distance) {
+            const hits = ray.intersectObject(rp.group, true);
+            if (hits.length > 0) {
+              if (!bestRpHit || hits[0].distance < bestRpHit.distance) {
                 bestRpId = rpId;
-                bestRpHit = { point: ray.ray.origin.clone().addScaledVector(ray.ray.direction, hit.t), distance: hit.t };
-                bestRpZone = hit.zone;
+                bestRpHit = hits[0];
               }
             }
           }
@@ -5568,7 +5815,8 @@
           createBlood(bp);
           createBulletTrail(muzzleStart.clone(), bp.clone(), w.color);
           emitShootNetwork(muzzleStart, bp, w.color, "blood");
-          triggerHitFeedback(false);
+          state.hitmarkerTimer = 0.08;
+          hitmarkerEl.classList.add("show");
 
           const coopArena = MULTIPLAYER && ARENA_COOP && CURRENT_MAP === "arena";
           if (coopArena && !ZOMBIE_AUTHORITY) {
@@ -5584,9 +5832,8 @@
               bestEnemy.alive = false;
               bestEnemy.respawnTimer = 3.0;
               bestEnemy.group.visible = false;
+              detachEyeLightFrom(bestEnemy);
               state.score += 1;
-              triggerHitFeedback(true);
-              createSparks(bp.clone(), 0xff5555);
             }
           }
         } else if (closestDist === rpDist && bestRpId && bestRpHit) {
@@ -5594,8 +5841,9 @@
           createBlood(bp);
           createBulletTrail(muzzleStart.clone(), bp.clone(), w.color);
           emitShootNetwork(muzzleStart, bp, w.color, "blood");
-          triggerHitFeedback(false);
-          const dmg = bestRpZone === "head" ? w.damageHead : (bestRpZone === "leg" ? w.damageLegs : w.damageBody);
+          state.hitmarkerTimer = 0.08;
+          hitmarkerEl.classList.add("show");
+          const dmg = w.damageBody;
           socket.emit("hit", { target: bestRpId, damage: dmg, x: player.position.x, z: player.position.z });
         } else if (wallHit) {
           const wp = wallHit.point.clone();
@@ -5867,8 +6115,7 @@
           z: player.position.z,
           yaw: player.yaw,
           name: playerName,
-          weapon: state.weaponIndex,
-          reloading: state.reloading
+          weapon: state.weaponIndex
         });
       }
     }
@@ -5887,7 +6134,7 @@
       }
       document.body.classList.add("show-cursor");
 
-      if (!isPvpCrossfireMap(CURRENT_MAP) && killerEnemy) {
+      if (CURRENT_MAP !== "crossfire" && killerEnemy) {
         const ex = killerEnemy.group.position.x;
         const ez = killerEnemy.group.position.z;
         deathCamYaw = Math.atan2(ex - player.position.x, ez - player.position.z);
@@ -5899,14 +6146,15 @@
       deathFade.style.background = "rgba(0,0,0,0)";
       deathUI.style.display = "none";
 
-      btnDeathQuit.textContent = "QUIT";
-      btnDeathRestart.textContent = MULTIPLAYER ? "RESPAWN" : "RESTART";
+      btnDeathQuit.textContent = t("btnQuit");
+      btnDeathRestart.textContent = MULTIPLAYER ? t("btnRespawn") : t("btnRestart");
+      btnDeathSettings.textContent = t("btnSettings");
       btnDeathSettings.style.display = "";
 
-      if (isPvpCrossfireMap(CURRENT_MAP)) {
+      if (CURRENT_MAP === "crossfire") {
         deathUI.style.display = "flex";
         deathUI.style.opacity = "0.25";
-        deathTitle.textContent = "DEFEATED";
+        deathTitle.textContent = t("deathDefeated");
         deathTitle.style.color = "#e53e3e";
         deathScore.textContent = "";
         btnDeathRestart.style.display = "";
@@ -5914,8 +6162,8 @@
         deathUI.addEventListener("mouseenter", () => { deathUI.style.opacity = "1"; });
         deathUI.addEventListener("mouseleave", () => { deathUI.style.opacity = "0.25"; });
       } else {
-        deathScore.textContent = `Score: ${state.score}`;
-        deathTitle.textContent = "DEFEAT";
+        deathScore.textContent = t("deathScoreFmt").replace("{score}", String(state.score));
+        deathTitle.textContent = t("deathDefeat");
         deathTitle.style.color = "#e53e3e";
         btnDeathRestart.style.display = "";
         deathOverlay.style.pointerEvents = "none";
@@ -5923,17 +6171,17 @@
     }
 
     function updateDeathAnim(dt) {
-      if (player.health > 0 || isPvpCrossfireMap(CURRENT_MAP)) return;
+      if (player.health > 0 || CURRENT_MAP === "crossfire") return;
       deathAnimTime += dt;
-      const t = Math.min(deathAnimTime / DEATH_ANIM_DURATION, 1);
-      const fadeOpacity = t * 0.5;
+      const deathPhase = Math.min(deathAnimTime / DEATH_ANIM_DURATION, 1);
+      const fadeOpacity = deathPhase * 0.5;
       deathFade.style.background = `rgba(0,0,0,${fadeOpacity})`;
 
       if (killerEnemy) {
         player.yaw += (deathCamYaw - player.yaw) * Math.min(1, dt * 4);
         player.pitch += (deathCamPitch - player.pitch) * Math.min(1, dt * 4);
       }
-      const zoomFov = deathBaseFov - t * 20;
+      const zoomFov = deathBaseFov - deathPhase * 20;
       camera.fov = Math.max(30, zoomFov);
       camera.updateProjectionMatrix();
 
@@ -5941,7 +6189,7 @@
       camera.rotation.y = player.yaw;
       camera.rotation.x = player.pitch;
 
-      if (t >= 1 && deathUI.style.display === "none") {
+      if (deathPhase >= 1 && deathUI.style.display === "none") {
         deathUI.style.display = "flex";
         deathOverlay.style.pointerEvents = "auto";
       }
@@ -5953,7 +6201,7 @@
       deathUI.style.display = "none";
       deathFade.style.background = "rgba(0,0,0,0)";
       deathOverlay.style.pointerEvents = "none";
-      btnDeathRestart.textContent = "RESTART";
+      btnDeathRestart.textContent = t("btnRestart");
       killerEnemy = null;
       weaponRoot.visible = true;
       refreshLocalPlayerLightsForCurrentState();
@@ -6001,7 +6249,7 @@
       keys.space = false;
       keys.shift = false;
       pauseOverlay.style.display = "flex";
-      btnPauseRestart.style.display = isPvpCrossfireMap(CURRENT_MAP) ? "none" : "";
+      btnPauseRestart.style.display = (CURRENT_MAP !== "crossfire") ? "" : "none";
       crosshairEl.classList.add("hidden");
     }
 
@@ -6035,6 +6283,27 @@
       setActiveSettingsTab(chosen);
     }
 
+    function refreshOverlayTexts() {
+      const pauseTitleEl = document.getElementById("pauseTitle");
+      if (pauseTitleEl) pauseTitleEl.textContent = t("paused");
+      btnResume.textContent = t("btnResume");
+      btnPauseSettings.textContent = t("btnSettings");
+      btnPauseRestart.textContent = t("pauseRestart");
+      btnPauseQuit.textContent = t("pauseQuit");
+      btnDeathSettings.textContent = t("btnSettings");
+      btnDeathQuit.textContent = t("btnQuit");
+      btnDeathRestart.textContent = MULTIPLAYER ? t("btnRespawn") : t("btnRestart");
+      if (deathOverlay.style.display === "block" && deathUI.style.display === "flex") {
+        if (CURRENT_MAP === "crossfire") {
+          deathTitle.textContent = t("deathDefeated");
+          deathScore.textContent = "";
+        } else {
+          deathTitle.textContent = t("deathDefeat");
+          deathScore.textContent = t("deathScoreFmt").replace("{score}", String(state.score));
+        }
+      }
+    }
+
     function syncSettingsUI() {
       rngMasterVol.value = String(Math.round(gameSettings.masterVolume * 100));
       rngMusicVol.value = String(Math.round(gameSettings.musicVolume * 100));
@@ -6042,16 +6311,15 @@
       lblMasterVol.textContent = `${rngMasterVol.value}%`;
       lblMusicVol.textContent = `${rngMusicVol.value}%`;
       lblSfxVol.textContent = `${rngSfxVol.value}%`;
-      qualityLabel.textContent = QUALITY_LABELS[gameSettings.qualityIndex] || "REGULAR";
-      textureLabel.textContent = gameSettings.texturesOn ? "ON" : "OFF";
+      qualityLabel.textContent = t(`qualityTier${gameSettings.qualityIndex}`);
+      textureLabel.textContent = gameSettings.texturesOn ? t("on") : t("off");
       const rdi = THREE.MathUtils.clamp(
         gameSettings.renderDistanceIndex | 0,
         0,
         RENDER_DISTANCE_LEVELS.length - 1
       );
-      renderDistanceLabel.textContent = RENDER_DISTANCE_LEVELS[rdi].label;
-      languageValue.textContent = LANGUAGE_LABELS[gameSettings.language] || "ENGLISH";
-      applyLanguageUI();
+      renderDistanceLabel.textContent = t(`renderDist${rdi}`);
+      if (languageUiLabel) languageUiLabel.textContent = LANGUAGE_OPTIONS[languageIndexFromSettings()].native;
     }
 
     function openSettingsModal() {
@@ -6086,7 +6354,7 @@
         );
         return;
       }
-      const S = isPvpCrossfireMap(CURRENT_MAP) ? 45 : 42;
+      const S = CURRENT_MAP === "crossfire" ? 45 : 42;
       navMinX = -S;
       navMinZ = -S;
       navCols = Math.ceil((S * 2) / NAV_CELL);
@@ -6200,6 +6468,107 @@
       return { x: fx, z: fz };
     }
 
+    /** Idle roam: BFS path to a random cell at medium graph distance (nav grid cells). */
+    const WANDER_CELL_DIST_MIN = 6;
+    const WANDER_CELL_DIST_MAX = 20;
+    const WANDER_BFS_STEP_CAP = 90000;
+    const WANDER_WAYPOINT_REACH = 1.35;
+
+    function pushNavNeighbors8(idx, out) {
+      const cr = (idx / navCols) | 0;
+      const cc = idx % navCols;
+      for (let dr = -1; dr <= 1; dr++) {
+        const nr = cr + dr;
+        if (nr < 0 || nr >= navRows) continue;
+        for (let dc = -1; dc <= 1; dc++) {
+          if (dr === 0 && dc === 0) continue;
+          const nc = cc + dc;
+          if (nc < 0 || nc >= navCols) continue;
+          const nIdx = nr * navCols + nc;
+          if (navGrid[nIdx]) continue;
+          if (dr !== 0 && dc !== 0) {
+            if (navGrid[cr * navCols + nc] || navGrid[nr * navCols + cc]) continue;
+          }
+          out.push(nIdx);
+        }
+      }
+    }
+
+    /**
+     * @returns {Array<{x:number,z:number}>|null} world waypoints (cell centers), excluding start cell
+     */
+    function buildRandomWanderPath(ex, ez) {
+      if (!navGrid || navCols < 2 || navRows < 2) return null;
+      const c0 = Math.min(navCols - 1, Math.max(0, ((ex - navMinX) / NAV_CELL) | 0));
+      const r0 = Math.min(navRows - 1, Math.max(0, ((ez - navMinZ) / NAV_CELL) | 0));
+      const startIdx = r0 * navCols + c0;
+      if (navGrid[startIdx]) return null;
+
+      const total = navCols * navRows;
+      const dist = new Uint16Array(total).fill(65535);
+      const parent = new Int32Array(total).fill(-1);
+      dist[startIdx] = 0;
+      const queue = [startIdx];
+      let head = 0;
+      let bfsSteps = 0;
+      while (head < queue.length && bfsSteps < WANDER_BFS_STEP_CAP) {
+        bfsSteps++;
+        const idx = queue[head++];
+        const nd = dist[idx] + 1;
+        const neigh = [];
+        pushNavNeighbors8(idx, neigh);
+        for (let i = 0; i < neigh.length; i++) {
+          const nIdx = neigh[i];
+          if (nd < dist[nIdx]) {
+            dist[nIdx] = nd;
+            parent[nIdx] = idx;
+            queue.push(nIdx);
+          }
+        }
+      }
+
+      const candidates = [];
+      for (let i = 0; i < total; i++) {
+        if (navGrid[i]) continue;
+        const d = dist[i];
+        if (d >= WANDER_CELL_DIST_MIN && d <= WANDER_CELL_DIST_MAX) candidates.push(i);
+      }
+      if (!candidates.length) {
+        for (let i = 0; i < total; i++) {
+          if (navGrid[i]) continue;
+          const d = dist[i];
+          if (d >= 4 && d <= 40) candidates.push(i);
+        }
+      }
+      if (!candidates.length) return null;
+
+      const goalIdx = candidates[(Math.random() * candidates.length) | 0];
+      const chain = [];
+      let cur = goalIdx;
+      let guard = 0;
+      while (cur >= 0 && cur !== startIdx && guard++ < 512) {
+        chain.push(cur);
+        cur = parent[cur];
+      }
+      if (!chain.length) return null;
+      chain.reverse();
+      const path = [];
+      for (let i = 0; i < chain.length; i++) {
+        const gi = chain[i];
+        const gr = (gi / navCols) | 0;
+        const gc = gi % navCols;
+        path.push({
+          x: navMinX + (gc + 0.5) * NAV_CELL,
+          z: navMinZ + (gr + 0.5) * NAV_CELL,
+        });
+      }
+      return path;
+    }
+
+    function wanderScheduleNextDelay() {
+      return 1 + Math.random() * 14;
+    }
+
     // ── Zombie vision / awareness (throttled, 360° FOV) ──
     const LOSE_RATIO = 0.10;
     const LOSE_TIME = 15.0;
@@ -6297,6 +6666,8 @@
         if (ratio > 0) {
           enemy.aware = true;
           enemy.hiddenTimer = 0;
+          enemy.wanderPath = null;
+          enemy.wanderPathIdx = 0;
         }
       } else {
         if (ratio < LOSE_RATIO) {
@@ -6305,6 +6676,7 @@
             enemy.aware = false;
             enemy.hiddenTimer = 0;
             enemy.targetId = null;
+            enemy.wanderCooldown = wanderScheduleNextDelay();
           }
         } else {
           enemy.hiddenTimer = 0;
@@ -6336,6 +6708,122 @@
       updateHud();
     }
 
+    /**
+     * Tier-aware zombie-eye animation + colored eye light scheduler.
+     *
+     *  - Corona pulses: a low-amplitude breathing curve so eyes feel "alive"; the pulse rate ties to whether
+     *    the zombie is currently aware of a target (faster + brighter when hostile).
+     *  - Eye lights: real `THREE.PointLight`s but only attached to the closest few zombies to camera (and only
+     *    on regular+ tiers) so we never blow the WebGL forward shading uniform light limit.  This actually
+     *    casts coloured light onto nearby walls / floors — that's what gives the eyes their cinematic glow.
+     */
+    const MAX_ACTIVE_EYE_LIGHTS_BY_TIER = { potato: 0, regular: 4, high: 8, extreme: 14 };
+    const _eyeTmp = new THREE.Vector3();
+
+    function _eyeBaseLightConfig(type) {
+      if (type === "fast")   return { intensity: 1.6, distance: 4.5, decay: 1.6 };
+      if (type === "gunner") return { intensity: 1.4, distance: 4.0, decay: 1.7 };
+      if (type === "tank")   return { intensity: 2.4, distance: 6.5, decay: 1.4 };
+      return { intensity: 1.7, distance: 4.8, decay: 1.6 };
+    }
+
+    function attachEyeLightTo(enemy) {
+      const er = enemy.eyeRefs;
+      if (!er || er.light) return;
+      const cfg = _eyeBaseLightConfig(enemy.type);
+      const L = new THREE.PointLight(er.eyeColor.getHex(), cfg.intensity, cfg.distance, cfg.decay);
+      L.castShadow = false;
+      enemy.group.add(L);
+      // Anchor between the eyes so the cast glow looks like both pupils are emitting.
+      L.position.set(0, 1.84 + 0.06, 0.27);
+      er.light = L;
+      er._lightBase = cfg;
+    }
+
+    function detachEyeLightFrom(enemy) {
+      const er = enemy.eyeRefs;
+      if (!er || !er.light) return;
+      enemy.group.remove(er.light);
+      try { er.light.dispose && er.light.dispose(); } catch (_) {}
+      er.light = null;
+    }
+
+    retuneZombieEyeLights = function () {
+      const tier = getQualityId();
+      const lp = getQualityLightProfile();
+      const cap = MAX_ACTIVE_EYE_LIGHTS_BY_TIER[tier] || 0;
+      // Cap reached or tier is potato → strip every light immediately so the next frame's scheduler sees a clean state.
+      if (cap === 0) {
+        for (const e of state.enemies) detachEyeLightFrom(e);
+        return;
+      }
+      // Re-tune already-attached lights to the new intensity/range scaling.
+      for (const e of state.enemies) {
+        const er = e.eyeRefs;
+        if (!er || !er.light || !er._lightBase) continue;
+        er.light.intensity = er._lightBase.intensity * lp.intensityScale;
+        er.light.distance = er._lightBase.distance * lp.rangeScale;
+        er.light.decay = er._lightBase.decay * lp.decayBoost;
+      }
+    };
+
+    function updateZombieEyeFx(dt) {
+      const tier = getQualityId();
+      const cap = MAX_ACTIVE_EYE_LIGHTS_BY_TIER[tier] || 0;
+      const t = performance.now() * 0.001;
+
+      const candidates = [];
+      for (let i = 0; i < state.enemies.length; i++) {
+        const e = state.enemies[i];
+        if (!e || !e.alive || !e.eyeRefs) continue;
+        const er = e.eyeRefs;
+        const pulseHz = e.aware ? 4.5 : 1.6;
+        const pulse = 0.5 + 0.5 * Math.sin(t * pulseHz + i * 0.91);
+        const aware = e.aware ? 1 : 0.5;
+        const op = THREE.MathUtils.clamp(er.baseCoronaOpacity * (0.65 + 0.55 * pulse * aware), 0, 0.95);
+        if (er.coronaMat) er.coronaMat.opacity = op;
+        if (er.pupilMat) {
+          const k = 1.0 + 0.45 * pulse * aware;
+          er.pupilMat.color.copy(er.eyeColor).multiplyScalar(1.45 * k);
+        }
+        if (cap > 0) {
+          _eyeTmp.copy(e.group.position).sub(camera.position);
+          const d2 = _eyeTmp.lengthSq();
+          // Closer + aware zombies score higher (smaller numeric value = picked first).
+          const score = d2 * (e.aware ? 0.55 : 1.4);
+          candidates.push({ e, score });
+        }
+      }
+
+      if (cap > 0) {
+        candidates.sort((a, b) => a.score - b.score);
+        const keep = new Set();
+        for (let i = 0; i < Math.min(cap, candidates.length); i++) {
+          const e = candidates[i].e;
+          if (!e.eyeRefs.light) attachEyeLightTo(e);
+          keep.add(e);
+        }
+        // Strip lights from anyone that fell out of the active window (e.g. moved far / went unaware).
+        for (const c of candidates) {
+          if (!keep.has(c.e) && c.e.eyeRefs.light) detachEyeLightFrom(c.e);
+        }
+        // Modulate intensity with pulse on all active lights.
+        const lp = getQualityLightProfile();
+        for (const e of keep) {
+          const er = e.eyeRefs;
+          if (!er.light || !er._lightBase) continue;
+          const pulseHz = e.aware ? 4.5 : 1.6;
+          const pulse = 0.5 + 0.5 * Math.sin(t * pulseHz + (e.netIndex || 0) * 0.91);
+          const k = 0.7 + 0.55 * pulse * (e.aware ? 1 : 0.45);
+          er.light.intensity = er._lightBase.intensity * lp.intensityScale * k;
+        }
+      } else {
+        for (const e of state.enemies) {
+          if (e.eyeRefs && e.eyeRefs.light) detachEyeLightFrom(e);
+        }
+      }
+    }
+
     function updateEnemies(dt) {
       if (!gameWorldReady) return;
       if (player.health > 0 && player.health < player.maxHealth) {
@@ -6352,7 +6840,7 @@
       }
 
       visFrameCounter++;
-      if ((visFrameCounter % 6) === 0) rebuildFlowField();
+      if ((visFrameCounter % 5) === 0) rebuildFlowField();
 
       for (let ei = 0; ei < state.enemies.length; ei++) {
         const enemy = state.enemies[ei];
@@ -6369,6 +6857,9 @@
             enemy.targetId = null;
             enemy.retargetTimer = 0;
             enemy.rangedLosAcquireTimer = 0;
+            enemy.wanderPath = null;
+            enemy.wanderPathIdx = 0;
+            enemy.wanderCooldown = wanderScheduleNextDelay();
             enemy.facingYaw = Math.random() * Math.PI * 2;
             enemy.visYaw = enemy.facingYaw;
             enemy.armLV = -0.2;
@@ -6380,6 +6871,11 @@
           continue;
         }
 
+        if (enemy.aware) {
+          enemy.wanderPath = null;
+          enemy.wanderPathIdx = 0;
+        }
+
         const target = getEnemyTarget(enemy);
         const dx = target.x - enemy.group.position.x;
         const dz = target.z - enemy.group.position.z;
@@ -6387,6 +6883,15 @@
 
         if ((visFrameCounter + ei) % 8 === 0) {
           updateAwareness(enemy, dt * 8);
+        }
+        if (!enemy.aware && enemy.wanderPath && enemy.wanderPath.length) {
+          const tgtSpot = getEnemyTarget(enemy);
+          if (computeVisibility(enemy.group.position.x, enemy.group.position.z, tgtSpot.x, tgtSpot.z) > 0) {
+            enemy.aware = true;
+            enemy.hiddenTimer = 0;
+            enemy.wanderPath = null;
+            enemy.wanderPathIdx = 0;
+          }
         }
 
         enemy.retargetTimer += dt;
@@ -6519,13 +7024,79 @@
                 (target.y ?? 1.65) + 1.25 + (Math.random() - 0.5) * 0.45,
                 target.z + (Math.random() - 0.5) * 0.45
               );
-              createBulletTrail(_visOrigin.clone(), _tracerEnd.clone(), 0xff6666);
+              createZombieGunnerBulletTrail(_visOrigin.clone(), _tracerEnd.clone());
+              if (MULTIPLAYER && ARENA_COOP && CURRENT_MAP === "arena" && ZOMBIE_AUTHORITY) {
+                socket.emit("zombieShotTrail", {
+                  sx: _visOrigin.x,
+                  sy: _visOrigin.y,
+                  sz: _visOrigin.z,
+                  x: _tracerEnd.x,
+                  y: _tracerEnd.y,
+                  z: _tracerEnd.z,
+                });
+              }
             }
           }
         } else {
-          enemy.moving = false;
-          enemy.facingYaw += dt * 0.3;
           enemy.rangedLosAcquireTimer = 0;
+          enemy.wanderCooldown -= dt;
+          if (enemy.wanderPath && enemy.wanderPathIdx < enemy.wanderPath.length) {
+            const wp = enemy.wanderPath[enemy.wanderPathIdx];
+            const wx = wp.x - enemy.group.position.x;
+            const wz = wp.z - enemy.group.position.z;
+            const wdist = Math.sqrt(wx * wx + wz * wz);
+            if (wdist < WANDER_WAYPOINT_REACH) {
+              enemy.wanderPathIdx++;
+              if (enemy.wanderPathIdx >= enemy.wanderPath.length) {
+                enemy.wanderPath = null;
+                enemy.wanderPathIdx = 0;
+                enemy.wanderCooldown = wanderScheduleNextDelay();
+              }
+            }
+            if (enemy.wanderPath && enemy.wanderPathIdx < enemy.wanderPath.length) {
+              const wp2 = enemy.wanderPath[enemy.wanderPathIdx];
+              const wx2 = wp2.x - enemy.group.position.x;
+              const wz2 = wp2.z - enemy.group.position.z;
+              const wdist2 = Math.sqrt(wx2 * wx2 + wz2 * wz2);
+              if (wdist2 > 0.05) {
+                enemy.facingYaw = Math.atan2(wx2, wz2);
+                const step = enemy.speed * dt * 0.88;
+                const inv = 1 / wdist2;
+                let sx = wx2 * inv * step;
+                let sz = wz2 * inv * step;
+                const nx = enemy.group.position.x + sx;
+                const nz = enemy.group.position.z + sz;
+                if (!enemyCollidesWall(nx, nz)) {
+                  enemy.group.position.x = nx;
+                  enemy.group.position.z = nz;
+                } else if (!enemyCollidesWall(nx, enemy.group.position.z)) {
+                  enemy.group.position.x = nx;
+                } else if (!enemyCollidesWall(enemy.group.position.x, nz)) {
+                  enemy.group.position.z = nz;
+                }
+                enemy.moveYaw = enemy.facingYaw;
+                enemy.walkTime += dt * (enemy.type === "fast" ? 12 : 8);
+                enemy.moving = true;
+              } else {
+                enemy.moving = false;
+              }
+            } else {
+              enemy.moving = false;
+            }
+          } else if (enemy.wanderCooldown <= 0) {
+            const path = buildRandomWanderPath(enemy.group.position.x, enemy.group.position.z);
+            if (path && path.length) {
+              enemy.wanderPath = path;
+              enemy.wanderPathIdx = 0;
+            } else {
+              enemy.wanderCooldown = 2 + Math.random() * 4;
+            }
+            enemy.moving = false;
+            enemy.facingYaw += dt * 0.28;
+          } else {
+            enemy.moving = false;
+            enemy.facingYaw += dt * 0.3;
+          }
         }
 
         enemy.visYaw = dampAngle(enemy.visYaw, enemy.facingYaw, dt, 14);
@@ -6599,7 +7170,6 @@
     function updateEffects(dt) {
       updateBlood(dt);
       updateSparks(dt);
-      updateMuzzleFlashes(dt);
       updateTracers(dt);
       updateHitIndicators(dt);
       const now = performance.now();
@@ -6619,13 +7189,6 @@
         state.hitmarkerTimer -= dt;
       } else {
         hitmarkerEl.classList.remove("show");
-        hitmarkerEl.classList.remove("critical");
-      }
-
-      if (state.combatFeedbackTimer > 0) {
-        state.combatFeedbackTimer -= dt;
-      } else if (combatFeedbackEl) {
-        combatFeedbackEl.classList.remove("show");
       }
     }
 
@@ -6653,7 +7216,16 @@
           const gSpeed = Math.hypot(rp.visX - spx, rp.visZ - spz) / Math.max(dt, 1e-5);
           rp._prevVisX = rp.visX;
           rp._prevVisZ = rp.visZ;
-          updateRemotePlayerRig(rp, dt, gSpeed);
+          rp.walkPhase = (rp.walkPhase || 0) + dt * Math.min(gSpeed * 4.2, 14);
+          const wSin = Math.sin(rp.walkPhase) * 0.52;
+          const moving = gSpeed > 0.06;
+          if (rp.leftLeg && rp.rightLeg) {
+            rp.leftLeg.rotation.x = dampScalar(rp.leftLeg.rotation.x, moving ? -wSin : 0, dt, 12);
+            rp.rightLeg.rotation.x = dampScalar(rp.rightLeg.rotation.x, moving ? wSin : 0, dt, 12);
+          }
+          const armBase = -0.82;
+          rp.leftArm.rotation.x = dampScalar(rp.leftArm.rotation.x, armBase + (moving ? wSin * 0.14 : 0), dt, 10);
+          rp.rightArm.rotation.x = dampScalar(rp.rightArm.rotation.x, armBase - (moving ? wSin * 0.14 : 0), dt, 10);
         }
       }
 
@@ -6664,6 +7236,7 @@
       }
 
       if (started && menuEl.style.display === "none" && !gameWorldReady) {
+        syncGameRendererSize();
         tickFpsMeter(dt);
         renderer.render(scene, camera);
         return;
@@ -6701,6 +7274,7 @@
         if (runZombieAi) {
           updateEnemies(dt);
         }
+        if (gameWorldReady) updateZombieEyeFx(dt);
         if (gameWorldReady) updateDeathAnim(dt);
         if (gameWorldReady && MULTIPLAYER && ARENA_COOP && ZOMBIE_AUTHORITY && CURRENT_MAP === "arena") {
           _zombieSyncAcc += dt;
@@ -6728,7 +7302,7 @@
         cullMazeLightsNearCamera();
       }
 
-      if (isPvpCrossfireMap(CURRENT_MAP) && MULTIPLAYER && player.health <= 0) {
+      if (CURRENT_MAP === "crossfire" && MULTIPLAYER && player.health <= 0) {
         const first = remotePlayers.values().next().value;
         if (first) {
           const sx = first.visX ?? first.x;
@@ -6806,9 +7380,9 @@
 
     async function preloadCriticalGameAssets() {
       await Promise.all([
-        preloadBootImageRel("game-ui/game-ui-menu-background.png"),
-        preloadBootImageRel("game-ui/game-ui-button-texture.png"),
-        preloadBootImageRel("game-ui/game-ui-settings-panel-bg.png"),
+        preloadBootImageRel("background.png"),
+        preloadBootImageRel("game-ui-button-texture.png"),
+        preloadBootImageRel("game-ui-settings-panel-bg.png"),
       ]);
       await preloadWallTextureForBoot();
     }
@@ -6817,7 +7391,7 @@
       gameWorldReady = false;
       gameBootOverlay.style.display = "flex";
       gameBootOverlay.setAttribute("aria-busy", "true");
-      gameBootLabel.textContent = "Building world…";
+      gameBootLabel.textContent = t("bootBuild");
       weaponRoot.visible = false;
       setLocalPlayerLights(false);
 
@@ -6829,7 +7403,6 @@
       hitDirContainer.innerHTML = "";
       hitIndicators.length = 0;
       CURRENT_MAP = mapName;
-      applySceneFogAndCameraFar();
       if (multiplayer !== undefined) {
         MULTIPLAYER = multiplayer;
         if (!multiplayer) ARENA_COOP = false;
@@ -6856,11 +7429,10 @@
         queueMicrotask(() => emitJoinRoomWithAck());
       }
 
-      if (isPvpCrossfireMap(CURRENT_MAP)) {
-        player.position.set(0, 1.65, CURRENT_MAP === "crossfire_grid" ? 22 : 34);
+      if (CURRENT_MAP === "crossfire") {
+        player.position.set(0, 1.65, 34);
         floor.visible = true;
-        ceiling.visible = CURRENT_MAP !== "crossfire_grid";
-        if (CURRENT_MAP === "crossfire_grid") playerLightsPreference = false;
+        ceiling.visible = true;
       } else {
         floor.visible = false;
         ceiling.visible = false;
@@ -6876,6 +7448,7 @@
       buildNavGrid();
 
       for (const enemy of state.enemies) {
+        detachEyeLightFrom(enemy);
         scene.remove(enemy.group);
       }
       state.enemies.length = 0;
@@ -6923,7 +7496,7 @@
       }
 
       try {
-        gameBootLabel.textContent = "Loading assets…";
+        gameBootLabel.textContent = t("bootLoad");
         await preloadCriticalGameAssets();
       } catch (err) {
         console.warn("[boot] asset preload", err);
@@ -6938,6 +7511,8 @@
       compileSceneShaders();
 
       weaponRoot.visible = true;
+      gameBootLabel.textContent = t("bootPrep");
+      /** Force a fresh layout + size sync before flipping gameWorldReady so the first rendered frame already fills the screen. */
       await waitForRenderableViewport();
       syncGameRendererSize();
       renderer.render(scene, camera);
@@ -6968,6 +7543,7 @@
       gameBootOverlay.setAttribute("aria-busy", "false");
       menuEl.style.display = "flex";
       document.body.classList.remove("in-game");
+      try { resizeMenuWallBackdrop(); } catch (_) {}
       showMenuPanel("menuMain");
       menuBgmPeakSessionMax = 1e-6;
       menuBackdropLightSmooth = 0;
@@ -6978,6 +7554,7 @@
       camera.fov = 75;
       camera.updateProjectionMatrix();
       for (const enemy of state.enemies) {
+        detachEyeLightFrom(enemy);
         scene.remove(enemy.group);
       }
       state.enemies.length = 0;
@@ -6991,13 +7568,19 @@
     }
 
     function showMenuPanel(id) {
-      for (const p of [menuMain, menuArenaMode, menuPvpMaps, menuLobby, menuJoinCode]) p.style.display = "none";
+      for (const p of [menuMain, menuArenaMode, menuLobby, menuJoinCode]) p.style.display = "none";
       document.getElementById(id).style.display = "flex";
     }
 
-    function showLobby(mode, title) {
+    function showLobby(mode) {
       pendingLobbyMode = mode;
-      lobbyTitle.textContent = title;
+      const titleKey =
+        mode === "arena-coop"
+          ? "lobbyArenaCoop"
+          : mode === "crossfire"
+            ? "lobbyCrossfire"
+            : "lobbyMultiplayer";
+      lobbyTitle.textContent = t(titleKey);
       showMenuPanel("menuLobby");
     }
 
@@ -7017,25 +7600,15 @@
 
     btnArena.addEventListener("click", () => showMenuPanel("menuArenaMode"));
     btnArenaSingle.addEventListener("click", () => startGame("arena", false));
-    btnArenaCoop.addEventListener("click", () => showLobby("arena-coop", "ARENA CO-OP"));
+    btnArenaCoop.addEventListener("click", () => showLobby("arena-coop"));
     btnArenaBack.addEventListener("click", () => showMenuPanel("menuMain"));
 
-    btnCrossfire.addEventListener("click", () => showMenuPanel("menuPvpMaps"));
-
-    btnPvpMapClassic.addEventListener("click", () => {
-      PENDING_PVP_MAP = "crossfire";
-      showLobby("crossfire", "CROSSFIRE (PVP) — CLASSIC");
-    });
-    btnPvpMapGrid.addEventListener("click", () => {
-      PENDING_PVP_MAP = "crossfire_grid";
-      showLobby("crossfire", "CROSSFIRE (PVP) — GRID");
-    });
-    btnPvpMapBack.addEventListener("click", () => showMenuPanel("menuMain"));
+    btnCrossfire.addEventListener("click", () => showLobby("crossfire"));
 
     btnQuickplay.addEventListener("click", () => {
       socket.emit("quickplay", pendingLobbyMode, (res) => {
         if (res.error) { codeError.textContent = res.error; return; }
-        const map = pendingLobbyMode === "crossfire" ? PENDING_PVP_MAP : "arena";
+        const map = pendingLobbyMode === "crossfire" ? "crossfire" : "arena";
         beginMultiplayerGame(map, { roomKey: res.roomKey, roomCode: res.room });
       });
     });
@@ -7043,7 +7616,7 @@
     btnCreateRoom.addEventListener("click", () => {
       socket.emit("createRoom", pendingLobbyMode, (res) => {
         if (res.error) { codeError.textContent = res.error; return; }
-        const map = pendingLobbyMode === "crossfire" ? PENDING_PVP_MAP : "arena";
+        const map = pendingLobbyMode === "crossfire" ? "crossfire" : "arena";
         beginMultiplayerGame(map, { roomKey: res.roomKey, roomCode: res.code });
       });
     });
@@ -7056,10 +7629,10 @@
 
     btnCodeJoin.addEventListener("click", () => {
       const code = codeInput.value.trim().toUpperCase();
-      if (!code) { codeError.textContent = "Enter a code"; return; }
+      if (!code) { codeError.textContent = t("enterCodeError"); return; }
       socket.emit("joinByCode", { code, mode: pendingLobbyMode }, (res) => {
         if (res.error) { codeError.textContent = res.error; return; }
-        const map = pendingLobbyMode === "crossfire" ? PENDING_PVP_MAP : "arena";
+        const map = pendingLobbyMode === "crossfire" ? "crossfire" : "arena";
         beginMultiplayerGame(map, { roomKey: res.roomKey, roomCode: code });
       });
     });
@@ -7070,12 +7643,12 @@
 
     btnCodeBack.addEventListener("click", () => showMenuPanel("menuLobby"));
     btnLobbyBack.addEventListener("click", () => {
-      if (pendingLobbyMode === "crossfire") showMenuPanel("menuPvpMaps");
+      if (pendingLobbyMode === "crossfire") showMenuPanel("menuMain");
       else showMenuPanel("menuArenaMode");
     });
 
     btnNameOk.addEventListener("click", () => {
-      playerName = nameInput.value.trim().slice(0, 16) || "Player";
+      playerName = nameInput.value.trim().slice(0, 16) || t("namePlaceholder");
       nameModal.style.display = "none";
       const map = nameModal._pendingMap || "crossfire";
       const coopArena = map === "arena" && pendingLobbyMode === "arena-coop";
@@ -7171,17 +7744,16 @@
     btnRenderDistNext.addEventListener("click", () => cycleRenderDistance(1));
 
     function cycleLanguage(delta) {
-      const i = LANGUAGE_OPTIONS.indexOf(gameSettings.language);
-      const next = (i + delta + LANGUAGE_OPTIONS.length) % LANGUAGE_OPTIONS.length;
-      gameSettings.language = LANGUAGE_OPTIONS[next];
-      syncSettingsUI();
+      const n = LANGUAGE_OPTIONS.length;
+      const idx = (languageIndexFromSettings() + delta + n) % n;
+      gameSettings.language = LANGUAGE_OPTIONS[idx].code;
       saveGameSettings();
-      updateHud();
+      applyGameLanguage();
     }
-    btnLangPrev?.addEventListener("click", () => cycleLanguage(-1));
-    btnLangNext?.addEventListener("click", () => cycleLanguage(1));
+    btnLangPrev.addEventListener("click", () => cycleLanguage(-1));
+    btnLangNext.addEventListener("click", () => cycleLanguage(1));
 
-    syncSettingsUI();
+    applyGameLanguage();
 
     window.addEventListener("resize", () => {
       syncGameRendererSize();
