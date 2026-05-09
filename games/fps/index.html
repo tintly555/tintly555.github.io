@@ -1396,8 +1396,25 @@
       if (data.sx != null && data.sy != null && data.sz != null
           && data.x != null && data.y != null && data.z != null) {
         const start = new THREE.Vector3(data.sx, data.sy, data.sz);
+        let rp = null;
         if (data.id && remotePlayers.has(data.id)) {
-          const rp = remotePlayers.get(data.id);
+          rp = remotePlayers.get(data.id);
+        } else {
+          // Fallback when packet omits shooter id: snap to nearest remote avatar.
+          let best = null;
+          let bestD2 = Infinity;
+          for (const cand of remotePlayers.values()) {
+            const dx = (cand.x || 0) - start.x;
+            const dz = (cand.z || 0) - start.z;
+            const d2 = dx * dx + dz * dz;
+            if (d2 < bestD2) {
+              bestD2 = d2;
+              best = cand;
+            }
+          }
+          if (best && bestD2 < 9) rp = best;
+        }
+        if (rp) {
           getRemoteGunMuzzleWorld(rp, start);
         }
         createBulletTrail(
@@ -1719,11 +1736,11 @@
     function applyRemoteWeaponMount(rp) {
       if (!rp || !rp.gunModel) return;
       const mount = [
-        { x: 0.06, y: -0.58, z: -0.49, rx: 0.16, ry: 0.06, rz: -0.10 }, // pistol
-        { x: 0.04, y: -0.60, z: -0.57, rx: 0.13, ry: 0.04, rz: -0.12 }, // rifle
-        { x: 0.05, y: -0.62, z: -0.54, rx: 0.18, ry: 0.05, rz: -0.10 }, // shotgun
-        { x: 0.04, y: -0.60, z: -0.55, rx: 0.13, ry: 0.04, rz: -0.11 }, // smg
-      ][rp.currentWeapon | 0] || { x: 0.04, y: -0.60, z: -0.57, rx: 0.13, ry: 0.04, rz: -0.12 };
+        { x: 0.02, y: -0.56, z: -0.48, rx: 0.04, ry: 0.00, rz: 0.02 }, // pistol
+        { x: 0.01, y: -0.58, z: -0.58, rx: 0.03, ry: 0.00, rz: 0.00 }, // rifle
+        { x: 0.01, y: -0.60, z: -0.55, rx: 0.05, ry: 0.00, rz: 0.01 }, // shotgun
+        { x: 0.01, y: -0.58, z: -0.56, rx: 0.03, ry: 0.00, rz: 0.00 }, // smg
+      ][rp.currentWeapon | 0] || { x: 0.01, y: -0.58, z: -0.58, rx: 0.03, ry: 0.00, rz: 0.00 };
       rp.gunModel.position.set(mount.x, mount.y, mount.z);
       rp.gunModel.rotation.set(mount.rx, mount.ry, mount.rz);
     }
@@ -1831,12 +1848,12 @@
         fng.position.set(0, -0.78, 0.12); ag.add(fng);
       };
       makePlayerArm(rightArm); makePlayerArm(leftArm);
-      rightArm.position.set(0.34, 1.44, -0.01); rightArm.rotation.x = -1.16;
-      leftArm.position.set(-0.34, 1.44, 0.01); leftArm.rotation.x = -1.10;
-      rightArm.rotation.y = 0.06;
-      leftArm.rotation.y = -0.12;
-      rightArm.rotation.z = 0.20;
-      leftArm.rotation.z = -0.26;
+      rightArm.position.set(0.34, 1.42, -0.02); rightArm.rotation.x = -0.98;
+      leftArm.position.set(-0.34, 1.42, -0.01); leftArm.rotation.x = -0.94;
+      rightArm.rotation.y = 0.04;
+      leftArm.rotation.y = -0.08;
+      rightArm.rotation.z = 0.14;
+      leftArm.rotation.z = -0.20;
       group.add(rightArm, leftArm);
 
       const makePlayerLeg = (px) => {
@@ -5281,6 +5298,30 @@
       return { t: bestT, zone };
     }
 
+    function remotePlayerHitAlongRay(raycaster, rp) {
+      if (!rp || !rp.group) return null;
+      _invEnemyMat.copy(rp.group.matrixWorld).invert();
+      _ehLo.copy(raycaster.ray.origin).applyMatrix4(_invEnemyMat);
+      _ehLd.copy(raycaster.ray.direction).transformDirection(_invEnemyMat).normalize();
+      const volumes = [
+        { cx: 0, cy: 1.82, cz: 0, r: 0.24, zone: "head" },
+        { cx: 0, cy: 1.14, cz: 0, r: 0.44, zone: "body" },
+        { cx: 0, cy: 0.44, cz: 0, r: 0.38, zone: "leg" },
+      ];
+      let bestT = Infinity;
+      let zone = null;
+      for (let i = 0; i < volumes.length; i++) {
+        const v = volumes[i];
+        const t = raySphereParam(_ehLo, _ehLd, v.cx, v.cy, v.cz, v.r);
+        if (t !== null && t < bestT) {
+          bestT = t;
+          zone = v.zone;
+        }
+      }
+      if (bestT === Infinity || !zone) return null;
+      return { t: bestT, zone };
+    }
+
     function applyDamage(enemy, zone, w) {
       if (zone === "head") enemy.hp -= w.damageHead;
       else if (zone === "leg") enemy.hp -= w.damageLegs;
@@ -5387,14 +5428,16 @@
 
         let bestRpId = null;
         let bestRpHit = null;
+        let bestRpZone = "body";
         if (MULTIPLAYER && !ARENA_COOP) {
           for (const [rpId, rp] of remotePlayers) {
             if (!rp.group.visible) continue;
-            const hits = ray.intersectObject(rp.group, true);
-            if (hits.length > 0) {
-              if (!bestRpHit || hits[0].distance < bestRpHit.distance) {
+            const hit = remotePlayerHitAlongRay(ray, rp);
+            if (hit) {
+              if (!bestRpHit || hit.t < bestRpHit.distance) {
                 bestRpId = rpId;
-                bestRpHit = hits[0];
+                bestRpHit = { point: ray.ray.origin.clone().addScaledVector(ray.ray.direction, hit.t), distance: hit.t };
+                bestRpZone = hit.zone;
               }
             }
           }
@@ -5440,7 +5483,7 @@
           createBulletTrail(muzzleStart.clone(), bp.clone(), w.color);
           emitShootNetwork(muzzleStart, bp, w.color, "blood");
           triggerHitFeedback(false);
-          const dmg = w.damageBody;
+          const dmg = bestRpZone === "head" ? w.damageHead : (bestRpZone === "leg" ? w.damageLegs : w.damageBody);
           socket.emit("hit", { target: bestRpId, damage: dmg, x: player.position.x, z: player.position.z });
         } else if (wallHit) {
           const wp = wallHit.point.clone();
@@ -6511,18 +6554,18 @@
           const idlePhase = performance.now() * 0.0025 + rp.walkPhase * 0.12;
           const idleBreath = Math.sin(idlePhase) * 0.06;
           const weaponStance = [
-            { l: -1.02, r: -1.10, ly: -0.22, ry: 0.16, lz: -0.48, rz: 0.34 },
-            { l: -1.10, r: -1.20, ly: -0.24, ry: 0.18, lz: -0.54, rz: 0.38 },
-            { l: -1.06, r: -1.16, ly: -0.22, ry: 0.17, lz: -0.50, rz: 0.35 },
-            { l: -1.08, r: -1.18, ly: -0.23, ry: 0.18, lz: -0.52, rz: 0.37 },
-            { l: -0.86, r: -0.96, ly: -0.16, ry: 0.12, lz: -0.34, rz: 0.26 },
-          ][rp.currentWeapon | 0] || { l: -1.10, r: -1.20, ly: -0.24, ry: 0.18, lz: -0.54, rz: 0.38 };
-          let targetLX = weaponStance.l + idleBreath + (moving ? wSin * 0.22 : 0);
-          let targetRX = weaponStance.r - idleBreath * 0.7 - (moving ? wSin * 0.19 : 0);
+            { l: -0.94, r: -1.02, ly: -0.18, ry: 0.12, lz: -0.34, rz: 0.24 },
+            { l: -0.98, r: -1.08, ly: -0.20, ry: 0.14, lz: -0.38, rz: 0.28 },
+            { l: -0.96, r: -1.06, ly: -0.19, ry: 0.13, lz: -0.36, rz: 0.26 },
+            { l: -0.97, r: -1.07, ly: -0.20, ry: 0.14, lz: -0.37, rz: 0.27 },
+            { l: -0.80, r: -0.90, ly: -0.14, ry: 0.10, lz: -0.26, rz: 0.20 },
+          ][rp.currentWeapon | 0] || { l: -0.98, r: -1.08, ly: -0.20, ry: 0.14, lz: -0.38, rz: 0.28 };
+          let targetLX = weaponStance.l + idleBreath + (moving ? wSin * 0.34 : 0);
+          let targetRX = weaponStance.r - idleBreath * 0.7 - (moving ? wSin * 0.30 : 0);
           let targetLY = weaponStance.ly;
           let targetRY = weaponStance.ry;
-          let targetLZ = weaponStance.lz + (moving ? Math.cos(rp.walkPhase) * 0.06 : idleBreath * 0.18);
-          let targetRZ = weaponStance.rz - (moving ? Math.cos(rp.walkPhase) * 0.06 : idleBreath * 0.15);
+          let targetLZ = weaponStance.lz + (moving ? Math.cos(rp.walkPhase) * 0.12 : idleBreath * 0.24);
+          let targetRZ = weaponStance.rz - (moving ? Math.cos(rp.walkPhase) * 0.12 : idleBreath * 0.20);
           if (rp.isReloading) {
             rp.reloadPhase = (rp.reloadPhase || 0) + dt * 6.5;
             const rSin = Math.sin(rp.reloadPhase);
