@@ -3170,9 +3170,10 @@
         updateNameSprite(rp, data.name);
       }
       if (data.weapon != null && data.weapon !== rp.currentWeapon) {
-        rp.rightArm.remove(rp.gunModel);
+        const grip = rp.rightHandGrip || rp.rightArm;
+        grip.remove(rp.gunModel);
         rp.gunModel = makeThirdPersonGun(data.weapon);
-        rp.rightArm.add(rp.gunModel);
+        grip.add(rp.gunModel);
         rp.currentWeapon = data.weapon;
         applyRemoteWeaponMount(rp);
       }
@@ -3531,12 +3532,13 @@
 
     function applyRemoteWeaponMount(rp) {
       if (!rp || !rp.gunModel) return;
+      // Offsets are in **rightHandGrip** local space (wrist / palm).
       const mount = [
-        { x: 0.03, y: -0.44, z: -0.30, rx: 0.0, ry: 0.0, rz: 0.0 }, // pistol
-        { x: 0.03, y: -0.46, z: -0.38, rx: 0.0, ry: 0.0, rz: 0.0 }, // rifle
-        { x: 0.03, y: -0.48, z: -0.35, rx: 0.02, ry: 0.0, rz: 0.0 }, // shotgun
-        { x: 0.03, y: -0.46, z: -0.36, rx: 0.0, ry: 0.0, rz: 0.0 }, // smg
-      ][rp.currentWeapon | 0] || { x: 0.03, y: -0.46, z: -0.38, rx: 0.0, ry: 0.0, rz: 0.0 };
+        { x: 0.02, y: -0.04, z: 0.07, rx: 0.08, ry: -0.05, rz: 0.03 },
+        { x: 0.03, y: -0.06, z: 0.14, rx: 0.07, ry: -0.06, rz: 0.04 },
+        { x: 0.025, y: -0.07, z: 0.13, rx: 0.09, ry: -0.05, rz: 0.03 },
+        { x: 0.03, y: -0.055, z: 0.12, rx: 0.07, ry: -0.055, rz: 0.035 },
+      ][rp.currentWeapon | 0] || { x: 0.03, y: -0.06, z: 0.14, rx: 0.07, ry: -0.06, rz: 0.04 };
       rp.gunModel.position.set(mount.x, mount.y, mount.z);
       rp.gunModel.rotation.set(mount.rx, mount.ry, mount.rz);
     }
@@ -3547,14 +3549,14 @@
       const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(q);
       const right = new THREE.Vector3(1, 0, 0).applyQuaternion(q);
       const up = new THREE.Vector3(0, 1, 0).applyQuaternion(q);
-      // Stable remote muzzle anchor from right-hand weapon mount.
-      const origin = rp.rightArm
-        ? rp.rightArm.getWorldPosition(new THREE.Vector3())
+      const originNode = rp.rightHandGrip || rp.rightArm;
+      const origin = originNode
+        ? originNode.getWorldPosition(new THREE.Vector3())
         : new THREE.Vector3(rp.x || 0, (rp.y || 1.65) + 0.1, rp.z || 0);
       out.copy(origin);
-      out.addScaledVector(fwd, 0.78);
-      out.addScaledVector(right, 0.16);
-      out.addScaledVector(up, -0.03);
+      out.addScaledVector(fwd, 0.52);
+      out.addScaledVector(right, 0.12);
+      out.addScaledVector(up, 0.02);
       return out;
     }
 
@@ -3613,8 +3615,14 @@
         const legKick = moving ? walkSin * (1.52 * (0.45 + moveAmp * 0.55)) : 0;
         rp.leftLeg.rotation.x = dampScalar(rp.leftLeg.rotation.x, -legKick, dt, 15);
         rp.rightLeg.rotation.x = dampScalar(rp.rightLeg.rotation.x, legKick, dt, 15);
-        rp.leftLeg.position.y = dampScalar(rp.leftLeg.position.y, 0.62 + (moving ? Math.max(0, walkSin) * 0.10 : 0), dt, 13);
-        rp.rightLeg.position.y = dampScalar(rp.rightLeg.position.y, 0.62 + (moving ? Math.max(0, -walkSin) * 0.10 : 0), dt, 13);
+        rp.leftLeg.position.y = dampScalar(rp.leftLeg.position.y, moving ? Math.max(0, walkSin) * 0.08 : 0, dt, 13);
+        rp.rightLeg.position.y = dampScalar(rp.rightLeg.position.y, moving ? Math.max(0, -walkSin) * 0.08 : 0, dt, 13);
+      }
+      if (rp.leftKnee && rp.rightKnee) {
+        const lk = 0.14 + (moving ? Math.max(0, -walkSin) * 0.52 : 0);
+        const rk = 0.14 + (moving ? Math.max(0, walkSin) * 0.52 : 0);
+        rp.leftKnee.rotation.x = dampScalar(rp.leftKnee.rotation.x, lk, dt, 14);
+        rp.rightKnee.rotation.x = dampScalar(rp.rightKnee.rotation.x, rk, dt, 14);
       }
 
       const basePose = getRemoteWeaponStancePreset(rp.currentWeapon | 0);
@@ -3658,6 +3666,24 @@
       rp.rightArm.rotation.y = dampScalar(rp.rightArm.rotation.y, targetRY, dt, 15);
       rp.leftArm.rotation.z = dampScalar(rp.leftArm.rotation.z, targetLZ, dt, 15);
       rp.rightArm.rotation.z = dampScalar(rp.rightArm.rotation.z, targetRZ, dt, 15);
+
+      if (rp.leftElbow && rp.rightElbow) {
+        const flexBase = 0.38;
+        const flexWalk = moving ? Math.abs(walkSin) * 0.24 : 0.07;
+        const flexReload = rp.isReloading ? 0.35 : 0;
+        rp.leftElbow.rotation.x = dampScalar(
+          rp.leftElbow.rotation.x,
+          flexBase + flexWalk * (0.55 + 0.45 * walkCos) + flexReload,
+          dt,
+          13
+        );
+        rp.rightElbow.rotation.x = dampScalar(
+          rp.rightElbow.rotation.x,
+          flexBase + flexWalk * (0.55 - 0.45 * walkCos) + flexReload,
+          dt,
+          13
+        );
+      }
     }
 
     function createRemotePlayer(name) {
@@ -3733,25 +3759,40 @@
       neck.position.set(0, -0.26, 0); headGroup.add(neck);
       headGroup.position.y = 1.80; group.add(headGroup);
 
-      const rightArm = new THREE.Group();
-      const leftArm = new THREE.Group();
-      const makePlayerArm = (ag) => {
+      /** Shoulder → elbow → forearm/hand; gun parents to `rightHandGrip` only. */
+      const buildSegmentedArm = () => {
+        const shoulder = new THREE.Group();
         const sh = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.10, 0.18), mCamo2);
-        sh.position.set(0, -0.02, 0); ag.add(sh);
+        sh.position.set(0, -0.02, 0); shoulder.add(sh);
         const pad = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.10, 0.20), mKnee);
-        pad.position.set(0, -0.02, 0); ag.add(pad);
+        pad.position.set(0, -0.02, 0); shoulder.add(pad);
         const up = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.32, 0.17), mCamo1);
-        up.position.set(0, -0.22, 0); ag.add(up);
+        up.position.set(0, -0.22, 0); shoulder.add(up);
+
+        const elbow = new THREE.Group();
+        elbow.position.set(0, -0.38, 0.06);
+
         const elbPad = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.08, 0.10), mKnee);
-        elbPad.position.set(0, -0.38, 0.06); ag.add(elbPad);
+        elbPad.position.set(0, 0, 0); elbow.add(elbPad);
         const fa = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.30, 0.15), mCamo2);
-        fa.position.set(0, -0.50, 0.06); ag.add(fa);
+        fa.position.set(0, -0.14, 0.06); elbow.add(fa);
         const glv = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.13, 0.16), mGlove);
-        glv.position.set(0, -0.70, 0.10); ag.add(glv);
+        glv.position.set(0, -0.34, 0.10); elbow.add(glv);
         const fng = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.04, 0.08), mGlove);
-        fng.position.set(0, -0.78, 0.12); ag.add(fng);
+        fng.position.set(0, -0.42, 0.12); elbow.add(fng);
+
+        const handGrip = new THREE.Group();
+        handGrip.position.set(0, -0.46, 0.13);
+        elbow.add(handGrip);
+
+        shoulder.add(elbow);
+        return { shoulder, elbow, handGrip };
       };
-      makePlayerArm(rightArm); makePlayerArm(leftArm);
+
+      const armL = buildSegmentedArm();
+      const armR = buildSegmentedArm();
+      const leftArm = armL.shoulder;
+      const rightArm = armR.shoulder;
       rightArm.position.set(0.34, 1.42, -0.02); rightArm.rotation.x = -0.54;
       leftArm.position.set(-0.34, 1.42, -0.01); leftArm.rotation.x = -0.52;
       rightArm.rotation.y = 0.22;
@@ -3760,30 +3801,54 @@
       leftArm.rotation.z = -0.30;
       group.add(rightArm, leftArm);
 
-      const makePlayerLeg = (px) => {
-        const lg = new THREE.Group();
+      /** Pelvis connects torso mass (above) to both legs; hips share one pivot height. */
+      const pelvis = new THREE.Group();
+      pelvis.position.set(0, 0.62, 0);
+      const hipPad = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.14, 0.30), mPants);
+      hipPad.position.set(0, 0.02, 0);
+      pelvis.add(hipPad);
+
+      const makeSegmentedLeg = (sidePx) => {
+        const hip = new THREE.Group();
+        hip.position.set(sidePx, 0, 0);
         const th = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.38, 0.20), mPants);
-        th.position.set(0, -0.19, 0); lg.add(th);
+        th.position.set(0, -0.19, 0);
+        hip.add(th);
+
+        const knee = new THREE.Group();
+        knee.position.set(0, -0.38, 0.06);
         const kp = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.10, 0.12), mKnee);
-        kp.position.set(0, -0.38, 0.06); lg.add(kp);
-        const sh = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.34, 0.18), mPants);
-        sh.position.set(0, -0.54, 0); lg.add(sh);
+        kp.position.set(0, 0, 0);
+        knee.add(kp);
+        const shin = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.34, 0.18), mPants);
+        shin.position.set(0, -0.18, 0);
+        knee.add(shin);
         const bt = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.16, 0.28), mBoot);
-        bt.position.set(0, -0.78, 0.03); lg.add(bt);
+        bt.position.set(0, -0.42, 0.03);
+        knee.add(bt);
         const sl = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.04, 0.30), mBootS);
-        sl.position.set(0, -0.88, 0.04); lg.add(sl);
+        sl.position.set(0, -0.52, 0.04);
+        knee.add(sl);
         const lace = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.10, 0.02), mGear);
-        lace.position.set(0, -0.74, 0.15); lg.add(lace);
-        lg.position.set(px, 0.62, 0);
-        return lg;
+        lace.position.set(0, -0.38, 0.15);
+        knee.add(lace);
+
+        hip.add(knee);
+        return { root: hip, knee };
       };
-      const legR = makePlayerLeg(0.15);
-      const legL = makePlayerLeg(-0.15);
-      group.add(legR, legL);
+
+      const legR = makeSegmentedLeg(0.15);
+      const legL = makeSegmentedLeg(-0.15);
+      pelvis.add(legR.root, legL.root);
+      group.add(pelvis);
+
+      const waistBridge = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.16, 0.28), mCamo2);
+      waistBridge.position.set(0, 0.76, 0);
+      group.add(waistBridge);
 
       const gunModel = makeThirdPersonGun(1);
-      rightArm.add(gunModel);
-      const rpTmp = { gunModel, currentWeapon: 1 };
+      armR.handGrip.add(gunModel);
+      const rpTmp = { gunModel, currentWeapon: 1, rightHandGrip: armR.handGrip };
       applyRemoteWeaponMount(rpTmp);
 
       const ns = makeNameSprite(name || "Player");
@@ -3824,7 +3889,13 @@
       group.visible = false;
       return { group, x: 0, y: 1.65, z: 0, yaw: 0, name: name || "Player",
                nameSprite: ns.sprite, nameCanvas: ns.canvas, nameCtx: ns.ctx, nameTex: ns.tex,
-               rightArm, leftArm, rightLeg: legR, leftLeg: legL, walkPhase: 0,
+               rightArm, leftArm,
+               leftElbow: armL.elbow, rightElbow: armR.elbow,
+               rightHandGrip: armR.handGrip,
+               pelvis,
+               rightLeg: legR.root, leftLeg: legL.root,
+               leftKnee: legL.knee, rightKnee: legR.knee,
+               walkPhase: 0,
                gunModel, currentWeapon: 1, isReloading: false, reloadPhase: 0,
                torsoMesh: chest, headGroup };
     }
