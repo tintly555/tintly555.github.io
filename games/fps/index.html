@@ -3474,6 +3474,15 @@
         scene.add(L);
         pvpMapLights.push(L);
       }
+      // Open-roof duel map needs stable global fill, not flashlight dependence.
+      const hemiFill = new THREE.HemisphereLight(0xdfe9ff, 0x3f3426, 1.05 * Math.PI);
+      scene.add(hemiFill);
+      pvpMapLights.push(hemiFill);
+      const sunFill = new THREE.DirectionalLight(0xfff0dc, 0.72 * Math.PI);
+      sunFill.position.set(18, 34, 8);
+      sunFill.castShadow = false;
+      scene.add(sunFill);
+      pvpMapLights.push(sunFill);
       // New duel map should feel open/bright: force no ceiling regardless of previous map state.
       ceiling.visible = false;
     }
@@ -5179,6 +5188,27 @@
       drawEnemyHp(enemy);
     }
 
+    const _muzzleTmpForward = new THREE.Vector3();
+    const _muzzleTmpRight = new THREE.Vector3();
+    const _muzzleTmpUp = new THREE.Vector3();
+    const _muzzleTmpQuat = new THREE.Quaternion();
+    function getWeaponMuzzleWorldPoint(out) {
+      const wm = weaponModels[state.weaponIndex];
+      if (!wm || !wm.userData || !wm.userData.gun) {
+        return out.copy(camera.position);
+      }
+      wm.userData.gun.getWorldPosition(out);
+      camera.getWorldQuaternion(_muzzleTmpQuat);
+      _muzzleTmpForward.set(0, 0, -1).applyQuaternion(_muzzleTmpQuat);
+      _muzzleTmpRight.set(1, 0, 0).applyQuaternion(_muzzleTmpQuat);
+      _muzzleTmpUp.set(0, 1, 0).applyQuaternion(_muzzleTmpQuat);
+      // Push flash to barrel tip area so it is not glued to gun body center.
+      out.addScaledVector(_muzzleTmpForward, 0.33);
+      out.addScaledVector(_muzzleTmpRight, 0.05);
+      out.addScaledVector(_muzzleTmpUp, -0.02);
+      return out;
+    }
+
     function tryShoot() {
       if (!gameWorldReady || paused || player.health <= 0) return;
       if (state.weaponIndex === 4) return;
@@ -5222,7 +5252,7 @@
       );
 
       const muzzleStart = new THREE.Vector3();
-      weaponModels[state.weaponIndex].userData.gun.getWorldPosition(muzzleStart);
+      getWeaponMuzzleWorldPoint(muzzleStart);
 
       playGunSound(w);
       createMuzzleFlash(muzzleStart.clone(), w.color);
