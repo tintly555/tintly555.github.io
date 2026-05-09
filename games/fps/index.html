@@ -1371,9 +1371,9 @@
       if (data.weapon != null && data.weapon !== rp.currentWeapon) {
         rp.rightArm.remove(rp.gunModel);
         rp.gunModel = makeThirdPersonGun(data.weapon);
-        rp.gunModel.position.set(0.08, -0.68, -0.18);
         rp.rightArm.add(rp.gunModel);
         rp.currentWeapon = data.weapon;
+        applyRemoteWeaponMount(rp);
       }
       rp.isReloading = !!data.reloading;
       rp.group.visible = true;
@@ -1706,6 +1706,18 @@
       return g;
     }
 
+    function applyRemoteWeaponMount(rp) {
+      if (!rp || !rp.gunModel) return;
+      const mount = [
+        { x: 0.03, y: -0.56, z: -0.35, rx: 0.04, ry: 0.0, rz: 0.0 }, // pistol
+        { x: 0.00, y: -0.58, z: -0.38, rx: 0.03, ry: 0.0, rz: 0.0 }, // rifle
+        { x: 0.01, y: -0.60, z: -0.33, rx: 0.06, ry: 0.0, rz: 0.0 }, // shotgun
+        { x: 0.00, y: -0.57, z: -0.36, rx: 0.03, ry: 0.0, rz: 0.0 }, // smg
+      ][rp.currentWeapon | 0] || { x: 0.00, y: -0.58, z: -0.38, rx: 0.03, ry: 0.0, rz: 0.0 };
+      rp.gunModel.position.set(mount.x, mount.y, mount.z);
+      rp.gunModel.rotation.set(mount.rx, mount.ry, mount.rz);
+    }
+
     function createRemotePlayer(name) {
       const group = new THREE.Group();
       const mCamo1 = new THREE.MeshStandardMaterial({ color: 0x3b5a3e, roughness: 0.85 });
@@ -1798,8 +1810,10 @@
         fng.position.set(0, -0.78, 0.12); ag.add(fng);
       };
       makePlayerArm(rightArm); makePlayerArm(leftArm);
-      rightArm.position.set(0.42, 1.46, 0); rightArm.rotation.x = -1.0;
-      leftArm.position.set(-0.42, 1.46, 0); leftArm.rotation.x = -0.8;
+      rightArm.position.set(0.36, 1.44, 0.02); rightArm.rotation.x = -1.08;
+      leftArm.position.set(-0.36, 1.44, 0.02); leftArm.rotation.x = -1.02;
+      rightArm.rotation.z = 0.14;
+      leftArm.rotation.z = -0.18;
       group.add(rightArm, leftArm);
 
       const makePlayerLeg = (px) => {
@@ -1824,8 +1838,9 @@
       group.add(legR, legL);
 
       const gunModel = makeThirdPersonGun(1);
-      gunModel.position.set(0.08, -0.68, -0.18);
       rightArm.add(gunModel);
+      const rpTmp = { gunModel, currentWeapon: 1 };
+      applyRemoteWeaponMount(rpTmp);
 
       const ns = makeNameSprite(name || "Player");
       ns.sprite.position.set(0, 2.55, 0);
@@ -3432,44 +3447,34 @@
       const thick = 1.0;
       const trim = 0x70798a;
 
-      addWallBox(90, H, thick, 0, H / 2, -45);
-      addWallBox(90, H, thick, 0, H / 2, 45);
-      addWallBox(thick, H, 90, -45, H / 2, 0);
-      addWallBox(thick, H, 90, 45, H / 2, 0);
+      // Smaller open duel arena: only perimeter walls, no inner full-height enclosures.
+      const half = 30;
+      addWallBox(half * 2, H, thick, 0, H / 2, -half);
+      addWallBox(half * 2, H, thick, 0, H / 2, half);
+      addWallBox(thick, H, half * 2, -half, H / 2, 0);
+      addWallBox(thick, H, half * 2, half, H / 2, 0);
 
       function pillar(px, pz, s = 2.4) {
-        const coverH = 1.75;
+        const coverH = 1.65;
         addWallBox(s, coverH, s, px, coverH / 2, pz, trim);
       }
 
-      addWallBox(52, H, thick, 0, H / 2, -12);
-      addWallBox(52, H, thick, 0, H / 2, 12);
-      addWallBox(thick, H, 52, -12, H / 2, 0);
-      addWallBox(thick, H, 52, 12, H / 2, 0);
-
-      addWallBox(22, H, thick, -18, H / 2, -28);
-      addWallBox(22, H, thick, 18, H / 2, 28);
-      addWallBox(thick, H, 22, -28, H / 2, -18);
-      addWallBox(thick, H, 22, 28, H / 2, 18);
-
-      addWallBox(30, H, thick, -8, H / 2, 32);
-      addWallBox(30, H, thick, 8, H / 2, -32);
-
       const posts = [
-        [-32, -32], [32, -32], [-32, 32], [32, 32],
-        [-24, 0], [24, 0], [0, -24], [0, 24],
-        [-18, 18], [18, -18], [-10, -20], [10, 20],
+        [-22, -22], [22, -22], [-22, 22], [22, 22],
+        [-16, 0], [16, 0], [0, -16], [0, 16],
+        [-10, 10], [10, -10], [-6, -18], [6, 18],
+        [-2, 0], [2, 0],
       ];
       for (const [px, pz] of posts) pillar(px, pz);
 
       const lightPos = [
-        [-30, -30], [0, -30], [30, -30],
-        [-30, 0], [0, 0], [30, 0],
-        [-30, 30], [0, 30], [30, 30],
+        [-20, -20], [0, -20], [20, -20],
+        [-20, 0], [0, 0], [20, 0],
+        [-20, 20], [0, 20], [20, 20],
       ];
       for (const [lx, lz] of lightPos) {
-        const L = createPhysicalPointLight(0xfff4e2, 95 * Math.PI, 44, 2.6);
-        L.position.set(lx, H - 0.35, lz);
+        const L = createPhysicalPointLight(0xfff4e2, 88 * Math.PI, 34, 2.4);
+        L.position.set(lx, H - 0.5, lz);
         L.castShadow = false;
         scene.add(L);
         pvpMapLights.push(L);
@@ -3478,8 +3483,8 @@
       const hemiFill = new THREE.HemisphereLight(0xdfe9ff, 0x3f3426, 1.05 * Math.PI);
       scene.add(hemiFill);
       pvpMapLights.push(hemiFill);
-      const sunFill = new THREE.DirectionalLight(0xfff0dc, 0.72 * Math.PI);
-      sunFill.position.set(18, 34, 8);
+      const sunFill = new THREE.DirectionalLight(0xfff0dc, 0.84 * Math.PI);
+      sunFill.position.set(14, 30, 10);
       sunFill.castShadow = false;
       scene.add(sunFill);
       pvpMapLights.push(sunFill);
@@ -5016,7 +5021,7 @@
     function rebuildMapAndEnemies() {
       clearMap();
       if (isPvpCrossfireMap(CURRENT_MAP)) {
-        player.position.set(0, 1.65, 34);
+        player.position.set(0, 1.65, CURRENT_MAP === "crossfire_grid" ? 22 : 34);
         floor.visible = true;
         ceiling.visible = CURRENT_MAP !== "crossfire_grid";
         if (CURRENT_MAP === "crossfire_grid") playerLightsPreference = false;
@@ -5197,15 +5202,18 @@
       if (!wm || !wm.userData || !wm.userData.gun) {
         return out.copy(camera.position);
       }
-      wm.userData.gun.getWorldPosition(out);
       camera.getWorldQuaternion(_muzzleTmpQuat);
       _muzzleTmpForward.set(0, 0, -1).applyQuaternion(_muzzleTmpQuat);
       _muzzleTmpRight.set(1, 0, 0).applyQuaternion(_muzzleTmpQuat);
       _muzzleTmpUp.set(0, 1, 0).applyQuaternion(_muzzleTmpQuat);
-      // Push flash to barrel tip area so it is not glued to gun body center.
-      out.addScaledVector(_muzzleTmpForward, 0.33);
-      out.addScaledVector(_muzzleTmpRight, 0.05);
-      out.addScaledVector(_muzzleTmpUp, -0.02);
+      // Use camera-forward muzzle anchor to keep flash at barrel tip in both hipfire and ADS.
+      const adsK = THREE.MathUtils.clamp(state.adsProgress || 0, 0, 1);
+      const side = THREE.MathUtils.lerp(0.17, 0.03, adsK);
+      const down = THREE.MathUtils.lerp(0.11, 0.045, adsK);
+      out.copy(camera.position);
+      out.addScaledVector(_muzzleTmpForward, 0.62);
+      out.addScaledVector(_muzzleTmpRight, side);
+      out.addScaledVector(_muzzleTmpUp, -down);
       return out;
     }
 
@@ -6403,29 +6411,30 @@
             rp.rightLeg.position.y = dampScalar(rp.rightLeg.position.y, moving ? 0.62 + Math.max(0, -wSin) * 0.06 : 0.62, dt, 12);
           }
           const weaponStance = [
-            { l: -0.8, r: -1.12 },
-            { l: -0.88, r: -1.22 },
-            { l: -0.97, r: -1.3 },
-            { l: -0.84, r: -1.14 },
-            { l: -0.7, r: -0.98 },
-          ][rp.currentWeapon | 0] || { l: -0.88, r: -1.18 };
-          let targetLX = weaponStance.l + (moving ? wSin * 0.26 : 0);
-          let targetRX = weaponStance.r - (moving ? wSin * 0.24 : 0);
+            { l: -1.02, r: -1.14, lz: -0.24, rz: 0.16 },
+            { l: -1.12, r: -1.26, lz: -0.28, rz: 0.20 },
+            { l: -1.06, r: -1.20, lz: -0.23, rz: 0.17 },
+            { l: -1.10, r: -1.22, lz: -0.26, rz: 0.19 },
+            { l: -0.84, r: -0.98, lz: -0.18, rz: 0.12 },
+          ][rp.currentWeapon | 0] || { l: -1.1, r: -1.24, lz: -0.26, rz: 0.18 };
+          let targetLX = weaponStance.l + (moving ? wSin * 0.12 : 0);
+          let targetRX = weaponStance.r - (moving ? wSin * 0.10 : 0);
+          let targetLZ = weaponStance.lz + (moving ? Math.cos(rp.walkPhase) * 0.03 : 0);
+          let targetRZ = weaponStance.rz - (moving ? Math.cos(rp.walkPhase) * 0.03 : 0);
           if (rp.isReloading) {
             rp.reloadPhase = (rp.reloadPhase || 0) + dt * 6.5;
             const rSin = Math.sin(rp.reloadPhase);
-            targetRX = -0.18 + rSin * 0.75;
-            targetLX = -0.26 + Math.sin(rp.reloadPhase + 0.8) * 0.5;
+            targetRX = -0.34 + rSin * 0.62;
+            targetLX = -0.48 + Math.sin(rp.reloadPhase + 0.8) * 0.40;
+            targetRZ = 0.34;
+            targetLZ = -0.36;
             if (rp.gunModel) {
-              rp.gunModel.rotation.z = dampScalar(rp.gunModel.rotation.z, 0.72 + rSin * 0.38, dt, 16);
-              rp.gunModel.rotation.x = dampScalar(rp.gunModel.rotation.x, -0.38 + Math.cos(rp.reloadPhase * 1.35) * 0.14, dt, 14);
+              rp.gunModel.rotation.z = dampScalar(rp.gunModel.rotation.z, 0.45 + rSin * 0.28, dt, 16);
+              rp.gunModel.rotation.x = dampScalar(rp.gunModel.rotation.x, -0.20 + Math.cos(rp.reloadPhase * 1.35) * 0.10, dt, 14);
             }
           } else {
             rp.reloadPhase = 0;
-            if (rp.gunModel) {
-              rp.gunModel.rotation.z = dampScalar(rp.gunModel.rotation.z, 0, dt, 14);
-              rp.gunModel.rotation.x = dampScalar(rp.gunModel.rotation.x, 0, dt, 14);
-            }
+            applyRemoteWeaponMount(rp);
           }
           if (rp.torsoMesh) {
             rp.torsoMesh.rotation.y = dampScalar(rp.torsoMesh.rotation.y, moving ? Math.sin(rp.walkPhase * 0.5) * 0.13 : 0, dt, 10);
@@ -6437,8 +6446,8 @@
           }
           rp.leftArm.rotation.x = dampScalar(rp.leftArm.rotation.x, targetLX, dt, 13);
           rp.rightArm.rotation.x = dampScalar(rp.rightArm.rotation.x, targetRX, dt, 13);
-          rp.leftArm.rotation.z = dampScalar(rp.leftArm.rotation.z, moving ? Math.cos(rp.walkPhase) * 0.12 : 0, dt, 12);
-          rp.rightArm.rotation.z = dampScalar(rp.rightArm.rotation.z, moving ? -Math.cos(rp.walkPhase) * 0.12 : 0, dt, 12);
+          rp.leftArm.rotation.z = dampScalar(rp.leftArm.rotation.z, targetLZ, dt, 12);
+          rp.rightArm.rotation.z = dampScalar(rp.rightArm.rotation.z, targetRZ, dt, 12);
         }
       }
 
@@ -6640,7 +6649,7 @@
       }
 
       if (isPvpCrossfireMap(CURRENT_MAP)) {
-        player.position.set(0, 1.65, 34);
+        player.position.set(0, 1.65, CURRENT_MAP === "crossfire_grid" ? 22 : 34);
         floor.visible = true;
         ceiling.visible = CURRENT_MAP !== "crossfire_grid";
         if (CURRENT_MAP === "crossfire_grid") playerLightsPreference = false;
