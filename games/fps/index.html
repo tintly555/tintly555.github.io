@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <!--
-  Paste file: CODE_TO_PASTE（24） — active numbered copy; copied from （23） (（22） + classmate i18n + Tintly gameplay). Prefer editing （24） onward; keep （23） as snapshot.
+  Paste file: CODE_TO_PASTE（25） — active numbered copy; （24） = frozen snapshot (same body as （23）). This file adds GitHub Pages deploy meta: game-multiplayer-origin → Socket relay, game-static-prefix → /games/fps. Prefer editing （25） onward; keep （23）/（24） as snapshots.
   Source-of-truth: https://tintly555.github.io/games/fps/
   Includes: PVP map picker (Classic / Grid Killhouse), co-op maze seed sync, remote rig + hitzones, layered gun SFX, boot viewport guard.
-  Multiplayer: meta game-multiplayer-origin empty = Socket.IO on this page’s origin (GitHub Pages self-host). Set to a relay URL only if you use an external game server.
+  Multiplayer: For https://tintly555.github.io/games/fps/ keep game-multiplayer-origin pointing at the Socket relay (see meta below). Empty = same-origin only (OK for local dev with a game server on the same host; NOT OK for plain GitHub Pages — Pages has no Socket.IO).
   Assets: meta game-asset-base resolves first (same order as classmate self-hosted); UI backgrounds probe both nested game-ui/*.png and flat background.png / game-ui-*.png layouts.
   Merge policy: keep classmate fixes (paths, meta, self-hosted multiplayer); if a branch drops Tintly features (PVP map picker, Grid Killhouse, co-op maze seed sync, remote rig/hitzones, layered gun SFX, boot viewport guard, etc.), restore those behaviors — do not “win” by deleting gameplay.
   Crossfire = PVP; Arena = zombies / co-op.
@@ -79,12 +79,12 @@
   <title>Abandoned Orphanage</title>
   <!-- Only the script-injected <base> above should set the document base (folder of this HTML).
        A second fixed base (e.g. chat origin) breaks relative game-ui/ + walls.png when the page is not at site root or when assets live beside this file. -->
-  <!-- Socket.IO / multiplayer API host only — do not use as primary CDN for game-ui / menu.mp3 (same-origin loads avoid 404 + Web Audio CORS). -->
-  <meta name="game-multiplayer-origin" content="" />
+  <!-- Socket.IO relay — NOT the asset CDN. Empty origin → io() uses this page’s host (GitHub Pages cannot run Socket.IO; quick play / rooms will fail). -->
+  <meta name="game-multiplayer-origin" content="https://chat.jimmyqrg.com" />
   <!-- Optional absolute base for walls.png + game-ui/ when this HTML is embedded or hosted away from those files (empty = auto-detect). -->
   <meta name="game-asset-base" content="" />
-  <!-- Where static files from public/ are mounted: empty = site root (e.g. Fly: /walls.png). GitHub Pages subpath: content="/games/fps" -->
-  <meta name="game-static-prefix" content="" />
+  <!-- GitHub Pages deploy path for this repo (public → /games/fps/). Use content="" if this file is served at site root. -->
+  <meta name="game-static-prefix" content="/games/fps" />
   <script>
     (function () {
       /** Same priority as classmate self-hosted build: optional absolute/static root override first. */
@@ -1192,6 +1192,7 @@
      enterCodeError: "Enter a code",
      lobbyPickModeFirst: "Choose CO-OP or a PVP map first.",
      mpNoServerAck: "No response from server.",
+     mpMissingRoomId: "Could not join — missing room id from server.",
      loadingWorld: "Loading world…",
      fpsChatHint: "Press T to chat",
      fpsLightHint: "Press L to toggle light & flashlight",
@@ -1310,6 +1311,7 @@
      enterCodeError: "请输入房间码",
      lobbyPickModeFirst: "请先选择合作模式或 PVP 地图。",
      mpNoServerAck: "服务器无响应。",
+     mpMissingRoomId: "无法加入 — 服务器未返回房间编号。",
      loadingWorld: "正在加载世界…",
      fpsChatHint: "按 T 打开聊天",
      fpsLightHint: "按 L 开关照明与手电",
@@ -1428,6 +1430,7 @@
      enterCodeError: "請輸入房間代碼",
      lobbyPickModeFirst: "請先選擇合作模式或 PVP 地圖。",
      mpNoServerAck: "伺服器無回應。",
+     mpMissingRoomId: "無法加入 — 伺服器未回傳房間編號。",
      loadingWorld: "正在載入世界…",
      fpsChatHint: "按 T 開啟聊天",
      fpsLightHint: "按 L 切換照明與手電筒",
@@ -3105,12 +3108,20 @@
 
     const multiplayerOrigin = getMultiplayerOrigin();
 
-    const socket = typeof io === "function"
-      ? io(`${multiplayerOrigin}/game`, {
+    const _ioFactory = typeof globalThis.io === "function" ? globalThis.io : null;
+    if (!_ioFactory) {
+      console.warn(
+        "[multiplayer] socket.io-client not available (CDN blocked or script order). Using offline stub."
+      );
+    }
+
+    const socket = _ioFactory
+      ? _ioFactory(`${multiplayerOrigin}/game`, {
           transports: ["websocket", "polling"],
           reconnection: true,
-          reconnectionAttempts: 10,
+          reconnectionAttempts: 12,
           reconnectionDelay: 800,
+          timeout: 20000,
         })
       : createOfflineSocketStub();
 
@@ -8839,6 +8850,86 @@
       showMenuPanel("menuLobby");
     }
 
+    /**
+     * Relay servers differ: some send roomKey, others only `code` / `room`, or nest under `data`.
+     */
+    function normalizeMatchAck(res) {
+      if (!res || typeof res !== "object") {
+        return { error: "No response from server." };
+      }
+      if (res.error != null && res.error !== false && res.error !== "") {
+        return { error: String(res.error) };
+      }
+      if (res.ok === false) {
+        return { error: String(res.message || res.reason || "Request rejected.") };
+      }
+      const inner = res.data && typeof res.data === "object" ? res.data : res;
+      if (inner.ok === false) {
+        return { error: String(inner.message || inner.reason || "Request rejected.") };
+      }
+      if (inner.success === false || res.success === false) {
+        return { error: String(inner.message || res.message || "Matchmaking failed.") };
+      }
+
+      let roomKey = "";
+      const keyCandidates = [
+        inner.roomKey,
+        res.roomKey,
+        inner.sessionId,
+        res.sessionId,
+        inner.matchId,
+        res.matchId,
+        inner.roomId,
+        res.roomId,
+      ];
+      for (let i = 0; i < keyCandidates.length; i++) {
+        const v = keyCandidates[i];
+        if (typeof v === "string" && v.trim()) {
+          roomKey = v.trim();
+          break;
+        }
+      }
+
+      let shortCode = "";
+      const codeCandidates = [
+        inner.code,
+        res.code,
+        inner.roomCode,
+        res.roomCode,
+        inner.joinCode,
+        res.joinCode,
+        inner.shortCode,
+        res.shortCode,
+      ];
+      for (let i = 0; i < codeCandidates.length; i++) {
+        const v = codeCandidates[i];
+        if (typeof v === "string" && v.trim()) {
+          shortCode = v.trim();
+          break;
+        }
+      }
+
+      const roomStr = typeof inner.room === "string" ? inner.room : typeof res.room === "string" ? res.room : "";
+      if (!roomKey && roomStr.includes(":")) {
+        roomKey = roomStr.trim();
+      }
+      if (!roomKey && shortCode && pendingLobbyMode) {
+        roomKey = `${pendingLobbyMode}:${shortCode}`;
+      }
+      if (!roomKey && shortCode) {
+        roomKey = shortCode;
+      }
+
+      let roomCode = shortCode || (roomKey.includes(":") ? roomKey.split(":").pop() : roomKey);
+      if (!roomKey) {
+        return {
+          error:
+            "Server response missing room id. Ask relay admin to return roomKey or code for quickplay/createRoom.",
+        };
+      }
+      return { roomKey, roomCode: roomCode || roomKey };
+    }
+
     function showLobbyErr(msg) {
       const el = document.getElementById("lobbyError");
       if (el) el.textContent = msg || "";
@@ -8852,6 +8943,10 @@
       } else {
         activeRoomId = (roomOpts && roomOpts.roomKey) || "";
         ROOM_CODE = (roomOpts && roomOpts.roomCode) || "";
+      }
+      if (!activeRoomId) {
+        showLobbyErr(t("mpMissingRoomId"));
+        return;
       }
       nameModal.style.display = "flex";
       nameInput.value = "";
@@ -8887,12 +8982,13 @@
           showLobbyErr(t("mpNoServerAck"));
           return;
         }
-        if (res.error) {
-          showLobbyErr(res.error);
+        const norm = normalizeMatchAck(res);
+        if (norm.error) {
+          showLobbyErr(norm.error);
           return;
         }
         const map = pendingLobbyMode === "crossfire" ? PENDING_PVP_MAP : "arena";
-        beginMultiplayerGame(map, { roomKey: res.roomKey, roomCode: res.room });
+        beginMultiplayerGame(map, { roomKey: norm.roomKey, roomCode: norm.roomCode });
       });
     });
 
@@ -8907,12 +9003,13 @@
           showLobbyErr(t("mpNoServerAck"));
           return;
         }
-        if (res.error) {
-          showLobbyErr(res.error);
+        const norm = normalizeMatchAck(res);
+        if (norm.error) {
+          showLobbyErr(norm.error);
           return;
         }
         const map = pendingLobbyMode === "crossfire" ? PENDING_PVP_MAP : "arena";
-        beginMultiplayerGame(map, { roomKey: res.roomKey, roomCode: res.code });
+        beginMultiplayerGame(map, { roomKey: norm.roomKey, roomCode: norm.roomCode });
       });
     });
 
@@ -8927,10 +9024,18 @@
     btnCodeJoin.addEventListener("click", () => {
       const code = codeInput.value.trim().toUpperCase();
       if (!code) { codeError.textContent = t("enterCodeError"); return; }
+      if (!pendingLobbyMode) {
+        codeError.textContent = t("lobbyPickModeFirst");
+        return;
+      }
       socket.emit("joinByCode", { code, mode: pendingLobbyMode }, (res) => {
-        if (res.error) { codeError.textContent = res.error; return; }
+        const norm = normalizeMatchAck(res);
+        if (norm.error) {
+          codeError.textContent = norm.error;
+          return;
+        }
         const map = pendingLobbyMode === "crossfire" ? PENDING_PVP_MAP : "arena";
-        beginMultiplayerGame(map, { roomKey: res.roomKey, roomCode: code });
+        beginMultiplayerGame(map, { roomKey: norm.roomKey, roomCode: norm.roomCode || code });
       });
     });
 
