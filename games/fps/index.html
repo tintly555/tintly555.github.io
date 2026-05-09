@@ -1,4 +1,9 @@
-<!doctype html>
+<!DOCTYPE html>
+<!--
+  Source-of-truth deployment: https://tintly555.github.io/games/fps/
+  This copy in the chat repo is for editing; multiplayer hits chat.jimmyqrg.com via meta below when hosted on static Pages.
+  Crossfire mode is PVP (player vs player); Arena is PVE / co-op vs zombies.
+-->
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -18,7 +23,7 @@
       } catch (e) {}
     })();
   </script>
-  <title>3D Zombie FPS Prototype</title>
+  <title>Abandoned Orphanage Prototype</title>
   <meta name="game-multiplayer-origin" content="https://chat.jimmyqrg.com" />
   <!-- Optional absolute base for walls.png + game-ui/ when this HTML is embedded or hosted away from those files (empty = auto-detect). -->
   <meta name="game-asset-base" content="" />
@@ -179,6 +184,39 @@
       transform: translate(-50%, -50%) rotate(-45deg);
     }
 
+    /* Full-screen boot: map gen + asset preload before gameplay */
+    #gameBootOverlay {
+      position: fixed;
+      inset: 0;
+      z-index: 105;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 18px;
+      background: radial-gradient(ellipse 90% 70% at 50% 40%, rgba(18, 22, 34, 0.92) 0%, rgba(4, 6, 12, 0.97) 65%, #020308 100%);
+      pointer-events: auto;
+      font-family: 'Audiowide', sans-serif;
+    }
+    #gameBootOverlay .game-boot-spinner {
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
+      border: 3px solid rgba(79, 209, 255, 0.22);
+      border-top-color: rgba(79, 209, 255, 0.95);
+      animation: game-boot-spin 0.85s linear infinite;
+    }
+    @keyframes game-boot-spin {
+      to { transform: rotate(360deg); }
+    }
+    #gameBootOverlay .game-boot-text {
+      margin: 0;
+      font-size: 15px;
+      letter-spacing: 0.12em;
+      color: rgba(232, 238, 252, 0.88);
+      text-shadow: 0 2px 16px rgba(0, 0, 0, 0.65);
+    }
+
     .menu {
       position: fixed;
       inset: 0;
@@ -246,7 +284,6 @@
       justify-content: center;
       gap: 12px;
       width: 100%;
-      max-width: 420px;
     }
 
     .menu-main-settings {
@@ -535,13 +572,36 @@
         var meta = document.querySelector('meta[name="game-asset-base"]');
         var mb = meta && meta.content != null ? String(meta.content).trim() : "";
         if (mb) bases.push(normBase(mb));
-        bases.push(dir);
+        var mpMeta = document.querySelector('meta[name="game-multiplayer-origin"]');
+        var mp = mpMeta && mpMeta.content != null ? String(mpMeta.content).trim() : "";
+        if (mp) {
+          try {
+            bases.push(new URL("/", mp).href);
+          } catch (eMp) {}
+        }
+        var lastSeg = "";
         try {
-          bases.push(new URL("../", dir).href);
-        } catch (e1) {}
-        try {
-          bases.push(new URL("../../", dir).href);
-        } catch (e2) {}
+          var segs = new URL(dir).pathname.replace(/\/+$/, "").split("/").filter(Boolean);
+          lastSeg = String(segs[segs.length - 1] || "").toLowerCase();
+        } catch (e0) {}
+        // Match getGameAssetBaseCandidates(): assets often live one level up when game.html is under .../html/
+        if (lastSeg === "html") {
+          try {
+            bases.push(new URL("../", dir).href);
+          } catch (e1) {}
+          try {
+            bases.push(new URL("../../", dir).href);
+          } catch (e2) {}
+          bases.push(dir);
+        } else {
+          bases.push(dir);
+          try {
+            bases.push(new URL("../", dir).href);
+          } catch (e1) {}
+          try {
+            bases.push(new URL("../../", dir).href);
+          } catch (e2) {}
+        }
         bases.push("https://tintly555.github.io/games/fps/");
         var root = document.documentElement;
         var bi = 0;
@@ -583,7 +643,7 @@
   <div id="menu" class="menu">
     <div class="menu-panels-wrap">
     <div id="menuMain" style="display:flex;flex-direction:column;align-items:center;gap:10px;">
-      <h1>3D Zombie FPS</h1>
+      <h1>Abandoned Orphanage</h1>
       <p>by Tintly555 and JimmyQrg</p>
       <button type="button" id="btnArena">Zombie Arena</button>
       <button type="button" id="btnCrossfire">Crossfire (PVP)</button>
@@ -613,6 +673,10 @@
   </div>
 
   <div id="app"></div>
+  <div id="gameBootOverlay" aria-live="polite" aria-busy="true" style="display:none;">
+    <div class="game-boot-spinner" role="status" aria-label="Loading"></div>
+    <p id="gameBootLabel" class="game-boot-text">Loading world…</p>
+  </div>
   <div id="shadeOverlay" aria-hidden="true"></div>
   <div id="warFilmOverlay" aria-hidden="true"></div>
   <div class="hud" id="hud"></div>
@@ -724,6 +788,8 @@
     const menuLobby = document.getElementById("menuLobby");
     const lobbyTitle = document.getElementById("lobbyTitle");
     const menuJoinCode = document.getElementById("menuJoinCode");
+    const gameBootOverlay = document.getElementById("gameBootOverlay");
+    const gameBootLabel = document.getElementById("gameBootLabel");
     const codeInput = document.getElementById("codeInput");
     const codeError = document.getElementById("codeError");
     const btnArena = document.getElementById("btnArena");
@@ -825,6 +891,8 @@
     let ROOM_CODE = "";
     let pendingLobbyMode = "";
     let started = false;
+    /** False during boot overlay: no movement, shooting, zombie AI, or damage until map + assets are ready. */
+    let gameWorldReady = false;
     let paused = false;
     let chatOpen = false;
     let playerName = "Player";
@@ -854,7 +922,7 @@
       }
     }
 
-    const PLAYER_LIGHT_COLOR = 0xfff6ec;
+    const PLAYER_LIGHT_COLOR = 0xfff0d4;
     // Soft body halo (local camera only) — stronger so it still reads in the arena next to many maze lights.
     const PLAYER_BODY_INTENSITY = 10;
     const PLAYER_BODY_DISTANCE = 300;
@@ -895,7 +963,11 @@
         emit(_ev, ...args) {
           const last = args[args.length - 1];
           if (typeof last === "function") {
-            queueMicrotask(() => last({ error: "Network unavailable" }));
+            if (_ev === "joinRoom") {
+              queueMicrotask(() => last({ ok: true, hostId: "offline", roomKey: String(args[0] || "") }));
+            } else {
+              queueMicrotask(() => last({ error: "Network unavailable" }));
+            }
           }
         },
         disconnect() {},
@@ -934,9 +1006,11 @@
       socket.emit("joinRoom", activeRoomId, (ack) => {
         if (gen !== _joinRoomGeneration) return;
         if (!ack || !ack.ok) return;
-        if (MULTIPLAYER && ARENA_COOP && CURRENT_MAP === "arena" && ack.hostId != null) {
+        if (MULTIPLAYER && ARENA_COOP && CURRENT_MAP === "arena") {
           ZOMBIE_HOST_KNOWN = true;
-          ZOMBIE_AUTHORITY = ack.hostId === socket.id;
+          if (ack.hostId != null) {
+            ZOMBIE_AUTHORITY = String(ack.hostId) === String(socket.id);
+          }
         }
       });
     }
@@ -1042,6 +1116,7 @@
     });
 
     socket.on("damaged", (data) => {
+      if (!gameWorldReady) return;
       if (player.health <= 0) return;
       player.health = Math.max(0, player.health - (data.damage || 0));
       player.regenTimer = 0;
@@ -1056,7 +1131,7 @@
 
     socket.on("zombieHost", (data) => {
       ZOMBIE_HOST_KNOWN = true;
-      ZOMBIE_AUTHORITY = !!(data && data.hostId === socket.id);
+      ZOMBIE_AUTHORITY = !!(data && String(data.hostId) === String(socket.id));
     });
 
     socket.on("zombieSync", (data) => {
@@ -1464,8 +1539,8 @@
     }
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x020305);
-    scene.fog = new THREE.Fog(0x020305, 16, 72);
+    scene.background = new THREE.Color(0x070504);
+    scene.fog = new THREE.Fog(0x070504, 16, 72);
 
     const camera = new THREE.PerspectiveCamera(
       75,
@@ -1499,10 +1574,10 @@
 
     // Same luminance as pre–r155 legacy lights: physically correct shading drops ~π× vs old scaling.
     const _LEGACY_L = Math.PI;
-    const hemi = new THREE.HemisphereLight(0x2c3848, 0x0f1114, 0.14 * _LEGACY_L);
+    const hemi = new THREE.HemisphereLight(0x524838, 0x141008, 0.14 * _LEGACY_L);
     scene.add(hemi);
 
-    const moon = new THREE.DirectionalLight(0x5a6880, 0.11 * _LEGACY_L);
+    const moon = new THREE.DirectionalLight(0xc8b078, 0.11 * _LEGACY_L);
     moon.position.set(28, 34, 22);
     moon.castShadow = true;
     moon.shadow.mapSize.set(256, 256);
@@ -1512,8 +1587,8 @@
     moon.shadow.camera.bottom = -100;
     scene.add(moon);
 
-    const fallbackColor = 0x43454d;
-    const fallbackWallColor = 0x6b7384;
+    const fallbackColor = "#13151d";
+    const fallbackWallColor = "#3b4334";
     let wallTexture = null;
     let wallTextureLoaded = false;
 
@@ -1649,6 +1724,14 @@
       const raw = meta && meta.content != null ? String(meta.content).trim() : "";
       if (raw) out.push(normalizeGameAssetBase(raw));
 
+      const mpMeta = document.querySelector('meta[name="game-multiplayer-origin"]');
+      const mpRaw = mpMeta && mpMeta.content != null ? String(mpMeta.content).trim() : "";
+      if (mpRaw) {
+        try {
+          out.push(new URL("/", mpRaw).href);
+        } catch (_) {}
+      }
+
       const dir = pageDirFromLocation();
       let parent = null;
       let grandparent = null;
@@ -1772,6 +1855,7 @@
         t.anisotropy = getMaxTextureAnisotropy();
         return new THREE.MeshLambertMaterial({ map: t, color: tint });
       }
+      // Diffuse-only like textured walls — StandardMaterial still picks up specular/Fresnel even at high roughness.
       return new THREE.MeshLambertMaterial({ color: tint });
     }
 
@@ -2363,7 +2447,7 @@
 
         if (kind === "roof") {
           const L = createPhysicalPointLight(
-            0xfff2dd,
+            0xffecd0,
             108 * MAZE_LIGHT_INTENSITY_SCALE,
             MAZE_CHUNK_WORLD * 0.62
           );
@@ -2376,8 +2460,8 @@
           const bulb = new THREE.Mesh(
             new THREE.CylinderGeometry(0.14, 0.18, 0.12, 8),
             new THREE.MeshStandardMaterial({
-              color: 0xfff6ec,
-              emissive: 0xffeed0,
+              color: 0xfff2de,
+              emissive: 0xfff0d0,
               emissiveIntensity: 0.9,
               roughness: 0.35,
               metalness: 0.2,
@@ -2424,7 +2508,7 @@
           chunkMeshes.push(sconce);
 
           const spot = createPhysicalSpotLight(
-            0xffecd8,
+            0xffe4c8,
             220 * MAZE_LIGHT_INTENSITY_SCALE,
             56,
             Math.PI / 4.2,
@@ -2438,7 +2522,7 @@
           chunkLights.push(spot);
           registerMazeCullLight(spot, key);
           const sconceFill = createPhysicalPointLight(
-            0xffe8d0,
+            0xffe2c4,
             28 * MAZE_LIGHT_INTENSITY_SCALE,
             11
           );
@@ -2450,7 +2534,7 @@
         } else if (kind === "area") {
           const ceilingY = MAZE_CEILING_LIGHT_Y;
           const fill = createPhysicalPointLight(
-            0xfff5ee,
+            0xfff0e4,
             200 * MAZE_LIGHT_INTENSITY_SCALE,
             MAZE_CHUNK_WORLD * 0.88
           );
@@ -2461,7 +2545,7 @@
           registerMazeCullLight(fill, key);
 
           const wideDown = createPhysicalSpotLight(
-            0xfff1e6,
+            0xffebd8,
             320 * MAZE_LIGHT_INTENSITY_SCALE,
             MAZE_CHUNK_WORLD * 0.95,
             Math.PI / 2.05,
@@ -2944,7 +3028,7 @@
             : CURRENT_MAP;
       hud.innerHTML = `
         ${roomLine}
-        3D Zombie FPS<br>
+        Abandoned Orphanage<br>
         WASD move | Space jump | R reload<br>
         Mouse aim | RMB zoom | Weapons: 1 2 3 4<br>
         Map: ${mapLabel}${MULTIPLAYER ? " (MP)" : ""}<br>
@@ -3025,13 +3109,13 @@
         hp = 180; speed = 1.05; attackDamage = 14; attackCooldown = 0.70;
       }
 
-      const matSkin = new THREE.MeshStandardMaterial({ color: skinColor, roughness: 0.85 });
-      const matSkinD = new THREE.MeshStandardMaterial({ color: skinDark, roughness: 0.85 });
-      const matShirt = new THREE.MeshStandardMaterial({ color: shirtColor, roughness: 0.9 });
-      const matPants = new THREE.MeshStandardMaterial({ color: pantsColor, roughness: 0.9 });
-      const matWound = new THREE.MeshStandardMaterial({ color: woundColor, roughness: 0.6 });
-      const matBone = new THREE.MeshStandardMaterial({ color: 0xd4c8a8, roughness: 0.7 });
-      const matBlood = new THREE.MeshStandardMaterial({ color: 0x551111, roughness: 0.5 });
+      const matSkin = new THREE.MeshStandardMaterial({ color: skinColor, roughness: 0.95, metalness: 0 });
+      const matSkinD = new THREE.MeshStandardMaterial({ color: skinDark, roughness: 0.95, metalness: 0 });
+      const matShirt = new THREE.MeshStandardMaterial({ color: shirtColor, roughness: 0.96, metalness: 0 });
+      const matPants = new THREE.MeshStandardMaterial({ color: pantsColor, roughness: 0.96, metalness: 0 });
+      const matWound = new THREE.MeshStandardMaterial({ color: woundColor, roughness: 0.94, metalness: 0 });
+      const matBone = new THREE.MeshStandardMaterial({ color: 0xd4c8a8, roughness: 0.94, metalness: 0 });
+      const matBlood = new THREE.MeshStandardMaterial({ color: 0x551111, roughness: 0.93, metalness: 0 });
 
       const chest = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.56, 0.34), matShirt);
       chest.position.y = 1.22; torsoRoot.add(chest);
@@ -3052,7 +3136,7 @@
       collarTear.position.set(0.18, 1.52, 0.12); torsoRoot.add(collarTear);
 
       if (type === "tank") {
-        const armorMat = new THREE.MeshStandardMaterial({ color: 0x505e6e, roughness: 0.5, metalness: 0.4 });
+        const armorMat = new THREE.MeshStandardMaterial({ color: 0x505e6e, roughness: 0.9, metalness: 0.08 });
         const armorF = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.42, 0.08), armorMat);
         armorF.position.set(0, 1.22, 0.20); torsoRoot.add(armorF);
         const armorB = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.42, 0.06), armorMat);
@@ -3066,11 +3150,11 @@
       }
 
       if (type === "gunner") {
-        const bandolier = new THREE.MeshStandardMaterial({ color: 0x4a3020, roughness: 0.8 });
+        const bandolier = new THREE.MeshStandardMaterial({ color: 0x4a3020, roughness: 0.95, metalness: 0 });
         const strap = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.50, 0.06), bandolier);
         strap.position.set(-0.18, 1.10, 0.14); strap.rotation.z = 0.3; torsoRoot.add(strap);
         for (let i = 0; i < 3; i++) {
-          const shell = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.06, 0.03), new THREE.MeshStandardMaterial({ color: 0xc0a040 }));
+          const shell = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.06, 0.03), new THREE.MeshStandardMaterial({ color: 0xc0a040, roughness: 0.82, metalness: 0.12 }));
           shell.position.set(-0.18 + i * 0.05, 1.18 - i * 0.08, 0.18); torsoRoot.add(shell);
         }
       }
@@ -3082,7 +3166,7 @@
       jawBone.position.set(0, -0.24, 0.02); headGroup.add(jawBone);
 
       const eyeGlowMat = new THREE.MeshBasicMaterial({ color: eyeColor });
-      const eyeSocketMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a });
+      const eyeSocketMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 1, metalness: 0 });
       const sockL = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.10, 0.04), eyeSocketMat);
       sockL.position.set(-0.10, 0.06, 0.20); headGroup.add(sockL);
       const sockR = sockL.clone(); sockR.position.x = 0.10; headGroup.add(sockR);
@@ -3102,7 +3186,7 @@
       const noseBridge = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.08, 0.06), matSkinD);
       noseBridge.position.set(0, -0.02, 0.22); headGroup.add(noseBridge);
 
-      const hairMat = new THREE.MeshStandardMaterial({ color: 0x25201d, roughness: 0.9 });
+      const hairMat = new THREE.MeshStandardMaterial({ color: 0x25201d, roughness: 0.96, metalness: 0 });
       if (type !== "fast") {
         const h1 = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.08, 0.28), hairMat);
         h1.position.set(0, 0.26, -0.06); headGroup.add(h1);
@@ -3276,12 +3360,72 @@
     audioMusic.connect(audioMaster);
     audioMaster.connect(audioCtx.destination);
 
+    let menuBgmAudio = null;
+
     function applyAudioVolumes() {
       audioMaster.gain.value = gameSettings.masterVolume;
       audioSfx.gain.value = gameSettings.soundVolume;
       audioMusic.gain.value = gameSettings.musicVolume;
+      if (menuBgmAudio) {
+        menuBgmAudio.volume = THREE.MathUtils.clamp(
+          gameSettings.masterVolume * gameSettings.musicVolume,
+          0,
+          1
+        );
+      }
     }
     applyAudioVolumes();
+
+    function getMenuBgmUrl() {
+      for (const base of getGameAssetBaseCandidates()) {
+        try {
+          return new URL("menu.mp3", normalizeGameAssetBase(base)).href;
+        } catch (_) {}
+      }
+      try {
+        return new URL("menu.mp3", pageDirFromLocation()).href;
+      } catch (_) {
+        return "menu.mp3";
+      }
+    }
+    function ensureMenuBgmAudio() {
+      if (menuBgmAudio) return;
+      menuBgmAudio = new Audio(getMenuBgmUrl());
+      menuBgmAudio.loop = true;
+      menuBgmAudio.preload = "auto";
+      menuBgmAudio.volume = THREE.MathUtils.clamp(
+        gameSettings.masterVolume * gameSettings.musicVolume,
+        0,
+        1
+      );
+    }
+    function pauseMenuBgm() {
+      if (!menuBgmAudio) return;
+      try {
+        menuBgmAudio.pause();
+      } catch (_) {}
+    }
+    /** Browser autoplay policy: start only after a user gesture; safe to call repeatedly. */
+    function tryPlayMenuBgm() {
+      if (menuEl.style.display === "none") return;
+      ensureMenuBgmAudio();
+      menuBgmAudio.volume = THREE.MathUtils.clamp(
+        gameSettings.masterVolume * gameSettings.musicVolume,
+        0,
+        1
+      );
+      const p = menuBgmAudio.play();
+      if (p && typeof p.catch === "function") p.catch(() => {});
+    }
+    function onMenuBgmUserGesture() {
+      if (audioCtx.state === "suspended") {
+        audioCtx.resume().catch(() => {});
+      }
+      tryPlayMenuBgm();
+    }
+    ["pointerdown", "keydown", "touchstart"].forEach((ev) => {
+      window.addEventListener(ev, onMenuBgmUserGesture, { capture: true });
+    });
 
     let ambientWindNode = null;
     function ensureAmbientWindLoop() {
@@ -3732,7 +3876,7 @@
     });
 
     document.addEventListener("mousedown", (e) => {
-      if (!state.locked || player.health <= 0) return;
+      if (!gameWorldReady || !state.locked || player.health <= 0) return;
       if (e.button === 2) {
         if (!state.reloading) state.ads = true;
       }
@@ -3745,6 +3889,7 @@
     });
 
     renderer.domElement.addEventListener("click", () => {
+      if (!gameWorldReady) return;
       if (!state.locked && !paused && player.health > 0) renderer.domElement.requestPointerLock();
     });
 
@@ -3759,13 +3904,13 @@
         keys.shift = false;
         state.mouseDown = false;
         state.ads = false;
-        if (started && player.health > 0 && menuEl.style.display === "none" && !chatOpen && !settingsModalOpen) {
+        if (started && player.health > 0 && menuEl.style.display === "none" && !chatOpen && !settingsModalOpen && gameWorldReady) {
           showPause();
         }
       } else {
         hidePause();
       }
-      hint.style.display = (state.locked || paused || player.health <= 0) ? "none" : "block";
+      hint.style.display = (state.locked || paused || player.health <= 0 || !gameWorldReady) ? "none" : "block";
     });
 
     window.addEventListener("blur", () => {
@@ -3965,7 +4110,7 @@
     }
 
     function tryShoot() {
-      if (paused || player.health <= 0) return;
+      if (!gameWorldReady || paused || player.health <= 0) return;
       const now = performance.now();
       const w = weapon();
       const shootingAds = (state.ads || keys.shift) && !state.reloading && player.health > 0;
@@ -4386,6 +4531,20 @@
       }
     }
 
+    /** Host sim: hurt local player or send zombie hit to a remote co-op player (server `hit` → `damaged`). */
+    function applyCoopZombieDamageToTarget(enemy) {
+      if (MULTIPLAYER && ARENA_COOP && CURRENT_MAP === "arena" && enemy.targetId != null) {
+        socket.emit("hit", {
+          target: enemy.targetId,
+          damage: enemy.attackDamage,
+          x: enemy.group.position.x,
+          z: enemy.group.position.z,
+        });
+      } else {
+        damagePlayer(enemy.attackDamage, enemy);
+      }
+    }
+
     function showPause() {
       if (player.health <= 0) return;
       if (paused) return;
@@ -4701,6 +4860,7 @@
     }
 
     function applyZombieSyncPayload(data) {
+      if (!gameWorldReady) return;
       if (!data || !Array.isArray(data.zombies)) return;
       if (typeof data.score === "number") state.score = data.score;
       for (const z of data.zombies) {
@@ -4724,6 +4884,7 @@
     }
 
     function updateEnemies(dt) {
+      if (!gameWorldReady) return;
       if (player.health > 0 && player.health < player.maxHealth) {
         player.regenTimer += dt;
         if (player.regenTimer >= 5.0) {
@@ -4857,10 +5018,8 @@
             enemy.moving = false;
           }
 
-          const isTargetLocal = enemy.targetId === null;
-
           let gunnerLosClear = false;
-          if (enemy.ranged && dist < enemy.rangeDistance && isTargetLocal) {
+          if (enemy.ranged && dist < enemy.rangeDistance) {
             _visOrigin.set(enemy.group.position.x, 1.6, enemy.group.position.z);
             _enemyShotDir.set(dx, (target.y ?? 1.65) - 1.6, dz);
             if (_enemyShotDir.lengthSq() > 1e-10) {
@@ -4871,26 +5030,26 @@
               gunnerLosClear = _visRay.intersectObjects(wallMeshes, false).length === 0;
             }
           }
-          if (enemy.ranged && dist < enemy.rangeDistance && isTargetLocal && gunnerLosClear) {
+          if (enemy.ranged && dist < enemy.rangeDistance && gunnerLosClear) {
             enemy.rangedLosAcquireTimer += dt;
           } else {
             enemy.rangedLosAcquireTimer = 0;
           }
 
           if (!enemy.ranged) {
-            if (dist < 2.05 && enemy.attackCooldownTimer <= 0 && isTargetLocal) {
+            if (dist < 2.05 && enemy.attackCooldownTimer <= 0) {
               enemy.attackCooldownTimer = enemy.attackCooldown;
-              damagePlayer(enemy.attackDamage, enemy);
+              applyCoopZombieDamageToTarget(enemy);
             }
           } else if (
             enemy.ranged &&
             dist < enemy.rangeDistance &&
             enemy.attackCooldownTimer <= 0 &&
-            isTargetLocal &&
             enemy.rangedLosAcquireTimer >= RANGED_LOS_ACQUIRE_DELAY
           ) {
             _visOrigin.set(enemy.group.position.x, 1.6, enemy.group.position.z);
-            _enemyShotDir.set(dx, player.position.y - 0.3 - 1.6, dz);
+            const ty = (target.y ?? 1.65) - 0.3;
+            _enemyShotDir.set(dx, ty - 1.6, dz);
             const spr = 0.16 + Math.random() * 0.14;
             _enemyShotDir.x += (Math.random() - 0.5) * spr * 2;
             _enemyShotDir.z += (Math.random() - 0.5) * spr * 2;
@@ -4901,11 +5060,11 @@
             _visRay.far = Math.min(dist, enemy.rangeDistance);
             if (_visRay.intersectObjects(wallMeshes, false).length === 0) {
               enemy.attackCooldownTimer = enemy.attackCooldown;
-              damagePlayer(enemy.attackDamage, enemy);
+              applyCoopZombieDamageToTarget(enemy);
               _tracerEnd.set(
-                player.position.x + (Math.random() - 0.5) * 0.45,
-                player.position.y + 1.25 + (Math.random() - 0.5) * 0.45,
-                player.position.z + (Math.random() - 0.5) * 0.45
+                target.x + (Math.random() - 0.5) * 0.45,
+                (target.y ?? 1.65) + 1.25 + (Math.random() - 0.5) * 0.45,
+                target.z + (Math.random() - 0.5) * 0.45
               );
               createBulletTrail(_visOrigin.clone(), _tracerEnd.clone(), 0xff6666);
             }
@@ -5052,6 +5211,12 @@
         return;
       }
 
+      if (started && menuEl.style.display === "none" && !gameWorldReady) {
+        tickFpsMeter(dt);
+        renderer.render(scene, camera);
+        return;
+      }
+
       updatePlayer(dt);
       updateWeapon(dt);
 
@@ -5075,13 +5240,14 @@
 
       if (CURRENT_MAP === "arena") {
         const runZombieAi =
-          player.health > 0 ||
-          (MULTIPLAYER && ARENA_COOP && ZOMBIE_AUTHORITY && CURRENT_MAP === "arena");
+          gameWorldReady &&
+          (player.health > 0 ||
+            (MULTIPLAYER && ARENA_COOP && ZOMBIE_AUTHORITY && CURRENT_MAP === "arena"));
         if (runZombieAi) {
           updateEnemies(dt);
         }
-        updateDeathAnim(dt);
-        if (MULTIPLAYER && ARENA_COOP && ZOMBIE_AUTHORITY && CURRENT_MAP === "arena") {
+        if (gameWorldReady) updateDeathAnim(dt);
+        if (gameWorldReady && MULTIPLAYER && ARENA_COOP && ZOMBIE_AUTHORITY && CURRENT_MAP === "arena") {
           _zombieSyncAcc += dt;
           if (_zombieSyncAcc >= 1 / 14) {
             _zombieSyncAcc = 0;
@@ -5101,7 +5267,7 @@
         }
       }
 
-      if (CURRENT_MAP === "arena" && started) {
+      if (CURRENT_MAP === "arena" && started && gameWorldReady) {
         updateInfiniteMaze(dt);
         processOneMazeChunkBuild();
         cullMazeLightsNearCamera();
@@ -5134,7 +5300,72 @@
 
     const clock = new THREE.Clock();
 
-    function startGame(mapName, multiplayer, arenaCoop) {
+    /** Build a 5×5 ring of maze chunks around the player chunk so LOS / nav / spawns are consistent before gameplay. */
+    function ensureArenaBootstrapChunks() {
+      const pcx = Math.floor(player.position.x / MAZE_CHUNK_WORLD);
+      const pcz = Math.floor(player.position.z / MAZE_CHUNK_WORLD);
+      const R = 2;
+      for (let dz = -R; dz <= R; dz++) {
+        for (let dx = -R; dx <= R; dx++) {
+          buildMazeChunk(pcx + dx, pcz + dz);
+        }
+      }
+    }
+
+    function loadBootImage(url) {
+      return new Promise((resolve, reject) => {
+        const im = new Image();
+        im.crossOrigin = "anonymous";
+        im.onload = () => resolve();
+        im.onerror = () => reject(new Error("img"));
+        im.src = url;
+      });
+    }
+
+    async function preloadBootImageRel(rel) {
+      const bases = getGameAssetBaseCandidates();
+      let lastErr = null;
+      for (const b of bases) {
+        try {
+          const u = new URL(rel, normalizeGameAssetBase(b)).href;
+          await loadBootImage(u);
+          return;
+        } catch (e) {
+          lastErr = e;
+        }
+      }
+      if (lastErr) console.warn("[boot] missing image", rel);
+    }
+
+    async function preloadWallTextureForBoot() {
+      const urls = getWallTextureUrlList();
+      for (const u of urls) {
+        try {
+          await new Promise((resolve, reject) => {
+            texLoader.load(u, () => resolve(), undefined, () => reject());
+          });
+          return;
+        } catch (_) {}
+      }
+    }
+
+    async function preloadCriticalGameAssets() {
+      await Promise.all([
+        preloadBootImageRel("game-ui/game-ui-menu-background.png"),
+        preloadBootImageRel("game-ui/game-ui-button-texture.png"),
+        preloadBootImageRel("game-ui/game-ui-settings-panel-bg.png"),
+      ]);
+      await preloadWallTextureForBoot();
+    }
+
+    async function bootGame(mapName, multiplayer, arenaCoop) {
+      gameWorldReady = false;
+      gameBootOverlay.style.display = "flex";
+      gameBootOverlay.setAttribute("aria-busy", "true");
+      gameBootLabel.textContent = "Building world…";
+      weaponRoot.visible = false;
+      setLocalPlayerLights(false);
+
       hideDeathScreen();
       hidePause();
       closeChat();
@@ -5158,11 +5389,13 @@
       state.camShake = 0;
       ensureAmbientWindLoop();
       menuEl.style.display = "none";
+      pauseMenuBgm();
 
       clearMap();
 
       if (MULTIPLAYER && activeRoomId) {
         emitJoinRoomWithAck();
+        queueMicrotask(() => emitJoinRoomWithAck());
       }
 
       if (CURRENT_MAP === "crossfire") {
@@ -5178,6 +5411,7 @@
 
       if (CURRENT_MAP === "arena") {
         applyArenaMazePlayerSpawn();
+        ensureArenaBootstrapChunks();
       }
 
       buildNavGrid();
@@ -5189,6 +5423,9 @@
 
       if (CURRENT_MAP === "arena") {
         rebuildEnemyRoster();
+        for (const e of state.enemies) {
+          e.group.visible = false;
+        }
       }
 
       player.velocityY = 0;
@@ -5213,21 +5450,43 @@
       state.weaponBobRotZ = 0;
       killerEnemy = null;
       deathAnimTime = 0;
-      weaponRoot.visible = true;
 
       for (const w of weapons) {
         w.ammo = w.magSize;
       }
-    
+
       setWeapon(1);
       updateHud();
-
-      compileSceneShaders();
 
       if (!started) {
         started = true;
         animate();
       }
+
+      try {
+        gameBootLabel.textContent = "Loading assets…";
+        await preloadCriticalGameAssets();
+      } catch (err) {
+        console.warn("[boot] asset preload", err);
+      }
+
+      if (CURRENT_MAP === "arena") {
+        for (const e of state.enemies) {
+          if (e.alive) e.group.visible = true;
+        }
+      }
+
+      compileSceneShaders();
+
+      weaponRoot.visible = true;
+      setLocalPlayerLights(true);
+      gameWorldReady = true;
+      gameBootOverlay.style.display = "none";
+      gameBootOverlay.setAttribute("aria-busy", "false");
+    }
+
+    function startGame(mapName, multiplayer, arenaCoop) {
+      void bootGame(mapName, multiplayer, arenaCoop);
     }
 
     function goToMenu() {
@@ -5241,8 +5500,12 @@
       ZOMBIE_AUTHORITY = false;
       ZOMBIE_HOST_KNOWN = true;
       _zombieSyncAcc = 0;
+      gameWorldReady = false;
+      gameBootOverlay.style.display = "none";
+      gameBootOverlay.setAttribute("aria-busy", "false");
       menuEl.style.display = "flex";
       showMenuPanel("menuMain");
+      tryPlayMenuBgm();
       player.health = 100;
       weaponRoot.visible = true;
       camera.fov = 75;
