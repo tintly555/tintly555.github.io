@@ -1709,11 +1709,11 @@
     function applyRemoteWeaponMount(rp) {
       if (!rp || !rp.gunModel) return;
       const mount = [
-        { x: 0.03, y: -0.56, z: -0.35, rx: 0.04, ry: 0.0, rz: 0.0 }, // pistol
-        { x: 0.00, y: -0.58, z: -0.38, rx: 0.03, ry: 0.0, rz: 0.0 }, // rifle
-        { x: 0.01, y: -0.60, z: -0.33, rx: 0.06, ry: 0.0, rz: 0.0 }, // shotgun
-        { x: 0.00, y: -0.57, z: -0.36, rx: 0.03, ry: 0.0, rz: 0.0 }, // smg
-      ][rp.currentWeapon | 0] || { x: 0.00, y: -0.58, z: -0.38, rx: 0.03, ry: 0.0, rz: 0.0 };
+        { x: 0.02, y: -0.54, z: -0.43, rx: 0.08, ry: 0.02, rz: 0.0 }, // pistol
+        { x: -0.01, y: -0.55, z: -0.49, rx: 0.07, ry: 0.0, rz: 0.0 }, // rifle
+        { x: 0.00, y: -0.57, z: -0.46, rx: 0.11, ry: 0.0, rz: 0.0 }, // shotgun
+        { x: -0.01, y: -0.55, z: -0.47, rx: 0.07, ry: 0.0, rz: 0.0 }, // smg
+      ][rp.currentWeapon | 0] || { x: -0.01, y: -0.55, z: -0.49, rx: 0.07, ry: 0.0, rz: 0.0 };
       rp.gunModel.position.set(mount.x, mount.y, mount.z);
       rp.gunModel.rotation.set(mount.rx, mount.ry, mount.rz);
     }
@@ -1810,10 +1810,12 @@
         fng.position.set(0, -0.78, 0.12); ag.add(fng);
       };
       makePlayerArm(rightArm); makePlayerArm(leftArm);
-      rightArm.position.set(0.36, 1.44, 0.02); rightArm.rotation.x = -1.08;
-      leftArm.position.set(-0.36, 1.44, 0.02); leftArm.rotation.x = -1.02;
-      rightArm.rotation.z = 0.14;
-      leftArm.rotation.z = -0.18;
+      rightArm.position.set(0.34, 1.44, -0.01); rightArm.rotation.x = -1.16;
+      leftArm.position.set(-0.34, 1.44, 0.01); leftArm.rotation.x = -1.10;
+      rightArm.rotation.y = 0.06;
+      leftArm.rotation.y = -0.12;
+      rightArm.rotation.z = 0.20;
+      leftArm.rotation.z = -0.26;
       group.add(rightArm, leftArm);
 
       const makePlayerLeg = (px) => {
@@ -5257,23 +5259,26 @@
     const _muzzleTmpRight = new THREE.Vector3();
     const _muzzleTmpUp = new THREE.Vector3();
     const _muzzleTmpQuat = new THREE.Quaternion();
+    const _muzzleLocal = new THREE.Vector3();
     function getWeaponMuzzleWorldPoint(out) {
       const wm = weaponModels[state.weaponIndex];
       if (!wm || !wm.userData || !wm.userData.gun) {
         return out.copy(camera.position);
       }
+      // Visual tracer origin = barrel tip of first-person weapon model (not camera center / scope).
+      const barrelLocal = [
+        { x: 0.00, y: 0.01, z: -0.27 }, // pistol
+        { x: 0.00, y: 0.01, z: -0.50 }, // rifle
+        { x: 0.00, y: 0.00, z: -0.52 }, // shotgun
+        { x: 0.00, y: 0.01, z: -0.40 }, // smg
+      ][state.weaponIndex | 0] || { x: 0.00, y: 0.01, z: -0.46 };
+      _muzzleLocal.set(barrelLocal.x, barrelLocal.y, barrelLocal.z);
+      wm.userData.gun.localToWorld(out.copy(_muzzleLocal));
       camera.getWorldQuaternion(_muzzleTmpQuat);
       _muzzleTmpForward.set(0, 0, -1).applyQuaternion(_muzzleTmpQuat);
       _muzzleTmpRight.set(1, 0, 0).applyQuaternion(_muzzleTmpQuat);
       _muzzleTmpUp.set(0, 1, 0).applyQuaternion(_muzzleTmpQuat);
-      // Use camera-forward muzzle anchor to keep flash at barrel tip in both hipfire and ADS.
-      const adsK = THREE.MathUtils.clamp(state.adsProgress || 0, 0, 1);
-      const side = THREE.MathUtils.lerp(0.17, 0.03, adsK);
-      const down = THREE.MathUtils.lerp(0.11, 0.045, adsK);
-      out.copy(camera.position);
-      out.addScaledVector(_muzzleTmpForward, 0.62);
-      out.addScaledVector(_muzzleTmpRight, side);
-      out.addScaledVector(_muzzleTmpUp, -down);
+      out.addScaledVector(_muzzleTmpForward, 0.035);
       return out;
     }
 
@@ -5321,10 +5326,9 @@
 
       const muzzleStart = new THREE.Vector3();
       getWeaponMuzzleWorldPoint(muzzleStart);
-      const shotForward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
 
       playGunSound(w);
-      createMuzzleFlash(muzzleStart.clone(), w.color, shotForward);
+      // Per request: disable muzzle flash effect.
 
       for (let i = 0; i < w.pellets; i++) {
         const movingPenalty = (keys.w || keys.a || keys.s || keys.d) ? 1.25 : 1;
@@ -6462,7 +6466,7 @@
           rp._prevVisX = rp.visX;
           rp._prevVisZ = rp.visZ;
           rp.walkPhase = (rp.walkPhase || 0) + dt * Math.min(gSpeed * 4.2, 14);
-          const wSin = Math.sin(rp.walkPhase) * 0.52;
+          const wSin = Math.sin(rp.walkPhase) * 0.45;
           const moving = gSpeed > 0.06;
           const wCos = Math.cos(rp.walkPhase * 2) * 0.055;
           if (rp.leftLeg && rp.rightLeg) {
@@ -6472,26 +6476,30 @@
             rp.rightLeg.position.y = dampScalar(rp.rightLeg.position.y, moving ? 0.62 + Math.max(0, -wSin) * 0.06 : 0.62, dt, 12);
           }
           const weaponStance = [
-            { l: -1.02, r: -1.14, lz: -0.24, rz: 0.16 },
-            { l: -1.12, r: -1.26, lz: -0.28, rz: 0.20 },
-            { l: -1.06, r: -1.20, lz: -0.23, rz: 0.17 },
-            { l: -1.10, r: -1.22, lz: -0.26, rz: 0.19 },
-            { l: -0.84, r: -0.98, lz: -0.18, rz: 0.12 },
-          ][rp.currentWeapon | 0] || { l: -1.1, r: -1.24, lz: -0.26, rz: 0.18 };
-          let targetLX = weaponStance.l + (moving ? wSin * 0.12 : 0);
-          let targetRX = weaponStance.r - (moving ? wSin * 0.10 : 0);
-          let targetLZ = weaponStance.lz + (moving ? Math.cos(rp.walkPhase) * 0.03 : 0);
-          let targetRZ = weaponStance.rz - (moving ? Math.cos(rp.walkPhase) * 0.03 : 0);
+            { l: -1.16, r: -1.22, ly: -0.18, ry: 0.10, lz: -0.32, rz: 0.26 },
+            { l: -1.22, r: -1.30, ly: -0.20, ry: 0.12, lz: -0.36, rz: 0.30 },
+            { l: -1.18, r: -1.26, ly: -0.18, ry: 0.11, lz: -0.33, rz: 0.27 },
+            { l: -1.20, r: -1.28, ly: -0.19, ry: 0.12, lz: -0.35, rz: 0.29 },
+            { l: -0.92, r: -1.02, ly: -0.12, ry: 0.08, lz: -0.22, rz: 0.18 },
+          ][rp.currentWeapon | 0] || { l: -1.22, r: -1.30, ly: -0.20, ry: 0.12, lz: -0.36, rz: 0.30 };
+          let targetLX = weaponStance.l + (moving ? wSin * 0.08 : 0);
+          let targetRX = weaponStance.r - (moving ? wSin * 0.07 : 0);
+          let targetLY = weaponStance.ly;
+          let targetRY = weaponStance.ry;
+          let targetLZ = weaponStance.lz + (moving ? Math.cos(rp.walkPhase) * 0.02 : 0);
+          let targetRZ = weaponStance.rz - (moving ? Math.cos(rp.walkPhase) * 0.02 : 0);
           if (rp.isReloading) {
             rp.reloadPhase = (rp.reloadPhase || 0) + dt * 6.5;
             const rSin = Math.sin(rp.reloadPhase);
-            targetRX = -0.34 + rSin * 0.62;
-            targetLX = -0.48 + Math.sin(rp.reloadPhase + 0.8) * 0.40;
-            targetRZ = 0.34;
-            targetLZ = -0.36;
+            targetRX = -0.45 + rSin * 0.50;
+            targetLX = -0.62 + Math.sin(rp.reloadPhase + 0.8) * 0.32;
+            targetRY = 0.34;
+            targetLY = -0.30;
+            targetRZ = 0.48;
+            targetLZ = -0.46;
             if (rp.gunModel) {
-              rp.gunModel.rotation.z = dampScalar(rp.gunModel.rotation.z, 0.45 + rSin * 0.28, dt, 16);
-              rp.gunModel.rotation.x = dampScalar(rp.gunModel.rotation.x, -0.20 + Math.cos(rp.reloadPhase * 1.35) * 0.10, dt, 14);
+              rp.gunModel.rotation.z = dampScalar(rp.gunModel.rotation.z, 0.32 + rSin * 0.22, dt, 16);
+              rp.gunModel.rotation.x = dampScalar(rp.gunModel.rotation.x, -0.14 + Math.cos(rp.reloadPhase * 1.35) * 0.08, dt, 14);
             }
           } else {
             rp.reloadPhase = 0;
@@ -6507,6 +6515,8 @@
           }
           rp.leftArm.rotation.x = dampScalar(rp.leftArm.rotation.x, targetLX, dt, 13);
           rp.rightArm.rotation.x = dampScalar(rp.rightArm.rotation.x, targetRX, dt, 13);
+          rp.leftArm.rotation.y = dampScalar(rp.leftArm.rotation.y, targetLY, dt, 12);
+          rp.rightArm.rotation.y = dampScalar(rp.rightArm.rotation.y, targetRY, dt, 12);
           rp.leftArm.rotation.z = dampScalar(rp.leftArm.rotation.z, targetLZ, dt, 12);
           rp.rightArm.rotation.z = dampScalar(rp.rightArm.rotation.z, targetRZ, dt, 12);
         }
