@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-  Paste file: CODE_TO_PASTE（23） — （22） + classmate inline i18n (LANGUAGE_OPTIONS / GAME_I18N / mergeKeys / t / applyGameLanguage); Tintly gameplay retained.
+  Paste file: CODE_TO_PASTE（24） — active numbered copy; copied from （23） (（22） + classmate i18n + Tintly gameplay). Prefer editing （24） onward; keep （23） as snapshot.
   Source-of-truth: https://tintly555.github.io/games/fps/
   Includes: PVP map picker (Classic / Grid Killhouse), co-op maze seed sync, remote rig + hitzones, layered gun SFX, boot viewport guard.
   Multiplayer: meta game-multiplayer-origin empty = Socket.IO on this page’s origin (GitHub Pages self-host). Set to a relay URL only if you use an external game server.
@@ -889,6 +889,7 @@
     </div>
     <div id="menuLobby" style="display:none;flex-direction:column;align-items:center;gap:10px;">
       <h2 id="lobbyTitle" style="font-family:'Audiowide',sans-serif;font-size:24px;margin:0 0 10px 0;letter-spacing:2px;">MULTIPLAYER</h2>
+      <p id="lobbyError" style="font-family:var(--game-font-ui);color:#e53e3e;font-size:13px;margin:0 0 6px 0;min-height:20px;text-align:center;max-width:300px;line-height:1.35;"></p>
       <button type="button" id="btnQuickplay">QUICK PLAY</button>
       <button type="button" id="btnCreateRoom">CREATE A ROOM</button>
       <button type="button" id="btnJoinCode">JOIN VIA CODE</button>
@@ -1189,6 +1190,8 @@
      roomCodePlaceholder: "ROOM CODE",
      btnJoin: "JOIN",
      enterCodeError: "Enter a code",
+     lobbyPickModeFirst: "Choose CO-OP or a PVP map first.",
+     mpNoServerAck: "No response from server.",
      loadingWorld: "Loading world…",
      fpsChatHint: "Press T to chat",
      fpsLightHint: "Press L to toggle light & flashlight",
@@ -1305,6 +1308,8 @@
      roomCodePlaceholder: "房间码",
      btnJoin: "加入",
      enterCodeError: "请输入房间码",
+     lobbyPickModeFirst: "请先选择合作模式或 PVP 地图。",
+     mpNoServerAck: "服务器无响应。",
      loadingWorld: "正在加载世界…",
      fpsChatHint: "按 T 打开聊天",
      fpsLightHint: "按 L 开关照明与手电",
@@ -1421,6 +1426,8 @@
      roomCodePlaceholder: "房間代碼",
      btnJoin: "加入",
      enterCodeError: "請輸入房間代碼",
+     lobbyPickModeFirst: "請先選擇合作模式或 PVP 地圖。",
+     mpNoServerAck: "伺服器無回應。",
      loadingWorld: "正在載入世界…",
      fpsChatHint: "按 T 開啟聊天",
      fpsLightHint: "按 L 切換照明與手電筒",
@@ -3059,13 +3066,28 @@
         on() {},
         emit(_ev, ...args) {
           const last = args[args.length - 1];
-          if (typeof last === "function") {
-            if (_ev === "joinRoom") {
-              queueMicrotask(() => last({ ok: true, hostId: "offline", roomKey: String(args[0] || "") }));
-            } else {
-              queueMicrotask(() => last({ error: "Network unavailable" }));
-            }
+          if (typeof last !== "function") return;
+          const reply = (payload) => queueMicrotask(() => last(payload));
+          if (_ev === "joinRoom") {
+            reply({ ok: true, hostId: "offline", roomKey: String(args[0] || "") });
+            return;
           }
+          if (_ev === "quickplay") {
+            const mode = String(args[0] || "arena");
+            reply({ roomKey: `offline-quick:${mode}:${Date.now()}`, room: "LOCAL" });
+            return;
+          }
+          if (_ev === "createRoom") {
+            const mode = String(args[0] || "arena");
+            reply({ roomKey: `offline-create:${mode}:${Date.now()}`, code: "LOCAL" });
+            return;
+          }
+          if (_ev === "joinByCode") {
+            const payload = args[0] || {};
+            reply({ roomKey: `offline-join:${payload.mode || "arena"}:${payload.code || ""}` });
+            return;
+          }
+          reply({ error: "Network unavailable (Socket.IO not loaded or offline stub)" });
         },
         disconnect() {},
       };
@@ -8812,7 +8834,15 @@
     function showLobby(mode, title) {
       pendingLobbyMode = mode;
       lobbyTitle.textContent = title;
+      const lobbyErr = document.getElementById("lobbyError");
+      if (lobbyErr) lobbyErr.textContent = "";
       showMenuPanel("menuLobby");
+    }
+
+    function showLobbyErr(msg) {
+      const el = document.getElementById("lobbyError");
+      if (el) el.textContent = msg || "";
+      if (msg && codeError) codeError.textContent = msg;
     }
 
     function beginMultiplayerGame(mapName, roomOpts) {
@@ -8847,16 +8877,40 @@
     btnPvpMapBack.addEventListener("click", () => showMenuPanel("menuMain"));
 
     btnQuickplay.addEventListener("click", () => {
+      if (!pendingLobbyMode) {
+        showLobbyErr(t("lobbyPickModeFirst"));
+        return;
+      }
+      showLobbyErr("");
       socket.emit("quickplay", pendingLobbyMode, (res) => {
-        if (res.error) { codeError.textContent = res.error; return; }
+        if (!res) {
+          showLobbyErr(t("mpNoServerAck"));
+          return;
+        }
+        if (res.error) {
+          showLobbyErr(res.error);
+          return;
+        }
         const map = pendingLobbyMode === "crossfire" ? PENDING_PVP_MAP : "arena";
         beginMultiplayerGame(map, { roomKey: res.roomKey, roomCode: res.room });
       });
     });
 
     btnCreateRoom.addEventListener("click", () => {
+      if (!pendingLobbyMode) {
+        showLobbyErr(t("lobbyPickModeFirst"));
+        return;
+      }
+      showLobbyErr("");
       socket.emit("createRoom", pendingLobbyMode, (res) => {
-        if (res.error) { codeError.textContent = res.error; return; }
+        if (!res) {
+          showLobbyErr(t("mpNoServerAck"));
+          return;
+        }
+        if (res.error) {
+          showLobbyErr(res.error);
+          return;
+        }
         const map = pendingLobbyMode === "crossfire" ? PENDING_PVP_MAP : "arena";
         beginMultiplayerGame(map, { roomKey: res.roomKey, roomCode: res.code });
       });
@@ -8864,6 +8918,8 @@
 
     btnJoinCode.addEventListener("click", () => {
       codeError.textContent = "";
+      const lobbyErr = document.getElementById("lobbyError");
+      if (lobbyErr) lobbyErr.textContent = "";
       codeInput.value = "";
       showMenuPanel("menuJoinCode");
     });
