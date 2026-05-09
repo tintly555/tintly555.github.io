@@ -25,6 +25,18 @@
             var segs = String(path || "").replace(/\/+$/, "").split("/").filter(Boolean);
             return segs.length === 1 && segs[0].toLowerCase() === "game";
           }
+          /**
+           * Some hosts/proxies put game.html under .../html/ while assets remain one level up; treat that path as if it
+           * pointed to the parent directory so relative URLs do NOT produce …/html/walls.png 404s.
+           */
+          function stripHtmlSegment(path) {
+            var segs = String(path || "").replace(/\/+$/, "").split("/").filter(Boolean);
+            if (segs.length && segs[segs.length - 1].toLowerCase() === "html") {
+              segs.pop();
+              return "/" + segs.join("/") + (segs.length ? "/" : "");
+            }
+            return path;
+          }
           if (!p || p === "/") {
             return u.origin + "/";
           }
@@ -32,10 +44,13 @@
             return u.origin + "/";
           }
           if (p.endsWith("/")) {
-            return u.origin + p;
+            var stripped = stripHtmlSegment(p);
+            return u.origin + (stripped || "/");
           }
           var li = p.lastIndexOf("/");
-          return li >= 0 ? u.origin + p.slice(0, li + 1) : u.origin + "/";
+          var dirPath = li >= 0 ? p.slice(0, li + 1) : "/";
+          dirPath = stripHtmlSegment(dirPath) || "/";
+          return u.origin + dirPath;
         } catch (e1) {
           var schemeRest = page.indexOf("/", page.indexOf("//") + 2);
           var slash = page.lastIndexOf("/");
@@ -351,6 +366,11 @@
       pointer-events: none;
     }
 
+    /* When in-game, the menu backdrop canvas must NOT cover #app — its last frame would otherwise sit on top of the game and look like a black screen until the user resizes. */
+    body.in-game #menuWallBackdrop {
+      display: none;
+    }
+
     .menu {
       position: fixed;
       inset: 0;
@@ -363,7 +383,12 @@
       gap: 12px;
       box-sizing: border-box;
       padding: 28px 16px 22px;
-      background: transparent;
+      /** Painted PNG menu art lives here; --game-ui-menu-bg is set by JS once the file is found. */
+      background-color: #070504;
+      background-image: var(--game-ui-menu-bg);
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
     }
 
     .menu h1 {
@@ -831,6 +856,7 @@
     <div id="fpsValue">— FPS</div>
     <div style="opacity:0.72;font-size:11px;margin-top:3px;letter-spacing:0.02em;">Press T to chat</div>
     <div style="opacity:0.72;font-size:11px;margin-top:3px;letter-spacing:0.02em;">Press L to toggle light &amp; flashlight</div>
+    <div style="opacity:0.72;font-size:11px;margin-top:3px;letter-spacing:0.02em;">Press Z to zoom flashlight</div>
   </div>
   <div class="hint" id="hint">Click anywhere</div>
   <div class="flash" id="flash"></div>
@@ -907,8 +933,8 @@
               <input type="range" id="rngMasterVol" min="0" max="100" value="100" />
             </div>
             <div class="settings-row">
-              <label>Music volume <span class="value-pill" id="lblMusicVol">35%</span></label>
-              <input type="range" id="rngMusicVol" min="0" max="100" value="35" />
+              <label>Music volume <span class="value-pill" id="lblMusicVol">70%</span></label>
+              <input type="range" id="rngMusicVol" min="0" max="100" value="70" />
             </div>
             <div class="settings-row">
               <label>Sound volume <span class="value-pill" id="lblSfxVol">100%</span></label>
@@ -1150,6 +1176,36 @@
     const FLASH_INNER_ANGLE = Math.PI / 16;
     const FLASH_INNER_PEN = 0.08;
 
+    const FLASHLIGHT_ZOOM_LEVELS = [
+      {
+        name: "WIDE",
+        outerIntensity: 24,
+        outerDistance: 300,
+        outerAngle: Math.PI / 4.2,
+        innerIntensity: 120,
+        innerDistance: 90,
+        innerAngle: Math.PI / 14,
+      },
+      {
+        name: "NORMAL",
+        outerIntensity: FLASH_OUTER_INTENSITY,
+        outerDistance: FLASH_OUTER_DISTANCE,
+        outerAngle: FLASH_OUTER_ANGLE,
+        innerIntensity: FLASH_INNER_INTENSITY,
+        innerDistance: FLASH_INNER_DISTANCE,
+        innerAngle: FLASH_INNER_ANGLE,
+      },
+      {
+        name: "FOCUS",
+        outerIntensity: 42,
+        outerDistance: 420,
+        outerAngle: Math.PI / 12,
+        innerIntensity: 190,
+        innerDistance: 150,
+        innerAngle: Math.PI / 24,
+      },
+    ];
+
     /**
      * Punctual lights only (Point / Spot). Hemisphere & directional lights have no decay in Three.js.
      * https://threejs.org/docs/#api/en/lights/PointLight
@@ -1328,7 +1384,7 @@
     });
 
     socket.on("damaged", (data) => {
-      if (!gameWorldReady) return;
+      if (!gameWorldReady || menuEl.style.display !== "none") return;
       if (player.health <= 0) return;
       player.health = Math.max(0, player.health - (data.damage || 0));
       player.regenTimer = 0;
@@ -1347,12 +1403,14 @@
     });
 
     socket.on("zombieSync", (data) => {
+      if (!gameWorldReady) return;
       if (!MULTIPLAYER || !ARENA_COOP || CURRENT_MAP !== "arena") return;
       if (ZOMBIE_AUTHORITY) return;
       applyZombieSyncPayload(data);
     });
 
     socket.on("zombieDamaged", (data) => {
+      if (!gameWorldReady) return;
       if (!MULTIPLAYER || !ARENA_COOP || CURRENT_MAP !== "arena") return;
       if (!ZOMBIE_AUTHORITY || !data) return;
       if (data.by === socket.id) return;
@@ -1754,28 +1812,24 @@
     function getSafeViewportSize() {
       try {
         const vv = window.visualViewport;
-        let w = window.innerWidth;
-        let h = window.innerHeight;
-        if (vv && vv.width >= 2 && vv.height >= 2) {
-          w = vv.width;
-          h = vv.height;
+        const de = typeof document !== "undefined" ? document.documentElement : null;
+        const iw = window.innerWidth || 0;
+        const ih = window.innerHeight || 0;
+        const vw = vv && vv.width ? vv.width : 0;
+        const vh = vv && vv.height ? vv.height : 0;
+        const cw = de ? de.clientWidth || 0 : 0;
+        const ch = de ? de.clientHeight || 0 : 0;
+        /** Fullscreen / macOS: one of these is often 0 until layout; take the max so we never setSize(0). */
+        let w = Math.max(iw, vw, cw);
+        let h = Math.max(ih, vh, ch);
+        if (w < 4 || h < 4) {
+          const aw = typeof screen !== "undefined" && screen.availWidth ? screen.availWidth : 0;
+          const ah = typeof screen !== "undefined" && screen.availHeight ? screen.availHeight : 0;
+          w = Math.max(w, aw);
+          h = Math.max(h, ah);
         }
-        w = Math.max(
-          1,
-          w ||
-            (typeof document !== "undefined" &&
-              document.documentElement &&
-              document.documentElement.clientWidth) ||
-            1
-        );
-        h = Math.max(
-          1,
-          h ||
-            (typeof document !== "undefined" &&
-              document.documentElement &&
-              document.documentElement.clientHeight) ||
-            1
-        );
+        w = Math.max(1, w);
+        h = Math.max(1, h);
         return { w, h };
       } catch (_) {
         return { w: 1, h: 1 };
@@ -1964,6 +2018,27 @@
       camera.updateProjectionMatrix();
       renderer.setPixelRatio(getPixelRatioForQuality());
       renderer.setSize(vp.w, vp.h);
+    }
+
+    /**
+     * Keep boot overlay up until the WebGL canvas has real dimensions. Otherwise gameplay (zombies, MP damage)
+     * runs while the framebuffer is 0×0 or stale — resizing then “starts” the picture but the player may already be dead.
+     */
+    const MIN_GAME_VIEWPORT_PX = 24;
+    async function waitForRenderableViewport() {
+      const MAX_FRAMES = 360;
+      for (let i = 0; i < MAX_FRAMES; i++) {
+        syncGameRendererSize();
+        try {
+          resizeMenuWallBackdrop();
+        } catch (_) {}
+        const el = renderer.domElement;
+        void el.offsetHeight;
+        const w = el.clientWidth | 0;
+        const h = el.clientHeight | 0;
+        if (w >= MIN_GAME_VIEWPORT_PX && h >= MIN_GAME_VIEWPORT_PX) return;
+        await new Promise((r) => requestAnimationFrame(r));
+      }
     }
 
     applyGraphicsQuality();
@@ -3929,23 +4004,25 @@
     audioMaster.connect(audioCtx.destination);
 
     let menuBgmAudio = null;
+    /** Set on first pointer/key/touch in the page; required for menu.mp3 (autoplay) and to resume after game. */
+    let menuBgmUnlocked = false;
 
     function applyAudioVolumes() {
       audioMaster.gain.value = gameSettings.masterVolume;
       audioSfx.gain.value = gameSettings.soundVolume;
       audioMusic.gain.value = gameSettings.musicVolume;
-      if (menuBgmMenuGain) {
-        menuBgmMenuGain.gain.value = THREE.MathUtils.clamp(
-          gameSettings.masterVolume * gameSettings.musicVolume,
-          0,
-          1
-        );
-      } else if (menuBgmAudio) {
-        menuBgmAudio.volume = THREE.MathUtils.clamp(
-          gameSettings.masterVolume * gameSettings.musicVolume,
-          0,
-          1
-        );
+      if (menuBgmAudio) {
+        if (_menuBgmGapTimer != null) {
+          menuBgmAudio.volume = 0;
+        } else if (typeof _menuBgmHandleTimeUpdate === "function") {
+          _menuBgmHandleTimeUpdate();
+        } else {
+          menuBgmAudio.volume = THREE.MathUtils.clamp(
+            gameSettings.masterVolume * gameSettings.musicVolume,
+            0,
+            1
+          );
+        }
       }
     }
     applyAudioVolumes();
@@ -3972,65 +4049,139 @@
       }
     }
 
-    function getMenuBgmUrl() {
+    /** All possible menu.mp3 URLs to try; first that loads wins. */
+    function getMenuBgmUrlList() {
+      const urls = [];
       for (const base of getGameAssetBaseCandidates()) {
         try {
-          return new URL("menu.mp3", normalizeGameAssetBase(base)).href;
+          urls.push(new URL("menu.mp3", normalizeGameAssetBase(base)).href);
         } catch (_) {}
       }
       try {
-        return new URL("menu.mp3", pageDirFromLocation()).href;
-      } catch (_) {
-        return "menu.mp3";
-      }
+        urls.push(new URL("menu.mp3", pageDirFromLocation()).href);
+      } catch (_) {}
+      return [...new Set(urls)];
     }
-    function ensureMenuBgmAudio() {
-      if (menuBgmAudio) return;
-      const bgmUrl = getMenuBgmUrl();
-      menuBgmAudio = new Audio();
+
+    let _menuBgmFallbackIdx = 0;
+    let _menuBgmCandidates = null;
+    function _menuBgmTrySrc(idx) {
+      if (!_menuBgmCandidates || idx >= _menuBgmCandidates.length) return;
+      const url = _menuBgmCandidates[idx];
       try {
-        if (new URL(bgmUrl).origin !== window.location.origin) {
+        if (new URL(url).origin !== window.location.origin) {
           menuBgmAudio.crossOrigin = "anonymous";
         }
       } catch (_) {}
-      menuBgmAudio.src = bgmUrl;
-      menuBgmAudio.loop = true;
-      menuBgmAudio.preload = "auto";
-      wireMenuBgmThroughAnalyser();
-      if (!menuBgmMenuGain) {
-        menuBgmAudio.volume = THREE.MathUtils.clamp(
-          gameSettings.masterVolume * gameSettings.musicVolume,
-          0,
-          1
-        );
-      } else {
-        applyAudioVolumes();
+      menuBgmAudio.src = url;
+      try { menuBgmAudio.load(); } catch (_) {}
+    }
+
+    /**
+     * Custom loop with a fade tail: fade volume to 0 over the final FADE_SECS, then hold silent for GAP_SECS,
+     * then restart from 0 at the user-configured volume. Native `audio.loop` is disabled so we can shape the tail.
+     */
+    const MENU_BGM_FADE_SECS = 8;
+    const MENU_BGM_GAP_SECS = 2;
+    let _menuBgmGapTimer = null;
+    function _menuBgmTargetVolume() {
+      return THREE.MathUtils.clamp(gameSettings.masterVolume * gameSettings.musicVolume, 0, 1);
+    }
+    function _menuBgmClearGapTimer() {
+      if (_menuBgmGapTimer != null) {
+        clearTimeout(_menuBgmGapTimer);
+        _menuBgmGapTimer = null;
       }
+    }
+    function _menuBgmHandleTimeUpdate() {
+      if (!menuBgmAudio) return;
+      const dur = Number(menuBgmAudio.duration);
+      if (!Number.isFinite(dur) || dur <= MENU_BGM_FADE_SECS) {
+        menuBgmAudio.volume = _menuBgmTargetVolume();
+        return;
+      }
+      const remaining = dur - menuBgmAudio.currentTime;
+      const target = _menuBgmTargetVolume();
+      if (remaining <= MENU_BGM_FADE_SECS) {
+        const k = Math.max(0, Math.min(1, remaining / MENU_BGM_FADE_SECS));
+        menuBgmAudio.volume = target * k;
+      } else {
+        menuBgmAudio.volume = target;
+      }
+    }
+    function _menuBgmHandleEnded() {
+      if (!menuBgmAudio) return;
+      _menuBgmClearGapTimer();
+      menuBgmAudio.volume = 0;
+      _menuBgmGapTimer = setTimeout(() => {
+        _menuBgmGapTimer = null;
+        if (!menuBgmAudio) return;
+        if (!menuBgmUnlocked) return;
+        if (menuEl.style.display === "none") return;
+        try {
+          menuBgmAudio.currentTime = 0;
+        } catch (_) {}
+        menuBgmAudio.volume = _menuBgmTargetVolume();
+        const p = menuBgmAudio.play();
+        if (p && typeof p.catch === "function") p.catch(() => {});
+      }, MENU_BGM_GAP_SECS * 1000);
+    }
+    function ensureMenuBgmAudio() {
+      if (menuBgmAudio) return;
+      _menuBgmCandidates = getMenuBgmUrlList();
+      _menuBgmFallbackIdx = 0;
+      menuBgmAudio = new Audio();
+      menuBgmAudio.loop = false;
+      menuBgmAudio.preload = "auto";
+      menuBgmAudio.volume = _menuBgmTargetVolume();
+      menuBgmAudio.addEventListener("error", () => {
+        _menuBgmFallbackIdx++;
+        if (_menuBgmFallbackIdx < _menuBgmCandidates.length) {
+          _menuBgmTrySrc(_menuBgmFallbackIdx);
+          if (menuBgmUnlocked && menuEl.style.display !== "none") {
+            const p = menuBgmAudio.play();
+            if (p && typeof p.catch === "function") p.catch(() => {});
+          }
+        } else {
+          console.warn("[menu bgm] all sources failed", _menuBgmCandidates);
+        }
+      });
+      menuBgmAudio.addEventListener("canplay", () => {
+        if (menuBgmUnlocked && menuEl.style.display !== "none") {
+          const p = menuBgmAudio.play();
+          if (p && typeof p.catch === "function") p.catch(() => {});
+        }
+      });
+      menuBgmAudio.addEventListener("timeupdate", _menuBgmHandleTimeUpdate);
+      menuBgmAudio.addEventListener("ended", _menuBgmHandleEnded);
+      _menuBgmTrySrc(0);
     }
     function pauseMenuBgm() {
       if (!menuBgmAudio) return;
+      _menuBgmClearGapTimer();
       try {
         menuBgmAudio.pause();
       } catch (_) {}
     }
-    /** Browser autoplay policy: start only after a user gesture; safe to call repeatedly. */
+    /**
+     * Menu music: play only while the main menu is visible, and only after any user gesture this session.
+     * In-game: pause. Return to menu: play again (goToMenu + prior unlock from playing / menu use).
+     */
     function tryPlayMenuBgm() {
       if (menuEl.style.display === "none") return;
+      if (!menuBgmUnlocked) return;
       ensureMenuBgmAudio();
-      wireMenuBgmThroughAnalyser();
-      if (!menuBgmMenuGain) {
-        menuBgmAudio.volume = THREE.MathUtils.clamp(
-          gameSettings.masterVolume * gameSettings.musicVolume,
-          0,
-          1
-        );
-      } else {
-        applyAudioVolumes();
-      }
+      if (_menuBgmGapTimer != null) return;
+      _menuBgmHandleTimeUpdate();
       const p = menuBgmAudio.play();
-      if (p && typeof p.catch === "function") p.catch(() => {});
+      if (p && typeof p.catch === "function") {
+        p.catch((err) => {
+          console.warn("[menu bgm] play() rejected", err && err.message);
+        });
+      }
     }
     function onMenuBgmUserGesture() {
+      menuBgmUnlocked = true;
       void (async () => {
         try {
           if (audioCtx.state === "suspended") {
@@ -4389,6 +4540,22 @@
     flashOuterLocal.target = playerLightTarget;
     flashInnerLocal.target = playerLightTarget;
 
+    let flashlightZoomIndex = 1;
+    function applyFlashlightZoomProfile(index) {
+      const i = ((index % FLASHLIGHT_ZOOM_LEVELS.length) + FLASHLIGHT_ZOOM_LEVELS.length) % FLASHLIGHT_ZOOM_LEVELS.length;
+      const z = FLASHLIGHT_ZOOM_LEVELS[i];
+      flashlightZoomIndex = i;
+      flashOuterLocal.intensity = z.outerIntensity;
+      flashOuterLocal.distance = z.outerDistance;
+      flashOuterLocal.angle = z.outerAngle;
+      flashInnerLocal.intensity = z.innerIntensity;
+      flashInnerLocal.distance = z.innerDistance;
+      flashInnerLocal.angle = z.innerAngle;
+      flashOuterLocal.updateMatrixWorld();
+      flashInnerLocal.updateMatrixWorld();
+    }
+    applyFlashlightZoomProfile(flashlightZoomIndex);
+
     function setLocalPlayerLights(on) {
       playerBodyLight.visible = on;
       flashOuterLocal.visible = on;
@@ -4621,6 +4788,19 @@
       ) {
         playerLightsPreference = !playerLightsPreference;
         refreshLocalPlayerLightsForCurrentState();
+        playFlashlightToggleSound();
+        e.preventDefault();
+        return;
+      }
+      if (
+        k === "z" &&
+        started &&
+        gameWorldReady &&
+        menuEl.style.display === "none" &&
+        !chatOpen &&
+        !settingsModalOpen
+      ) {
+        applyFlashlightZoomProfile(flashlightZoomIndex + 1);
         playFlashlightToggleSound();
         e.preventDefault();
         return;
@@ -6100,6 +6280,7 @@
       }
 
       if (started && menuEl.style.display === "none" && !gameWorldReady) {
+        syncGameRendererSize();
         tickFpsMeter(dt);
         renderer.render(scene, camera);
         return;
@@ -6280,6 +6461,7 @@
       state.camShake = 0;
       ensureAmbientWindLoop();
       menuEl.style.display = "none";
+      document.body.classList.add("in-game");
       stopMenuBackdropLoop();
       pauseMenuBgm();
 
@@ -6371,6 +6553,12 @@
       compileSceneShaders();
 
       weaponRoot.visible = true;
+      gameBootLabel.textContent = "Preparing display…";
+      /** Force a fresh layout + size sync before flipping gameWorldReady so the first rendered frame already fills the screen. */
+      await waitForRenderableViewport();
+      syncGameRendererSize();
+      renderer.render(scene, camera);
+      await new Promise((r) => requestAnimationFrame(r));
       gameWorldReady = true;
       refreshLocalPlayerLightsForCurrentState();
       gameBootOverlay.style.display = "none";
@@ -6396,6 +6584,8 @@
       gameBootOverlay.style.display = "none";
       gameBootOverlay.setAttribute("aria-busy", "false");
       menuEl.style.display = "flex";
+      document.body.classList.remove("in-game");
+      try { resizeMenuWallBackdrop(); } catch (_) {}
       showMenuPanel("menuMain");
       menuBgmPeakSessionMax = 1e-6;
       menuBackdropLightSmooth = 0;
