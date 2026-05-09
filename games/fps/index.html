@@ -1746,14 +1746,20 @@
     }
 
     function getRemoteGunMuzzleWorld(rp, out) {
-      if (!rp || !rp.gunModel) return out.set(rp?.x || 0, (rp?.y || 1.65) + 0.15, rp?.z || 0);
-      const local = [
-        new THREE.Vector3(0, 0.01, -0.26), // pistol
-        new THREE.Vector3(0, 0.01, -0.46), // rifle
-        new THREE.Vector3(0, 0.01, -0.44), // shotgun
-        new THREE.Vector3(0, 0.01, -0.38), // smg
-      ][rp.currentWeapon | 0] || new THREE.Vector3(0, 0.01, -0.42);
-      return rp.gunModel.localToWorld(out.copy(local));
+      if (!rp || !rp.group) return out.set(rp?.x || 0, (rp?.y || 1.65) + 0.15, rp?.z || 0);
+      const q = rp.group.getWorldQuaternion(new THREE.Quaternion());
+      const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(q);
+      const right = new THREE.Vector3(1, 0, 0).applyQuaternion(q);
+      const up = new THREE.Vector3(0, 1, 0).applyQuaternion(q);
+      // Stable remote muzzle anchor: from shoulder/weapon region toward facing direction.
+      const origin = rp.rightArm
+        ? rp.rightArm.getWorldPosition(new THREE.Vector3())
+        : new THREE.Vector3(rp.x || 0, (rp.y || 1.65) + 0.1, rp.z || 0);
+      out.copy(origin);
+      out.addScaledVector(fwd, 0.60);
+      out.addScaledVector(right, 0.10);
+      out.addScaledVector(up, -0.02);
+      return out;
     }
 
     function createRemotePlayer(name) {
@@ -5353,6 +5359,10 @@
       _muzzleTmpRight.set(1, 0, 0).applyQuaternion(_muzzleTmpQuat);
       _muzzleTmpUp.set(0, 1, 0).applyQuaternion(_muzzleTmpQuat);
       out.addScaledVector(_muzzleTmpForward, 0.035);
+      // Reduce extreme up/down tracer slope: keep origin near weapon but partially converge to camera axis.
+      const adsK = THREE.MathUtils.clamp(state.adsProgress || 0, 0, 1);
+      const keepWeapon = THREE.MathUtils.lerp(0.62, 0.78, adsK);
+      out.lerp(camera.position.clone().addScaledVector(_muzzleTmpForward, 0.18), 1 - keepWeapon);
       return out;
     }
 
@@ -6554,18 +6564,18 @@
           const idlePhase = performance.now() * 0.0025 + rp.walkPhase * 0.12;
           const idleBreath = Math.sin(idlePhase) * 0.06;
           const weaponStance = [
-            { l: -0.64, r: -0.74, ly: -0.14, ry: 0.10, lz: -0.18, rz: 0.14 },
-            { l: -0.70, r: -0.82, ly: -0.16, ry: 0.12, lz: -0.22, rz: 0.18 },
-            { l: -0.68, r: -0.80, ly: -0.15, ry: 0.11, lz: -0.20, rz: 0.16 },
-            { l: -0.69, r: -0.81, ly: -0.16, ry: 0.12, lz: -0.21, rz: 0.17 },
-            { l: -0.56, r: -0.66, ly: -0.12, ry: 0.08, lz: -0.15, rz: 0.12 },
-          ][rp.currentWeapon | 0] || { l: -0.70, r: -0.82, ly: -0.16, ry: 0.12, lz: -0.22, rz: 0.18 };
-          let targetLX = weaponStance.l + idleBreath + (moving ? wSin * 0.36 : 0);
-          let targetRX = weaponStance.r - idleBreath * 0.7 - (moving ? wSin * 0.32 : 0);
+            { l: -0.34, r: -0.42, ly: -0.14, ry: 0.10, lz: -0.10, rz: 0.09 },
+            { l: -0.38, r: -0.48, ly: -0.16, ry: 0.12, lz: -0.12, rz: 0.11 },
+            { l: -0.36, r: -0.46, ly: -0.15, ry: 0.11, lz: -0.11, rz: 0.10 },
+            { l: -0.37, r: -0.47, ly: -0.16, ry: 0.12, lz: -0.12, rz: 0.11 },
+            { l: -0.30, r: -0.38, ly: -0.12, ry: 0.08, lz: -0.08, rz: 0.08 },
+          ][rp.currentWeapon | 0] || { l: -0.38, r: -0.48, ly: -0.16, ry: 0.12, lz: -0.12, rz: 0.11 };
+          let targetLX = weaponStance.l + idleBreath + (moving ? wSin * 0.46 : 0);
+          let targetRX = weaponStance.r - idleBreath * 0.7 - (moving ? wSin * 0.42 : 0);
           let targetLY = weaponStance.ly;
           let targetRY = weaponStance.ry;
-          let targetLZ = weaponStance.lz + (moving ? Math.cos(rp.walkPhase) * 0.14 : idleBreath * 0.24);
-          let targetRZ = weaponStance.rz - (moving ? Math.cos(rp.walkPhase) * 0.14 : idleBreath * 0.20);
+          let targetLZ = weaponStance.lz + (moving ? Math.cos(rp.walkPhase) * 0.18 : idleBreath * 0.26);
+          let targetRZ = weaponStance.rz - (moving ? Math.cos(rp.walkPhase) * 0.18 : idleBreath * 0.22);
           if (rp.isReloading) {
             rp.reloadPhase = (rp.reloadPhase || 0) + dt * 6.5;
             const rSin = Math.sin(rp.reloadPhase);
