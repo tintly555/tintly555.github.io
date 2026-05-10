@@ -4885,27 +4885,44 @@
 
     function getSafeViewportSize() {
       try {
+        let w = window.innerWidth || 0;
+        let h = window.innerHeight || 0;
+        const de = typeof document !== "undefined" ? document.documentElement : null;
+        const db = typeof document !== "undefined" ? document.body : null;
+        if (de) {
+          w = Math.max(w, de.clientWidth || 0);
+          h = Math.max(h, de.clientHeight || 0);
+        }
+        if (db) {
+          w = Math.max(w, db.clientWidth || 0);
+          h = Math.max(h, db.clientHeight || 0);
+        }
+        try {
+          const appEl = document.getElementById("app");
+          if (appEl) {
+            const br = appEl.getBoundingClientRect();
+            if (br.width >= 2 && br.height >= 2) {
+              w = Math.max(w, br.width);
+              h = Math.max(h, br.height);
+            }
+          }
+        } catch (_) {}
         const vv = window.visualViewport;
-        let w = window.innerWidth;
-        let h = window.innerHeight;
         if (vv && vv.width >= 2 && vv.height >= 2) {
-          w = vv.width;
-          h = vv.height;
+          /** Do not trust visualViewport alone — it can briefly mismatch innerWidth (fixes black canvas until window resize / F12). */
+          w = Math.max(w, vv.width);
+          h = Math.max(h, vv.height);
         }
         w = Math.max(
           1,
           w ||
-            (typeof document !== "undefined" &&
-              document.documentElement &&
-              document.documentElement.clientWidth) ||
+            (de && de.clientWidth) ||
             1
         );
         h = Math.max(
           1,
           h ||
-            (typeof document !== "undefined" &&
-              document.documentElement &&
-              document.documentElement.clientHeight) ||
+            (de && de.clientHeight) ||
             1
         );
         if (!Number.isFinite(w) || !Number.isFinite(h)) {
@@ -10107,6 +10124,34 @@
     });
     window.addEventListener("load", () => {
       syncGameRendererSize();
+      requestAnimationFrame(() => syncGameRendererSize());
+      try {
+        resizeMenuWallBackdrop();
+      } catch (_) {}
+      [16, 120, 380].forEach((ms) =>
+        setTimeout(() => {
+          syncGameRendererSize();
+          try {
+            resizeMenuWallBackdrop();
+          } catch (_) {}
+        }, ms)
+      );
+    });
+    window.addEventListener("pageshow", () => {
+      syncGameRendererSize();
+      requestAnimationFrame(() => syncGameRendererSize());
+      try {
+        resizeMenuWallBackdrop();
+      } catch (_) {}
+    });
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") {
+        syncGameRendererSize();
+        requestAnimationFrame(() => syncGameRendererSize());
+        try {
+          resizeMenuWallBackdrop();
+        } catch (_) {}
+      }
     });
     try {
       if (window.visualViewport) {
@@ -10116,7 +10161,12 @@
     } catch (_) {}
     try {
       if (typeof ResizeObserver !== "undefined") {
-        const ro = new ResizeObserver(() => syncGameRendererSize());
+        const ro = new ResizeObserver(() => {
+          syncGameRendererSize();
+          try {
+            resizeMenuWallBackdrop();
+          } catch (_) {}
+        });
         if (app) ro.observe(app);
         if (document.documentElement) ro.observe(document.documentElement);
       }
