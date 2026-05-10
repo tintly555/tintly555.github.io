@@ -3528,7 +3528,7 @@
         addMeshPart(g, new THREE.BoxGeometry(0.04, 0.14, 0.05), mBlack, 0, -0.08, -0.04);
       }
       g.scale.set(0.9, 0.9, 0.9);
-      /** Root ≈ pistol grip at wrist. Box meshes extend mainly along local ±Z; barrel toward -Z (see muzzle). */
+      /** Root ≈ pistol grip at wrist. Inner barrelFlip bakes 180° Y so we never stack ry+π on YXZ (gun skyward bug). */
       const root = new THREE.Group();
       const gripShift = [
         { x: 0, y: 0.03, z: 0.02 },
@@ -3537,7 +3537,11 @@
         { x: 0.015, y: 0.11, z: -0.17 },
       ][type | 0] || { x: 0.015, y: 0.11, z: -0.17 };
       g.position.set(gripShift.x, gripShift.y, gripShift.z);
-      root.add(g);
+      const barrelFlip = new THREE.Group();
+      barrelFlip.rotation.y = Math.PI;
+      barrelFlip.add(g);
+      root.add(barrelFlip);
+      root.userData.visualGroup = g;
       return root;
     }
 
@@ -3553,7 +3557,7 @@
 
     function applyRemoteWeaponMount(rp) {
       if (!rp || !rp.gunModel) return;
-      /** Long guns: avoid huge negative rx (was flipping muzzle to sky with YXZ + π). Small positive rx = slight nose-down, horizontal bore. */
+      /** π lives on geometry barrelFlip; mount stays small-angle only (no ry+π here). */
       const mount = [
         { x: 0.03, y: -0.03, z: 0.03, rx: -0.12, ry: 0, rz: 0 },
         { x: 0.055, y: -0.07, z: 0.03, rx: 0.11, ry: 0.02, rz: -0.045 },
@@ -3562,7 +3566,7 @@
       ][rp.currentWeapon | 0] || { x: 0.055, y: -0.07, z: 0.03, rx: 0.11, ry: 0.02, rz: -0.045 };
       rp.gunModel.position.set(mount.x, mount.y, mount.z);
       rp.gunModel.rotation.order = "YXZ";
-      rp.gunModel.rotation.set(mount.rx, mount.ry + Math.PI, mount.rz);
+      rp.gunModel.rotation.set(mount.rx, mount.ry, mount.rz);
     }
 
     function getRemoteGunMuzzleWorld(rp, out) {
@@ -3573,9 +3577,9 @@
         : new THREE.Vector3(rp.x || 0, (rp.y || 1.65) + 0.1, rp.z || 0);
       out.copy(origin);
       if (rp.gunModel) {
-        const gq = new THREE.Quaternion();
-        rp.gunModel.getWorldQuaternion(gq);
-        const barrelFwd = new THREE.Vector3(0, 0, -1).applyQuaternion(gq).normalize();
+        rp.gunModel.updateMatrixWorld(true);
+        const gNode = rp.gunModel.userData.visualGroup || rp.gunModel;
+        const barrelFwd = new THREE.Vector3(0, 0, -1).transformDirection(gNode.matrixWorld).normalize();
         out.addScaledVector(barrelFwd, 0.52);
       } else {
         const q = rp.group.getWorldQuaternion(new THREE.Quaternion());
