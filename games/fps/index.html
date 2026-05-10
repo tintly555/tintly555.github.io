@@ -6940,11 +6940,6 @@
         addMeshPart(gunGroup, new THREE.BoxGeometry(0.008, 0.04, 0.014), mSight, 0, 0.09, -0.38);
         addMeshPart(gunGroup, new THREE.SphereGeometry(0.004, 6, 6), mDot, 0, 0.108, -0.38);
 
-        const rH = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.15, 0.17), mGlove);
-        rH.position.set(0, -0.12, 0.12); gunGroup.add(rH);
-        const lH = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.13, 0.15), mGlove);
-        lH.position.set(0, -0.09, -0.22); gunGroup.add(lH);
-
         gunGroup.position.set(0.25, -0.22, -0.80);
         adsOffset.set(-0.25, 0.10, 0.28);
 
@@ -6958,11 +6953,6 @@
         addMeshPart(gunGroup, new THREE.BoxGeometry(0.08, 0.03, 0.04), mBlack, 0, -0.06, 0.14);
         addMeshPart(gunGroup, new THREE.BoxGeometry(0.055, 0.035, 0.018), mSight, 0, 0.085, 0.18);
         addMeshPart(gunGroup, new THREE.BoxGeometry(0.025, 0.06, 0.018), mSight, 0, 0.095, -0.34);
-
-        const rH = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.15, 0.17), mGlove);
-        rH.position.set(0, -0.11, 0.14); gunGroup.add(rH);
-        const lH = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.13, 0.15), mGlove);
-        lH.position.set(0, -0.07, -0.10); gunGroup.add(lH);
 
         gunGroup.position.set(0.23, -0.20, -0.82);
         adsOffset.set(-0.175, 0.105, 0.24);
@@ -6978,11 +6968,6 @@
         addMeshPart(gunGroup, new THREE.BoxGeometry(0.05, 0.03, 0.06), mBlack, 0, -0.22, -0.03);
         addMeshPart(gunGroup, new THREE.BoxGeometry(0.018, 0.04, 0.018), mSight, 0, 0.075, -0.28);
         addMeshPart(gunGroup, new THREE.BoxGeometry(0.04, 0.018, 0.018), mSight, 0, 0.065, 0.14);
-
-        const rH = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.15, 0.17), mGlove);
-        rH.position.set(0, -0.11, 0.10); gunGroup.add(rH);
-        const lH = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.13, 0.15), mGlove);
-        lH.position.set(0, -0.09, -0.16); gunGroup.add(lH);
 
         gunGroup.position.set(0.24, -0.22, -0.76);
         adsOffset.set(-0.22, 0.085, 0.24);
@@ -7500,8 +7485,8 @@
         const adsPenalty = shootingAds ? 1 : 1.8;
         const totalSpread = (w.spreadBase + state.spreadBloom) * spreadMultiplier * movingPenalty * adsPenalty;
         const dir = getWeaponDirection(totalSpread);
-        /** Origin at muzzle so spread=0 ray is parallel to view axis (no eye-origin vs barrel tracer skew). */
-        const ray = new THREE.Raycaster(muzzleStart, dir, 0, 160);
+        /** Eye ray matches screen crosshair; hitscan cannot start at muzzle or parallel offset misses cover near crosshair. */
+        const ray = new THREE.Raycaster(camera.position, dir, 0, 160);
         ray.camera = camera;
 
         let bestEnemy = null;
