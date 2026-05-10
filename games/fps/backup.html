@@ -1,8 +1,10 @@
 <!DOCTYPE html>
 <!--
-  Same as game.html but does not point game-multiplayer-origin at chat.jimmyqrg.com.
-  Socket.IO and asset fallbacks use this page’s origin only (unless you set meta below).
-  Crossfire mode is PVP (player vs player); Arena is PVE / co-op vs zombies.
+  Same game as game.html, tuned for the GitHub Pages layout: repo …/games/fps (e.g.
+  https://github.com/tintly555/tintly555.github.io/tree/main/games/fps — live https://tintly555.github.io/games/fps/).
+  game-static-prefix is /games/fps so deployedPublicRoot() resolves walls.png, game-ui/, menu.mp3 beside index.html.
+  Default empty game-multiplayer-origin = Socket.IO on this origin (unless you set the meta).
+  Crossfire = PVP; Arena = PVE / co-op vs zombies.
 -->
 <html lang="en">
 <head>
@@ -76,17 +78,35 @@
       try {
         window.__gameComputeAssetBaseDir = computeAssetBaseDir;
       } catch (eExp) {}
+      /**
+       * Layout 0 = this repo (`public/game-ui/…`). Layout 1 = tintly555.github.io/games/fps (flat PNG names).
+       * @see https://github.com/tintly555/tintly555.github.io/tree/main/games/fps
+       */
+      try {
+        window.__FPS_UI_LAYER_PATHS__ = [
+          {
+            menu: "game-ui/game-ui-menu-background.png",
+            btn: "game-ui/game-ui-button-texture.png",
+            settings: "game-ui/game-ui-settings-panel-bg.png",
+          },
+          {
+            menu: "background.png",
+            btn: "game-ui-button-texture.png",
+            settings: "game-ui-settings-panel-bg.png",
+          },
+        ];
+      } catch (ePaths) {}
     })();
   </script>
   <title>Zone No Light</title>
   <!-- Only the script-injected <base> above should set the document base (folder of this HTML).
        A second fixed base (e.g. chat origin) breaks relative game-ui/ + walls.png when the page is not at site root or when assets live beside this file. -->
-  <!-- Socket.IO / multiplayer API host only — do not use as primary CDN for game-ui / menu.mp3 (same-origin loads avoid 404 + Web Audio CORS). -->
+  <!-- Multiplayer only: Socket.IO API origin — not a CDN for walls/game-ui. Empty = same origin (typical for this file). -->
   <meta name="game-multiplayer-origin" content="" />
-  <!-- Optional absolute base for walls.png + game-ui/ when this HTML is embedded or hosted away from those files (empty = auto-detect). -->
+  <!-- Optional absolute base for walls.png + game-ui/ (empty = use origin + game-static-prefix + computeAssetBaseDir fallbacks). -->
   <meta name="game-asset-base" content="" />
-  <!-- Where static files from public/ are mounted: empty = site root (e.g. Fly: /walls.png). GitHub Pages subpath: content="/games/fps" -->
-  <meta name="game-static-prefix" content="" />
+  <!-- GitHub Pages: site serves repo `public/` at /games/fps/ — must match that path or asset URLs 404. -->
+  <meta name="game-static-prefix" content="/games/fps" />
   <script>
     (function () {
       function normRoot(u) {
@@ -135,18 +155,36 @@
           window.__GAME_STATIC_ROOT__ = R;
         } catch (e0) {}
         var el = document.documentElement;
-        el.style.setProperty(
-          "--game-ui-menu-bg",
-          'url("' + new URL("game-ui/game-ui-menu-background.png", R).href + '")'
-        );
-        el.style.setProperty(
-          "--game-ui-btn-texture",
-          'url("' + new URL("game-ui/game-ui-button-texture.png", R).href + '")'
-        );
-        el.style.setProperty(
-          "--game-ui-settings-bg",
-          'url("' + new URL("game-ui/game-ui-settings-panel-bg.png", R).href + '")'
-        );
+        var PATHS = window.__FPS_UI_LAYER_PATHS__ || [];
+        function installUiFromLayout(layoutIdx) {
+          var L = PATHS[layoutIdx];
+          if (!L) return;
+          el.style.setProperty("--game-ui-menu-bg", 'url("' + new URL(L.menu, R).href + '")');
+          el.style.setProperty("--game-ui-btn-texture", 'url("' + new URL(L.btn, R).href + '")');
+          el.style.setProperty("--game-ui-settings-bg", 'url("' + new URL(L.settings, R).href + '")');
+        }
+        var uiIdx = 0;
+        function probeHeadUiLayout() {
+          if (uiIdx >= PATHS.length) return;
+          var im = new Image();
+          im.onload = function () {
+            try {
+              window.__GAME_UI_LAYOUT_INDEX__ = uiIdx;
+            } catch (eSet) {}
+            installUiFromLayout(uiIdx);
+          };
+          im.onerror = function () {
+            uiIdx++;
+            probeHeadUiLayout();
+          };
+          try {
+            im.src = new URL(PATHS[uiIdx].menu, R).href;
+          } catch (eSrc) {
+            uiIdx++;
+            probeHeadUiLayout();
+          }
+        }
+        probeHeadUiLayout();
         try {
           var curMouse = new URL("mouse.png", R).href;
           el.style.setProperty("--game-cursor-default", 'url("' + curMouse + '") 0 0, auto');
@@ -163,8 +201,6 @@
       }
     }
   </script>
-  <!-- Socket.IO from CDN so menu/game always initialize even when socket.io.min.js isn’t deployed beside this file. -->
-  <script defer src="https://cdn.jsdelivr.net/npm/socket.io-client@4/dist/socket.io.min.js" crossorigin="anonymous"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <!-- Audiowide = Latin sci-fi headings; Noto* = same neutral tech look for every localized script (CJK, Arabic, Devanagari, Cyrillic, etc.). -->
@@ -212,7 +248,14 @@
       z-index: 1;
       width: 100vw;
       height: 100vh;
+      min-height: 100dvh;
       cursor: none;
+    }
+
+    #app canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
     }
 
     /* Restore visible cursor when pointer lock is released (death screen, pause). */
@@ -896,37 +939,46 @@
         }
         bases.push("https://tintly555.github.io/games/fps/");
         var root = document.documentElement;
+        var PATHS = window.__FPS_UI_LAYER_PATHS__ || [];
         var bi = 0;
-        function apply(base) {
+        var li = 0;
+        function applyLayoutFromBase(layoutIdx, base) {
           var b = normBase(base);
-          root.style.setProperty(
-            "--game-ui-menu-bg",
-            'url("' + new URL("game-ui/game-ui-menu-background.png", b).href + '")'
-          );
-          root.style.setProperty(
-            "--game-ui-btn-texture",
-            'url("' + new URL("game-ui/game-ui-button-texture.png", b).href + '")'
-          );
-          root.style.setProperty(
-            "--game-ui-settings-bg",
-            'url("' + new URL("game-ui/game-ui-settings-panel-bg.png", b).href + '")'
-          );
+          var L = PATHS[layoutIdx];
+          if (!L) return;
+          try {
+            window.__GAME_UI_LAYOUT_INDEX__ = layoutIdx;
+          } catch (eIdx) {}
+          root.style.setProperty("--game-ui-menu-bg", 'url("' + new URL(L.menu, b).href + '")');
+          root.style.setProperty("--game-ui-btn-texture", 'url("' + new URL(L.btn, b).href + '")');
+          root.style.setProperty("--game-ui-settings-bg", 'url("' + new URL(L.settings, b).href + '")');
         }
-        function tryNext() {
+        function tryBaseAndLayout() {
           if (bi >= bases.length) return;
-          var base = bases[bi++];
+          if (li >= PATHS.length) {
+            li = 0;
+            bi++;
+            tryBaseAndLayout();
+            return;
+          }
+          var base = bases[bi];
+          var L = PATHS[li];
           var img = new Image();
           img.onload = function () {
-            apply(base);
+            applyLayoutFromBase(li, base);
           };
-          img.onerror = tryNext;
+          img.onerror = function () {
+            li++;
+            tryBaseAndLayout();
+          };
           try {
-            img.src = new URL("game-ui/game-ui-menu-background.png", normBase(base)).href;
+            img.src = new URL(L.menu, normBase(base)).href;
           } catch (e3) {
-            tryNext();
+            li++;
+            tryBaseAndLayout();
           }
         }
-        tryNext();
+        tryBaseAndLayout();
       } catch (e4) {}
     })();
   </script>
@@ -1121,6 +1173,17 @@
       </div>
     </div>
   </div>
+
+  <!-- Same-origin socket.io.min.js first (e.g. tintly555.github.io/games/fps); synchronous fallback keeps `io` defined before the module below. -->
+  <script src="socket.io.min.js"></script>
+  <script>
+    (function () {
+      if (typeof io === "function") return;
+      document.write(
+        '<script crossorigin="anonymous" src="https://cdn.jsdelivr.net/npm/socket.io-client@4/dist/socket.io.min.js"><\/script>'
+      );
+    })();
+  </script>
 
   <script type="module">
     import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.182.0/build/three.module.js";
@@ -3013,13 +3076,16 @@
       });
 
       try {
-        syncSettingsUI();
+      syncSettingsUI();
       } catch (_) {}
       try {
-        updateHud();
+      updateHud();
       } catch (_) {}
       try {
-        refreshOverlayTexts();
+      refreshOverlayTexts();
+      } catch (_) {}
+      try {
+        refreshFpsOverlayHints();
       } catch (_) {}
       try {
         if (typeof pendingLobbyMode === "string" && menuLobby && menuLobby.style.display !== "none" && lobbyTitle) {
@@ -3556,13 +3622,26 @@
         on() {},
         emit(_ev, ...args) {
           const last = args[args.length - 1];
-          if (typeof last === "function") {
+          if (typeof last !== "function") return;
+          const reply = (payload) => queueMicrotask(() => last(payload));
             if (_ev === "joinRoom") {
-              queueMicrotask(() => last({ ok: true, hostId: "offline", roomKey: String(args[0] || "") }));
-            } else {
-              queueMicrotask(() => last({ error: "Network unavailable" }));
-            }
+            reply({ ok: true, hostId: "offline", roomKey: String(args[0] || "") });
+            return;
           }
+          if (_ev === "quickplay" || _ev === "createRoom") {
+            const mode = String(args[0] || "arena");
+            const code = (Math.random().toString(36).slice(2, 8) + "XX").slice(0, 6).toUpperCase();
+            reply({ roomKey: `${mode}:${code}`, room: code, code });
+            return;
+          }
+          if (_ev === "joinByCode") {
+            const payload = args[0] || {};
+            const code = String(payload.code || "LOCAL").toUpperCase();
+            const mode = String(payload.mode || "arena");
+            reply({ roomKey: `${mode}:${code}`, room: code, code });
+            return;
+          }
+          reply({ error: "Network unavailable (Socket.IO not loaded or offline stub)" });
         },
         disconnect() {},
       };
@@ -3580,12 +3659,20 @@
 
     const multiplayerOrigin = getMultiplayerOrigin();
 
-    const socket = typeof io === "function"
-      ? io(`${multiplayerOrigin}/game`, {
+    const _ioFactory = typeof globalThis.io === "function" ? globalThis.io : null;
+    if (!_ioFactory) {
+      console.warn(
+        "[multiplayer] socket.io-client not available (blocked, wrong script order, or local build missing io). Using offline stub."
+      );
+    }
+
+    const socket = _ioFactory
+      ? _ioFactory(`${multiplayerOrigin}/game`, {
           transports: ["websocket", "polling"],
           reconnection: true,
-          reconnectionAttempts: 10,
+          reconnectionAttempts: 12,
           reconnectionDelay: 800,
+          timeout: 20000,
         })
       : createOfflineSocketStub();
 
@@ -3642,14 +3729,14 @@
       if (rawWeapon !== undefined && rawWeapon !== null) {
         const w = ((Number(rawWeapon) | 0) % 5 + 5) % 5;
         if (w !== rp.currentWeapon) {
-          rp.rightArm.remove(rp.gunModel);
+        rp.rightArm.remove(rp.gunModel);
           rp.gunModel = makeThirdPersonGun(w);
           rp.gunModel.position.set(
             w === 4 ? 0.1 : 0.15,
             w === 4 ? -0.55 : -0.42,
             w === 4 ? -0.1 : -0.28
           );
-          rp.rightArm.add(rp.gunModel);
+        rp.rightArm.add(rp.gunModel);
           rp.currentWeapon = w;
         }
       }
@@ -3730,6 +3817,7 @@
       state.flashTimer = 0.14;
       addHitIndicator(data.x || 0, data.z || 0);
       triggerCamShake(0.085);
+      playReceivedDamageSound(data.hitKind === "melee" ? "melee" : "bullet");
       updateHud();
       if (player.health <= 0) {
         showDeathScreen(null);
@@ -4610,13 +4698,13 @@
         scene.fog.color.set(0xc9dbf5);
         scene.background.set(0xe8f2ff);
       } else {
-        const base = getQualityFogBase();
-        const rdIdx = THREE.MathUtils.clamp(
-          gameSettings.renderDistanceIndex | 0,
-          0,
-          RENDER_DISTANCE_LEVELS.length - 1
-        );
-        const scale = RENDER_DISTANCE_LEVELS[rdIdx].scale;
+      const base = getQualityFogBase();
+      const rdIdx = THREE.MathUtils.clamp(
+        gameSettings.renderDistanceIndex | 0,
+        0,
+        RENDER_DISTANCE_LEVELS.length - 1
+      );
+      const scale = RENDER_DISTANCE_LEVELS[rdIdx].scale;
         far = Math.max(22, base.far * scale);
         near = THREE.MathUtils.clamp(base.near * scale * 0.97, 4, Math.max(8, far - 12));
         scene.fog.color.set(getCurrentMapFogColor());
@@ -4919,44 +5007,88 @@
 
     initMenuWallBackdrop();
 
+    /** Same two layouts as `window.__FPS_UI_LAYER_PATHS__` in the head (repo `game-ui/` vs tintly555.github.io flat PNGs). */
+    const DEFAULT_GAME_UI_LAYER_PATHS = [
+      {
+        menu: "game-ui/game-ui-menu-background.png",
+        btn: "game-ui/game-ui-button-texture.png",
+        settings: "game-ui/game-ui-settings-panel-bg.png",
+      },
+      {
+        menu: "background.png",
+        btn: "game-ui-button-texture.png",
+        settings: "game-ui-settings-panel-bg.png",
+      },
+    ];
+
+    function getGameUiLayerPaths() {
+      try {
+        if (typeof window !== "undefined" && window.__FPS_UI_LAYER_PATHS__ && window.__FPS_UI_LAYER_PATHS__.length) {
+          return window.__FPS_UI_LAYER_PATHS__;
+        }
+      } catch (_) {}
+      return DEFAULT_GAME_UI_LAYER_PATHS;
+    }
+
+    function getGameUiLayoutIndex() {
+      try {
+        if (typeof window !== "undefined" && typeof window.__GAME_UI_LAYOUT_INDEX__ === "number") {
+          return window.__GAME_UI_LAYOUT_INDEX__;
+        }
+      } catch (_) {}
+      return 0;
+    }
+
     function applyResolvedGameAssetBase(base) {
       const b = normalizeGameAssetBase(base);
       try {
         const root = document.documentElement;
-        root.style.setProperty(
-          "--game-ui-menu-bg",
-          `url("${new URL("game-ui/game-ui-menu-background.png", b).href}")`
-        );
-        root.style.setProperty(
-          "--game-ui-btn-texture",
-          `url("${new URL("game-ui/game-ui-button-texture.png", b).href}")`
-        );
-        root.style.setProperty(
-          "--game-ui-settings-bg",
-          `url("${new URL("game-ui/game-ui-settings-panel-bg.png", b).href}")`
-        );
+        const paths = getGameUiLayerPaths();
+        let idx = getGameUiLayoutIndex();
+        const L = paths[idx] || paths[0];
+        root.style.setProperty("--game-ui-menu-bg", `url("${new URL(L.menu, b).href}")`);
+        root.style.setProperty("--game-ui-btn-texture", `url("${new URL(L.btn, b).href}")`);
+        root.style.setProperty("--game-ui-settings-bg", `url("${new URL(L.settings, b).href}")`);
       } catch (_) {}
     }
 
     function resolveGameUiLayersFromProbe() {
       const candidates = getGameAssetBaseCandidates();
-      let i = 0;
-      function tryNext() {
-        if (i >= candidates.length) return;
-        const base = normalizeGameAssetBase(candidates[i++]);
+      const paths = getGameUiLayerPaths();
+      let bi = 0;
+      let li = 0;
+      function tryProbe() {
+        if (bi >= candidates.length) return;
+        if (li >= paths.length) {
+          li = 0;
+          bi++;
+          tryProbe();
+          return;
+        }
+        const base = normalizeGameAssetBase(candidates[bi]);
+        const L = paths[li];
         let testUrl;
         try {
-          testUrl = new URL("game-ui/game-ui-menu-background.png", base).href;
+          testUrl = new URL(L.menu, base).href;
         } catch (_) {
-          tryNext();
+          li++;
+          tryProbe();
           return;
         }
         const img = new Image();
-        img.onload = () => applyResolvedGameAssetBase(base);
-        img.onerror = () => tryNext();
+        img.onload = () => {
+          try {
+            if (typeof window !== "undefined") window.__GAME_UI_LAYOUT_INDEX__ = li;
+          } catch (_) {}
+          applyResolvedGameAssetBase(candidates[bi]);
+        };
+        img.onerror = () => {
+          li++;
+          tryProbe();
+        };
         img.src = testUrl;
       }
-      tryNext();
+      tryProbe();
     }
 
     /**
@@ -5210,9 +5342,9 @@
         if (entry.boxDims) {
           const curSeg = entry._displacedSegments | 0;
           if (dispScale > 0 && targetSeg !== curSeg) {
-            try {
-              mesh.geometry.dispose();
-              mesh.geometry = new THREE.BoxGeometry(
+          try {
+            mesh.geometry.dispose();
+            mesh.geometry = new THREE.BoxGeometry(
                 entry.boxDims.w,
                 entry.boxDims.h,
                 entry.boxDims.d,
@@ -5221,13 +5353,13 @@
                 targetSeg
               );
               entry._displacedSegments = targetSeg;
-            } catch (_) {}
+          } catch (_) {}
           } else if (dispScale === 0 && curSeg > 0) {
-            try {
-              mesh.geometry.dispose();
-              mesh.geometry = new THREE.BoxGeometry(entry.boxDims.w, entry.boxDims.h, entry.boxDims.d, 1, 1, 1);
-              entry._displacedSegments = 0;
-            } catch (_) {}
+          try {
+            mesh.geometry.dispose();
+            mesh.geometry = new THREE.BoxGeometry(entry.boxDims.w, entry.boxDims.h, entry.boxDims.d, 1, 1, 1);
+            entry._displacedSegments = 0;
+          } catch (_) {}
           }
         }
       }
@@ -5424,6 +5556,9 @@
     const tracerGroup = new THREE.Group();
     const bloodGroup = new THREE.Group();
     scene.add(decalGroup, sparkGroup, tracerGroup, bloodGroup);
+
+    /** Hard cap so tracer ribbon GC + scene graph cannot grow without bound if FPS dips. */
+    const MAX_TRACER_RIBBONS = 96;
 
     const MAX_BLOOD_MESHES = 36;
     const MAX_SPARK_MESHES = 36;
@@ -6088,11 +6223,17 @@
     }
 
     function cullMazeLightsNearCamera() {
-      if (!mazeCullableLights.length) return;
+      const lights = mazeCullableLights;
+      const n = lights.length;
+      if (!n) return;
       const cx = camera.position.x;
       const cy = camera.position.y;
       const cz = camera.position.z;
-      const scored = mazeCullableLights.map((L) => {
+      while (_mazeLightCullScratch.length < n) {
+        _mazeLightCullScratch.push({ L: null, d2: 0 });
+      }
+      for (let i = 0; i < n; i++) {
+        const L = lights[i];
         const p = L.position;
         const dx = p.x - cx;
         const dy = p.y - cy;
@@ -6100,11 +6241,15 @@
         let d2 = dx * dx + dz * dz + dy * dy * 0.45;
         if (L.isSpotLight) d2 *= 0.5;
         else if (L.isPointLight && p.y < MAZE_CEILING_LIGHT_Y - 0.5) d2 *= 0.65;
-        return { L, d2 };
-      });
+        const row = _mazeLightCullScratch[i];
+        row.L = L;
+        row.d2 = d2;
+      }
+      const scored = _mazeLightCullScratch;
+      scored.length = n;
       scored.sort((a, b) => a.d2 - b.d2);
       const maxV = MAX_MAZE_LIGHTS_ACTIVE;
-      for (let i = 0; i < scored.length; i++) {
+      for (let i = 0; i < n; i++) {
         scored[i].L.visible = i < maxV;
       }
     }
@@ -6548,6 +6693,8 @@
       medKitDefilling: false,
       medKitDefillPhase: 0,
       medKitDefillStart: 0,
+      /** 0–1 smooth zoom while holding medkit heal; lerps out on release / finish. */
+      medKitZoomProgress: 0,
     };
 
     applyGraphicsQuality();
@@ -6677,12 +6824,12 @@
           : "";
       const mapLabel =
         CURRENT_MAP === "arena"
-          ? t("mapArena")
+            ? t("mapArena")
           : CURRENT_MAP === "crossfire_grid"
             ? t("mapCrossfireGrid")
             : isPvpCrossfireMap(CURRENT_MAP)
               ? t("mapCrossfireClassic")
-              : CURRENT_MAP;
+            : CURRENT_MAP;
       const mpSuffix = MULTIPLAYER ? ` ${t("hudMpSuffix")}` : "";
       const reloadParen = state.reloading ? ` (${t("hudRefilling")})` : "";
       const aimLine =
@@ -6709,7 +6856,8 @@
       const elL = document.getElementById("fpsHintFlash");
       const elZ = document.getElementById("fpsHintZoom");
       if (!elL || !elZ) return;
-      if (CURRENT_MAP === "crossfire_grid") {
+      const inGame = gameWorldReady && menuEl && menuEl.style.display === "none";
+      if (CURRENT_MAP === "crossfire_grid" && inGame) {
         elL.textContent =
           gameSettings.language === "zh"
             ? "室外单挑亮图：手电已关（无需照明）"
@@ -7305,31 +7453,118 @@
       ambientWindNode = { src, g };
     }
 
+    const _gunNoiseBuf = {};
+    function getGunNoiseBuffer(durationSec) {
+      const key = durationSec.toFixed(4);
+      if (_gunNoiseBuf[key]) return _gunNoiseBuf[key];
+      const rate = audioCtx.sampleRate;
+      const n = Math.max(64, (rate * durationSec) | 0);
+      const buf = audioCtx.createBuffer(1, n, rate);
+      const d = buf.getChannelData(0);
+      let brown = 0;
+      for (let i = 0; i < n; i++) {
+        const rnd = Math.random() * 2 - 1;
+        brown = 0.985 * brown + 0.015 * rnd;
+        d[i] = brown * 2.4;
+      }
+      _gunNoiseBuf[key] = buf;
+      return buf;
+    }
+
+    /** Layered shots: transient crack + body + mechanical bite + tail + short room echo (per weapon slot). */
     function playGunSound(w) {
-      if (audioCtx.state === "suspended") audioCtx.resume();
-
+      if (audioCtx.state === "suspended") void audioCtx.resume();
+      void w;
       const now = audioCtx.currentTime;
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      const filter = audioCtx.createBiquadFilter();
+      const idx = state.weaponIndex;
+      const presets = [
+        { crackMs: 64, crackFc: 4300, crackQ: 0.84, crackG: 0.52, bodyMs: 170, bodyFc: 980, bodyG: 0.2, mechHz: 980, mechG: 0.03, tailMs: 260, tailFc: 1200, tailG: 0.08, echoDelay: 0.072, echoFb: 0.26, echoG: 0.08 },
+        { crackMs: 88, crackFc: 3600, crackQ: 0.72, crackG: 0.68, bodyMs: 250, bodyFc: 740, bodyG: 0.28, mechHz: 760, mechG: 0.045, tailMs: 330, tailFc: 900, tailG: 0.12, echoDelay: 0.082, echoFb: 0.31, echoG: 0.11 },
+        { crackMs: 110, crackFc: 2500, crackQ: 0.56, crackG: 0.82, bodyMs: 330, bodyFc: 520, bodyG: 0.38, mechHz: 520, mechG: 0.02, tailMs: 420, tailFc: 760, tailG: 0.18, echoDelay: 0.094, echoFb: 0.36, echoG: 0.16 },
+        { crackMs: 56, crackFc: 5200, crackQ: 0.92, crackG: 0.45, bodyMs: 185, bodyFc: 1200, bodyG: 0.17, mechHz: 1080, mechG: 0.03, tailMs: 240, tailFc: 1600, tailG: 0.07, echoDelay: 0.064, echoFb: 0.22, echoG: 0.06 },
+      ];
+      const p = presets[idx] || presets[1];
 
-      osc.type = "square";
-      osc.frequency.setValueAtTime(w.soundBase, now);
-      osc.frequency.exponentialRampToValueAtTime(w.soundBase * 0.45, now + 0.08);
+      const crackSrc = audioCtx.createBufferSource();
+      crackSrc.buffer = getGunNoiseBuffer(p.crackMs / 1000);
+      const crackBp = audioCtx.createBiquadFilter();
+      crackBp.type = "bandpass";
+      crackBp.frequency.setValueAtTime(p.crackFc, now);
+      crackBp.Q.setValueAtTime(p.crackQ, now);
+      const crackGain = audioCtx.createGain();
+      crackGain.gain.setValueAtTime(0.0001, now);
+      crackGain.gain.exponentialRampToValueAtTime(p.crackG, now + 0.003);
+      crackGain.gain.exponentialRampToValueAtTime(0.0001, now + p.crackMs / 1000);
+      crackSrc.connect(crackBp);
+      crackBp.connect(crackGain);
+      crackGain.connect(audioSfx);
+      crackSrc.start(now);
+      crackSrc.stop(now + p.crackMs / 1000 + 0.03);
 
-      filter.type = "lowpass";
-      filter.frequency.setValueAtTime(2200, now);
+      const bodySrc = audioCtx.createBufferSource();
+      bodySrc.buffer = getGunNoiseBuffer(p.bodyMs / 1000);
+      const bodyLp = audioCtx.createBiquadFilter();
+      bodyLp.type = "lowpass";
+      bodyLp.frequency.setValueAtTime(p.bodyFc, now);
+      const bodyGain = audioCtx.createGain();
+      bodyGain.gain.setValueAtTime(0.0001, now + 0.002);
+      bodyGain.gain.exponentialRampToValueAtTime(p.bodyG, now + 0.014);
+      bodyGain.gain.exponentialRampToValueAtTime(0.0001, now + p.bodyMs / 1000);
+      bodySrc.connect(bodyLp);
+      bodyLp.connect(bodyGain);
+      bodyGain.connect(audioSfx);
+      bodySrc.start(now + 0.0015);
+      bodySrc.stop(now + p.bodyMs / 1000 + 0.05);
 
-      gain.gain.setValueAtTime(0.0001, now);
-      gain.gain.exponentialRampToValueAtTime(0.10, now + 0.01);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.11);
+      const mech = audioCtx.createOscillator();
+      mech.type = idx === 2 ? "sawtooth" : "triangle";
+      mech.frequency.setValueAtTime(p.mechHz, now);
+      mech.frequency.exponentialRampToValueAtTime(Math.max(180, p.mechHz * 0.55), now + 0.08);
+      const mechHp = audioCtx.createBiquadFilter();
+      mechHp.type = "highpass";
+      mechHp.frequency.setValueAtTime(450, now);
+      const mechGain = audioCtx.createGain();
+      mechGain.gain.setValueAtTime(0.0001, now);
+      mechGain.gain.exponentialRampToValueAtTime(p.mechG, now + 0.005);
+      mechGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.1);
+      mech.connect(mechHp);
+      mechHp.connect(mechGain);
+      mechGain.connect(audioSfx);
+      mech.start(now + 0.001);
+      mech.stop(now + 0.105);
 
-      osc.connect(filter);
-      filter.connect(gain);
-      gain.connect(audioSfx);
+      const tailSrc = audioCtx.createBufferSource();
+      tailSrc.buffer = getGunNoiseBuffer(p.tailMs / 1000);
+      const tailBp = audioCtx.createBiquadFilter();
+      tailBp.type = "bandpass";
+      tailBp.frequency.setValueAtTime(p.tailFc, now);
+      tailBp.Q.setValueAtTime(0.5, now);
+      const tailGain = audioCtx.createGain();
+      tailGain.gain.setValueAtTime(0.0001, now + 0.006);
+      tailGain.gain.exponentialRampToValueAtTime(p.tailG, now + 0.035);
+      tailGain.gain.exponentialRampToValueAtTime(0.0001, now + p.tailMs / 1000);
+      tailSrc.connect(tailBp);
+      tailBp.connect(tailGain);
+      tailGain.connect(audioSfx);
+      tailSrc.start(now + 0.006);
+      tailSrc.stop(now + p.tailMs / 1000 + 0.06);
 
-      osc.start(now);
-      osc.stop(now + 0.12);
+      const echoIn = audioCtx.createGain();
+      echoIn.gain.setValueAtTime(p.echoG, now);
+      const delay = audioCtx.createDelay(0.22);
+      delay.delayTime.setValueAtTime(p.echoDelay, now);
+      const feedback = audioCtx.createGain();
+      feedback.gain.setValueAtTime(p.echoFb, now);
+      const echoLp = audioCtx.createBiquadFilter();
+      echoLp.type = "lowpass";
+      echoLp.frequency.setValueAtTime(Math.max(700, p.tailFc * 1.1), now);
+      bodyGain.connect(echoIn);
+      echoIn.connect(delay);
+      delay.connect(echoLp);
+      echoLp.connect(audioSfx);
+      delay.connect(feedback);
+      feedback.connect(delay);
+      feedback.gain.exponentialRampToValueAtTime(0.0001, now + 0.5);
     }
 
     let flashlightAudioBuffer = null;
@@ -7381,6 +7616,64 @@
           bs.start();
         } catch (_) {}
       });
+    }
+
+    /** Local player hurt: bullet (PvP / default MP) vs melee (zombie). Uses Web Audio only. */
+    function playReceivedDamageSound(kind) {
+      if (audioCtx.state === "suspended") void audioCtx.resume();
+      const melee = kind === "melee";
+      const now = audioCtx.currentTime;
+      const buf = getGunNoiseBuffer(melee ? 0.15 : 0.085);
+      const src = audioCtx.createBufferSource();
+      src.buffer = buf;
+      const bp = audioCtx.createBiquadFilter();
+      bp.type = melee ? "lowpass" : "bandpass";
+      bp.frequency.setValueAtTime(melee ? 680 : 3100, now);
+      if (!melee) bp.Q.setValueAtTime(0.82, now);
+      const ng = audioCtx.createGain();
+      ng.gain.setValueAtTime(0.0001, now);
+      ng.gain.exponentialRampToValueAtTime(melee ? 0.38 : 0.34, now + 0.014);
+      ng.gain.exponentialRampToValueAtTime(0.0001, now + (melee ? 0.17 : 0.095));
+      src.connect(bp);
+      bp.connect(ng);
+      ng.connect(audioSfx);
+      src.start(now);
+      src.stop(now + 0.22);
+      if (melee) {
+        const o = audioCtx.createOscillator();
+        o.type = "triangle";
+        o.frequency.setValueAtTime(88, now);
+        o.frequency.exponentialRampToValueAtTime(48, now + 0.13);
+        const og = audioCtx.createGain();
+        og.gain.setValueAtTime(0.0001, now);
+        og.gain.exponentialRampToValueAtTime(0.09, now + 0.022);
+        og.gain.exponentialRampToValueAtTime(0.0001, now + 0.15);
+        const lp = audioCtx.createBiquadFilter();
+        lp.type = "lowpass";
+        lp.frequency.value = 420;
+        o.connect(lp);
+        lp.connect(og);
+        og.connect(audioSfx);
+        o.start(now);
+        o.stop(now + 0.16);
+      } else {
+        const o = audioCtx.createOscillator();
+        o.type = "square";
+        o.frequency.setValueAtTime(2200, now);
+        o.frequency.exponentialRampToValueAtTime(760, now + 0.048);
+        const og = audioCtx.createGain();
+        og.gain.setValueAtTime(0.0001, now);
+        og.gain.exponentialRampToValueAtTime(0.048, now + 0.006);
+        og.gain.exponentialRampToValueAtTime(0.0001, now + 0.072);
+        const hp = audioCtx.createBiquadFilter();
+        hp.type = "highpass";
+        hp.frequency.value = 620;
+        o.connect(hp);
+        hp.connect(og);
+        og.connect(audioSfx);
+        o.start(now);
+        o.stop(now + 0.085);
+      }
     }
 
     function triggerCamShake(add = 0.09) {
@@ -7475,6 +7768,15 @@
 
     /** Short-lived additive line trail (player weapons + synced MP shots). */
     function pushTracerRibbon(start, end, color, maxLife, opacityMul = 1) {
+      while (state.tracers.length >= MAX_TRACER_RIBBONS && state.tracers.length > 0) {
+        const old = state.tracers.shift();
+        if (!old) break;
+        tracerGroup.remove(old.group);
+        for (const p of old.parts) {
+          try { p.geometry.dispose(); } catch (_) {}
+          try { p.material.dispose(); } catch (_) {}
+        }
+      }
       const hex = typeof color === "number" ? color : new THREE.Color(color).getHex();
       const om = THREE.MathUtils.clamp(opacityMul, 0, 2);
       const a = start.clone();
@@ -7673,6 +7975,8 @@
 
     /** Camera-space Y offset so the view-model sits ~20px lower on a typical 1080p window (FOV 75). */
     const WEAPON_VIEW_DROP_Y = -0.032;
+    /** Pistol ADS: raise view-model ~20px when aimed (same scale as WEAPON_VIEW_DROP_Y). */
+    const PISTOL_ADS_EXTRA_UP_Y = 0.032;
 
     function makeWeaponModel(type) {
       const root = new THREE.Group();
@@ -7707,7 +8011,7 @@
         fng.position.set(0, -0.065, 0.04); gunGroup.add(fng);
 
         gunGroup.position.set(0.26, -0.22, -0.72);
-        adsOffset.set(-0.26, 0.095, 0.26);
+        adsOffset.set(-0.26, 0.095 + PISTOL_ADS_EXTRA_UP_Y, 0.26);
 
       } else if (type === 1) {
         addMeshPart(gunGroup, new THREE.BoxGeometry(0.13, 0.14, 0.88), mMetal, 0, 0, 0);
@@ -7836,6 +8140,7 @@
         state.medKitDefilling = false;
         state.medKitDefillPhase = 0;
         state.medKitDefillStart = 0;
+        state.medKitZoomProgress = 0;
         applyMedKitRingVisual(0);
       }
       weaponModels.forEach((w, i) => {
@@ -8536,7 +8841,23 @@
         state.weaponBobRotZ + reloadRotZ
       );
 
-      const targetFov = usingAds ? 38 : 75;
+      const MED_KIT_HOLD_ZOOM_FOV = 56;
+      const wantsMedKitZoom =
+        state.weaponIndex === 4 &&
+        player.health > 0 &&
+        player.health < player.maxHealth &&
+        state.mouseDown &&
+        !state.medKitNeedsRelease &&
+        !state.medKitDefilling;
+      state.medKitZoomProgress +=
+        ((wantsMedKitZoom ? 1 : 0) - state.medKitZoomProgress) * Math.min(1, dt * 10);
+
+      let targetFov = 75;
+      if (usingAds) {
+        targetFov = 38;
+      } else if (state.weaponIndex === 4) {
+        targetFov = THREE.MathUtils.lerp(75, MED_KIT_HOLD_ZOOM_FOV, state.medKitZoomProgress);
+      }
       if (camera.fov !== targetFov) {
         camera.fov += (targetFov - camera.fov) * Math.min(1, dt * 10);
         camera.updateProjectionMatrix();
@@ -8729,6 +9050,7 @@
       player.regenTimer = 0;
       state.flashTimer = 0.14;
       triggerCamShake(0.095);
+      playReceivedDamageSound("melee");
       if (attacker && attacker.group) {
         addHitIndicator(attacker.group.position.x, attacker.group.position.z);
       }
@@ -8746,6 +9068,7 @@
           damage: enemy.attackDamage,
           x: enemy.group.position.x,
           z: enemy.group.position.z,
+          hitKind: "melee",
         });
       } else {
         damagePlayer(enemy.attackDamage, enemy);
@@ -8857,6 +9180,11 @@
     let navMinX = 0, navMinZ = 0, navCols = 0, navRows = 0;
     let flowDirX = null, flowDirZ = null;
     let flowPlayerC = -1, flowPlayerR = -1;
+    /** Reused flow-field BFS buffers — avoids large TypedArray + queue allocations every nav-cell crossing (GC churn). */
+    let _flowBfsDistBuf = null;
+    let _flowBfsQueueReuse = [];
+    /** Reused {L,d2} rows for maze light cull sort — avoids `.map()` allocating every frame. */
+    let _mazeLightCullScratch = [];
 
     function buildNavGrid() {
       if (CURRENT_MAP === "arena") {
@@ -8903,11 +9231,17 @@
       flowPlayerR = pr;
 
       const total = navCols * navRows;
-      const dist = new Uint16Array(total).fill(65535);
+      if (!_flowBfsDistBuf || _flowBfsDistBuf.length !== total) {
+        _flowBfsDistBuf = new Uint16Array(total);
+      }
+      const dist = _flowBfsDistBuf;
+      dist.fill(65535);
       const goalIdx = pr * navCols + pc;
       dist[goalIdx] = 0;
 
-      const queue = [goalIdx];
+      const queue = _flowBfsQueueReuse;
+      queue.length = 0;
+      queue.push(goalIdx);
       let head = 0;
       while (head < queue.length) {
         const idx = queue[head++];
@@ -9904,6 +10238,21 @@
       if (lastErr) console.warn("[boot] missing image", rel);
     }
 
+    /** Try several relative paths (e.g. repo `game-ui/…` vs tintly555 flat PNG names); first hit wins. */
+    async function preloadBootImageRelFirstOf(relativeOptionRels) {
+      for (const rel of relativeOptionRels) {
+        const bases = getGameAssetBaseCandidates();
+        for (const b of bases) {
+          try {
+            const u = new URL(rel, normalizeGameAssetBase(b)).href;
+            await loadBootImage(u);
+            return;
+          } catch (_) {}
+        }
+      }
+      console.warn("[boot] missing image, tried", relativeOptionRels);
+    }
+
     async function preloadWallTextureForBoot() {
       const urls = getWallTextureUrlList();
       for (const u of urls) {
@@ -9918,9 +10267,9 @@
 
     async function preloadCriticalGameAssets() {
       await Promise.all([
-        preloadBootImageRel("game-ui/game-ui-menu-background.png"),
-        preloadBootImageRel("game-ui/game-ui-button-texture.png"),
-        preloadBootImageRel("game-ui/game-ui-settings-panel-bg.png"),
+        preloadBootImageRelFirstOf(["game-ui/game-ui-menu-background.png", "background.png"]),
+        preloadBootImageRelFirstOf(["game-ui/game-ui-button-texture.png", "game-ui-button-texture.png"]),
+        preloadBootImageRelFirstOf(["game-ui/game-ui-settings-panel-bg.png", "game-ui-settings-panel-bg.png"]),
       ]);
       await preloadWallTextureForBoot();
     }
@@ -10012,6 +10361,7 @@
       player.regenTimer = 0;
       state.ads = false;
       state.adsProgress = 0;
+      state.medKitZoomProgress = 0;
       state.mouseDown = false;
       state.reloading = false;
       state.recoil = 0;
@@ -10208,7 +10558,7 @@
           : `${t("lobbyCrossfire")} — ${t("pvpMapClassic")}`;
       } else {
         const titleKey = mode === "arena-coop" ? "lobbyArenaCoop" : "lobbyMultiplayer";
-        lobbyTitle.textContent = t(titleKey);
+      lobbyTitle.textContent = t(titleKey);
       }
       const lobbyErr = document.getElementById("lobbyError");
       if (lobbyErr) lobbyErr.textContent = "";
