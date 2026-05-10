@@ -3528,14 +3528,14 @@
         addMeshPart(g, new THREE.BoxGeometry(0.04, 0.14, 0.05), mBlack, 0, -0.08, -0.04);
       }
       g.scale.set(0.9, 0.9, 0.9);
-      /** Root origin ≈ pistol grip at right wrist; barrel runs local +Z after mount rotation. */
+      /** Root ≈ pistol grip at wrist. Box meshes extend mainly along local ±Z; barrel toward -Z (see muzzle). */
       const root = new THREE.Group();
       const gripShift = [
         { x: 0, y: 0.03, z: 0.02 },
-        { x: 0.02, y: 0.18, z: -0.34 },
-        { x: 0, y: 0.19, z: -0.32 },
-        { x: 0.015, y: 0.16, z: -0.28 },
-      ][type | 0] || { x: 0.015, y: 0.16, z: -0.28 };
+        { x: 0.02, y: 0.12, z: -0.20 },
+        { x: 0, y: 0.13, z: -0.19 },
+        { x: 0.015, y: 0.11, z: -0.17 },
+      ][type | 0] || { x: 0.015, y: 0.11, z: -0.17 };
       g.position.set(gripShift.x, gripShift.y, gripShift.z);
       root.add(g);
       return root;
@@ -3553,13 +3553,13 @@
 
     function applyRemoteWeaponMount(rp) {
       if (!rp || !rp.gunModel) return;
-      // rightHandGrip origin = firing-hand wrist; weapon root grip sits there; local +Z = barrel toward target after Y rotation.
+      /** Long guns: avoid huge negative rx (was flipping muzzle to sky with YXZ + π). Small positive rx = slight nose-down, horizontal bore. */
       const mount = [
-        { x: 0.03, y: -0.04, z: 0.02, rx: -0.18, ry: 0, rz: 0 },
-        { x: 0.05, y: -0.14, z: -0.12, rx: -0.48, ry: 0.03, rz: 0.06 },
-        { x: 0.04, y: -0.15, z: -0.11, rx: -0.5, ry: 0.025, rz: 0.05 },
-        { x: 0.045, y: -0.13, z: -0.11, rx: -0.46, ry: 0.03, rz: 0.055 },
-      ][rp.currentWeapon | 0] || { x: 0.05, y: -0.14, z: -0.12, rx: -0.48, ry: 0.03, rz: 0.06 };
+        { x: 0.03, y: -0.03, z: 0.03, rx: -0.12, ry: 0, rz: 0 },
+        { x: 0.055, y: -0.07, z: 0.03, rx: 0.11, ry: 0.02, rz: -0.045 },
+        { x: 0.048, y: -0.075, z: 0.03, rx: 0.12, ry: 0.015, rz: -0.04 },
+        { x: 0.052, y: -0.065, z: 0.028, rx: 0.11, ry: 0.02, rz: -0.042 },
+      ][rp.currentWeapon | 0] || { x: 0.055, y: -0.07, z: 0.03, rx: 0.11, ry: 0.02, rz: -0.045 };
       rp.gunModel.position.set(mount.x, mount.y, mount.z);
       rp.gunModel.rotation.order = "YXZ";
       rp.gunModel.rotation.set(mount.rx, mount.ry + Math.PI, mount.rz);
@@ -3575,8 +3575,8 @@
       if (rp.gunModel) {
         const gq = new THREE.Quaternion();
         rp.gunModel.getWorldQuaternion(gq);
-        const barrelFwd = new THREE.Vector3(0, 0, 1).applyQuaternion(gq);
-        out.addScaledVector(barrelFwd, 0.44);
+        const barrelFwd = new THREE.Vector3(0, 0, -1).applyQuaternion(gq).normalize();
+        out.addScaledVector(barrelFwd, 0.52);
       } else {
         const q = rp.group.getWorldQuaternion(new THREE.Quaternion());
         const fwd = new THREE.Vector3(0, 0, 1).applyQuaternion(q);
@@ -3661,14 +3661,14 @@
       let targetRZ;
 
       if (!rp.isReloading && wpIdx !== 0) {
-        const strafe = moving ? walkSin * 0.16 : 0;
-        const bob = moving ? walkCos * 0.06 : 0;
-        targetLX = -1.14 + strafe + idleBreath * 0.06;
-        targetRX = -1.22 - strafe - idleBreath * 0.07;
-        targetLY = -0.88 + bob;
-        targetRY = 0.88 - bob;
-        targetLZ = -0.62 + bob * 0.38;
-        targetRZ = 0.62 - bob * 0.38;
+        const strafe = moving ? walkSin * 0.12 : 0;
+        const bob = moving ? walkCos * 0.05 : 0;
+        targetLX = basePose.lx + grip.leftBiasX - 0.12 + strafe + idleBreath * 0.04;
+        targetRX = basePose.rx + grip.rightBiasX - 0.14 - strafe - idleBreath * 0.05;
+        targetLY = basePose.ly + grip.leftBiasY + 0.16 + bob;
+        targetRY = basePose.ry - 0.16 - bob;
+        targetLZ = basePose.lz + grip.leftBiasZ + 0.12 + bob * 0.35;
+        targetRZ = basePose.rz - 0.12 - bob * 0.35;
       } else {
         targetLX = basePose.lx + grip.leftBiasX + idleBreath + (moving ? walkSin * 0.46 : 0);
         targetRX = basePose.rx + grip.rightBiasX - idleBreath * 0.9 - (moving ? walkSin * 0.54 : 0);
@@ -3704,7 +3704,7 @@
         rp.headGroup.rotation.x = dampScalar(rp.headGroup.rotation.x, moving ? Math.cos(rp.walkPhase) * 0.12 : 0, dt, 12);
       }
 
-      const armSnap = !rp.isReloading && wpIdx !== 0 ? 24 : 16;
+      const armSnap = !rp.isReloading && wpIdx !== 0 ? 20 : 16;
       rp.leftArm.rotation.x = dampScalar(rp.leftArm.rotation.x, targetLX, dt, armSnap);
       rp.rightArm.rotation.x = dampScalar(rp.rightArm.rotation.x, targetRX, dt, armSnap);
       rp.leftArm.rotation.y = dampScalar(rp.leftArm.rotation.y, targetLY, dt, armSnap - 1);
@@ -3713,13 +3713,13 @@
       rp.rightArm.rotation.z = dampScalar(rp.rightArm.rotation.z, targetRZ, dt, armSnap - 1);
 
       if (rp.leftElbow && rp.rightElbow) {
-        const flexWalk = moving ? Math.abs(walkSin) * 0.22 : 0.06;
-        const flexReload = rp.isReloading ? 0.36 : 0;
+        const flexWalk = moving ? Math.abs(walkSin) * 0.16 : 0.05;
+        const flexReload = rp.isReloading ? 0.32 : 0;
         const twoHand = !rp.isReloading && wpIdx !== 0;
-        const baseBend = twoHand ? 0.92 : 0.54;
-        const bendL = -(baseBend + flexWalk * (0.55 + 0.45 * walkCos) + flexReload);
-        const bendR = -(baseBend + flexWalk * (0.55 - 0.45 * walkCos) + flexReload);
-        const elbowSnap = twoHand ? 17 : 13;
+        const baseBend = twoHand ? 0.62 : 0.46;
+        const bendL = baseBend + flexWalk * (0.55 + 0.45 * walkCos) + flexReload;
+        const bendR = baseBend + flexWalk * (0.55 - 0.45 * walkCos) + flexReload;
+        const elbowSnap = twoHand ? 15 : 13;
         rp.leftElbow.rotation.x = dampScalar(rp.leftElbow.rotation.x, bendL, dt, elbowSnap);
         rp.rightElbow.rotation.x = dampScalar(rp.rightElbow.rotation.x, bendR, dt, elbowSnap);
       }
@@ -3832,15 +3832,15 @@
       const armR = buildSegmentedArm();
       const leftArm = armL.shoulder;
       const rightArm = armR.shoulder;
-      rightArm.position.set(0.34, 1.42, -0.02); rightArm.rotation.x = -1.12;
-      leftArm.position.set(-0.34, 1.42, -0.01); leftArm.rotation.x = -1.08;
-      rightArm.rotation.y = 0.82;
-      leftArm.rotation.y = -0.82;
-      rightArm.rotation.z = 0.58;
-      leftArm.rotation.z = -0.58;
+      rightArm.position.set(0.34, 1.42, -0.02); rightArm.rotation.x = -0.82;
+      leftArm.position.set(-0.34, 1.42, -0.01); leftArm.rotation.x = -0.78;
+      rightArm.rotation.y = 0.52;
+      leftArm.rotation.y = -0.52;
+      rightArm.rotation.z = 0.42;
+      leftArm.rotation.z = -0.42;
       group.add(rightArm, leftArm);
-      armL.elbow.rotation.x = -0.92;
-      armR.elbow.rotation.x = -0.92;
+      armL.elbow.rotation.x = 0.58;
+      armR.elbow.rotation.x = 0.58;
 
       /** Pelvis connects torso mass (above) to both legs; hips share one pivot height. */
       const pelvis = new THREE.Group();
