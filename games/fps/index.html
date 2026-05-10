@@ -916,8 +916,8 @@
   <div id="fpsOverlay" style="position:fixed;top:10px;right:14px;z-index:45;pointer-events:none;text-align:right;font-family:'Audiowide',sans-serif;font-size:13px;color:rgba(245,248,255,0.92);text-shadow:0 1px 5px rgba(0,0,0,0.85);line-height:1.4;">
     <div id="fpsValue">— FPS</div>
     <div style="opacity:0.72;font-size:11px;margin-top:3px;letter-spacing:0.02em;">Press T to chat</div>
-    <div style="opacity:0.72;font-size:11px;margin-top:3px;letter-spacing:0.02em;">Press L to toggle light &amp; flashlight</div>
-    <div style="opacity:0.72;font-size:11px;margin-top:3px;letter-spacing:0.02em;">Press Z to zoom flashlight</div>
+    <div id="fpsHintFlash" style="opacity:0.72;font-size:11px;margin-top:3px;letter-spacing:0.02em;">Press L to toggle light &amp; flashlight</div>
+    <div id="fpsHintZoom" style="opacity:0.72;font-size:11px;margin-top:3px;letter-spacing:0.02em;">Press Z to zoom flashlight</div>
   </div>
   <div class="hint" id="hint">Click anywhere</div>
   <div class="flash" id="flash"></div>
@@ -3881,8 +3881,8 @@
       const armR = buildSegmentedArm();
       const leftArm = armL.shoulder;
       const rightArm = armR.shoulder;
-      rightArm.position.set(0.34, 1.42, -0.02); rightArm.rotation.x = -0.82;
-      leftArm.position.set(-0.34, 1.42, -0.01); leftArm.rotation.x = -0.78;
+      rightArm.position.set(0.285, 1.415, -0.015); rightArm.rotation.x = -0.82;
+      leftArm.position.set(-0.285, 1.415, -0.015); leftArm.rotation.x = -0.78;
       rightArm.rotation.y = 0.52;
       leftArm.rotation.y = -0.52;
       rightArm.rotation.z = 0.42;
@@ -3890,6 +3890,13 @@
       group.add(rightArm, leftArm);
       armL.elbow.rotation.x = 0.58;
       armR.elbow.rotation.x = 0.58;
+      const shoulderBridgeMat = mCamo2;
+      const shoulderBridgeR = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.14, 0.12), shoulderBridgeMat);
+      shoulderBridgeR.position.set(0.305, 1.385, -0.02);
+      group.add(shoulderBridgeR);
+      const shoulderBridgeL = shoulderBridgeR.clone();
+      shoulderBridgeL.position.x *= -1;
+      group.add(shoulderBridgeL);
 
       /** Pelvis connects torso mass (above) to both legs; hips share one pivot height. */
       const pelvis = new THREE.Group();
@@ -4133,21 +4140,35 @@
     /** Distance fog + camera far: darkness and light fade beyond render distance (scaled by preset). */
     function applySceneFogAndCameraFar() {
       if (!scene.fog || !scene.fog.isFog) return;
-      const base = getQualityFogBase();
-      const rdIdx = THREE.MathUtils.clamp(
-        gameSettings.renderDistanceIndex | 0,
-        0,
-        RENDER_DISTANCE_LEVELS.length - 1
-      );
-      const scale = RENDER_DISTANCE_LEVELS[rdIdx].scale;
-      const far = Math.max(22, base.far * scale);
-      const near = THREE.MathUtils.clamp(base.near * scale * 0.97, 4, Math.max(8, far - 12));
+      let far;
+      let near;
+      if (CURRENT_MAP === "crossfire_grid") {
+        const rdIdx = THREE.MathUtils.clamp(
+          gameSettings.renderDistanceIndex | 0,
+          0,
+          RENDER_DISTANCE_LEVELS.length - 1
+        );
+        const scale = RENDER_DISTANCE_LEVELS[rdIdx].scale;
+        far = Math.max(140, 210 * scale);
+        near = THREE.MathUtils.clamp(28 * scale, 14, far - 28);
+        scene.fog.color.set(0xc9dbf5);
+        scene.background.set(0xe8f2ff);
+      } else {
+        const base = getQualityFogBase();
+        const rdIdx = THREE.MathUtils.clamp(
+          gameSettings.renderDistanceIndex | 0,
+          0,
+          RENDER_DISTANCE_LEVELS.length - 1
+        );
+        const scale = RENDER_DISTANCE_LEVELS[rdIdx].scale;
+        far = Math.max(22, base.far * scale);
+        near = THREE.MathUtils.clamp(base.near * scale * 0.97, 4, Math.max(8, far - 12));
+        scene.fog.color.set(getCurrentMapFogColor());
+        scene.background.set(getCurrentMapBackgroundColor());
+      }
       scene.fog.near = near;
       scene.fog.far = far;
-      scene.fog.color.set(getCurrentMapFogColor());
-      scene.background.set(getCurrentMapBackgroundColor());
-
-      camera.far = THREE.MathUtils.clamp(far + 32, 52, 260);
+      camera.far = THREE.MathUtils.clamp(far + 48, 52, 280);
       camera.updateProjectionMatrix();
     }
 
@@ -5593,6 +5614,18 @@
 
       addWindowWallX(-28, 28, 14, H, 1.0, 4, 1.2, 3.0);
       addWindowWallX( 28,-28, 14, H, 1.0, 4, 1.2, 3.0);
+
+      const cfAmb = new THREE.AmbientLight(0xaabccf, 1.15);
+      scene.add(cfAmb);
+      pvpMapLights.push(cfAmb);
+      const cfHemi = new THREE.HemisphereLight(0xc9d6ea, 0x2a2218, 2.4);
+      scene.add(cfHemi);
+      pvpMapLights.push(cfHemi);
+      const cfSun = new THREE.DirectionalLight(0xffecd8, 4.2);
+      cfSun.position.set(10, 38, 18);
+      cfSun.castShadow = false;
+      scene.add(cfSun);
+      pvpMapLights.push(cfSun);
     }
 
     /** PVP alt layout: perimeter + line walls + small cube cover (top-down sketch style). */
@@ -5628,18 +5661,26 @@
         [-20, 20], [0, 20], [20, 20],
       ];
       for (const [lx, lz] of lightPos) {
-        const L = createPhysicalPointLight(0xfff4e2, 88 * Math.PI, 34, 2.4);
-        L.position.set(lx, H - 0.5, lz);
+        const L = createPhysicalPointLight(0xfff6ee, 520, 150, 2.2);
+        L.position.set(lx, H + 1.2, lz);
         L.castShadow = false;
         scene.add(L);
         pvpMapLights.push(L);
       }
+      const rimTop = createPhysicalPointLight(0xeaf6ff, 380, 180, 2.4);
+      rimTop.position.set(0, H + 8, 0);
+      rimTop.castShadow = false;
+      scene.add(rimTop);
+      pvpMapLights.push(rimTop);
       // Open-roof duel map needs stable global fill, not flashlight dependence.
-      const hemiFill = new THREE.HemisphereLight(0xdfe9ff, 0x3f3426, 1.05 * Math.PI);
+      const ambFill = new THREE.AmbientLight(0xd4e2f5, 2.1);
+      scene.add(ambFill);
+      pvpMapLights.push(ambFill);
+      const hemiFill = new THREE.HemisphereLight(0xeef6ff, 0x5c5348, 4.2);
       scene.add(hemiFill);
       pvpMapLights.push(hemiFill);
-      const sunFill = new THREE.DirectionalLight(0xfff0dc, 0.84 * Math.PI);
-      sunFill.position.set(14, 30, 10);
+      const sunFill = new THREE.DirectionalLight(0xfff6ea, 9.5);
+      sunFill.position.set(18, 42, 14);
       sunFill.castShadow = false;
       scene.add(sunFill);
       pvpMapLights.push(sunFill);
@@ -5919,11 +5960,17 @@
               : CURRENT_MAP;
       const mpSuffix = MULTIPLAYER ? ` ${t("hudMpSuffix")}` : "";
       const reloadParen = state.reloading ? ` (${t("hudRefilling")})` : "";
+      const aimLine =
+        CURRENT_MAP === "crossfire_grid"
+          ? gameSettings.language === "zh"
+            ? "鼠标瞄准 | 右键机瞄 | 亮图无需手电"
+            : "Mouse aim | RMB ADS | Bright map — no flashlight"
+          : t("hudAimLineFps");
       hud.innerHTML = `
         ${roomLine}
         ${t("gameTitle")}<br>
         ${t("hudMoveLine")}<br>
-        ${t("hudAimLineFps")}<br>
+        ${aimLine}<br>
         ${t("hudWeaponsLine")}<br>
         ${t("hudMapPrefix")} ${mapLabel}${mpSuffix}<br>
         ${t("hudWeaponPrefix")} ${wName}<br>
@@ -5931,6 +5978,25 @@
         ${t("hudHealthPrefix")} ${Math.max(0, Math.floor(player.health))} / ${player.maxHealth}<br>
         ${t("hudScorePrefix")} ${state.score}
       `;
+      refreshFpsOverlayHints();
+    }
+
+    function refreshFpsOverlayHints() {
+      const elL = document.getElementById("fpsHintFlash");
+      const elZ = document.getElementById("fpsHintZoom");
+      if (!elL || !elZ) return;
+      if (CURRENT_MAP === "crossfire_grid") {
+        elL.textContent =
+          gameSettings.language === "zh"
+            ? "室外单挑亮图：手电已关（无需照明）"
+            : "Bright duel map — flashlight stays off";
+        elZ.textContent = "";
+        elZ.style.display = "none";
+      } else {
+        elZ.style.display = "";
+        elL.textContent = t("fpsLightHint");
+        elZ.textContent = t("fpsFlashZoomHint");
+      }
     }
     updateHud();
 
@@ -6912,16 +6978,8 @@
         addMeshPart(gunGroup, new THREE.BoxGeometry(0.065, 0.04, 0.26), mLight, 0, 0.055, -0.04);
         addMeshPart(gunGroup, new THREE.BoxGeometry(0.04, 0.025, 0.14), mDark, 0, -0.04, -0.10);
         addMeshPart(gunGroup, new THREE.BoxGeometry(0.035, 0.020, 0.04), mBlack, 0, -0.065, 0.06);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.06, 0.018, 0.018), mSight, 0, 0.074, 0.085);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.008, 0.055, 0.016), mSight, 0, 0.088, -0.19);
-        addMeshPart(gunGroup, new THREE.SphereGeometry(0.004, 8, 8), mDot, 0, 0.114, -0.19);
         addMeshPart(gunGroup, new THREE.BoxGeometry(0.09, 0.20, 0.11), mBlack, 0, -0.16, 0.08);
         addMeshPart(gunGroup, new THREE.BoxGeometry(0.10, 0.04, 0.09), mBlack, 0, -0.06, 0.08);
-
-        const rH = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.15, 0.17), mGlove);
-        rH.position.set(0, -0.12, 0.08); gunGroup.add(rH);
-        const fng = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.06, 0.04), mHand);
-        fng.position.set(0, -0.065, 0.04); gunGroup.add(fng);
 
         gunGroup.position.set(0.26, -0.22, -0.72);
         adsOffset.set(-0.26, 0.095, 0.26);
@@ -6937,8 +6995,6 @@
         addMeshPart(gunGroup, new THREE.BoxGeometry(0.07, 0.28, 0.10), mBlack, 0, -0.15, 0.00);
         addMeshPart(gunGroup, new THREE.BoxGeometry(0.07, 0.03, 0.08), mBlack, 0, -0.28, -0.01);
         addMeshPart(gunGroup, new THREE.BoxGeometry(0.06, 0.06, 0.04), mDark, 0, 0.09, 0.18);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.008, 0.04, 0.014), mSight, 0, 0.09, -0.38);
-        addMeshPart(gunGroup, new THREE.SphereGeometry(0.004, 6, 6), mDot, 0, 0.108, -0.38);
 
         gunGroup.position.set(0.25, -0.22, -0.80);
         adsOffset.set(-0.25, 0.10, 0.28);
@@ -6951,8 +7007,6 @@
         addMeshPart(gunGroup, new THREE.BoxGeometry(0.14, 0.14, 0.24), mWoodD, 0, 0, 0.48);
         addMeshPart(gunGroup, new THREE.BoxGeometry(0.12, 0.08, 0.12), mWoodD, 0, -0.06, 0.38);
         addMeshPart(gunGroup, new THREE.BoxGeometry(0.08, 0.03, 0.04), mBlack, 0, -0.06, 0.14);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.055, 0.035, 0.018), mSight, 0, 0.085, 0.18);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.025, 0.06, 0.018), mSight, 0, 0.095, -0.34);
 
         gunGroup.position.set(0.23, -0.20, -0.82);
         adsOffset.set(-0.175, 0.105, 0.24);
@@ -6966,8 +7020,6 @@
         addMeshPart(gunGroup, new THREE.BoxGeometry(0.07, 0.18, 0.09), mDark, 0, -0.15, 0.10);
         addMeshPart(gunGroup, new THREE.BoxGeometry(0.06, 0.22, 0.08), mBlack, 0, -0.11, -0.02);
         addMeshPart(gunGroup, new THREE.BoxGeometry(0.05, 0.03, 0.06), mBlack, 0, -0.22, -0.03);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.018, 0.04, 0.018), mSight, 0, 0.075, -0.28);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.04, 0.018, 0.018), mSight, 0, 0.065, 0.14);
 
         gunGroup.position.set(0.24, -0.22, -0.76);
         adsOffset.set(-0.22, 0.085, 0.24);
@@ -7097,6 +7149,10 @@
         !chatOpen &&
         !settingsModalOpen
       ) {
+        if (CURRENT_MAP === "crossfire_grid") {
+          e.preventDefault();
+          return;
+        }
         applyFlashlightZoomProfile(flashlightZoomIndex + 1);
         playFlashlightToggleSound();
         e.preventDefault();
@@ -8836,6 +8892,7 @@
       menuEl.style.display = "none";
       document.body.classList.add("in-game");
       stopMenuBackdropLoop();
+      /** Menu BGM (`menu.mp3`) pauses during gameplay so SFX read clearly — not deleted. Ship `menu.mp3` beside index.html or menu stays silent (404). */
       pauseMenuBgm();
 
       clearMap();
