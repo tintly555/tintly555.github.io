@@ -190,7 +190,14 @@
       z-index: 1;
       width: 100vw;
       height: 100vh;
+      min-height: 100dvh;
       cursor: none;
+    }
+
+    #app canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
     }
 
     /* Restore OS cursor when pointer lock is released (death screen, menu). */
@@ -905,7 +912,7 @@
     <div id="fpsValue">— FPS</div>
     <div id="fpsChatHint" style="opacity:0.72;font-size:11px;margin-top:3px;letter-spacing:0.02em;" data-i18n="hudHelpChat">Press T to chat</div>
     <div id="fpsHintFlash" style="opacity:0.72;font-size:11px;margin-top:3px;letter-spacing:0.02em;" data-i18n="hudHelpLight">Press L to toggle light &amp; flashlight</div>
-    <div id="fpsHintZoom" style="opacity:0.72;font-size:11px;margin-top:3px;letter-spacing:0.02em;" data-i18n="hudHelpZoom">Press Z to zoom flashlight</div>
+    <div id="fpsHintZoom" style="opacity:0.72;font-size:11px;margin-top:3px;letter-spacing:0.02em;" data-i18n="hudHelpZoom">Press Z to cycle flashlight beam (small / medium / wide)</div>
   </div>
   <div class="hint" id="hint" data-i18n="hintClick">Click anywhere</div>
   <div class="flash" id="flash"></div>
@@ -1210,7 +1217,7 @@
         pvpMapBack: "← BACK",
         hudHelpChat: "Press T to chat",
         hudHelpLight: "Press L to toggle light & flashlight",
-        hudHelpZoom: "Press Z to zoom flashlight",
+        hudHelpZoom: "Press Z to cycle flashlight beam (small / medium / wide)",
         hudGameTitleLine: "Zone No Light",
         combatHit: "HIT",
         combatKill: "KILL!",
@@ -1248,7 +1255,7 @@
         pvpMapBack: "← 返回",
         hudHelpChat: "按 T 打开聊天",
         hudHelpLight: "按 L 开关灯光与手电",
-        hudHelpZoom: "按 Z 调整手电变焦",
+        hudHelpZoom: "按 Z 切换手电光斑：小 / 中 / 大",
         hudGameTitleLine: "无光之境",
         combatHit: "命中",
         combatKill: "击杀",
@@ -4002,11 +4009,12 @@
     const FLASH_INNER_ANGLE = Math.PI / 16;
     const FLASH_INNER_PEN = 0.08;
 
-    /** Hold Z (KeyZ): tighter cones / penumbra — HUD “flashlight zoom”. */
-    const FLASH_ZOOM_OUTER_ANGLE = Math.PI / 10;
-    const FLASH_ZOOM_INNER_ANGLE = Math.PI / 26;
-    const FLASH_ZOOM_OUTER_PEN = 0.20;
-    const FLASH_ZOOM_INNER_PEN = 0.045;
+    /** Z cycles 小→中→大 (narrow beam / default / wide flood). Index 1 matches FLASH_OUTER_* defaults. */
+    const FLASH_BEAM_LEVELS = [
+      { outerA: Math.PI / 10, innerA: Math.PI / 26, outerP: 0.2, innerP: 0.045 },
+      { outerA: FLASH_OUTER_ANGLE, innerA: FLASH_INNER_ANGLE, outerP: FLASH_OUTER_PEN, innerP: FLASH_INNER_PEN },
+      { outerA: Math.PI / 4.0, innerA: Math.PI / 11, outerP: 0.48, innerP: 0.16 },
+    ];
 
     /**
      * Punctual lights only (Point / Spot). Hemisphere & directional lights have no decay in Three.js.
@@ -4932,6 +4940,19 @@
             (de && de.clientHeight) ||
             1
         );
+        /** Cold layout / docked DevTools: inner* can lie; outer + avail screen recover sane pixels without standalone resize. */
+        if (w < 200 || h < 200) {
+          try {
+            const ow = window.outerWidth || 0;
+            const oh = window.outerHeight || 0;
+            const sw = window.screen && window.screen.availWidth ? window.screen.availWidth : 0;
+            const sh = window.screen && window.screen.availHeight ? window.screen.availHeight : 0;
+            if (ow >= 2) w = Math.max(w, ow);
+            if (oh >= 2) h = Math.max(h, oh);
+            if (sw >= 2) w = Math.max(w, sw);
+            if (sh >= 2) h = Math.max(h, sh);
+          } catch (_) {}
+        }
         if (!Number.isFinite(w) || !Number.isFinite(h)) {
           w = 800;
           h = 600;
@@ -5178,8 +5199,14 @@
         camera.updateProjectionMatrix();
         renderer.setPixelRatio(getPixelRatioForQuality());
         renderer.setSize(w, h, true);
+        try {
+          renderer.domElement.style.display = "block";
+        } catch (_) {}
       } catch (_) {}
     }
+
+    /** First frames after load / tab focus: keep syncing until layout stabilizes (mitigates black GL canvas until manual resize). */
+    let _rendererSyncWarmupFrames = 0;
 
     applyGraphicsQuality();
     requestAnimationFrame(() => {
@@ -6722,7 +6749,7 @@
       onGround: true
     };
 
-    const keys = { w:false, a:false, s:false, d:false, space:false, shift:false, flashlightZoom:false };
+    const keys = { w:false, a:false, s:false, d:false, space:false, shift:false };
     const state = {
       locked: false,
       mouseDown: false,
@@ -6881,7 +6908,7 @@
         ${roomLine}
         ${tr("hudGameTitleLine", "Zone No Light")}<br>
         WASD move | Space jump | R reload<br>
-        Mouse aim | RMB zoom | L flashlight | Z flashlight zoom<br>
+        Mouse aim | RMB zoom | L flashlight | Z beam small/med/wide<br>
         Weapons: 1 2 3 4 | <b>5</b> Med Kit (hold M1 to heal 10s)<br>
         Map: ${mapLabel}${MULTIPLAYER ? " (MP)" : ""}<br>
         Weapon: ${w.name}<br>
@@ -7804,7 +7831,8 @@
 
     /** User toggle (L key); actual visibility also depends on menu / death / loading. */
     let playerLightsPreference = true;
-    let flashlightZoomBlend = 0;
+    /** 0=小 1=中 2=大 — toggled with Z (cycles). */
+    let flashlightBeamLevel = 1;
 
     function refreshLocalPlayerLightsForCurrentState() {
       if (!gameWorldReady || menuEl.style.display !== "none") {
@@ -8078,7 +8106,8 @@
           e.preventDefault();
           return;
         }
-        keys.flashlightZoom = true;
+        if (e.repeat) return;
+        flashlightBeamLevel = (flashlightBeamLevel + 1) % 3;
         e.preventDefault();
         return;
       }
@@ -8111,7 +8140,6 @@
       if (k === "d") keys.d = false;
       if (k === " ") keys.space = false;
       if (k === "shift") keys.shift = false;
-      if (k === "z" || e.code === "KeyZ") keys.flashlightZoom = false;
     });
 
     renderer.domElement.addEventListener("mousedown", (e) => {
@@ -8160,7 +8188,6 @@
         keys.d = false;
         keys.space = false;
         keys.shift = false;
-        keys.flashlightZoom = false;
         state.mouseDown = false;
         state.ads = false;
         if (started && player.health > 0 && menuEl.style.display === "none" && !chatOpen && !settingsModalOpen && gameWorldReady) {
@@ -8179,7 +8206,6 @@
       keys.d = false;
       keys.space = false;
       keys.shift = false;
-      keys.flashlightZoom = false;
       state.mouseDown = false;
       state.ads = false;
     });
@@ -8912,7 +8938,6 @@
       keys.d = false;
       keys.space = false;
       keys.shift = false;
-      keys.flashlightZoom = false;
       pauseOverlay.style.display = "flex";
       btnPauseRestart.style.display = isPvpCrossfireMap(CURRENT_MAP) ? "none" : "";
       crosshairEl.classList.add("hidden");
@@ -9546,22 +9571,18 @@
       const dt = Math.min(clock.getDelta(), 0.033);
       if (document.visibilityState === "hidden") return;
 
+      if (_rendererSyncWarmupFrames > 0) {
+        _rendererSyncWarmupFrames--;
+        syncGameRendererSize();
+      }
+
       {
-        const wantFlashZoom =
-          keys.flashlightZoom &&
-          started &&
-          gameWorldReady &&
-          menuEl.style.display === "none" &&
-          player.health > 0 &&
-          CURRENT_MAP !== "crossfire_grid" &&
-          playerLightsPreference &&
-          flashOuterLocal.visible;
-        flashlightZoomBlend = dampScalar(flashlightZoomBlend, wantFlashZoom ? 1 : 0, dt, 22);
-        const zb = flashlightZoomBlend;
-        flashOuterLocal.angle = THREE.MathUtils.lerp(FLASH_OUTER_ANGLE, FLASH_ZOOM_OUTER_ANGLE, zb);
-        flashInnerLocal.angle = THREE.MathUtils.lerp(FLASH_INNER_ANGLE, FLASH_ZOOM_INNER_ANGLE, zb);
-        flashOuterLocal.penumbra = THREE.MathUtils.lerp(FLASH_OUTER_PEN, FLASH_ZOOM_OUTER_PEN, zb);
-        flashInnerLocal.penumbra = THREE.MathUtils.lerp(FLASH_INNER_PEN, FLASH_ZOOM_INNER_PEN, zb);
+        const tgt = FLASH_BEAM_LEVELS[flashlightBeamLevel] || FLASH_BEAM_LEVELS[1];
+        const lam = 17;
+        flashOuterLocal.angle = dampScalar(flashOuterLocal.angle, tgt.outerA, dt, lam);
+        flashInnerLocal.angle = dampScalar(flashInnerLocal.angle, tgt.innerA, dt, lam);
+        flashOuterLocal.penumbra = dampScalar(flashOuterLocal.penumbra, tgt.outerP, dt, lam);
+        flashInnerLocal.penumbra = dampScalar(flashInnerLocal.penumbra, tgt.innerP, dt, lam);
       }
 
       if (MULTIPLAYER) {
@@ -10251,6 +10272,11 @@
     window.addEventListener("resize", () => {
       syncGameRendererSize();
     });
+    document.addEventListener("fullscreenchange", () => {
+      _rendererSyncWarmupFrames = Math.max(_rendererSyncWarmupFrames, 120);
+      syncGameRendererSize();
+      requestAnimationFrame(() => syncGameRendererSize());
+    });
     window.addEventListener("orientationchange", () => {
       const bump = () => {
         syncGameRendererSize();
@@ -10264,6 +10290,7 @@
       setTimeout(bump, 280);
     });
     window.addEventListener("load", () => {
+      _rendererSyncWarmupFrames = Math.max(_rendererSyncWarmupFrames, 200);
       syncGameRendererSize();
       requestAnimationFrame(() => syncGameRendererSize());
       try {
@@ -10279,6 +10306,7 @@
       );
     });
     window.addEventListener("pageshow", () => {
+      _rendererSyncWarmupFrames = Math.max(_rendererSyncWarmupFrames, 160);
       syncGameRendererSize();
       requestAnimationFrame(() => syncGameRendererSize());
       try {
@@ -10287,6 +10315,7 @@
     });
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "visible") {
+        _rendererSyncWarmupFrames = Math.max(_rendererSyncWarmupFrames, 120);
         syncGameRendererSize();
         requestAnimationFrame(() => syncGameRendererSize());
         try {
@@ -10314,6 +10343,7 @@
     } catch (_) {}
     try {
       renderer.domElement.addEventListener("webglcontextrestored", () => {
+        _rendererSyncWarmupFrames = Math.max(_rendererSyncWarmupFrames, 160);
         syncGameRendererSize();
         requestAnimationFrame(() => syncGameRendererSize());
       });
