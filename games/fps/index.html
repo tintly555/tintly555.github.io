@@ -7448,6 +7448,8 @@
 
     function wireMenuBgmThroughAnalyser() {
       if (!menuBgmAudio || menuBgmMediaSrc) return;
+      /** If AudioContext is still suspended (before first interaction), routing here zeros element volume → silence until resume. Guns work because each shot calls resume(). */
+      if (audioCtx.state !== "running") return;
       try {
         menuBgmMediaSrc = audioCtx.createMediaElementSource(menuBgmAudio);
         menuBgmAnalyser = audioCtx.createAnalyser();
@@ -7503,12 +7505,47 @@
       tail.push("menu.mp3");
       return [...new Set([...same, ...other, ...tail])];
     }
+
+    /** True while the main-menu layer is up (CSS or inline). */
+    function isMainMenuLayerVisible() {
+      try {
+        if (!menuEl) return false;
+        if (menuEl.style.display === "none") return false;
+        return window.getComputedStyle(menuEl).display !== "none";
+      } catch (_) {
+        return menuEl && menuEl.style.display !== "none";
+      }
+    }
+
+    function syncMenuBgmRoutingAndVolumes() {
+      if (!menuBgmAudio) return;
+      wireMenuBgmThroughAnalyser();
+      if (!menuBgmMenuGain) {
+        menuBgmAudio.volume = THREE.MathUtils.clamp(
+          gameSettings.masterVolume * gameSettings.musicVolume,
+          0,
+          1
+        );
+      } else {
+        applyAudioVolumes();
+      }
+    }
+
+    function tryStartMenuBgmPlayback() {
+      if (!menuBgmAudio || !isMainMenuLayerVisible()) return;
+      if (audioCtx.state === "suspended") void audioCtx.resume().catch(() => {});
+      syncMenuBgmRoutingAndVolumes();
+      const p = menuBgmAudio.play();
+      if (p && typeof p.catch === "function") p.catch(() => {});
+    }
+
     function ensureMenuBgmAudio() {
       if (menuBgmAudio) return;
       const urls = getMenuBgmUrlCandidates();
       menuBgmAudio = new Audio();
       menuBgmAudio.loop = true;
       menuBgmAudio.preload = "auto";
+      menuBgmAudio.setAttribute("playsinline", "");
       let urlIdx = 0;
       function applySrcAt(idx) {
         if (idx >= urls.length) return;
@@ -7525,17 +7562,14 @@
           menuBgmAudio.load();
         } catch (_) {}
       }
+      /** Previously only wired routing here — never called play(), so menu stayed silent until accidental timing. Restore “start when buffered” + entry retries. */
+      menuBgmAudio.addEventListener("canplaythrough", () => {
+        syncMenuBgmRoutingAndVolumes();
+        tryStartMenuBgmPlayback();
+      });
       menuBgmAudio.addEventListener("canplay", () => {
-        wireMenuBgmThroughAnalyser();
-        if (!menuBgmMenuGain) {
-          menuBgmAudio.volume = THREE.MathUtils.clamp(
-            gameSettings.masterVolume * gameSettings.musicVolume,
-            0,
-            1
-          );
-        } else {
-          applyAudioVolumes();
-        }
+        syncMenuBgmRoutingAndVolumes();
+        tryStartMenuBgmPlayback();
       });
       menuBgmAudio.addEventListener("error", () => {
         urlIdx++;
@@ -7549,40 +7583,65 @@
         menuBgmAudio.pause();
       } catch (_) {}
     }
-    /** Browser autoplay policy: start only after a user gesture; safe to call repeatedly. */
+
+    /** Safe to spam: starts decode early, resumes after policy blocks. First load + user gesture retry. */
     function tryPlayMenuBgm() {
-      if (menuEl.style.display === "none") return;
+      if (!isMainMenuLayerVisible()) return;
       ensureMenuBgmAudio();
-      wireMenuBgmThroughAnalyser();
-      if (!menuBgmMenuGain) {
-        menuBgmAudio.volume = THREE.MathUtils.clamp(
-          gameSettings.masterVolume * gameSettings.musicVolume,
-          0,
-          1
-        );
-      } else {
-        applyAudioVolumes();
+      if (menuBgmAudio.readyState >= 2) {
+        tryStartMenuBgmPlayback();
       }
-      const doPlay = () => {
-        if (!menuBgmAudio || menuEl.style.display === "none") return;
-        const p = menuBgmAudio.play();
-        if (p && typeof p.catch === "function") p.catch(() => {});
-      };
-      if (menuBgmAudio.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) doPlay();
-      else menuBgmAudio.addEventListener("canplay", doPlay, { once: true });
+      /** Older WebKit fires canplay sporadically; handler on element covers late readiness. */
     }
+
     function onMenuBgmUserGesture() {
-      /** play() must run in the same synchronous gesture turn (esp. iOS Safari); await resume() breaks that chain. */
-      try {
-        tryPlayMenuBgm();
-      } catch (_) {}
+      /** Resume Web Audio first (same as gun path), then menu BGM can wire to audioMaster when running. */
       try {
         void audioCtx.resume();
+      } catch (_) {}
+      try {
+        tryPlayMenuBgm();
       } catch (_) {}
     }
     ["pointerdown", "keydown", "touchstart"].forEach((ev) => {
       window.addEventListener(ev, onMenuBgmUserGesture, { capture: true });
     });
+
+    /** Enter page → load menu.mp3 ASAP and autoplay whenever the browser allows (plus timed retries after decode). */
+    function scheduleMenuBgmEntryAutoplay() {
+      try {
+        ensureMenuBgmAudio();
+      } catch (_) {}
+      try {
+        tryPlayMenuBgm();
+      } catch (_) {}
+      const bumps = [0, 50, 200, 500, 1200];
+      bumps.forEach((ms) =>
+        window.setTimeout(() => {
+          try {
+            tryPlayMenuBgm();
+          } catch (_) {}
+        }, ms)
+      );
+    }
+    scheduleMenuBgmEntryAutoplay();
+    window.addEventListener("pageshow", () => {
+      if (!isMainMenuLayerVisible()) return;
+      try {
+        tryPlayMenuBgm();
+      } catch (_) {}
+    });
+
+    audioCtx.onstatechange = () => {
+      if (audioCtx.state !== "running") return;
+      try {
+        if (!menuBgmAudio || !isMainMenuLayerVisible()) return;
+        syncMenuBgmRoutingAndVolumes();
+        try {
+          void menuBgmAudio.play().catch(() => {});
+        } catch (_) {}
+      } catch (_) {}
+    };
 
     let ambientWindNode = null;
     function ensureAmbientWindLoop() {
