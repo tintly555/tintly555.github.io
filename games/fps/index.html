@@ -4002,6 +4002,12 @@
     const FLASH_INNER_ANGLE = Math.PI / 16;
     const FLASH_INNER_PEN = 0.08;
 
+    /** Hold Z (KeyZ): tighter cones / penumbra — HUD “flashlight zoom”. */
+    const FLASH_ZOOM_OUTER_ANGLE = Math.PI / 10;
+    const FLASH_ZOOM_INNER_ANGLE = Math.PI / 26;
+    const FLASH_ZOOM_OUTER_PEN = 0.20;
+    const FLASH_ZOOM_INNER_PEN = 0.045;
+
     /**
      * Punctual lights only (Point / Spot). Hemisphere & directional lights have no decay in Three.js.
      * https://threejs.org/docs/#api/en/lights/PointLight
@@ -4311,6 +4317,7 @@
       state.flashTimer = 0.14;
       addHitIndicator(data.x || 0, data.z || 0);
       triggerCamShake(0.085);
+      playReceivedDamageSound(data.hitKind === "melee" ? "melee" : "bullet");
       updateHud();
       if (player.health <= 0) {
         showDeathScreen(null);
@@ -5142,6 +5149,23 @@
         const vp = getSafeViewportSize();
         let w = Math.floor(vp.w);
         let h = Math.floor(vp.h);
+        try {
+          const appEl = document.getElementById("app");
+          if (appEl) {
+            const br = appEl.getBoundingClientRect();
+            if (br.width >= 2 && br.height >= 2) {
+              w = Math.max(w, Math.floor(br.width));
+              h = Math.max(h, Math.floor(br.height));
+            }
+          }
+          if (renderer && renderer.domElement) {
+            const dr = renderer.domElement.getBoundingClientRect();
+            if (dr.width >= 2 && dr.height >= 2) {
+              w = Math.max(w, Math.floor(dr.width));
+              h = Math.max(h, Math.floor(dr.height));
+            }
+          }
+        } catch (_) {}
         if (!Number.isFinite(w) || !Number.isFinite(h)) {
           w = 800;
           h = 600;
@@ -5153,7 +5177,7 @@
         camera.aspect = aspect;
         camera.updateProjectionMatrix();
         renderer.setPixelRatio(getPixelRatioForQuality());
-        renderer.setSize(w, h);
+        renderer.setSize(w, h, true);
       } catch (_) {}
     }
 
@@ -6698,7 +6722,7 @@
       onGround: true
     };
 
-    const keys = { w:false, a:false, s:false, d:false, space:false, shift:false };
+    const keys = { w:false, a:false, s:false, d:false, space:false, shift:false, flashlightZoom:false };
     const state = {
       locked: false,
       mouseDown: false,
@@ -7513,6 +7537,64 @@
       });
     }
 
+    /** Local player hurt: bullet (PvP / default MP) vs melee (zombie). Uses Web Audio only. */
+    function playReceivedDamageSound(kind) {
+      if (audioCtx.state === "suspended") void audioCtx.resume();
+      const melee = kind === "melee";
+      const now = audioCtx.currentTime;
+      const buf = getGunNoiseBuffer(melee ? 0.15 : 0.085);
+      const src = audioCtx.createBufferSource();
+      src.buffer = buf;
+      const bp = audioCtx.createBiquadFilter();
+      bp.type = melee ? "lowpass" : "bandpass";
+      bp.frequency.setValueAtTime(melee ? 680 : 3100, now);
+      if (!melee) bp.Q.setValueAtTime(0.82, now);
+      const ng = audioCtx.createGain();
+      ng.gain.setValueAtTime(0.0001, now);
+      ng.gain.exponentialRampToValueAtTime(melee ? 0.38 : 0.34, now + 0.014);
+      ng.gain.exponentialRampToValueAtTime(0.0001, now + (melee ? 0.17 : 0.095));
+      src.connect(bp);
+      bp.connect(ng);
+      ng.connect(audioSfx);
+      src.start(now);
+      src.stop(now + 0.22);
+      if (melee) {
+        const o = audioCtx.createOscillator();
+        o.type = "triangle";
+        o.frequency.setValueAtTime(88, now);
+        o.frequency.exponentialRampToValueAtTime(48, now + 0.13);
+        const og = audioCtx.createGain();
+        og.gain.setValueAtTime(0.0001, now);
+        og.gain.exponentialRampToValueAtTime(0.09, now + 0.022);
+        og.gain.exponentialRampToValueAtTime(0.0001, now + 0.15);
+        const lp = audioCtx.createBiquadFilter();
+        lp.type = "lowpass";
+        lp.frequency.value = 420;
+        o.connect(lp);
+        lp.connect(og);
+        og.connect(audioSfx);
+        o.start(now);
+        o.stop(now + 0.16);
+      } else {
+        const o = audioCtx.createOscillator();
+        o.type = "square";
+        o.frequency.setValueAtTime(2200, now);
+        o.frequency.exponentialRampToValueAtTime(760, now + 0.048);
+        const og = audioCtx.createGain();
+        og.gain.setValueAtTime(0.0001, now);
+        og.gain.exponentialRampToValueAtTime(0.048, now + 0.006);
+        og.gain.exponentialRampToValueAtTime(0.0001, now + 0.072);
+        const hp = audioCtx.createBiquadFilter();
+        hp.type = "highpass";
+        hp.frequency.value = 620;
+        o.connect(hp);
+        hp.connect(og);
+        og.connect(audioSfx);
+        o.start(now);
+        o.stop(now + 0.085);
+      }
+    }
+
     function triggerCamShake(add = 0.09) {
       const s = getQualityPresentationScale();
       if (s <= 0) return;
@@ -7722,6 +7804,7 @@
 
     /** User toggle (L key); actual visibility also depends on menu / death / loading. */
     let playerLightsPreference = true;
+    let flashlightZoomBlend = 0;
 
     function refreshLocalPlayerLightsForCurrentState() {
       if (!gameWorldReady || menuEl.style.display !== "none") {
@@ -7983,6 +8066,22 @@
         e.preventDefault();
         return;
       }
+      if (
+        (k === "z" || e.code === "KeyZ") &&
+        started &&
+        gameWorldReady &&
+        menuEl.style.display === "none" &&
+        !chatOpen &&
+        !settingsModalOpen
+      ) {
+        if (CURRENT_MAP === "crossfire_grid") {
+          e.preventDefault();
+          return;
+        }
+        keys.flashlightZoom = true;
+        e.preventDefault();
+        return;
+      }
       if (k === "t" && started && !paused && player.health > 0) {
         e.preventDefault();
         document.exitPointerLock();
@@ -8012,6 +8111,7 @@
       if (k === "d") keys.d = false;
       if (k === " ") keys.space = false;
       if (k === "shift") keys.shift = false;
+      if (k === "z" || e.code === "KeyZ") keys.flashlightZoom = false;
     });
 
     renderer.domElement.addEventListener("mousedown", (e) => {
@@ -8060,6 +8160,7 @@
         keys.d = false;
         keys.space = false;
         keys.shift = false;
+        keys.flashlightZoom = false;
         state.mouseDown = false;
         state.ads = false;
         if (started && player.health > 0 && menuEl.style.display === "none" && !chatOpen && !settingsModalOpen && gameWorldReady) {
@@ -8078,6 +8179,7 @@
       keys.d = false;
       keys.space = false;
       keys.shift = false;
+      keys.flashlightZoom = false;
       state.mouseDown = false;
       state.ads = false;
     });
@@ -8396,7 +8498,13 @@
           emitShootNetwork(muzzleStart, bp, w.color, "blood");
           triggerHitFeedback(false);
           const dmg = w.damageBody;
-          socket.emit("hit", { target: bestRpId, damage: dmg, x: player.position.x, z: player.position.z });
+          socket.emit("hit", {
+            target: bestRpId,
+            damage: dmg,
+            x: player.position.x,
+            z: player.position.z,
+            hitKind: "bullet",
+          });
         } else if (wallHit) {
           const wp = wallHit.point.clone();
           const normal = wallHit.face.normal.clone().transformDirection(wallHit.object.matrixWorld);
@@ -8769,6 +8877,7 @@
       player.regenTimer = 0;
       state.flashTimer = 0.14;
       triggerCamShake(0.095);
+      playReceivedDamageSound("melee");
       if (attacker && attacker.group) {
         addHitIndicator(attacker.group.position.x, attacker.group.position.z);
       }
@@ -8786,6 +8895,7 @@
           damage: enemy.attackDamage,
           x: enemy.group.position.x,
           z: enemy.group.position.z,
+          hitKind: "melee",
         });
       } else {
         damagePlayer(enemy.attackDamage, enemy);
@@ -8802,6 +8912,7 @@
       keys.d = false;
       keys.space = false;
       keys.shift = false;
+      keys.flashlightZoom = false;
       pauseOverlay.style.display = "flex";
       btnPauseRestart.style.display = isPvpCrossfireMap(CURRENT_MAP) ? "none" : "";
       crosshairEl.classList.add("hidden");
@@ -9434,6 +9545,24 @@
       requestAnimationFrame(animate);
       const dt = Math.min(clock.getDelta(), 0.033);
       if (document.visibilityState === "hidden") return;
+
+      {
+        const wantFlashZoom =
+          keys.flashlightZoom &&
+          started &&
+          gameWorldReady &&
+          menuEl.style.display === "none" &&
+          player.health > 0 &&
+          CURRENT_MAP !== "crossfire_grid" &&
+          playerLightsPreference &&
+          flashOuterLocal.visible;
+        flashlightZoomBlend = dampScalar(flashlightZoomBlend, wantFlashZoom ? 1 : 0, dt, 22);
+        const zb = flashlightZoomBlend;
+        flashOuterLocal.angle = THREE.MathUtils.lerp(FLASH_OUTER_ANGLE, FLASH_ZOOM_OUTER_ANGLE, zb);
+        flashInnerLocal.angle = THREE.MathUtils.lerp(FLASH_INNER_ANGLE, FLASH_ZOOM_INNER_ANGLE, zb);
+        flashOuterLocal.penumbra = THREE.MathUtils.lerp(FLASH_OUTER_PEN, FLASH_ZOOM_OUTER_PEN, zb);
+        flashInnerLocal.penumbra = THREE.MathUtils.lerp(FLASH_INNER_PEN, FLASH_ZOOM_INNER_PEN, zb);
+      }
 
       if (MULTIPLAYER) {
         const k = 1 - Math.exp(-17 * dt);
@@ -10122,6 +10251,18 @@
     window.addEventListener("resize", () => {
       syncGameRendererSize();
     });
+    window.addEventListener("orientationchange", () => {
+      const bump = () => {
+        syncGameRendererSize();
+        try {
+          resizeMenuWallBackdrop();
+        } catch (_) {}
+      };
+      bump();
+      requestAnimationFrame(bump);
+      setTimeout(bump, 80);
+      setTimeout(bump, 280);
+    });
     window.addEventListener("load", () => {
       syncGameRendererSize();
       requestAnimationFrame(() => syncGameRendererSize());
@@ -10170,6 +10311,12 @@
         if (app) ro.observe(app);
         if (document.documentElement) ro.observe(document.documentElement);
       }
+    } catch (_) {}
+    try {
+      renderer.domElement.addEventListener("webglcontextrestored", () => {
+        syncGameRendererSize();
+        requestAnimationFrame(() => syncGameRendererSize());
+      });
     } catch (_) {}
   </script>
 </body>
