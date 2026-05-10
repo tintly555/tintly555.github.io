@@ -7468,22 +7468,40 @@
       }
     }
 
-    /** Every candidate base may host menu.mp3; the old code returned only the first URL so a bad first guess meant silence. */
+    /** Every candidate base may host menu.mp3. Same-origin URLs first (GitHub folder copy); cross-origin last. */
     function getMenuBgmUrlCandidates() {
-      const urls = [];
+      const here = (() => {
+        try {
+          return window.location.origin;
+        } catch (_) {
+          return "";
+        }
+      })();
+      const fromBase = [];
       for (const base of getGameAssetBaseCandidates()) {
         try {
-          urls.push(new URL("menu.mp3", normalizeGameAssetBase(base)).href);
+          fromBase.push(new URL("menu.mp3", normalizeGameAssetBase(base)).href);
         } catch (_) {}
       }
+      const same = [];
+      const other = [];
+      for (const u of fromBase) {
+        try {
+          if (here && new URL(u).origin === here) same.push(u);
+          else other.push(u);
+        } catch (_) {
+          other.push(u);
+        }
+      }
+      const tail = [];
       try {
-        urls.push(new URL("menu.mp3", pageDirFromLocation()).href);
+        tail.push(new URL("menu.mp3", pageDirFromLocation()).href);
       } catch (_) {}
       try {
-        urls.push(new URL("menu.mp3", window.location.href).href);
+        tail.push(new URL("menu.mp3", window.location.href).href);
       } catch (_) {}
-      urls.push("menu.mp3");
-      return [...new Set(urls)];
+      tail.push("menu.mp3");
+      return [...new Set([...same, ...other, ...tail])];
     }
     function ensureMenuBgmAudio() {
       if (menuBgmAudio) return;
@@ -7545,18 +7563,22 @@
       } else {
         applyAudioVolumes();
       }
-      const p = menuBgmAudio.play();
-      if (p && typeof p.catch === "function") p.catch(() => {});
+      const doPlay = () => {
+        if (!menuBgmAudio || menuEl.style.display === "none") return;
+        const p = menuBgmAudio.play();
+        if (p && typeof p.catch === "function") p.catch(() => {});
+      };
+      if (menuBgmAudio.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) doPlay();
+      else menuBgmAudio.addEventListener("canplay", doPlay, { once: true });
     }
     function onMenuBgmUserGesture() {
-      void (async () => {
-        try {
-          if (audioCtx.state === "suspended") {
-            await audioCtx.resume();
-          }
-        } catch (_) {}
+      /** play() must run in the same synchronous gesture turn (esp. iOS Safari); await resume() breaks that chain. */
+      try {
         tryPlayMenuBgm();
-      })();
+      } catch (_) {}
+      try {
+        void audioCtx.resume();
+      } catch (_) {}
     }
     ["pointerdown", "keydown", "touchstart"].forEach((ev) => {
       window.addEventListener(ev, onMenuBgmUserGesture, { capture: true });
@@ -8618,7 +8640,7 @@
         recoilMultiplier = shootingAds ? 0.90 : 1.0;
           
       } else if (state.weaponIndex === 3) {
-        spreadMultiplier = shootingAds ? 0.5 : 1.2;
+        spreadMultiplier = shootingAds ? 0.5 : 1.0;
         recoilMultiplier = 0.90;
       }
       state.recoil += w.recoil * recoilMultiplier;
@@ -8628,6 +8650,7 @@
       );
 
       const muzzleStart = new THREE.Vector3();
+      const eyeStart = camera.position.clone();
       const _wm = weaponModels[state.weaponIndex];
       const _muzzle = _wm.userData.muzzleNode;
       if (_muzzle) _muzzle.getWorldPosition(muzzleStart);
@@ -8683,7 +8706,7 @@
         if (closestDist === enemyDist && bestEnemy && bestEnemyHitT < Infinity) {
           const bp = _ehHitWorld.copy(ray.ray.origin).addScaledVector(ray.ray.direction, bestEnemyHitT);
           createBlood(bp);
-          createBulletTrail(muzzleStart.clone(), bp.clone(), w.color);
+          createBulletTrail(eyeStart.clone(), bp.clone(), w.color);
           emitShootNetwork(muzzleStart, bp, w.color, "blood");
           triggerHitFeedback(false);
 
@@ -8709,7 +8732,7 @@
         } else if (closestDist === rpDist && bestRpId && bestRpHit) {
           const bp = bestRpHit.point.clone();
           createBlood(bp);
-          createBulletTrail(muzzleStart.clone(), bp.clone(), w.color);
+          createBulletTrail(eyeStart.clone(), bp.clone(), w.color);
           emitShootNetwork(muzzleStart, bp, w.color, "blood");
           triggerHitFeedback(false);
           const dmg = w.damageBody;
@@ -8723,7 +8746,7 @@
         } else if (wallHit) {
           const wp = wallHit.point.clone();
           const normal = wallHit.face.normal.clone().transformDirection(wallHit.object.matrixWorld);
-          createBulletTrail(muzzleStart.clone(), wp.clone(), w.color);
+          createBulletTrail(eyeStart.clone(), wp.clone(), w.color);
           createSparks(wp.clone(), w.color);
           createBulletMark(wp.clone(), normal);
           emitShootNetwork(muzzleStart, wp, w.color, "spark", {
@@ -8732,8 +8755,8 @@
             nz: normal.z,
           });
         } else {
-          const missEnd = muzzleStart.clone().add(dir.clone().multiplyScalar(160));
-          createBulletTrail(muzzleStart.clone(), missEnd, w.color);
+          const missEnd = eyeStart.clone().add(dir.clone().multiplyScalar(160));
+          createBulletTrail(eyeStart.clone(), missEnd, w.color);
           emitShootNetwork(muzzleStart, missEnd, w.color, "miss");
         }
       }
@@ -8899,7 +8922,8 @@
         state.weaponBobRotZ + reloadRotZ
       );
 
-      const targetFov = usingAds ? 38 : 75;
+      const adsFov = Math.min(88, Math.max(28, weapon().adsFov ?? 55));
+      const targetFov = usingAds ? adsFov : 75;
       if (camera.fov !== targetFov) {
         camera.fov += (targetFov - camera.fov) * Math.min(1, dt * 10);
         camera.updateProjectionMatrix();
