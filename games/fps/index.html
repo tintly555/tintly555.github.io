@@ -8,6 +8,25 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script>
+    /** Menu wallpaper + button/settings PNG layouts (GitHub folder vs flat filenames). Probed at runtime; exposed for debugging. */
+    (function () {
+      try {
+        window.__FPS_UI_LAYER_PATHS__ = [
+          {
+            menuBg: "game-ui/game-ui-menu-background.png",
+            btnTex: "game-ui/game-ui-button-texture.png",
+            settingsBg: "game-ui/game-ui-settings-panel-bg.png",
+          },
+          {
+            menuBg: "background.png",
+            btnTex: "game-ui-button-texture.png",
+            settingsBg: "game-ui-settings-panel-bg.png",
+          },
+        ];
+      } catch (e) {}
+    })();
+  </script>
   <!-- Base URL = directory of this document (not the last "/" in "https://"). Required for game-ui/, walls.png, menu.mp3. -->
   <script>
     (function () {
@@ -135,17 +154,29 @@
           window.__GAME_STATIC_ROOT__ = R;
         } catch (e0) {}
         var el = document.documentElement;
+        var L0 =
+          (typeof window.__FPS_UI_LAYER_PATHS__ !== "undefined" &&
+            window.__FPS_UI_LAYER_PATHS__ &&
+            window.__FPS_UI_LAYER_PATHS__[0]) ||
+          null;
+        if (!L0) {
+          L0 = {
+            menuBg: "game-ui/game-ui-menu-background.png",
+            btnTex: "game-ui/game-ui-button-texture.png",
+            settingsBg: "game-ui/game-ui-settings-panel-bg.png",
+          };
+        }
         el.style.setProperty(
           "--game-ui-menu-bg",
-          'url("' + new URL("game-ui/game-ui-menu-background.png", R).href + '")'
+          'url("' + new URL(L0.menuBg, R).href + '")'
         );
         el.style.setProperty(
           "--game-ui-btn-texture",
-          'url("' + new URL("game-ui/game-ui-button-texture.png", R).href + '")'
+          'url("' + new URL(L0.btnTex, R).href + '")'
         );
         el.style.setProperty(
           "--game-ui-settings-bg",
-          'url("' + new URL("game-ui/game-ui-settings-panel-bg.png", R).href + '")'
+          'url("' + new URL(L0.settingsBg, R).href + '")'
         );
         try {
           var curMouse = new URL("mouse.png", R).href;
@@ -443,6 +474,24 @@
       box-sizing: border-box;
       padding: 28px 16px 22px;
       background: transparent;
+    }
+
+    /* Full-screen menu wallpaper (--game-ui-menu-bg is set from head + runtime probe). Was unset → wallpaper appeared “missing”. */
+    .menu::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      z-index: 0;
+      background-image: var(--game-ui-menu-bg);
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+      pointer-events: none;
+    }
+
+    .menu > * {
+      position: relative;
+      z-index: 1;
     }
 
     .menu h1 {
@@ -821,35 +870,62 @@
           } catch (e2) {}
         }
         bases.push("https://tintly555.github.io/games/fps/");
+        var LAYOUTS =
+          typeof window.__FPS_UI_LAYER_PATHS__ !== "undefined" &&
+          window.__FPS_UI_LAYER_PATHS__ &&
+          window.__FPS_UI_LAYER_PATHS__.length
+            ? window.__FPS_UI_LAYER_PATHS__
+            : [
+                {
+                  menuBg: "game-ui/game-ui-menu-background.png",
+                  btnTex: "game-ui/game-ui-button-texture.png",
+                  settingsBg: "game-ui/game-ui-settings-panel-bg.png",
+                },
+              ];
         var root = document.documentElement;
         var bi = 0;
-        function apply(base) {
+        var li = 0;
+        function apply(base, layout) {
           var b = normBase(base);
           root.style.setProperty(
             "--game-ui-menu-bg",
-            'url("' + new URL("game-ui/game-ui-menu-background.png", b).href + '")'
+            'url("' + new URL(layout.menuBg, b).href + '")'
           );
           root.style.setProperty(
             "--game-ui-btn-texture",
-            'url("' + new URL("game-ui/game-ui-button-texture.png", b).href + '")'
+            'url("' + new URL(layout.btnTex, b).href + '")'
           );
           root.style.setProperty(
             "--game-ui-settings-bg",
-            'url("' + new URL("game-ui/game-ui-settings-panel-bg.png", b).href + '")'
+            'url("' + new URL(layout.settingsBg, b).href + '")'
           );
         }
         function tryNext() {
           if (bi >= bases.length) return;
-          var base = bases[bi++];
+          if (li >= LAYOUTS.length) {
+            bi++;
+            li = 0;
+            tryNext();
+            return;
+          }
+          var base = bases[bi];
+          var layout = LAYOUTS[li];
           var img = new Image();
           img.onload = function () {
-            apply(base);
+            apply(base, layout);
           };
-          img.onerror = tryNext;
-          try {
-            img.src = new URL("game-ui/game-ui-menu-background.png", normBase(base)).href;
-          } catch (e3) {
+          img.onerror = function () {
+            li++;
+            if (li >= LAYOUTS.length) {
+              bi++;
+              li = 0;
+            }
             tryNext();
+          };
+          try {
+            img.src = new URL(layout.menuBg, normBase(base)).href;
+          } catch (e3) {
+            img.onerror();
           }
         }
         tryNext();
@@ -5588,41 +5664,73 @@
 
     initMenuWallBackdrop();
 
-    function applyResolvedGameAssetBase(base) {
+    const __GAME_UI_LAYOUTS__ =
+      (typeof window !== "undefined" && window.__FPS_UI_LAYER_PATHS__ && window.__FPS_UI_LAYER_PATHS__.length
+        ? window.__FPS_UI_LAYER_PATHS__
+        : [
+            {
+              menuBg: "game-ui/game-ui-menu-background.png",
+              btnTex: "game-ui/game-ui-button-texture.png",
+              settingsBg: "game-ui/game-ui-settings-panel-bg.png",
+            },
+          ]);
+
+    function applyResolvedGameAssetBase(base, layout) {
+      const L = layout || __GAME_UI_LAYOUTS__[0];
       const b = normalizeGameAssetBase(base);
       try {
         const root = document.documentElement;
         root.style.setProperty(
           "--game-ui-menu-bg",
-          `url("${new URL("game-ui/game-ui-menu-background.png", b).href}")`
+          `url("${new URL(L.menuBg, b).href}")`
         );
         root.style.setProperty(
           "--game-ui-btn-texture",
-          `url("${new URL("game-ui/game-ui-button-texture.png", b).href}")`
+          `url("${new URL(L.btnTex, b).href}")`
         );
         root.style.setProperty(
           "--game-ui-settings-bg",
-          `url("${new URL("game-ui/game-ui-settings-panel-bg.png", b).href}")`
+          `url("${new URL(L.settingsBg, b).href}")`
         );
       } catch (_) {}
     }
 
     function resolveGameUiLayersFromProbe() {
       const candidates = getGameAssetBaseCandidates();
-      let i = 0;
+      let bi = 0;
+      let li = 0;
       function tryNext() {
-        if (i >= candidates.length) return;
-        const base = normalizeGameAssetBase(candidates[i++]);
+        if (bi >= candidates.length) return;
+        if (li >= __GAME_UI_LAYOUTS__.length) {
+          bi++;
+          li = 0;
+          tryNext();
+          return;
+        }
+        const base = normalizeGameAssetBase(candidates[bi]);
+        const layout = __GAME_UI_LAYOUTS__[li];
         let testUrl;
         try {
-          testUrl = new URL("game-ui/game-ui-menu-background.png", base).href;
+          testUrl = new URL(layout.menuBg, base).href;
         } catch (_) {
+          li++;
+          if (li >= __GAME_UI_LAYOUTS__.length) {
+            bi++;
+            li = 0;
+          }
           tryNext();
           return;
         }
         const img = new Image();
-        img.onload = () => applyResolvedGameAssetBase(base);
-        img.onerror = () => tryNext();
+        img.onload = () => applyResolvedGameAssetBase(base, layout);
+        img.onerror = () => {
+          li++;
+          if (li >= __GAME_UI_LAYOUTS__.length) {
+            bi++;
+            li = 0;
+          }
+          tryNext();
+        };
         img.src = testUrl;
       }
       tryNext();
@@ -7360,40 +7468,62 @@
       }
     }
 
-    function getMenuBgmUrl() {
+    /** Every candidate base may host menu.mp3; the old code returned only the first URL so a bad first guess meant silence. */
+    function getMenuBgmUrlCandidates() {
+      const urls = [];
       for (const base of getGameAssetBaseCandidates()) {
         try {
-          return new URL("menu.mp3", normalizeGameAssetBase(base)).href;
+          urls.push(new URL("menu.mp3", normalizeGameAssetBase(base)).href);
         } catch (_) {}
       }
       try {
-        return new URL("menu.mp3", pageDirFromLocation()).href;
-      } catch (_) {
-        return "menu.mp3";
-      }
+        urls.push(new URL("menu.mp3", pageDirFromLocation()).href);
+      } catch (_) {}
+      try {
+        urls.push(new URL("menu.mp3", window.location.href).href);
+      } catch (_) {}
+      urls.push("menu.mp3");
+      return [...new Set(urls)];
     }
     function ensureMenuBgmAudio() {
       if (menuBgmAudio) return;
-      const bgmUrl = getMenuBgmUrl();
+      const urls = getMenuBgmUrlCandidates();
       menuBgmAudio = new Audio();
-      try {
-        if (new URL(bgmUrl).origin !== window.location.origin) {
-          menuBgmAudio.crossOrigin = "anonymous";
-        }
-      } catch (_) {}
-      menuBgmAudio.src = bgmUrl;
       menuBgmAudio.loop = true;
       menuBgmAudio.preload = "auto";
-      wireMenuBgmThroughAnalyser();
-      if (!menuBgmMenuGain) {
-        menuBgmAudio.volume = THREE.MathUtils.clamp(
-          gameSettings.masterVolume * gameSettings.musicVolume,
-          0,
-          1
-        );
-      } else {
-        applyAudioVolumes();
+      let urlIdx = 0;
+      function applySrcAt(idx) {
+        if (idx >= urls.length) return;
+        const u = urls[idx];
+        try {
+          if (new URL(u).origin !== window.location.origin) {
+            menuBgmAudio.crossOrigin = "anonymous";
+          } else {
+            menuBgmAudio.removeAttribute("crossOrigin");
+          }
+        } catch (_) {}
+        menuBgmAudio.src = u;
+        try {
+          menuBgmAudio.load();
+        } catch (_) {}
       }
+      menuBgmAudio.addEventListener("canplay", () => {
+        wireMenuBgmThroughAnalyser();
+        if (!menuBgmMenuGain) {
+          menuBgmAudio.volume = THREE.MathUtils.clamp(
+            gameSettings.masterVolume * gameSettings.musicVolume,
+            0,
+            1
+          );
+        } else {
+          applyAudioVolumes();
+        }
+      });
+      menuBgmAudio.addEventListener("error", () => {
+        urlIdx++;
+        if (urlIdx < urls.length) applySrcAt(urlIdx);
+      });
+      applySrcAt(0);
     }
     function pauseMenuBgm() {
       if (!menuBgmAudio) return;
@@ -9916,11 +10046,30 @@
       }
     }
 
+    async function preloadBootImageFirstAvailable(relCandidates) {
+      const list = Array.isArray(relCandidates) ? relCandidates : [relCandidates];
+      let lastErr = null;
+      for (const rel of list) {
+        const bases = getGameAssetBaseCandidates();
+        for (const b of bases) {
+          try {
+            const u = new URL(rel, normalizeGameAssetBase(b)).href;
+            await loadBootImage(u);
+            return;
+          } catch (e) {
+            lastErr = e;
+          }
+        }
+      }
+      if (lastErr) console.warn("[boot] missing image", list.join(" | "));
+    }
+
     async function preloadCriticalGameAssets() {
+      const L = __GAME_UI_LAYOUTS__;
       await Promise.all([
-        preloadBootImageRel("game-ui/game-ui-menu-background.png"),
-        preloadBootImageRel("game-ui/game-ui-button-texture.png"),
-        preloadBootImageRel("game-ui/game-ui-settings-panel-bg.png"),
+        preloadBootImageFirstAvailable(L.map((x) => x.menuBg)),
+        preloadBootImageFirstAvailable(L.map((x) => x.btnTex)),
+        preloadBootImageFirstAvailable(L.map((x) => x.settingsBg)),
       ]);
       await preloadWallTextureForBoot();
     }
