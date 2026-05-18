@@ -8418,39 +8418,13 @@
       root.userData.ejectNode = node;
     }
 
-    /** Per-weapon grip anchors on the view-model (local to gunGroup). */
-    /** Grip anchors sit on pistol grip / forestock — not on the bore (-Z) axis. */
+    /** Side-mounted grip stubs (±X). Thin in Z so blocks never sit on the bore axis. */
     const VIEW_HAND_GRIPS = {
-      0: {
-        r: [0.03, -0.12, 0.1],
-        rRot: [-1.48, -0.06, 0.36],
-        l: [0.01, -0.1, 0.02],
-        lRot: [-1.52, 0.18, -0.16],
-      },
-      1: {
-        r: [0.04, -0.11, 0.02],
-        rRot: [-1.5, -0.05, 0.34],
-        l: [0, -0.1, -0.02],
-        lRot: [-1.54, 0.16, -0.18],
-      },
-      2: {
-        r: [0.05, -0.08, 0.12],
-        rRot: [-1.46, -0.04, 0.3],
-        l: [0, -0.05, 0.02],
-        lRot: [-1.5, 0.12, -0.1],
-      },
-      3: {
-        r: [0.04, -0.11, 0.02],
-        rRot: [-1.5, -0.05, 0.34],
-        l: [0, -0.1, -0.01],
-        lRot: [-1.54, 0.16, -0.18],
-      },
-      5: {
-        r: [0.035, -0.1, 0.08],
-        rRot: [-1.48, -0.05, 0.32],
-        l: [-0.02, -0.1, 0.02],
-        lRot: [-1.52, 0.17, -0.2],
-      },
+      0: { r: [0.12, -0.14, 0.09], rRot: [0, 0, 0], l: [-0.11, -0.12, 0.04], lRot: [0, 0, 0] },
+      1: { r: [0.13, -0.12, 0.04], rRot: [0, 0, 0], l: [-0.12, -0.11, 0], lRot: [0, 0, 0] },
+      2: { r: [0.14, -0.1, 0.1], rRot: [0, 0, 0], l: [-0.12, -0.08, 0.04], lRot: [0, 0, 0] },
+      3: { r: [0.13, -0.12, 0.03], rRot: [0, 0, 0], l: [-0.12, -0.11, 0], lRot: [0, 0, 0] },
+      5: { r: [0.13, -0.11, 0.06], rRot: [0, 0, 0], l: [-0.12, -0.1, 0.02], lRot: [0, 0, 0] },
     };
 
     function attachViewHandGrips(gunGroup, root, spec) {
@@ -8472,36 +8446,19 @@
       root.userData.gripL = lGrip;
     }
 
+    /** One flat glove block per side — animation only, not a full hand mesh. */
     function makeViewHandMesh(side) {
-      const mSkin = new THREE.MeshStandardMaterial({
-        color: 0xc89d7c,
-        roughness: 0.72,
-        depthWrite: false,
-      });
-      const mGlove = new THREE.MeshStandardMaterial({
+      const mat = new THREE.MeshStandardMaterial({
         color: 0x3a3528,
-        roughness: 0.88,
+        roughness: 0.9,
         depthWrite: false,
       });
       const g = new THREE.Group();
-      g.rotation.order = "YXZ";
       g.name = side === "L" ? "viewHandL" : "viewHandR";
-      // View-model bore is -Z; palm on grip (Y), fingers wrap toward +Z (receiver), not down the barrel.
-      const sign = side === "L" ? 1 : -1;
-      g.rotation.set(-1.52, sign * 0.08, sign * 0.4);
-      const palm = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.14, 0.07), mGlove);
-      palm.position.set(sign * 0.02, -0.02, 0.02);
-      const knuckle = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.05, 0.06), mSkin);
-      knuckle.position.set(0, -0.06, 0.03);
-      const fingers = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.045, 0.07), mGlove);
-      fingers.position.set(0, -0.1, 0.06);
-      const thumb = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.06), mGlove);
-      thumb.position.set(sign * -0.07, -0.02, 0.04);
-      thumb.rotation.z = sign * 0.55;
-      for (const m of [palm, knuckle, fingers, thumb]) {
-        m.renderOrder = 26;
-        g.add(m);
-      }
+      const block = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.13, 0.034), mat);
+      block.position.set(0, -0.03, 0);
+      block.renderOrder = 26;
+      g.add(block);
       g.renderOrder = 25;
       return g;
     }
@@ -8525,8 +8482,8 @@
         const magHold = new THREE.Group();
         magHold.name = "handMagHold";
         magHold.visible = false;
-        magHold.position.set(0.02, -0.04, -0.06);
-        magHold.rotation.set(-0.35, 0.2, 0.15);
+        magHold.position.set(0, -0.1, 0);
+        magHold.rotation.set(0, 0, 0);
         lArm.add(magHold);
         root.userData.handMagHold = magHold;
       }
@@ -8583,27 +8540,9 @@
     function applyViewArmIdlePose(ud, wi) {
       if (wi === 4) return;
       resetViewArms(ud);
-      const bp = ud.armRBasePos;
-      const br = ud.armRBaseRot;
-      const lp = ud.armLBasePos;
-      const lr = ud.armLBaseRot;
-      if (!bp || !br) return;
-      if (wi === 0) {
-        setViewHandPose(ud.viewArmR, bp, br, 0, 0, 0, 0, 0, 0);
-        setViewHandPose(ud.viewArmL, lp, lr, 0, 0, 0, 0, 0, 0.06);
-      } else if (wi === 1 || wi === 3) {
-        setViewHandPose(ud.viewArmR, bp, br, 0, 0, 0, 0, 0, 0);
-        setViewHandPose(ud.viewArmL, lp, lr, 0, 0, -0.02, 0.04, 0, 0.08);
-      } else if (wi === 2) {
-        setViewHandPose(ud.viewArmR, bp, br, 0, 0, -0.02, 0.05, 0, 0);
-        setViewHandPose(ud.viewArmL, lp, lr, 0, 0, 0.04, -0.08, 0.06, 0);
-      } else if (wi === 5) {
-        setViewHandPose(ud.viewArmR, bp, br, 0, 0, 0, 0, 0, 0);
-        setViewHandPose(ud.viewArmL, lp, lr, 0, 0, -0.02, 0.05, 0, 0.1);
-      }
     }
 
-    /** Asymmetric reload: mag strip / insert / rack / pump / bolt — hands stay on grips, not floating. */
+    /** Simple side-block gestures: mostly ±Y / ±X, almost no twist into the gun mesh. */
     function applyViewArmReload(ud, wi, rp) {
       const p = rp;
       const bp = ud.armRBasePos;
@@ -8612,134 +8551,56 @@
       const lr = ud.armLBaseRot;
       if (!bp || !br) return;
       hideHandMagProxy(ud);
+      resetViewArms(ud);
 
       if (wi === 0) {
-        const magOut = reloadPhase(p, 0, 0.3);
-        const magIn = reloadPhase(p, 0.3, 0.52);
-        const rack = reloadPhase(p, 0.52, 1);
-        if (magOut < 1) {
-          const t = magOut;
-          setViewHandPose(ud.viewArmL, lp, lr, -0.04 * t, -0.12 * t, 0.06 * t, -0.55 * t, 0.35 * t, -0.4 * t);
-          setViewHandPose(ud.viewArmR, bp, br, 0.02 * t, 0, -0.02 * t, 0.08 * t, 0, 0);
-          syncHandMagProxy(ud, t > 0.15, ud.animMag);
-        } else if (magIn < 1) {
-          const t = 1 - magIn;
-          setViewHandPose(ud.viewArmL, lp, lr, -0.04 * t, -0.1 * t, 0.04 * t, -0.45 * t, 0.28 * t, -0.32 * t);
-          setViewHandPose(ud.viewArmR, bp, br, 0, 0, 0, 0.05, 0, 0);
-          syncHandMagProxy(ud, true, ud.animMag);
+        const mag = reloadPhase(p, 0, 0.55);
+        const rack = reloadPhase(p, 0.55, 1);
+        if (mag > 0 && mag < 1) {
+          const drop = mag < 0.5 ? mag * 2 : 2 - mag * 2;
+          setViewHandPose(ud.viewArmL, lp, lr, 0, -0.09 * drop, 0, 0, 0, 0);
+          syncHandMagProxy(ud, mag > 0.18 && mag < 0.82, ud.animMag);
         } else {
-          setViewHandPose(ud.viewArmL, lp, lr, 0, 0, 0, 0, 0, 0.04);
           syncHandMagProxy(ud, false);
         }
         if (rack > 0) {
-          let pull = 0;
-          if (rack < 0.45) pull = rack / 0.45;
-          else pull = 1 - (rack - 0.45) / 0.55;
-          setViewHandPose(ud.viewArmR, bp, br, 0, 0.02 * pull, -0.06 * pull, -0.12 * pull, 0, 0.06 * pull);
-          setViewHandPose(ud.viewArmL, lp, lr, 0, 0, 0, 0, 0, 0.02);
+          const pull = Math.sin(rack * Math.PI);
+          setViewHandPose(ud.viewArmR, bp, br, 0, 0.04 * pull, 0, 0, 0, 0);
         }
       } else if (wi === 1 || wi === 3) {
-        const strip = reloadPhase(p, 0, 0.34);
-        const insert = reloadPhase(p, 0.34, 0.58);
-        const charge = reloadPhase(p, 0.58, 0.82);
-        const settle = reloadPhase(p, 0.82, 1);
-        if (strip < 1) {
-          const t = strip;
-          setViewHandPose(ud.viewArmR, bp, br, 0.03 * t, -0.02 * t, 0, 0.1 * t, -0.05 * t, 0);
-          setViewHandPose(
-            ud.viewArmL,
-            lp,
-            lr,
-            -0.08 * t,
-            -0.14 * t,
-            0.05 * t,
-            -0.7 * t,
-            0.42 * t,
-            -0.55 * t
-          );
-          syncHandMagProxy(ud, t > 0.2, ud.animMag);
-        } else if (insert < 1) {
-          const t = insert;
-          setViewHandPose(
-            ud.viewArmL,
-            lp,
-            lr,
-            -0.06 * (1 - t),
-            -0.18 * (1 - t) + 0.04 * t,
-            -0.05 * (1 - t),
-            -0.35 * (1 - t),
-            0.2 * (1 - t),
-            -0.25 * (1 - t)
-          );
-          setViewHandPose(ud.viewArmR, bp, br, 0.02, -0.03, 0.02, 0.06, 0, 0);
-          syncHandMagProxy(ud, t < 0.85, ud.animMag);
-        } else if (charge < 1) {
-          const t = charge;
-          setViewHandPose(ud.viewArmR, bp, br, 0, 0, -0.04 * t, -0.15 * t, 0, 0.04 * t);
-          setViewHandPose(ud.viewArmL, lp, lr, 0.05, -0.06, 0, 0.15, -0.12, 0.2);
-          hideHandMagProxy(ud);
+        const mag = reloadPhase(p, 0, 0.58);
+        const charge = reloadPhase(p, 0.58, 0.85);
+        if (mag > 0 && mag < 1) {
+          const drop = mag < 0.5 ? mag * 2 : 2 - mag * 2;
+          setViewHandPose(ud.viewArmL, lp, lr, 0, -0.1 * drop, 0, 0, 0, 0);
+          syncHandMagProxy(ud, mag > 0.2 && mag < 0.8, ud.animMag);
         } else {
-          const t = settle;
-          setViewHandPose(ud.viewArmR, bp, br, 0, 0, -0.04 * (1 - t), -0.15 * (1 - t), 0, 0.04 * (1 - t));
-          setViewHandPose(ud.viewArmL, lp, lr, 0.05 * (1 - t), -0.06 * (1 - t), 0, 0.15 * (1 - t), -0.12 * (1 - t), 0.2 * (1 - t));
+          syncHandMagProxy(ud, false);
+        }
+        if (charge > 0) {
+          const pull = Math.sin(charge * Math.PI);
+          setViewHandPose(ud.viewArmR, bp, br, 0, 0.03 * pull, 0.02 * pull, 0, 0, 0);
         }
       } else if (wi === 2) {
-        const openT = reloadPhase(p, 0, 0.14);
-        const loadT = reloadPhase(p, 0.14, 0.88);
-        const closeT = reloadPhase(p, 0.88, 1);
-        let breakOpen = 0;
-        if (openT < 1) breakOpen = openT;
-        else if (closeT > 0) breakOpen = 1 - closeT;
-        else breakOpen = 1;
-        setViewHandPose(
-          ud.viewArmR,
-          bp,
-          br,
-          0,
-          0.03 * breakOpen,
-          -0.05 * breakOpen,
-          0.12 * breakOpen,
-          0,
-          0
-        );
-        if (loadT > 0 && loadT < 1) {
-          const shellWave = Math.sin(loadT * Math.PI * 2.2);
-          setViewHandPose(
-            ud.viewArmL,
-            lp,
-            lr,
-            0.02 * shellWave,
-            -0.05 + 0.04 * shellWave,
-            0.08 - loadT * 0.12,
-            -0.25 - 0.15 * breakOpen,
-            0.18,
-            0.12
-          );
-        } else {
-          setViewHandPose(ud.viewArmL, lp, lr, 0, 0, 0.06 * breakOpen, -0.2 * breakOpen, 0.12 * breakOpen, 0.08);
+        const load = reloadPhase(p, 0.12, 0.88);
+        if (load > 0 && load < 1) {
+          const wave = Math.sin(load * Math.PI * 2);
+          setViewHandPose(ud.viewArmL, lp, lr, 0, -0.05 + 0.04 * wave, 0, 0, 0, 0);
+          setViewHandPose(ud.viewArmR, bp, br, 0, 0.02 * wave, 0, 0, 0, 0);
         }
       } else if (wi === 5) {
-        const boltOpen = reloadPhase(p, 0, 0.18);
-        const magStrip = reloadPhase(p, 0.18, 0.4);
-        const magSeat = reloadPhase(p, 0.4, 0.62);
-        const boltClose = reloadPhase(p, 0.62, 1);
-        let boltPull = 0;
-        if (boltOpen < 1) boltPull = boltOpen;
-        else if (boltClose > 0) boltPull = 1 - boltClose;
-        else boltPull = 1;
-        setViewHandPose(ud.viewArmR, bp, br, 0, 0.02 * boltPull, 0.12 * boltPull, -0.22 * boltPull, 0, 0.08 * boltPull);
-        if (magStrip < 1) {
-          const t = magStrip;
-          setViewHandPose(ud.viewArmL, lp, lr, -0.07 * t, -0.13 * t, 0.04 * t, -0.65 * t, 0.38 * t, -0.48 * t);
-          setViewHandPose(ud.viewArmR, bp, br, 0.02, 0, 0.08 * boltPull, -0.18 * boltPull, 0, 0.06 * boltPull);
-          syncHandMagProxy(ud, t > 0.25, ud.animMag);
-        } else if (magSeat < 1) {
-          const t = magSeat;
-          setViewHandPose(ud.viewArmL, lp, lr, -0.04 * (1 - t), -0.16 * (1 - t), -0.02 * (1 - t), -0.4 * (1 - t), 0.22 * (1 - t), -0.3 * (1 - t));
-          syncHandMagProxy(ud, t < 0.75, ud.animMag);
+        const mag = reloadPhase(p, 0.15, 0.6);
+        const bolt = reloadPhase(p, 0.6, 1);
+        if (mag > 0 && mag < 1) {
+          const drop = mag < 0.5 ? mag * 2 : 2 - mag * 2;
+          setViewHandPose(ud.viewArmL, lp, lr, 0, -0.1 * drop, 0, 0, 0, 0);
+          syncHandMagProxy(ud, mag > 0.22 && mag < 0.78, ud.animMag);
         } else {
-          hideHandMagProxy(ud);
-          setViewHandPose(ud.viewArmL, lp, lr, 0.04, -0.05, 0, 0.12, -0.1, 0.15);
+          syncHandMagProxy(ud, false);
+        }
+        if (bolt > 0) {
+          const pull = Math.sin(bolt * Math.PI);
+          setViewHandPose(ud.viewArmR, bp, br, 0, 0.04 * pull, 0.03 * pull, 0, 0, 0);
         }
       }
     }
