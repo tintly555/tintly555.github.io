@@ -1025,7 +1025,7 @@
         />
       </g>
     </svg>
-    <span class="medkit-hold-txt" data-i18n="medkitHold">HOLD</span>
+    <span class="medkit-hold-txt" data-i18n="medkitHold">HOLD F</span>
   </div>
   <div class="hitmarker" id="hitmarker"></div>
   <div id="combatFeedback"></div>
@@ -1311,7 +1311,7 @@
         combatHit: "HIT",
         combatKill: "KILL!",
         hintClick: "Click anywhere",
-        medkitHold: "HOLD",
+        medkitHold: "HOLD F",
         settingsLangTitle: "LANGUAGE",
         settingsLangLabel: "Game language",
         settingsLangHint: "Switches menu and HUD labels immediately.",
@@ -1354,7 +1354,7 @@
         combatHit: "命中",
         combatKill: "击杀",
         hintClick: "点击任意处",
-        medkitHold: "按住",
+        medkitHold: "按住 F",
         settingsLangTitle: "语言",
         settingsLangLabel: "游戏语言",
         settingsLangHint: "菜单与 HUD 文案会立即切换。",
@@ -4710,73 +4710,6 @@
       return mesh;
     }
 
-    function stashViewHands(root, rightHand, leftHand) {
-      root.userData.animRightHand = rightHand;
-      root.userData.animLeftHand = leftHand || null;
-      root.userData.handRightBase = rightHand.position.clone();
-      root.userData.handRightRotBase = rightHand.rotation.clone();
-      if (leftHand) {
-        root.userData.handLeftBase = leftHand.position.clone();
-        root.userData.handLeftRotBase = leftHand.rotation.clone();
-      }
-    }
-
-    /** First-person glove + fingers; left/right offset so both hands read clearly. */
-    function makeViewHand(side) {
-      const grp = new THREE.Group();
-      const sign = side === "left" ? -1 : 1;
-      const mGlove = new THREE.MeshStandardMaterial({ color: 0x3f3a30, roughness: 0.86 });
-      const mSkin = new THREE.MeshStandardMaterial({ color: 0xc89d7c, roughness: 0.72 });
-      const mSleeve = new THREE.MeshStandardMaterial({ color: 0x4a5244, roughness: 0.9 });
-
-      const markHandMesh = (mesh) => {
-        mesh.renderOrder = 14;
-        return mesh;
-      };
-
-      const palm = markHandMesh(new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.14, 0.17), mGlove));
-      palm.position.set(sign * 0.02, 0, 0);
-      grp.add(palm);
-
-      const cuff = markHandMesh(new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.09, 0.12), mSleeve));
-      cuff.position.set(sign * 0.03, -0.075, 0.07);
-      grp.add(cuff);
-
-      const fore = markHandMesh(new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.22, 0.1), mSleeve));
-      fore.position.set(sign * 0.08, -0.2, 0.12);
-      fore.rotation.x = 0.55;
-      fore.rotation.z = sign * 0.18;
-      grp.add(fore);
-
-      for (let i = 0; i < 4; i++) {
-        const f = markHandMesh(new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.048, 0.036), mSkin));
-        f.position.set(sign * (0.045 + i * 0.01), -0.015, -0.035 - i * 0.016);
-        f.rotation.x = 0.42 + i * 0.04;
-        grp.add(f);
-      }
-      const thumb = markHandMesh(new THREE.Mesh(new THREE.BoxGeometry(0.032, 0.042, 0.05), mSkin));
-      thumb.position.set(-sign * 0.062, 0.012, -0.015);
-      thumb.rotation.z = sign * 0.62;
-      grp.add(thumb);
-
-      grp.userData.handSide = side;
-      return grp;
-    }
-
-    function attachViewHands(gunGroup, root, rightPos, leftPos, leftRot) {
-      const rH = makeViewHand("right");
-      rH.position.set(rightPos[0], rightPos[1], rightPos[2]);
-      gunGroup.add(rH);
-      let lH = null;
-      if (leftPos) {
-        lH = makeViewHand("left");
-        lH.position.set(leftPos[0], leftPos[1], leftPos[2]);
-        if (leftRot) lH.rotation.set(leftRot[0], leftRot[1], leftRot[2]);
-        gunGroup.add(lH);
-      }
-      stashViewHands(root, rH, lH);
-    }
-
     const _trailVecA = new THREE.Vector3();
     const _trailVecB = new THREE.Vector3();
     const _trailVecDir = new THREE.Vector3();
@@ -7059,7 +6992,7 @@
       spawnProtectUntil: 0,
     };
 
-    const keys = { w:false, a:false, s:false, d:false, space:false, shift:false };
+    const keys = { w:false, a:false, s:false, d:false, space:false, shift:false, f:false };
     const state = {
       locked: false,
       mouseDown: false,
@@ -7094,10 +7027,9 @@
       weaponActionDur: 320,
       shellCasings: [],
       lastShellEject: 0,
+      reloadStartAmmo: 0,
     };
 
-    const PLAYER_SPEED_AMR = 0.74;
-    const PLAYER_SPEED_AMR_ADS = 0.58;
 
     const AMR_SCOPE_OVERLAY_PATHS = [
       "game-ui/amr-scope-overlay.png",
@@ -7163,7 +7095,7 @@
         color: 0xffe08a,
         magSize: 12,
         ammo: 12,
-        reloadTime: 1200,
+        reloadTime: 1550,
         soundBase: 520,
         adsFov: 67,
         adsSpeed: 12,
@@ -7205,7 +7137,7 @@
         color: 0xffb47a,
         magSize: 8,
         ammo: 8,
-        reloadTime: 1900,
+        reloadTime: 3200,
         soundBase: 260,
         adsFov: 63,
         adsSpeed: 6,
@@ -7295,7 +7227,7 @@
         ${tr("hudGameTitleLine", "Zone No Light")}<br>
         WASD move | Space jump | R reload<br>
         Mouse aim | RMB zoom | L flashlight | Z beam small/med/wide<br>
-        Weapons: 1–4 | <b>5</b> Med Kit (hold M1 to heal 10s) | <b>6</b> AMR<br>
+        Weapons: 1–4 | <b>5</b> Med Kit (hold <b>F</b> 10s to heal) | <b>6</b> AMR<br>
         Map: ${mapLabel}${MULTIPLAYER ? " (MP)" : ""}<br>
         Weapon: ${w.name}<br>
         ${state.weaponIndex === 4 ? "" : `Bullets: ${w.ammo} / ${w.magSize}${state.reloading ? "（Refilling...）" : ""}<br>`}
@@ -8457,6 +8389,22 @@
     /** Camera-space Y offset so the view-model sits ~20px lower on a typical 1080p window (FOV 75). */
     const WEAPON_VIEW_DROP_Y = -0.032;
 
+    function attachWeaponMag(gunGroup, root, x, y, z, w, h, d) {
+      const magGrp = new THREE.Group();
+      const mMag = new THREE.MeshStandardMaterial({ color: 0x2a241c, roughness: 0.78, metalness: 0.25 });
+      addMeshPart(magGrp, new THREE.BoxGeometry(w, h, d), mMag, 0, 0, 0);
+      magGrp.position.set(x, y, z);
+      gunGroup.add(magGrp);
+      root.userData.animMag = magGrp;
+      root.userData.magBasePos = magGrp.position.clone();
+    }
+
+    function reloadPhase(p, t0, t1) {
+      if (p <= t0) return 0;
+      if (p >= t1) return 1;
+      return (p - t0) / (t1 - t0);
+    }
+
     function makeWeaponModel(type) {
       const root = new THREE.Group();
       const gunGroup = new THREE.Group();
@@ -8480,6 +8428,7 @@
         addMeshPart(gunGroup, new THREE.BoxGeometry(0.035, 0.022, 0.05), mBlack, 0, -0.07, 0.06);
         addMeshPart(gunGroup, new THREE.BoxGeometry(0.09, 0.19, 0.11), mBlack, 0, -0.16, 0.09);
         addMeshPart(gunGroup, new THREE.BoxGeometry(0.11, 0.045, 0.09), mBlack, 0, -0.055, 0.09);
+        addMeshPart(gunGroup, new THREE.BoxGeometry(0.042, 0.038, 0.06), mBlack, 0, 0.058, 0.03);
         const slideGrp = new THREE.Group();
         addMeshPart(slideGrp, new THREE.BoxGeometry(0.085, 0.055, 0.22), mLight, 0, 0.06, -0.12);
         addMeshPart(slideGrp, new THREE.BoxGeometry(0.06, 0.02, 0.018), mSight, 0, 0.078, 0.06);
@@ -8487,8 +8436,7 @@
         addMeshPart(slideGrp, new THREE.SphereGeometry(0.004, 8, 8), mDot, 0, 0.112, -0.17);
         gunGroup.add(slideGrp);
         root.userData.animSlide = slideGrp;
-
-        attachViewHands(gunGroup, root, [0.08, -0.11, 0.07], [-0.1, -0.09, -0.04], [0.2, 0, 0.12]);
+        attachWeaponMag(gunGroup, root, 0, -0.1, 0.04, 0.05, 0.12, 0.08);
 
         gunGroup.position.set(0.26, -0.22, -0.72);
         adsOffset.set(-0.26, 0.095, 0.26);
@@ -8513,8 +8461,7 @@
         addMeshPart(gunGroup, new THREE.SphereGeometry(0.004, 6, 6), mDot, 0, 0.116, -0.36);
         addMeshPart(gunGroup, new THREE.BoxGeometry(0.038, 0.024, 0.055), mDark, 0.04, 0.085, 0.1);
         root.userData.ejectPort = new THREE.Vector3(0.055, 0.09, 0.08);
-
-        attachViewHands(gunGroup, root, [0.1, -0.11, 0.1], [-0.15, -0.05, -0.3], [0.08, 0.05, 0.1]);
+        attachWeaponMag(gunGroup, root, 0, -0.12, 0.06, 0.055, 0.16, 0.1);
 
         gunGroup.position.set(0.25, -0.22, -0.80);
         adsOffset.set(-0.25, 0.10, 0.28);
@@ -8525,29 +8472,38 @@
         root.userData.muzzleNode = muzzleNode;
 
       } else if (type === 2) {
-        const barrelGrp = new THREE.Group();
-        addMeshPart(barrelGrp, new THREE.CylinderGeometry(0.042, 0.046, 0.58, 12), mMetal, 0, 0.04, -0.22, barrelZ, 0, 0);
-        addMeshPart(barrelGrp, new THREE.BoxGeometry(0.055, 0.035, 0.02), mSight, 0, 0.09, 0.2);
-        addMeshPart(barrelGrp, new THREE.BoxGeometry(0.03, 0.065, 0.02), mSight, 0, 0.1, -0.36);
-        gunGroup.add(barrelGrp);
-        root.userData.animBarrel = barrelGrp;
-        const pumpGrp = new THREE.Group();
-        addMeshPart(pumpGrp, new THREE.BoxGeometry(0.12, 0.08, 0.2), mWood, 0, -0.06, -0.06);
-        addMeshPart(pumpGrp, new THREE.BoxGeometry(0.06, 0.1, 0.06), mDark, 0, 0.02, -0.12);
-        const lPump = makeViewHand("left");
-        lPump.position.set(0, -0.04, 0.02);
-        pumpGrp.add(lPump);
-        gunGroup.add(pumpGrp);
-        root.userData.animPump = pumpGrp;
-        root.userData.ejectPort = new THREE.Vector3(0.045, 0.1, 0.02);
         addMeshPart(gunGroup, new THREE.BoxGeometry(0.17, 0.15, 0.48), mLight, 0, 0, 0.06);
         addMeshPart(gunGroup, new THREE.BoxGeometry(0.14, 0.15, 0.26), mWoodD, 0, 0, 0.5);
         addMeshPart(gunGroup, new THREE.BoxGeometry(0.12, 0.09, 0.14), mWoodD, 0, -0.055, 0.38);
         addMeshPart(gunGroup, new THREE.BoxGeometry(0.08, 0.035, 0.05), mBlack, 0, -0.055, 0.12);
-        const rPump = makeViewHand("right");
-        rPump.position.set(0.09, -0.1, 0.12);
-        gunGroup.add(rPump);
-        stashViewHands(root, rPump, lPump);
+        const breakGrp = new THREE.Group();
+        breakGrp.position.set(0, 0.03, 0.14);
+        const barrelGrp = new THREE.Group();
+        addMeshPart(barrelGrp, new THREE.CylinderGeometry(0.042, 0.046, 0.58, 12), mMetal, 0, 0.04, -0.2, barrelZ, 0, 0);
+        addMeshPart(barrelGrp, new THREE.BoxGeometry(0.055, 0.035, 0.02), mSight, 0, 0.09, 0.18);
+        addMeshPart(barrelGrp, new THREE.BoxGeometry(0.03, 0.065, 0.02), mSight, 0, 0.1, -0.34);
+        barrelGrp.position.set(0, 0, -0.16);
+        breakGrp.add(barrelGrp);
+        gunGroup.add(breakGrp);
+        root.userData.animBreak = breakGrp;
+        root.userData.animBarrel = barrelGrp;
+        const pumpGrp = new THREE.Group();
+        addMeshPart(pumpGrp, new THREE.BoxGeometry(0.12, 0.08, 0.2), mWood, 0, -0.06, -0.06);
+        addMeshPart(pumpGrp, new THREE.BoxGeometry(0.06, 0.1, 0.06), mDark, 0, 0.02, -0.12);
+        gunGroup.add(pumpGrp);
+        root.userData.animPump = pumpGrp;
+        root.userData.ejectPort = new THREE.Vector3(0.045, 0.1, 0.02);
+        const mBrass = new THREE.MeshStandardMaterial({
+          color: 0xd4af37,
+          metalness: 0.88,
+          roughness: 0.32,
+        });
+        const shellIns = new THREE.Group();
+        addMeshPart(shellIns, new THREE.CylinderGeometry(0.012, 0.014, 0.032, 6), mBrass, 0, 0, 0, barrelZ, 0, 0);
+        shellIns.position.set(0, 0.02, 0.02);
+        shellIns.visible = false;
+        gunGroup.add(shellIns);
+        root.userData.animReloadShell = shellIns;
 
         gunGroup.position.set(0.23, -0.2, -0.82);
         adsOffset.set(-0.175, 0.105, 0.24);
@@ -8568,8 +8524,7 @@
         addMeshPart(gunGroup, new THREE.BoxGeometry(0.018, 0.038, 0.018), mSight, 0, 0.08, -0.26);
         addMeshPart(gunGroup, new THREE.BoxGeometry(0.04, 0.016, 0.016), mSight, 0, 0.07, 0.12);
         root.userData.ejectPort = new THREE.Vector3(0.048, 0.085, 0.04);
-
-        attachViewHands(gunGroup, root, [0.09, -0.1, 0.08], [-0.14, -0.06, -0.2], [0.1, 0.04, 0.12]);
+        attachWeaponMag(gunGroup, root, 0, -0.12, 0.04, 0.048, 0.14, 0.09);
 
         gunGroup.position.set(0.24, -0.22, -0.76);
         adsOffset.set(-0.22, 0.085, 0.24);
@@ -8603,8 +8558,7 @@
         addMeshPart(boltGrp, new THREE.BoxGeometry(0.022, 0.035, 0.04), mMetal, 0, 0.1, 0.24);
         gunGroup.add(boltGrp);
         root.userData.animBolt = boltGrp;
-
-        attachViewHands(gunGroup, root, [0.1, -0.11, 0.14], [-0.16, -0.03, -0.42], [0.06, 0.02, 0.08]);
+        attachWeaponMag(gunGroup, root, 0, -0.14, 0.1, 0.06, 0.12, 0.11);
 
         gunGroup.position.set(0.2, -0.2, -0.96);
         adsOffset.set(-0.18, 0.12, 0.38);
@@ -8635,7 +8589,6 @@
       addMeshPart(kit, new THREE.BoxGeometry(0.11, 0.045, 0.078), mCross, 0, 0, 0.041);
       addMeshPart(kit, new THREE.BoxGeometry(0.24, 0.022, 0.078), mLatch, 0, 0.068, 0);
       addMeshPart(kit, new THREE.BoxGeometry(0.055, 0.035, 0.08), mCase, -0.1, 0, 0.04);
-      attachViewHands(kit, root, [0.14, -0.06, 0.02], [-0.14, -0.06, 0.02], [0.15, 0, -0.1]);
       kit.position.set(0.27, -0.19, -0.66);
       kit.rotation.y = -0.09;
       const kitMuzzle = new THREE.Object3D();
@@ -8675,25 +8628,23 @@
     }
 
     function getPlayerMoveSpeedMult() {
-      if (state.weaponIndex !== 5) return 1;
-      const adsOn = (state.ads || keys.shift) && state.adsProgress > 0.35;
-      return adsOn ? PLAYER_SPEED_AMR_ADS : PLAYER_SPEED_AMR;
+      return 1;
     }
 
     function startWeaponFireAnim() {
       const wi = state.weaponIndex;
       if (wi === 0) {
         state.weaponAction = "slide";
-        state.weaponActionDur = 340;
+        state.weaponActionDur = 380;
       } else if (wi === 1 || wi === 3) {
         state.weaponAction = "auto";
-        state.weaponActionDur = 140;
+        state.weaponActionDur = 160;
       } else if (wi === 2) {
         state.weaponAction = "pump";
-        state.weaponActionDur = 520;
+        state.weaponActionDur = 580;
       } else if (wi === 5) {
         state.weaponAction = "bolt";
-        state.weaponActionDur = 620;
+        state.weaponActionDur = 720;
       } else return;
       state.weaponActionStart = performance.now();
     }
@@ -8712,7 +8663,7 @@
     const _shellEjectVel = new THREE.Vector3();
 
     const SHELL_COLOR_BRASS = 0xd4af37;
-    const MAX_SHELL_CASINGS = 14;
+    const MAX_SHELL_CASINGS = 56;
 
     function clearShellCasings() {
       for (let i = state.shellCasings.length - 1; i >= 0; i--) {
@@ -8727,13 +8678,15 @@
     function maybeEjectShellCasing() {
       const wi = state.weaponIndex;
       if (wi !== 1 && wi !== 2 && wi !== 3) return;
-      if ((wi === 1 || wi === 3) && Math.random() > 0.48) return;
-      const now = performance.now();
-      if (now - state.lastShellEject < 120) return;
-      state.lastShellEject = now;
 
-      getActiveMuzzleWorld(_shellEjectPos);
-      if (_shellEjectPos.distanceTo(camera.position) < 0.28) return;
+      const activeWeapon = weaponModels[wi];
+      const port = activeWeapon && activeWeapon.userData.ejectPort;
+      if (port) {
+        activeWeapon.updateMatrixWorld(true);
+        _shellEjectPos.copy(port).applyMatrix4(activeWeapon.matrixWorld);
+      } else {
+        getActiveMuzzleWorld(_shellEjectPos);
+      }
 
       const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
       const up = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion);
@@ -8813,15 +8766,15 @@
       const sin = Math.sin(p * Math.PI);
       const out = { reloadRotX: 0, reloadRotY: 0, reloadRotZ: 0, reloadX: 0, reloadY: 0 };
       if (wi === 0) {
-        out.reloadRotZ = -0.52 * sin;
-        out.reloadY = -0.14 * sin;
+        out.reloadRotZ = -0.55 * sin;
+        out.reloadY = -0.12 * sin;
       } else if (wi === 1 || wi === 3) {
-        out.reloadRotZ = -0.78 * sin;
-        out.reloadRotX = -0.22 * sin;
-        out.reloadY = Math.sin(p * Math.PI * 6) * 0.065 * sin;
+        out.reloadRotZ = -0.92 * sin;
+        out.reloadRotX = -0.18 * sin;
       } else if (wi === 2) {
-        out.reloadRotY = Math.sin(p * Math.PI * 2.4) * 0.38;
-        out.reloadRotZ = 0.14 * Math.sin(p * Math.PI * 2.4);
+        const open = p < 0.14 ? p / 0.14 : p > 0.9 ? (1 - p) / 0.1 : 1;
+        out.reloadRotX = 0.28 * open;
+        out.reloadY = 0.06 * open;
       } else if (wi === 4) {
         if (p < 0.25) {
           const q = p / 0.25;
@@ -8841,12 +8794,104 @@
           out.reloadY = 0.08 * (1 - q);
         }
       } else if (wi === 5) {
-        out.reloadRotX = -0.05 * sin;
+        out.reloadRotX = -0.04 * sin;
       }
       return out;
     }
 
-    /** Gun + hands + moving parts (slide / bolt / pump) together. */
+    function applyReloadPartAnims(ud, wi, rp) {
+      if (!state.reloading || rp <= 0) return;
+      const w = weapon();
+      const magBase = ud.magBasePos;
+      const p = rp;
+
+      if (ud.animMag && magBase) {
+        ud.animMag.visible = true;
+        ud.animMag.position.copy(magBase);
+        ud.animMag.rotation.set(0, 0, 0);
+      }
+      if (ud.animReloadShell) ud.animReloadShell.visible = false;
+      if (ud.animBreak) ud.animBreak.rotation.set(0, 0, 0);
+
+      if (wi === 0) {
+        const magOut = reloadPhase(p, 0, 0.32);
+        const magIn = reloadPhase(p, 0.32, 0.5);
+        const rack = reloadPhase(p, 0.5, 1);
+        if (ud.animMag && magBase) {
+          if (p < 0.5) {
+            const drop = magOut < 1 ? magOut : 1 - magIn;
+            ud.animMag.position.y = magBase.y - 0.16 * drop;
+            ud.animMag.position.z = magBase.z + 0.07 * drop;
+            ud.animMag.position.x = magBase.x + 0.04 * drop;
+          } else {
+            ud.animMag.position.copy(magBase);
+          }
+        }
+        if (ud.animSlide && rack > 0) {
+          let slideBack = 0;
+          if (rack < 0.52) slideBack = 0.34 * (rack / 0.52);
+          else slideBack = 0.34 * (1 - (rack - 0.52) / 0.48);
+          ud.animSlide.position.z = slideBack;
+          ud.animSlide.rotation.x = -0.06 * slideBack;
+        }
+      } else if (wi === 1 || wi === 3) {
+        const magOut = reloadPhase(p, 0, 0.32);
+        const magIn = reloadPhase(p, 0.32, 0.58);
+        if (ud.animMag && magBase) {
+          if (magOut < 1) {
+            ud.animMag.position.y = magBase.y - 0.18 * magOut;
+            ud.animMag.position.z = magBase.z + 0.08 * magOut;
+          } else if (magIn < 1) {
+            const t = 1 - magIn;
+            ud.animMag.position.y = magBase.y - 0.18 * t;
+            ud.animMag.position.z = magBase.z + 0.08 * t;
+          }
+        }
+      } else if (wi === 2) {
+        const openT = reloadPhase(p, 0, 0.14);
+        const closeT = reloadPhase(p, 0.88, 1);
+        let breakOpen = 0;
+        if (openT < 1) breakOpen = openT;
+        else if (closeT > 0) breakOpen = 1 - closeT;
+        else breakOpen = 1;
+        if (ud.animBreak) ud.animBreak.rotation.x = breakOpen * 0.78;
+
+        const shellsNeeded = Math.max(1, w.magSize - state.reloadStartAmmo);
+        const loadT = reloadPhase(p, 0.14, 0.88);
+        if (ud.animReloadShell && loadT > 0 && loadT < 1) {
+          const idx = Math.min(
+            shellsNeeded - 1,
+            Math.floor(loadT * shellsNeeded)
+          );
+          const shellP = loadT * shellsNeeded - idx;
+          ud.animReloadShell.visible = true;
+          ud.animReloadShell.position.set(0, 0.06 + shellP * 0.04, 0.02 - shellP * 0.08);
+          ud.animReloadShell.rotation.x = Math.PI / 2 + shellP * 0.5;
+        }
+      } else if (wi === 5) {
+        const boltOpen = reloadPhase(p, 0, 0.18);
+        const magOut = reloadPhase(p, 0.18, 0.4);
+        const magIn = reloadPhase(p, 0.4, 0.62);
+        const boltClose = reloadPhase(p, 0.62, 1);
+        let boltPull = 0;
+        if (boltOpen < 1) boltPull = 0.26 * boltOpen;
+        else if (boltClose > 0) boltPull = 0.26 * (1 - boltClose);
+        else boltPull = 0.26;
+        if (ud.animBolt) ud.animBolt.position.z = boltPull;
+        if (ud.animMag && magBase) {
+          if (magOut < 1) {
+            ud.animMag.position.y = magBase.y - 0.15 * magOut;
+            ud.animMag.position.z = magBase.z + 0.06 * magOut;
+          } else if (magIn < 1) {
+            const t = 1 - magIn;
+            ud.animMag.position.y = magBase.y - 0.15 * t;
+            ud.animMag.position.z = magBase.z + 0.06 * t;
+          }
+        }
+      }
+    }
+
+    /** View-model weapon parts: slide / bolt / pump / mag + kick. */
     function applyWeaponHandsAnim(activeWeapon, reloadProgress) {
       const ud = activeWeapon.userData;
       if (ud.animSlide) {
@@ -8856,14 +8901,12 @@
       if (ud.animBolt) ud.animBolt.position.set(0, 0, 0);
       if (ud.animPump) ud.animPump.position.set(0, 0, 0);
       if (ud.animBarrel) ud.animBarrel.rotation.set(0, 0, 0);
-      if (ud.animRightHand && ud.handRightBase) {
-        ud.animRightHand.position.copy(ud.handRightBase);
-        if (ud.handRightRotBase) ud.animRightHand.rotation.copy(ud.handRightRotBase);
+      if (ud.animMag && ud.magBasePos) {
+        ud.animMag.position.copy(ud.magBasePos);
+        ud.animMag.visible = true;
       }
-      if (ud.animLeftHand && ud.handLeftBase) {
-        ud.animLeftHand.position.copy(ud.handLeftBase);
-        if (ud.handLeftRotBase) ud.animLeftHand.rotation.copy(ud.handLeftRotBase);
-      }
+      if (ud.animBreak) ud.animBreak.rotation.set(0, 0, 0);
+      if (ud.animReloadShell) ud.animReloadShell.visible = false;
 
       let offX = 0;
       let offY = 0;
@@ -8876,50 +8919,45 @@
       const k = Math.sin(t * Math.PI);
       const rp = reloadProgress;
 
+      if (state.reloading) {
+        applyReloadPartAnims(ud, wi, rp);
+      }
+
       if (wi === 0) {
         let slideBack = 0;
-        if (act === "slide") slideBack = 0.09 * k;
-        if (state.reloading) {
-          slideBack = rp < 0.45 ? 0.11 : 0.11 * (1 - (rp - 0.45) / 0.55);
+        if (act === "slide") slideBack = 0.15 * k;
+        if (ud.animSlide && !state.reloading) {
+          ud.animSlide.position.z = slideBack;
+          offZ = slideBack * 0.9;
+          rotX = -0.1 * k;
+        } else if (state.reloading && ud.animSlide) {
+          offZ = ud.animSlide.position.z * 0.92;
+          rotX = -0.1 * ud.animSlide.position.z;
         }
-        if (ud.animSlide) ud.animSlide.position.z = slideBack;
-        offZ = slideBack * 0.55;
-        if (ud.animRightHand) ud.animRightHand.position.z = ud.handRightBase.z + slideBack * 0.45;
       } else if (wi === 1 || wi === 3) {
         if (act === "auto") {
-          offZ = 0.022 * k;
-          rotX = -0.05 * k;
-        }
-        if (state.reloading && ud.animLeftHand) {
-          const mag = Math.sin(rp * Math.PI);
-          ud.animLeftHand.position.y = ud.handLeftBase.y - 0.14 * mag;
-          ud.animLeftHand.position.z = ud.handLeftBase.z + 0.08 * mag;
+          offZ = 0.045 * k;
+          rotX = -0.1 * k;
         }
       } else if (wi === 2) {
         let pumpZ = 0;
-        if (act === "pump") pumpZ = 0.12 * k;
-        if (state.reloading) pumpZ = 0.08 * Math.sin(rp * Math.PI);
+        if (act === "pump" && !state.reloading) pumpZ = 0.2 * k;
         if (ud.animPump) ud.animPump.position.z = pumpZ;
-        offZ = pumpZ * 0.65;
-        if (ud.animRightHand) ud.animRightHand.position.z = ud.handRightBase.z + pumpZ * 0.2;
+        offZ = pumpZ * 0.85;
+        rotX = -0.06 * k;
       } else if (wi === 5) {
         let boltPull = 0;
-        if (act === "bolt") {
-          if (t < 0.38) boltPull = 0.14 * (t / 0.38);
-          else if (t < 0.62) boltPull = 0.14;
-          else boltPull = 0.14 * (1 - (t - 0.62) / 0.38);
-          rotX = -0.07 * k;
+        if (act === "bolt" && !state.reloading) {
+          if (t < 0.35) boltPull = 0.22 * (t / 0.35);
+          else if (t < 0.65) boltPull = 0.22;
+          else boltPull = 0.22 * (1 - (t - 0.65) / 0.35);
+          if (ud.animBolt) ud.animBolt.position.z = boltPull;
+          rotX = -0.12 * k;
+          offZ = boltPull * 0.35;
         }
-        if (state.reloading) {
-          if (rp < 0.35) boltPull = 0.16 * (rp / 0.35);
-          else if (rp < 0.7) boltPull = 0.16;
-          else boltPull = 0.16 * (1 - (rp - 0.7) / 0.3);
-        }
-        if (ud.animBolt) ud.animBolt.position.z = boltPull;
-        rotX = -0.08 * Math.max(k, state.reloading ? Math.sin(rp * Math.PI) : 0);
-        if (ud.animRightHand) {
-          ud.animRightHand.position.z = ud.handRightBase.z + boltPull * 0.35;
-        }
+      } else if (wi === 4 && rp > 0) {
+        offY = -0.05 * Math.sin(rp * Math.PI);
+        rotZ = -0.25 * Math.sin(rp * Math.PI);
       }
 
       return { offX, offY, offZ, rotX, rotZ };
@@ -8956,6 +8994,7 @@
       if (w.ammo >= w.magSize) return;
       state.reloading = true;
       state.ads = false;
+      state.reloadStartAmmo = w.ammo;
       state.reloadEnd = performance.now() + w.reloadTime;
       updateHud();
     }
@@ -9020,6 +9059,7 @@
       if (k === "d") keys.d = true;
       if (k === " ") keys.space = true;
       if (k === "shift") keys.shift = true;
+      if (k === "f") keys.f = true;
       if (k === "1") setWeapon(0);
       if (k === "2") setWeapon(1);
       if (k === "3") setWeapon(2);
@@ -9037,6 +9077,10 @@
       if (k === "d") keys.d = false;
       if (k === " ") keys.space = false;
       if (k === "shift") keys.shift = false;
+      if (k === "f") {
+        keys.f = false;
+        if (state.weaponIndex === 4) state.medKitNeedsRelease = false;
+      }
     });
 
     renderer.domElement.addEventListener("mousedown", (e) => {
@@ -9048,11 +9092,7 @@
       if (player.health <= 0 || paused) return;
       if (e.button === 0) {
         state.mouseDown = true;
-        if (state.weaponIndex === 4) {
-          if (player.health < player.maxHealth) state.medKitNeedsRelease = false;
-        } else {
-          tryShoot();
-        }
+        if (state.weaponIndex !== 4) tryShoot();
       }
     });
 
@@ -9089,6 +9129,7 @@
         keys.d = false;
         keys.space = false;
         keys.shift = false;
+        keys.f = false;
         state.mouseDown = false;
         state.ads = false;
         if (started && player.health > 0 && menuEl.style.display === "none" && !chatOpen && !settingsModalOpen && gameWorldReady) {
@@ -9107,6 +9148,7 @@
       keys.d = false;
       keys.space = false;
       keys.shift = false;
+      keys.f = false;
       state.mouseDown = false;
       state.ads = false;
     });
@@ -9497,10 +9539,6 @@
     function updateMedKit(dt) {
       if (state.weaponIndex !== 4 || player.health <= 0 || paused) return;
 
-      if (!state.mouseDown) {
-        state.medKitNeedsRelease = false;
-      }
-
       if (state.medKitDefilling) {
         state.medKitDefillPhase += dt / MED_KIT_DEFILL_DURATION;
         if (state.medKitDefillPhase >= 1) {
@@ -9518,7 +9556,7 @@
 
       const wMed = weapons[4];
       const canHeal = player.health < player.maxHealth && wMed.ammo > 0;
-      const wantsHold = state.mouseDown && canHeal && !state.medKitNeedsRelease;
+      const wantsHold = keys.f && canHeal && !state.medKitNeedsRelease;
 
       if (wantsHold) {
         state.medKitHealProgress += dt / MED_KIT_HEAL_DURATION;
@@ -9556,7 +9594,7 @@
         player.health > 0 &&
         player.health < player.maxHealth &&
         !state.medKitNeedsRelease &&
-        state.mouseDown
+        keys.f
       );
     }
 
@@ -9602,10 +9640,26 @@
         reloadRotZ = wm.reloadRotZ;
         reloadX = wm.reloadX;
         reloadY = wm.reloadY;
+      } else if (
+        state.weaponIndex === 4 &&
+        keys.f &&
+        state.medKitHealProgress > 0 &&
+        player.health < player.maxHealth
+      ) {
+        const wm = getWeaponReloadMotion(4, state.medKitHealProgress);
+        reloadRotX = wm.reloadRotX;
+        reloadRotY = wm.reloadRotY;
+        reloadRotZ = wm.reloadRotZ;
+        reloadX = wm.reloadX;
+        reloadY = wm.reloadY;
       }
 
       const activeWeapon = weaponModels[state.weaponIndex];
-      const viewAnim = applyWeaponHandsAnim(activeWeapon, reloadProgress);
+      let animProgress = reloadProgress;
+      if (state.weaponIndex === 4 && keys.f) {
+        animProgress = Math.max(animProgress, state.medKitHealProgress);
+      }
+      const viewAnim = applyWeaponHandsAnim(activeWeapon, animProgress);
       const gun = activeWeapon.userData.gun;
       const basePos = activeWeapon.userData.basePos;
       const adsOffset = activeWeapon.userData.adsOffset;
@@ -9903,6 +9957,7 @@
       keys.d = false;
       keys.space = false;
       keys.shift = false;
+      keys.f = false;
       pauseOverlay.style.display = "flex";
       btnPauseRestart.style.display = isPvpCrossfireMap(CURRENT_MAP) ? "none" : "";
       crosshairEl.classList.add("hidden");
