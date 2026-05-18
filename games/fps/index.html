@@ -8401,10 +8401,18 @@
     /** Camera-space Y offset so the view-model sits ~20px lower on a typical 1080p window (FOV 75). */
     const WEAPON_VIEW_DROP_Y = -0.032;
 
+    const VIEW_MAG_MAT = new THREE.MeshStandardMaterial({
+      color: 0x6a5c48,
+      roughness: 0.55,
+      metalness: 0.4,
+      emissive: 0x2a2218,
+      emissiveIntensity: 0.35,
+    });
+
     function attachWeaponMag(gunGroup, root, x, y, z, w, h, d) {
       const magGrp = new THREE.Group();
-      const mMag = new THREE.MeshStandardMaterial({ color: 0x2a241c, roughness: 0.78, metalness: 0.25 });
-      addMeshPart(magGrp, new THREE.BoxGeometry(w, h, d), mMag, 0, 0, 0);
+      magGrp.name = "viewMag";
+      addMeshPart(magGrp, new THREE.BoxGeometry(w, h, d), VIEW_MAG_MAT, 0, 0, 0);
       magGrp.position.set(x, y, z);
       gunGroup.add(magGrp);
       root.userData.animMag = magGrp;
@@ -8483,8 +8491,8 @@
         const magHold = new THREE.Group();
         magHold.name = "handMagHold";
         magHold.visible = false;
-        magHold.position.set(0, -0.1, 0);
-        magHold.rotation.set(0, 0, 0);
+        magHold.position.set(0, -0.04, 0.07);
+        magHold.rotation.set(0.15, 0, 0);
         lArm.add(magHold);
         root.userData.handMagHold = magHold;
       }
@@ -8510,17 +8518,22 @@
         if (magMesh) magMesh.visible = true;
         return;
       }
-      if (!ud.handMagProxy) {
-        const proxy = magMesh.clone();
-        proxy.traverse((o) => {
-          if (o.isMesh) {
-            o.renderOrder = 27;
-            if (o.material) o.material = o.material.clone();
-          }
-        });
-        ud.handMagHold.add(proxy);
-        ud.handMagProxy = proxy;
+      if (ud.handMagProxy) {
+        ud.handMagHold.remove(ud.handMagProxy);
+        ud.handMagProxy = null;
       }
+      const proxy = magMesh.clone(true);
+      proxy.position.set(0, 0, 0);
+      proxy.rotation.set(0, 0, 0);
+      proxy.scale.set(1.12, 1.12, 1.12);
+      proxy.traverse((o) => {
+        if (o.isMesh) {
+          o.renderOrder = 28;
+          o.material = VIEW_MAG_MAT;
+        }
+      });
+      ud.handMagHold.add(proxy);
+      ud.handMagProxy = proxy;
       ud.handMagHold.visible = true;
       ud.handMagProxy.visible = true;
       magMesh.visible = false;
@@ -8551,19 +8564,17 @@
       const lp = ud.armLBasePos;
       const lr = ud.armLBaseRot;
       if (!bp || !br) return;
-      hideHandMagProxy(ud);
       resetViewArms(ud);
       setViewHandPose(ud.viewArmR, bp, br, 0, 0, 0, 0, 0, 0);
+      let magInHand = false;
 
       if (wi === 0) {
         const mag = reloadPhase(p, 0, 0.55);
         const rack = reloadPhase(p, 0.55, 1);
+        magInHand = mag > 0.12 && mag < 0.88;
         if (mag > 0 && mag < 1) {
           const drop = mag < 0.5 ? mag * 2 : 2 - mag * 2;
           setViewHandPose(ud.viewArmL, lp, lr, 0, -0.09 * drop, 0, 0, 0, 0);
-          syncHandMagProxy(ud, mag > 0.18 && mag < 0.82, ud.animMag);
-        } else {
-          syncHandMagProxy(ud, false);
         }
         if (rack > 0) {
           const pull = Math.sin(rack * Math.PI);
@@ -8572,12 +8583,10 @@
       } else if (wi === 1 || wi === 3) {
         const mag = reloadPhase(p, 0, 0.58);
         const charge = reloadPhase(p, 0.58, 0.85);
+        magInHand = mag > 0.14 && mag < 0.86;
         if (mag > 0 && mag < 1) {
           const drop = mag < 0.5 ? mag * 2 : 2 - mag * 2;
           setViewHandPose(ud.viewArmL, lp, lr, 0, -0.1 * drop, 0, 0, 0, 0);
-          syncHandMagProxy(ud, mag > 0.2 && mag < 0.8, ud.animMag);
-        } else {
-          syncHandMagProxy(ud, false);
         }
         if (charge > 0) {
           const pull = Math.sin(charge * Math.PI);
@@ -8600,18 +8609,18 @@
       } else if (wi === 5) {
         const mag = reloadPhase(p, 0.15, 0.6);
         const bolt = reloadPhase(p, 0.6, 1);
+        magInHand = mag > 0.16 && mag < 0.84;
         if (mag > 0 && mag < 1) {
           const drop = mag < 0.5 ? mag * 2 : 2 - mag * 2;
           setViewHandPose(ud.viewArmL, lp, lr, 0, -0.1 * drop, 0, 0, 0, 0);
-          syncHandMagProxy(ud, mag > 0.22 && mag < 0.78, ud.animMag);
-        } else {
-          syncHandMagProxy(ud, false);
         }
         if (bolt > 0) {
           const pull = Math.sin(bolt * Math.PI);
           setViewHandPose(ud.viewArmL, lp, lr, 0, 0.03 * pull, 0.06 * pull, 0, 0, 0);
         }
       }
+
+      syncHandMagProxy(ud, magInHand, ud.animMag);
     }
 
     function reloadPhase(p, t0, t1) {
@@ -8692,18 +8701,18 @@
         addMeshPart(gunGroup, new THREE.BoxGeometry(0.14, 0.15, 0.26), mWoodD, 0, 0, 0.5);
         addMeshPart(gunGroup, new THREE.BoxGeometry(0.12, 0.09, 0.14), mWoodD, 0, -0.055, 0.38);
         addMeshPart(gunGroup, new THREE.BoxGeometry(0.08, 0.035, 0.05), mBlack, 0, -0.055, 0.12);
-        const barrelGrp = new THREE.Group();
-        barrelGrp.position.set(0, 0.04, -0.08);
-        addMeshPart(barrelGrp, new THREE.CylinderGeometry(0.042, 0.046, 0.52, 12), mMetal, 0, 0, -0.2, barrelZ, 0, 0);
-        addMeshPart(barrelGrp, new THREE.BoxGeometry(0.055, 0.035, 0.02), mSight, 0, 0.05, 0.02);
-        addMeshPart(barrelGrp, new THREE.BoxGeometry(0.03, 0.065, 0.02), mSight, 0, 0.06, -0.42);
-        gunGroup.add(barrelGrp);
-        root.userData.animBarrel = barrelGrp;
         const breakGrp = new THREE.Group();
         breakGrp.position.set(0, 0.03, 0.22);
         addMeshPart(breakGrp, new THREE.BoxGeometry(0.17, 0.15, 0.48), mLight, 0, 0, -0.1);
+        const barrelGrp = new THREE.Group();
+        barrelGrp.position.set(0, 0.01, -0.3);
+        addMeshPart(barrelGrp, new THREE.CylinderGeometry(0.042, 0.046, 0.52, 12), mMetal, 0, 0, -0.18, barrelZ, 0, 0);
+        addMeshPart(barrelGrp, new THREE.BoxGeometry(0.055, 0.035, 0.02), mSight, 0, 0.05, 0.02);
+        addMeshPart(barrelGrp, new THREE.BoxGeometry(0.03, 0.065, 0.02), mSight, 0, 0.06, -0.4);
+        breakGrp.add(barrelGrp);
         gunGroup.add(breakGrp);
         root.userData.animBreak = breakGrp;
+        root.userData.animBarrel = barrelGrp;
         const pumpGrp = new THREE.Group();
         addMeshPart(pumpGrp, new THREE.BoxGeometry(0.12, 0.08, 0.2), mWood, 0, -0.06, -0.06);
         addMeshPart(pumpGrp, new THREE.BoxGeometry(0.06, 0.1, 0.06), mDark, 0, 0.02, -0.12);
@@ -8728,8 +8737,8 @@
         adsOffset.set(-0.175, 0.105, 0.24);
 
         const muzzleNode = new THREE.Object3D();
-        muzzleNode.position.set(0, 0.082, -0.52);
-        gunGroup.add(muzzleNode);
+        muzzleNode.position.set(0, 0.082, -0.42);
+        barrelGrp.add(muzzleNode);
         root.userData.muzzleNode = muzzleNode;
 
       } else if (type === 3) {
@@ -9075,8 +9084,6 @@
       const p = rp;
 
       if (ud.animMag && magBase) {
-        ud.animMag.visible = true;
-        ud.animMag.position.copy(magBase);
         ud.animMag.rotation.set(0, 0, 0);
       }
       if (ud.animReloadShell) ud.animReloadShell.visible = false;
@@ -9087,19 +9094,22 @@
         const magIn = reloadPhase(p, 0.32, 0.5);
         const rack = reloadPhase(p, 0.5, 1);
         if (ud.animMag && magBase) {
-          const inHand = magOut > 0.15 && magOut < 0.95;
-          if (inHand) {
-            ud.animMag.visible = false;
-          } else {
+          const inHand = magOut > 0.12 && magOut < 0.88;
+          if (!inHand) {
             ud.animMag.visible = true;
-            if (p < 0.52) {
-              const drop = magOut < 1 ? magOut : 1 - magIn;
-              ud.animMag.position.y = magBase.y - 0.16 * drop;
-              ud.animMag.position.z = magBase.z - 0.06 * drop;
-              ud.animMag.position.x = magBase.x + 0.05 * drop;
+            if (magOut < 0.12) {
+              ud.animMag.position.y = magBase.y - 0.14 * (magOut / 0.12);
+              ud.animMag.position.z = magBase.z - 0.05 * (magOut / 0.12);
+            } else if (magIn > 0.88) {
+              const t = (magIn - 0.88) / 0.12;
+              ud.animMag.position.y = magBase.y - 0.1 * (1 - t);
+              ud.animMag.position.z = magBase.z - 0.04 * (1 - t);
+              ud.animMag.position.x = magBase.x;
             } else {
               ud.animMag.position.copy(magBase);
             }
+          } else {
+            ud.animMag.visible = false;
           }
         }
         if (ud.animSlide && rack > 0) {
@@ -9113,23 +9123,23 @@
         const magOut = reloadPhase(p, 0, 0.32);
         const magIn = reloadPhase(p, 0.32, 0.58);
         if (ud.animMag && magBase) {
-          const inHand = magOut > 0.2 && magOut < 0.92;
-          if (inHand) {
-            ud.animMag.visible = false;
-          } else {
+          const inHand = magOut > 0.14 && magOut < 0.86;
+          if (!inHand) {
             ud.animMag.visible = true;
-            if (magOut < 1) {
-              ud.animMag.position.y = magBase.y - 0.18 * magOut;
-              ud.animMag.position.z = magBase.z - 0.07 * magOut;
-              ud.animMag.position.x = magBase.x + 0.06 * magOut;
-            } else if (magIn < 1) {
-              const t = 1 - magIn;
-              ud.animMag.position.y = magBase.y - 0.18 * t;
-              ud.animMag.position.z = magBase.z - 0.07 * t;
-              ud.animMag.position.x = magBase.x + 0.06 * t;
+            if (magOut < 0.14) {
+              const t = magOut / 0.14;
+              ud.animMag.position.y = magBase.y - 0.16 * t;
+              ud.animMag.position.z = magBase.z - 0.06 * t;
+            } else if (magIn > 0.86) {
+              const t = (magIn - 0.86) / 0.14;
+              ud.animMag.position.y = magBase.y - 0.12 * (1 - t);
+              ud.animMag.position.z = magBase.z - 0.05 * (1 - t);
+              ud.animMag.position.x = magBase.x;
             } else {
               ud.animMag.position.copy(magBase);
             }
+          } else {
+            ud.animMag.visible = false;
           }
         }
       } else if (wi === 2) {
@@ -9164,23 +9174,23 @@
         else boltPull = 0.34;
         if (ud.animBolt) ud.animBolt.position.z = boltPull;
         if (ud.animMag && magBase) {
-          const inHand = magOut > 0.22 && magOut < 0.88;
-          if (inHand) {
-            ud.animMag.visible = false;
-          } else {
+          const inHand = magOut > 0.16 && magOut < 0.84;
+          if (!inHand) {
             ud.animMag.visible = true;
-            if (magOut < 1) {
-              ud.animMag.position.y = magBase.y - 0.15 * magOut;
-              ud.animMag.position.z = magBase.z - 0.05 * magOut;
-              ud.animMag.position.x = magBase.x + 0.05 * magOut;
-            } else if (magIn < 1) {
-              const t = 1 - magIn;
-              ud.animMag.position.y = magBase.y - 0.15 * t;
+            if (magOut < 0.16) {
+              const t = magOut / 0.16;
+              ud.animMag.position.y = magBase.y - 0.14 * t;
               ud.animMag.position.z = magBase.z - 0.05 * t;
-              ud.animMag.position.x = magBase.x + 0.05 * t;
+            } else if (magIn > 0.84) {
+              const t = (magIn - 0.84) / 0.16;
+              ud.animMag.position.y = magBase.y - 0.1 * (1 - t);
+              ud.animMag.position.z = magBase.z - 0.04 * (1 - t);
+              ud.animMag.position.x = magBase.x;
             } else {
               ud.animMag.position.copy(magBase);
             }
+          } else {
+            ud.animMag.visible = false;
           }
         }
       }
@@ -9198,9 +9208,10 @@
       if (ud.animBolt) ud.animBolt.position.set(0, 0, 0);
       if (ud.animPump) ud.animPump.position.set(0, 0, 0);
       if (ud.animBarrel) ud.animBarrel.rotation.set(0, 0, 0);
-      if (ud.animMag && ud.magBasePos) {
+      if (ud.animMag && ud.magBasePos && !state.reloading) {
         ud.animMag.position.copy(ud.magBasePos);
         ud.animMag.visible = true;
+        hideHandMagProxy(ud);
       }
       if (ud.animBreak) ud.animBreak.rotation.set(0, 0, 0);
       if (ud.animReloadShell) ud.animReloadShell.visible = false;
