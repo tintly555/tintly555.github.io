@@ -8419,12 +8419,13 @@
     }
 
     /** Side-mounted grip stubs (±X). Thin in Z so blocks never sit on the bore axis. */
+    /** R = grip (hold). L = mag / charge / shells / bolt. */
     const VIEW_HAND_GRIPS = {
-      0: { r: [0.12, -0.14, 0.09], rRot: [0, 0, 0], l: [-0.11, -0.12, 0.04], lRot: [0, 0, 0] },
-      1: { r: [0.13, -0.12, 0.04], rRot: [0, 0, 0], l: [-0.12, -0.11, 0], lRot: [0, 0, 0] },
-      2: { r: [0.14, -0.1, 0.1], rRot: [0, 0, 0], l: [-0.12, -0.08, 0.04], lRot: [0, 0, 0] },
-      3: { r: [0.13, -0.12, 0.03], rRot: [0, 0, 0], l: [-0.12, -0.11, 0], lRot: [0, 0, 0] },
-      5: { r: [0.13, -0.11, 0.06], rRot: [0, 0, 0], l: [-0.12, -0.1, 0.02], lRot: [0, 0, 0] },
+      0: { r: [0.12, -0.15, 0.1], rRot: [0, 0, 0], l: [-0.11, -0.13, 0.02], lRot: [0, 0, 0] },
+      1: { r: [0.13, -0.13, 0.02], rRot: [0, 0, 0], l: [-0.12, -0.12, 0.06], lRot: [0, 0, 0] },
+      2: { r: [0.14, -0.1, -0.04], rRot: [0, 0, 0], l: [-0.12, -0.04, 0.12], lRot: [0, 0, 0] },
+      3: { r: [0.13, -0.13, 0.02], rRot: [0, 0, 0], l: [-0.12, -0.12, 0.05], lRot: [0, 0, 0] },
+      5: { r: [0.13, -0.12, 0.04], rRot: [0, 0, 0], l: [-0.12, -0.1, 0.08], lRot: [0, 0, 0] },
     };
 
     function attachViewHandGrips(gunGroup, root, spec) {
@@ -8542,7 +8543,7 @@
       resetViewArms(ud);
     }
 
-    /** Simple side-block gestures: mostly ±Y / ±X, almost no twist into the gun mesh. */
+    /** R holds the gun; L does mag / rack / charge / shells / bolt. */
     function applyViewArmReload(ud, wi, rp) {
       const p = rp;
       const bp = ud.armRBasePos;
@@ -8552,6 +8553,7 @@
       if (!bp || !br) return;
       hideHandMagProxy(ud);
       resetViewArms(ud);
+      setViewHandPose(ud.viewArmR, bp, br, 0, 0, 0, 0, 0, 0);
 
       if (wi === 0) {
         const mag = reloadPhase(p, 0, 0.55);
@@ -8565,7 +8567,7 @@
         }
         if (rack > 0) {
           const pull = Math.sin(rack * Math.PI);
-          setViewHandPose(ud.viewArmR, bp, br, 0, 0.04 * pull, 0, 0, 0, 0);
+          setViewHandPose(ud.viewArmL, lp, lr, 0, 0.03 * pull, 0.05 * pull, 0, 0, 0);
         }
       } else if (wi === 1 || wi === 3) {
         const mag = reloadPhase(p, 0, 0.58);
@@ -8579,14 +8581,21 @@
         }
         if (charge > 0) {
           const pull = Math.sin(charge * Math.PI);
-          setViewHandPose(ud.viewArmR, bp, br, 0, 0.03 * pull, 0.02 * pull, 0, 0, 0);
+          setViewHandPose(ud.viewArmL, lp, lr, 0, 0.02 * pull, 0.05 * pull, 0, 0, 0);
         }
       } else if (wi === 2) {
-        const load = reloadPhase(p, 0.12, 0.88);
-        if (load > 0 && load < 1) {
-          const wave = Math.sin(load * Math.PI * 2);
-          setViewHandPose(ud.viewArmL, lp, lr, 0, -0.05 + 0.04 * wave, 0, 0, 0, 0);
-          setViewHandPose(ud.viewArmR, bp, br, 0, 0.02 * wave, 0, 0, 0, 0);
+        const openT = reloadPhase(p, 0, 0.14);
+        const loadT = reloadPhase(p, 0.14, 0.88);
+        const closeT = reloadPhase(p, 0.88, 1);
+        let breakOpen = 0;
+        if (openT < 1) breakOpen = openT;
+        else if (closeT > 0) breakOpen = 1 - closeT;
+        else breakOpen = 1;
+        if (loadT > 0 && loadT < 1) {
+          const wave = Math.sin(loadT * Math.PI * 2);
+          setViewHandPose(ud.viewArmL, lp, lr, 0, -0.06 + 0.05 * wave, 0.03 * wave, 0, 0, 0);
+        } else if (breakOpen > 0) {
+          setViewHandPose(ud.viewArmL, lp, lr, 0, 0.05 * breakOpen, 0.06 * breakOpen, 0, -0.1 * breakOpen, 0);
         }
       } else if (wi === 5) {
         const mag = reloadPhase(p, 0.15, 0.6);
@@ -8600,7 +8609,7 @@
         }
         if (bolt > 0) {
           const pull = Math.sin(bolt * Math.PI);
-          setViewHandPose(ud.viewArmR, bp, br, 0, 0.04 * pull, 0.03 * pull, 0, 0, 0);
+          setViewHandPose(ud.viewArmL, lp, lr, 0, 0.03 * pull, 0.06 * pull, 0, 0, 0);
         }
       }
     }
@@ -8680,21 +8689,21 @@
         root.userData.muzzleNode = muzzleNode;
 
       } else if (type === 2) {
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.17, 0.15, 0.48), mLight, 0, 0, 0.06);
         addMeshPart(gunGroup, new THREE.BoxGeometry(0.14, 0.15, 0.26), mWoodD, 0, 0, 0.5);
         addMeshPart(gunGroup, new THREE.BoxGeometry(0.12, 0.09, 0.14), mWoodD, 0, -0.055, 0.38);
         addMeshPart(gunGroup, new THREE.BoxGeometry(0.08, 0.035, 0.05), mBlack, 0, -0.055, 0.12);
-        const breakGrp = new THREE.Group();
-        breakGrp.position.set(0, 0.02, 0.1);
         const barrelGrp = new THREE.Group();
-        addMeshPart(barrelGrp, new THREE.CylinderGeometry(0.042, 0.046, 0.52, 12), mMetal, 0, 0, -0.26, barrelZ, 0, 0);
+        barrelGrp.position.set(0, 0.04, -0.08);
+        addMeshPart(barrelGrp, new THREE.CylinderGeometry(0.042, 0.046, 0.52, 12), mMetal, 0, 0, -0.2, barrelZ, 0, 0);
         addMeshPart(barrelGrp, new THREE.BoxGeometry(0.055, 0.035, 0.02), mSight, 0, 0.05, 0.02);
-        addMeshPart(barrelGrp, new THREE.BoxGeometry(0.03, 0.065, 0.02), mSight, 0, 0.06, -0.5);
-        barrelGrp.position.set(0, 0, 0);
-        breakGrp.add(barrelGrp);
+        addMeshPart(barrelGrp, new THREE.BoxGeometry(0.03, 0.065, 0.02), mSight, 0, 0.06, -0.42);
+        gunGroup.add(barrelGrp);
+        root.userData.animBarrel = barrelGrp;
+        const breakGrp = new THREE.Group();
+        breakGrp.position.set(0, 0.03, 0.22);
+        addMeshPart(breakGrp, new THREE.BoxGeometry(0.17, 0.15, 0.48), mLight, 0, 0, -0.1);
         gunGroup.add(breakGrp);
         root.userData.animBreak = breakGrp;
-        root.userData.animBarrel = barrelGrp;
         const pumpGrp = new THREE.Group();
         addMeshPart(pumpGrp, new THREE.BoxGeometry(0.12, 0.08, 0.2), mWood, 0, -0.06, -0.06);
         addMeshPart(pumpGrp, new THREE.BoxGeometry(0.06, 0.1, 0.06), mDark, 0, 0.02, -0.12);
@@ -8710,9 +8719,9 @@
         });
         const shellIns = new THREE.Group();
         addMeshPart(shellIns, new THREE.CylinderGeometry(0.012, 0.014, 0.032, 6), mBrass, 0, 0, 0, barrelZ, 0, 0);
-        shellIns.position.set(0, 0.02, 0.02);
+        shellIns.position.set(0, 0.04, -0.06);
         shellIns.visible = false;
-        gunGroup.add(shellIns);
+        breakGrp.add(shellIns);
         root.userData.animReloadShell = shellIns;
 
         gunGroup.position.set(0.23, -0.2, -0.82);
@@ -9141,8 +9150,8 @@
           );
           const shellP = loadT * shellsNeeded - idx;
           ud.animReloadShell.visible = true;
-          ud.animReloadShell.position.set(0, 0.06 + shellP * 0.04, 0.02 - shellP * 0.08);
-          ud.animReloadShell.rotation.x = Math.PI / 2 + shellP * 0.5;
+          ud.animReloadShell.position.set(0, 0.05 + shellP * 0.035, -0.04 - shellP * 0.05);
+          ud.animReloadShell.rotation.x = Math.PI / 2 + shellP * 0.45;
         }
       } else if (wi === 5) {
         const boltOpen = reloadPhase(p, 0, 0.18);
