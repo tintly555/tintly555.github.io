@@ -1066,6 +1066,7 @@
     <div class="settings-shell">
       <aside class="settings-tabs">
         <button type="button" class="settings-tab active" id="settingsTabAudio" data-scroll-target="settingsSectionAudio">AUDIO</button>
+        <button type="button" class="settings-tab" id="settingsTabControls" data-scroll-target="settingsSectionControls">CONTROLS</button>
         <button type="button" class="settings-tab" id="settingsTabGraphics" data-scroll-target="settingsSectionGraphics">GRAPHICS</button>
         <button type="button" class="settings-tab" id="settingsTabLanguage" data-scroll-target="settingsSectionLanguage">LANGUAGE</button>
       </aside>
@@ -1085,6 +1086,23 @@
             <div class="settings-row">
               <label>Sound volume <span class="value-pill" id="lblSfxVol">100%</span></label>
               <input type="range" id="rngSfxVol" min="0" max="100" value="100" />
+            </div>
+          </section>
+          <section class="settings-section" id="settingsSectionControls">
+            <h2 id="settingsHeadingControls">CONTROLS</h2>
+            <div class="settings-row">
+              <label><span id="lookSensLabelText">Mouse look sensitivity</span> <span class="value-pill" id="lblLookSens">100%</span></label>
+              <input type="range" id="rngLookSens" min="0.1" max="200" step="0.1" value="100" />
+              <p id="lookSensHint" style="font-size:11px;opacity:0.65;margin-top:10px;max-width:480px;line-height:1.45;">
+                100% is the default feel. Range 0.1%–200%. Saved between sessions.
+              </p>
+            </div>
+            <div class="settings-row">
+              <label><span id="adsLookSensLabelText">ADS look sensitivity</span> <span class="value-pill" id="lblAdsLookSens">100%</span></label>
+              <input type="range" id="rngAdsLookSens" min="0.1" max="200" step="0.1" value="100" />
+              <p id="adsLookSensHint" style="font-size:11px;opacity:0.65;margin-top:10px;max-width:480px;line-height:1.45;">
+                Applies while aiming (right-click / Shift). 100% matches default ADS feel. Range 0.1%–200%.
+              </p>
             </div>
           </section>
           <section class="settings-section" id="settingsSectionGraphics">
@@ -1141,6 +1159,7 @@
 
   <script type="module">
     import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.182.0/build/three.module.js";
+    import { GAME_I18N, LANGUAGE_OPTIONS as LANG_META, translate as translateGame } from "./translation.js";
 
     const app = document.getElementById("app");
     const hud = document.getElementById("hud");
@@ -1208,7 +1227,12 @@
     const btnMenuSettings = document.getElementById("btnMenuSettings");
     const settingsModal = document.getElementById("settingsModal");
     const settingsScroll = document.getElementById("settingsScroll");
-    const SETTINGS_SECTION_IDS = ["settingsSectionAudio", "settingsSectionGraphics", "settingsSectionLanguage"];
+    const SETTINGS_SECTION_IDS = [
+      "settingsSectionAudio",
+      "settingsSectionControls",
+      "settingsSectionGraphics",
+      "settingsSectionLanguage",
+    ];
     const btnCloseSettings = document.getElementById("btnCloseSettings");
     const rngMasterVol = document.getElementById("rngMasterVol");
     const rngMusicVol = document.getElementById("rngMusicVol");
@@ -1216,6 +1240,10 @@
     const lblMasterVol = document.getElementById("lblMasterVol");
     const lblMusicVol = document.getElementById("lblMusicVol");
     const lblSfxVol = document.getElementById("lblSfxVol");
+    const rngLookSens = document.getElementById("rngLookSens");
+    const lblLookSens = document.getElementById("lblLookSens");
+    const rngAdsLookSens = document.getElementById("rngAdsLookSens");
+    const lblAdsLookSens = document.getElementById("lblAdsLookSens");
     const btnQualityPrev = document.getElementById("btnQualityPrev");
     const btnQualityNext = document.getElementById("btnQualityNext");
     const qualityLabel = document.getElementById("qualityLabel");
@@ -1239,703 +1267,8 @@
     const SETTINGS_STORAGE_KEY = "fpsGameSettingsV1";
     const QUALITY_LEVELS = ["potato", "regular", "high", "extreme"];
     const QUALITY_LABELS = ["POTATO", "REGULAR", "HIGH", "EXTREME"];
-    const LANGUAGE_OPTIONS = [
-      "en",
-      "zh",
-      "es",
-      "ja",
-      "fr",
-      "de",
-      "ko",
-      "pt",
-      "ru",
-      "it",
-      "nl",
-      "pl",
-      "tr",
-      "hi",
-      "ar",
-      "vi",
-      "id",
-    ];
-    const LANGUAGE_LABELS = {
-      en: "ENGLISH",
-      zh: "简体中文",
-      es: "ESPAÑOL",
-      ja: "日本語",
-      fr: "FRANÇAIS",
-      de: "DEUTSCH",
-      ko: "한국어",
-      pt: "PORTUGUÊS",
-      ru: "РУССКИЙ",
-      it: "ITALIANO",
-      nl: "NEDERLANDS",
-      pl: "POLSKI",
-      tr: "TÜRKÇE",
-      hi: "हिन्दी",
-      ar: "العربية",
-      vi: "TIẾNG VIỆT",
-      id: "BAHASA INDONESIA",
-    };
-    const I18N = {
-      en: {
-        gameTitle: "Zone No Light",
-        creditsGame: "Game by Tintly555",
-        creditsMusic: "Music by JimmyQrg",
-        btnZombieArena: "Zombie Arena",
-        btnCrossfirePickMap: "Crossfire (PVP — select map)",
-        zombieArenaTitle: "ZOMBIE ARENA",
-        btnSingleplayer: "SINGLEPLAYER",
-        btnCoopMode: "CO-OP MODE",
-        btnBack: "← BACK",
-        lobbyMultiplayer: "MULTIPLAYER",
-        lobbyArenaCoop: "ARENA CO-OP",
-        lobbyCrossfireClassic: "CROSSFIRE (PVP) — CLASSIC",
-        lobbyCrossfireGrid: "CROSSFIRE (PVP) — GRID",
-        btnQuickPlay: "QUICK PLAY",
-        btnCreateRoom: "CREATE A ROOM",
-        btnJoinViaCode: "JOIN VIA CODE",
-        joinViaCodeTitle: "JOIN VIA CODE",
-        roomCodePlaceholder: "ROOM CODE",
-        btnJoin: "JOIN",
-        menuSettings: "SETTINGS",
-        pvpMapTitle: "CROSSFIRE — MAP",
-        pvpMapDesc: "Choose the PVP layout, then use Quick Play / Create / Join.",
-        pvpMapClassic: "CLASSIC (ORIGINAL)",
-        pvpMapGrid: "GRID KILLHOUSE",
-        pvpMapBack: "← BACK",
-        hudHelpChat: "Press T to chat",
-        hudHelpLight: "Press L to toggle light & flashlight",
-        hudHelpZoom: "Press Z to cycle flashlight beam (small / medium / wide)",
-        hudGameTitleLine: "Zone No Light",
-        combatHit: "HIT",
-        combatKill: "KILL!",
-        hintClick: "Click anywhere",
-        medkitHold: "HOLD F",
-        settingsLangTitle: "LANGUAGE",
-        settingsLangLabel: "Game language",
-        settingsLangHint: "Switches menu and HUD labels immediately.",
-        mpNoServerAck: "No response from server.",
-        mpMissingRoomId: "Could not join — missing room id from server.",
-        lobbyPickModeFirst: "Choose CO-OP or a PVP map first.",
-        enterCodeError: "Enter a code",
-        joinNeedModeFirst: "Go back and pick a mode first.",
-      },
-      zh: {
-        gameTitle: "无光之境",
-        creditsGame: "游戏制作：Tintly555",
-        creditsMusic: "音乐制作：JimmyQrg",
-        btnZombieArena: "丧尸竞技场",
-        btnCrossfirePickMap: "交叉火力（对战 — 选地图）",
-        zombieArenaTitle: "丧尸竞技场",
-        btnSingleplayer: "单人模式",
-        btnCoopMode: "合作模式",
-        btnBack: "← 返回",
-        lobbyMultiplayer: "多人游戏",
-        lobbyArenaCoop: "竞技场合作",
-        lobbyCrossfireClassic: "交叉火力（对战）— 经典",
-        lobbyCrossfireGrid: "交叉火力（对战）— 亮图",
-        btnQuickPlay: "快速匹配",
-        btnCreateRoom: "创建房间",
-        btnJoinViaCode: "房间码加入",
-        joinViaCodeTitle: "房间码加入",
-        roomCodePlaceholder: "房间码",
-        btnJoin: "加入",
-        menuSettings: "设置",
-        pvpMapTitle: "交叉火力 — 地图",
-        pvpMapDesc: "选择 PVP 地图后，再进行快速匹配/创建/加入。",
-        pvpMapClassic: "经典地图（原版）",
-        pvpMapGrid: "新单挑地图（亮）",
-        pvpMapBack: "← 返回",
-        hudHelpChat: "按 T 打开聊天",
-        hudHelpLight: "按 L 开关灯光与手电",
-        hudHelpZoom: "按 Z 切换手电光斑：小 / 中 / 大",
-        hudGameTitleLine: "无光之境",
-        combatHit: "命中",
-        combatKill: "击杀",
-        hintClick: "点击任意处",
-        medkitHold: "按住 F",
-        settingsLangTitle: "语言",
-        settingsLangLabel: "游戏语言",
-        settingsLangHint: "菜单与 HUD 文案会立即切换。",
-        mpNoServerAck: "服务器没有响应。",
-        mpMissingRoomId: "无法加入 — 服务器未返回房间编号。",
-        lobbyPickModeFirst: "请先选择合作模式或 PVP 地图。",
-        enterCodeError: "请输入房间码",
-        joinNeedModeFirst: "请先返回并选择模式。",
-      },
-      es: {
-        gameTitle: "Zone No Light",
-        creditsGame: "Juego de Tintly555",
-        creditsMusic: "Música de JimmyQrg",
-        btnZombieArena: "Arena zombie",
-        btnCrossfirePickMap: "Crossfire (JcJ — elegir mapa)",
-        zombieArenaTitle: "ARENA ZOMBIE",
-        btnSingleplayer: "UN JUGADOR",
-        btnCoopMode: "COOPERATIVO",
-        btnBack: "← ATRÁS",
-        lobbyMultiplayer: "MULTIJUGADOR",
-        lobbyArenaCoop: "ARENA CO-OP",
-        lobbyCrossfireClassic: "CROSSFIRE (JcJ) — CLÁSICO",
-        lobbyCrossfireGrid: "CROSSFIRE (JcJ) — GRILLA",
-        btnQuickPlay: "PARTIDA RÁPIDA",
-        btnCreateRoom: "CREAR SALA",
-        btnJoinViaCode: "UNIRSE POR CÓDIGO",
-        joinViaCodeTitle: "UNIRSE POR CÓDIGO",
-        roomCodePlaceholder: "CÓDIGO",
-        btnJoin: "UNIRSE",
-        menuSettings: "AJUSTES",
-        pvpMapTitle: "CROSSFIRE — MAPA",
-        pvpMapDesc: "Elige el mapa JcJ y luego usa Partida rápida / Crear / Unirse.",
-        pvpMapClassic: "CLÁSICO (ORIGINAL)",
-        pvpMapGrid: "GRID KILLHOUSE",
-        pvpMapBack: "← ATRÁS",
-        hudHelpChat: "T para chatear",
-        hudHelpLight: "L para luz y linterna",
-        hudHelpZoom: "Z zoom de linterna",
-        hudGameTitleLine: "Zone No Light",
-        combatHit: "IMPACTO",
-        combatKill: "¡BAJA!",
-        hintClick: "Clic en cualquier sitio",
-        medkitHold: "MANTÉN",
-        settingsLangTitle: "IDIOMA",
-        settingsLangLabel: "Idioma del juego",
-        settingsLangHint: "Cambia menús y HUD al instante.",
-      },
-      ja: {
-        gameTitle: "Zone No Light",
-        creditsGame: "ゲーム制作：Tintly555",
-        creditsMusic: "音楽：JimmyQrg",
-        btnZombieArena: "ゾンビアリーナ",
-        btnCrossfirePickMap: "クロスファイア（PvP・マップ選択）",
-        zombieArenaTitle: "ゾンビアリーナ",
-        btnSingleplayer: "シングルプレイ",
-        btnCoopMode: "協力プレイ",
-        btnBack: "← 戻る",
-        lobbyMultiplayer: "マルチプレイ",
-        lobbyArenaCoop: "アリーナ協力",
-        lobbyCrossfireClassic: "クロスファイア（PvP）— クラシック",
-        lobbyCrossfireGrid: "クロスファイア（PvP）— グリッド",
-        btnQuickPlay: "クイックプレイ",
-        btnCreateRoom: "ルーム作成",
-        btnJoinViaCode: "コードで参加",
-        joinViaCodeTitle: "コードで参加",
-        roomCodePlaceholder: "ルームコード",
-        btnJoin: "参加",
-        menuSettings: "設定",
-        pvpMapTitle: "クロスファイア — マップ",
-        pvpMapDesc: "PvPマップを選んでからクイックプレイ／作成／参加を使います。",
-        pvpMapClassic: "クラシック（原作）",
-        pvpMapGrid: "グリッドキルハウス",
-        pvpMapBack: "← 戻る",
-        hudHelpChat: "T でチャット",
-        hudHelpLight: "L でライト／ライト",
-        hudHelpZoom: "Z でライトズーム",
-        hudGameTitleLine: "Zone No Light",
-        combatHit: "ヒット",
-        combatKill: "キル！",
-        hintClick: "クリックして開始",
-        medkitHold: "長押し",
-        settingsLangTitle: "言語",
-        settingsLangLabel: "ゲーム言語",
-        settingsLangHint: "メニューとHUDがすぐ切り替わります。",
-      },
-      fr: {
-        gameTitle: "Zone No Light",
-        creditsGame: "Jeu par Tintly555",
-        creditsMusic: "Musique par JimmyQrg",
-        btnZombieArena: "Arène zombie",
-        btnCrossfirePickMap: "Crossfire (PvP — choix de carte)",
-        zombieArenaTitle: "ARÈNE ZOMBIE",
-        btnSingleplayer: "SOLO",
-        btnCoopMode: "COOP",
-        btnBack: "← RETOUR",
-        lobbyMultiplayer: "MULTIJOUEUR",
-        lobbyArenaCoop: "ARÈNE COOP",
-        lobbyCrossfireClassic: "CROSSFIRE (PvP) — CLASSIQUE",
-        lobbyCrossfireGrid: "CROSSFIRE (PvP) — GRILLE",
-        btnQuickPlay: "PARTIE RAPIDE",
-        btnCreateRoom: "CRÉER UNE SALLE",
-        btnJoinViaCode: "REJOINDRE PAR CODE",
-        joinViaCodeTitle: "REJOINDRE PAR CODE",
-        roomCodePlaceholder: "CODE SALLE",
-        btnJoin: "REJOINDRE",
-        menuSettings: "PARAMÈTRES",
-        pvpMapTitle: "CROSSFIRE — CARTE",
-        pvpMapDesc: "Choisissez la carte PvP puis rapide / créer / rejoindre.",
-        pvpMapClassic: "CLASSIQUE (ORIGINAL)",
-        pvpMapGrid: "GRID KILLHOUSE",
-        pvpMapBack: "← RETOUR",
-        hudHelpChat: "T pour le chat",
-        hudHelpLight: "L lumière / lampe",
-        hudHelpZoom: "Z zoom lampe",
-        hudGameTitleLine: "Zone No Light",
-        combatHit: "TOUCHÉ",
-        combatKill: "KILL !",
-        hintClick: "Cliquez n'importe où",
-        medkitHold: "MAINTENIR",
-        settingsLangTitle: "LANGUE",
-        settingsLangLabel: "Langue du jeu",
-        settingsLangHint: "Menus et HUD changent immédiatement.",
-      },
-      de: {
-        gameTitle: "Zone No Light",
-        creditsGame: "Spiel von Tintly555",
-        creditsMusic: "Musik von JimmyQrg",
-        btnZombieArena: "Zombie-Arena",
-        btnCrossfirePickMap: "Crossfire (PvP — Karte wählen)",
-        zombieArenaTitle: "ZOMBIE-ARENA",
-        btnSingleplayer: "EINZELSPIELER",
-        btnCoopMode: "KOOP",
-        btnBack: "← ZURÜCK",
-        lobbyMultiplayer: "MEHRSPIELER",
-        lobbyArenaCoop: "ARENA-KOOP",
-        lobbyCrossfireClassic: "CROSSFIRE (PvP) — KLASSISCH",
-        lobbyCrossfireGrid: "CROSSFIRE (PvP) — GRID",
-        btnQuickPlay: "SCHNELLSPIEL",
-        btnCreateRoom: "RAUM ERSTELLEN",
-        btnJoinViaCode: "MIT CODE BEITRETEN",
-        joinViaCodeTitle: "MIT CODE BEITRETEN",
-        roomCodePlaceholder: "RAUMCODE",
-        btnJoin: "BEITRETEN",
-        menuSettings: "EINSTELLUNGEN",
-        pvpMapTitle: "CROSSFIRE — KARTE",
-        pvpMapDesc: "PvP-Layout wählen, dann Schnellspiel / Erstellen / Beitreten.",
-        pvpMapClassic: "KLASSISCH (ORIGINAL)",
-        pvpMapGrid: "GRID KILLHOUSE",
-        pvpMapBack: "← ZURÜCK",
-        hudHelpChat: "T für Chat",
-        hudHelpLight: "L Licht / Taschenlampe",
-        hudHelpZoom: "Z Taschenlampen-Zoom",
-        hudGameTitleLine: "Zone No Light",
-        combatHit: "TREFFER",
-        combatKill: "KILL!",
-        hintClick: "Überall klicken",
-        medkitHold: "HALTEN",
-        settingsLangTitle: "SPRACHE",
-        settingsLangLabel: "Spielsprache",
-        settingsLangHint: "Menüs und HUD sofort umschalten.",
-      },
-      ko: {
-        gameTitle: "Zone No Light",
-        creditsGame: "게임: Tintly555",
-        creditsMusic: "음악: JimmyQrg",
-        btnZombieArena: "좀비 아레나",
-        btnCrossfirePickMap: "교차 사격 (PvP — 맵 선택)",
-        zombieArenaTitle: "좀비 아레나",
-        btnSingleplayer: "싱글플레이",
-        btnCoopMode: "코옵",
-        btnBack: "← 뒤로",
-        lobbyMultiplayer: "멀티플레이",
-        lobbyArenaCoop: "아레나 코옵",
-        lobbyCrossfireClassic: "교차 사격 (PvP) — 클래식",
-        lobbyCrossfireGrid: "교차 사격 (PvP) — 그리드",
-        btnQuickPlay: "퀵 플레이",
-        btnCreateRoom: "방 만들기",
-        btnJoinViaCode: "코드로 참가",
-        joinViaCodeTitle: "코드로 참가",
-        roomCodePlaceholder: "방 코드",
-        btnJoin: "참가",
-        menuSettings: "설정",
-        pvpMapTitle: "교차 사격 — 맵",
-        pvpMapDesc: "PvP 맵을 고른 뒤 퀵 플레이 / 만들기 / 참가를 사용합니다.",
-        pvpMapClassic: "클래식 (오리지널)",
-        pvpMapGrid: "그리드 킬하우스",
-        pvpMapBack: "← 뒤로",
-        hudHelpChat: "T 채팅",
-        hudHelpLight: "L 조명/손전등",
-        hudHelpZoom: "Z 손전등 줌",
-        hudGameTitleLine: "Zone No Light",
-        combatHit: "적중",
-        combatKill: "킬!",
-        hintClick: "아무 곳이나 클릭",
-        medkitHold: "길게 누르기",
-        settingsLangTitle: "언어",
-        settingsLangLabel: "게임 언어",
-        settingsLangHint: "메뉴와 HUD가 즉시 바뀝니다.",
-      },
-      pt: {
-        gameTitle: "Zone No Light",
-        creditsGame: "Jogo por Tintly555",
-        creditsMusic: "Música por JimmyQrg",
-        btnZombieArena: "Arena zumbi",
-        btnCrossfirePickMap: "Crossfire (PvP — escolher mapa)",
-        zombieArenaTitle: "ARENA ZUMBI",
-        btnSingleplayer: "UM JOGADOR",
-        btnCoopMode: "COOPERATIVO",
-        btnBack: "← VOLTAR",
-        lobbyMultiplayer: "MULTIPLAYER",
-        lobbyArenaCoop: "ARENA CO-OP",
-        lobbyCrossfireClassic: "CROSSFIRE (PvP) — CLÁSSICO",
-        lobbyCrossfireGrid: "CROSSFIRE (PvP) — GRADE",
-        btnQuickPlay: "PARTIDA RÁPIDA",
-        btnCreateRoom: "CRIAR SALA",
-        btnJoinViaCode: "ENTRAR POR CÓDIGO",
-        joinViaCodeTitle: "ENTRAR POR CÓDIGO",
-        roomCodePlaceholder: "CÓDIGO DA SALA",
-        btnJoin: "ENTRAR",
-        menuSettings: "CONFIGURAÇÕES",
-        pvpMapTitle: "CROSSFIRE — MAPA",
-        pvpMapDesc: "Escolha o mapa PvP e use rápido / criar / entrar.",
-        pvpMapClassic: "CLÁSSICO (ORIGINAL)",
-        pvpMapGrid: "GRID KILLHOUSE",
-        pvpMapBack: "← VOLTAR",
-        hudHelpChat: "T para chat",
-        hudHelpLight: "L luz e lanterna",
-        hudHelpZoom: "Z zoom da lanterna",
-        hudGameTitleLine: "Zone No Light",
-        combatHit: "ACERTO",
-        combatKill: "KILL!",
-        hintClick: "Clique em qualquer lugar",
-        medkitHold: "SEGURE",
-        settingsLangTitle: "IDIOMA",
-        settingsLangLabel: "Idioma do jogo",
-        settingsLangHint: "Menus e HUD mudam na hora.",
-      },
-      ru: {
-        gameTitle: "Zone No Light",
-        creditsGame: "Игра: Tintly555",
-        creditsMusic: "Музыка: JimmyQrg",
-        btnZombieArena: "Зомби-арена",
-        btnCrossfirePickMap: "Перекрёстный огонь (PvP — выбор карты)",
-        zombieArenaTitle: "ЗОМБИ-АРЕНА",
-        btnSingleplayer: "ОДИНОЧНАЯ",
-        btnCoopMode: "КООП",
-        btnBack: "← НАЗАД",
-        lobbyMultiplayer: "МУЛЬТИПЛЕЕР",
-        lobbyArenaCoop: "АРЕНА КООП",
-        lobbyCrossfireClassic: "ПЕРЕКРЁСТНЫЙ ОГОНЬ (PvP) — КЛАССИКА",
-        lobbyCrossfireGrid: "ПЕРЕКРЁСТНЫЙ ОГОНЬ (PvP) — СЕТКА",
-        btnQuickPlay: "БЫСТРАЯ ИГРА",
-        btnCreateRoom: "СОЗДАТЬ КОМНАТУ",
-        btnJoinViaCode: "ВОЙТИ ПО КОДУ",
-        joinViaCodeTitle: "ВОЙТИ ПО КОДУ",
-        roomCodePlaceholder: "КОД КОМНАТЫ",
-        btnJoin: "ВОЙТИ",
-        menuSettings: "НАСТРОЙКИ",
-        pvpMapTitle: "ПЕРЕКРЁСТНЫЙ ОГОНЬ — КАРТА",
-        pvpMapDesc: "Выберите PvP-карту, затем быструю игру / создать / войти.",
-        pvpMapClassic: "КЛАССИКА (ОРИГИНАЛ)",
-        pvpMapGrid: "GRID KILLHOUSE",
-        pvpMapBack: "← НАЗАД",
-        hudHelpChat: "T — чат",
-        hudHelpLight: "L свет и фонарь",
-        hudHelpZoom: "Z зум фонаря",
-        hudGameTitleLine: "Zone No Light",
-        combatHit: "ПОПАДАНИЕ",
-        combatKill: "ФРАГ!",
-        hintClick: "Нажмите в любое место",
-        medkitHold: "УДЕРЖИВАТЬ",
-        settingsLangTitle: "ЯЗЫК",
-        settingsLangLabel: "Язык игры",
-        settingsLangHint: "Меню и HUD меняются сразу.",
-      },
-      it: {
-        gameTitle: "Zone No Light",
-        creditsGame: "Gioco di Tintly555",
-        creditsMusic: "Musica di JimmyQrg",
-        btnZombieArena: "Arena zombie",
-        btnCrossfirePickMap: "Crossfire (PvP — scegli mappa)",
-        zombieArenaTitle: "ARENA ZOMBIE",
-        btnSingleplayer: "GIOCATORE SINGOLO",
-        btnCoopMode: "COOPERATIVA",
-        btnBack: "← INDIETRO",
-        lobbyMultiplayer: "MULTIGIOCATORE",
-        lobbyArenaCoop: "ARENA CO-OP",
-        lobbyCrossfireClassic: "CROSSFIRE (PvP) — CLASSICA",
-        lobbyCrossfireGrid: "CROSSFIRE (PvP) — GRIGLIA",
-        btnQuickPlay: "PARTITA VELOCE",
-        btnCreateRoom: "CREA STANZA",
-        btnJoinViaCode: "ENTRA CON CODICE",
-        joinViaCodeTitle: "ENTRA CON CODICE",
-        roomCodePlaceholder: "CODICE STANZA",
-        btnJoin: "ENTRA",
-        menuSettings: "IMPOSTAZIONI",
-        pvpMapTitle: "CROSSFIRE — MAPPA",
-        pvpMapDesc: "Scegli il layout PvP poi usa veloce / crea / entra.",
-        pvpMapClassic: "CLASSICA (ORIGINALE)",
-        pvpMapGrid: "GRID KILLHOUSE",
-        pvpMapBack: "← INDIETRO",
-        hudHelpChat: "T per chat",
-        hudHelpLight: "L luce e torcia",
-        hudHelpZoom: "Z zoom torcia",
-        hudGameTitleLine: "Zone No Light",
-        combatHit: "COLPO",
-        combatKill: "KILL!",
-        hintClick: "Clicca ovunque",
-        medkitHold: "TIENI",
-        settingsLangTitle: "LINGUA",
-        settingsLangLabel: "Lingua di gioco",
-        settingsLangHint: "Menu e HUD cambiano subito.",
-      },
-      nl: {
-        gameTitle: "Zone No Light",
-        creditsGame: "Game door Tintly555",
-        creditsMusic: "Muziek door JimmyQrg",
-        btnZombieArena: "Zombie-arena",
-        btnCrossfirePickMap: "Crossfire (PvP — kies map)",
-        zombieArenaTitle: "ZOMBIE-ARENA",
-        btnSingleplayer: "ALLEEN SPELEN",
-        btnCoopMode: "CO-OP",
-        btnBack: "← TERUG",
-        lobbyMultiplayer: "MULTIPLAYER",
-        lobbyArenaCoop: "ARENA CO-OP",
-        lobbyCrossfireClassic: "CROSSFIRE (PvP) — KLASSIEK",
-        lobbyCrossfireGrid: "CROSSFIRE (PvP) — GRID",
-        btnQuickPlay: "SNEL SPELEN",
-        btnCreateRoom: "KAMER MAKEN",
-        btnJoinViaCode: "JOIN MET CODE",
-        joinViaCodeTitle: "JOIN MET CODE",
-        roomCodePlaceholder: "KAMERCODE",
-        btnJoin: "JOIN",
-        menuSettings: "INSTELLINGEN",
-        pvpMapTitle: "CROSSFIRE — MAP",
-        pvpMapDesc: "Kies het PvP-layout en gebruik daarna snel / maken / joinen.",
-        pvpMapClassic: "KLASSIEK (ORIGINEEL)",
-        pvpMapGrid: "GRID KILLHOUSE",
-        pvpMapBack: "← TERUG",
-        hudHelpChat: "T voor chat",
-        hudHelpLight: "L licht en zaklamp",
-        hudHelpZoom: "Z zaklamp-zoom",
-        hudGameTitleLine: "Zone No Light",
-        combatHit: "RAK",
-        combatKill: "KILL!",
-        hintClick: "Klik ergens",
-        medkitHold: "HOUD IN",
-        settingsLangTitle: "TAAL",
-        settingsLangLabel: "Speltaal",
-        settingsLangHint: "Menu en HUD wisselen direct.",
-      },
-      pl: {
-        gameTitle: "Zone No Light",
-        creditsGame: "Gra: Tintly555",
-        creditsMusic: "Muzyka: JimmyQrg",
-        btnZombieArena: "Arena zombie",
-        btnCrossfirePickMap: "Crossfire (PvP — wybór mapy)",
-        zombieArenaTitle: "ARENA ZOMBIE",
-        btnSingleplayer: "POJEDYNCZY",
-        btnCoopMode: "KOOPERACJA",
-        btnBack: "← WSTECZ",
-        lobbyMultiplayer: "MULTIPLAYER",
-        lobbyArenaCoop: "ARENA CO-OP",
-        lobbyCrossfireClassic: "CROSSFIRE (PvP) — KLASYK",
-        lobbyCrossfireGrid: "CROSSFIRE (PvP) — SIATKA",
-        btnQuickPlay: "SZYBKA GRA",
-        btnCreateRoom: "UTWÓRZ POKÓJ",
-        btnJoinViaCode: "DOŁĄCZ KODEM",
-        joinViaCodeTitle: "DOŁĄCZ KODEM",
-        roomCodePlaceholder: "KOD POKOJU",
-        btnJoin: "DOŁĄCZ",
-        menuSettings: "USTAWIENIA",
-        pvpMapTitle: "CROSSFIRE — MAPA",
-        pvpMapDesc: "Wybierz układ PvP, potem szybko / utwórz / dołącz.",
-        pvpMapClassic: "KLASYK (ORYGINAŁ)",
-        pvpMapGrid: "GRID KILLHOUSE",
-        pvpMapBack: "← WSTECZ",
-        hudHelpChat: "T czat",
-        hudHelpLight: "L światło i latarka",
-        hudHelpZoom: "Z zoom latarki",
-        hudGameTitleLine: "Zone No Light",
-        combatHit: "TRAFIENIE",
-        combatKill: "KILL!",
-        hintClick: "Kliknij gdziekolwiek",
-        medkitHold: "PRZYTRZYMAJ",
-        settingsLangTitle: "JĘZYK",
-        settingsLangLabel: "Język gry",
-        settingsLangHint: "Menu i HUD zmieniają się od razu.",
-      },
-      tr: {
-        gameTitle: "Zone No Light",
-        creditsGame: "Oyun: Tintly555",
-        creditsMusic: "Müzik: JimmyQrg",
-        btnZombieArena: "Zombi arena",
-        btnCrossfirePickMap: "Çapraz ateş (PvP — harita seç)",
-        zombieArenaTitle: "ZOMBİ ARENA",
-        btnSingleplayer: "TEK OYUNCU",
-        btnCoopMode: "KOOP",
-        btnBack: "← GERİ",
-        lobbyMultiplayer: "ÇOK OYUNCULU",
-        lobbyArenaCoop: "ARENA KOOP",
-        lobbyCrossfireClassic: "ÇAPRAZ ATEŞ (PvP) — KLASİK",
-        lobbyCrossfireGrid: "ÇAPRAZ ATEŞ (PvP) — IZGARA",
-        btnQuickPlay: "HIZLI OYUN",
-        btnCreateRoom: "ODA OLUŞTUR",
-        btnJoinViaCode: "KODLA KATIL",
-        joinViaCodeTitle: "KODLA KATIL",
-        roomCodePlaceholder: "ODA KODU",
-        btnJoin: "KATIL",
-        menuSettings: "AYARLAR",
-        pvpMapTitle: "ÇAPRAZ ATEŞ — HARİTA",
-        pvpMapDesc: "PvP düzenini seçin, sonra hızlı / oluştur / katıl.",
-        pvpMapClassic: "KLASİK (ORİJİNAL)",
-        pvpMapGrid: "GRID KILLHOUSE",
-        pvpMapBack: "← GERİ",
-        hudHelpChat: "T sohbet",
-        hudHelpLight: "L ışık ve el feneri",
-        hudHelpZoom: "Z el feneri zoom",
-        hudGameTitleLine: "Zone No Light",
-        combatHit: "İSABET",
-        combatKill: "KILL!",
-        hintClick: "Herhangi bir yere tıklayın",
-        medkitHold: "BASILI TUT",
-        settingsLangTitle: "DİL",
-        settingsLangLabel: "Oyun dili",
-        settingsLangHint: "Menü ve HUD hemen değişir.",
-      },
-      hi: {
-        gameTitle: "Zone No Light",
-        creditsGame: "गेम: Tintly555",
-        creditsMusic: "संगीत: JimmyQrg",
-        btnZombieArena: "ज़ॉम्बी अखाड़ा",
-        btnCrossfirePickMap: "क्रॉसफ़ायर (PvP — मैप चुनें)",
-        zombieArenaTitle: "ज़ॉम्बी अखाड़ा",
-        btnSingleplayer: "एकल खिलाड़ी",
-        btnCoopMode: "सहयोग",
-        btnBack: "← वापस",
-        lobbyMultiplayer: "मल्टीप्लेयर",
-        lobbyArenaCoop: "अखाड़ा सहयोग",
-        lobbyCrossfireClassic: "क्रॉसफ़ायर (PvP) — क्लासिक",
-        lobbyCrossfireGrid: "क्रॉसफ़ायर (PvP) — ग्रिड",
-        btnQuickPlay: "त्वरित खेल",
-        btnCreateRoom: "कमरा बनाएँ",
-        btnJoinViaCode: "कोड से जॉइन करें",
-        joinViaCodeTitle: "कोड से जॉइन करें",
-        roomCodePlaceholder: "रूम कोड",
-        btnJoin: "जॉइन",
-        menuSettings: "सेटिंग्स",
-        pvpMapTitle: "क्रॉसफ़ायर — मैप",
-        pvpMapDesc: "PvP लेआउट चुनें, फिर त्वरित / बनाएँ / जॉइन करें।",
-        pvpMapClassic: "क्लासिक (मूल)",
-        pvpMapGrid: "GRID KILLHOUSE",
-        pvpMapBack: "← वापस",
-        hudHelpChat: "T चैट",
-        hudHelpLight: "L प्रकाश व टॉर्च",
-        hudHelpZoom: "Z टॉर्च ज़ूम",
-        hudGameTitleLine: "Zone No Light",
-        combatHit: "हिट",
-        combatKill: "किल!",
-        hintClick: "कहीं भी क्लिक करें",
-        medkitHold: "दबाकर रखें",
-        settingsLangTitle: "भाषा",
-        settingsLangLabel: "गेम भाषा",
-        settingsLangHint: "मेनू और HUD तुरंत बदलते हैं।",
-      },
-      ar: {
-        gameTitle: "Zone No Light",
-        creditsGame: "اللعبة: Tintly555",
-        creditsMusic: "الموسيقى: JimmyQrg",
-        btnZombieArena: "ساحة الزومبي",
-        btnCrossfirePickMap: "النيران المتقاطعة (لاعب ضد لاعب — اختر الخريطة)",
-        zombieArenaTitle: "ساحة الزومبي",
-        btnSingleplayer: "لاعب واحد",
-        btnCoopMode: "تعاوني",
-        btnBack: "← رجوع",
-        lobbyMultiplayer: "متعدد اللاعبين",
-        lobbyArenaCoop: "ساحة تعاونية",
-        lobbyCrossfireClassic: "النيران المتقاطعة (PvP) — كلاسيكي",
-        lobbyCrossfireGrid: "النيران المتقاطعة (PvP) — شبكة",
-        btnQuickPlay: "لعب سريع",
-        btnCreateRoom: "إنشاء غرفة",
-        btnJoinViaCode: "انضم بالرمز",
-        joinViaCodeTitle: "انضم بالرمز",
-        roomCodePlaceholder: "رمز الغرفة",
-        btnJoin: "انضم",
-        menuSettings: "الإعدادات",
-        pvpMapTitle: "النيران المتقاطعة — الخريطة",
-        pvpMapDesc: "اختر خريطة لاعب ضد لاعب ثم سريع / إنشاء / انضمام.",
-        pvpMapClassic: "كلاسيكي (أصلي)",
-        pvpMapGrid: "GRID KILLHOUSE",
-        pvpMapBack: "← رجوع",
-        hudHelpChat: "T للدردشة",
-        hudHelpLight: "L الإضاءة والمصباح",
-        hudHelpZoom: "Z تكبير المصباح",
-        hudGameTitleLine: "Zone No Light",
-        combatHit: "إصابة",
-        combatKill: "قتل!",
-        hintClick: "انقر في أي مكان",
-        medkitHold: "استمر بالضغط",
-        settingsLangTitle: "اللغة",
-        settingsLangLabel: "لغة اللعبة",
-        settingsLangHint: "القوائم وواجهة اللعب تتبدّل فورًا.",
-      },
-      vi: {
-        gameTitle: "Zone No Light",
-        creditsGame: "Game: Tintly555",
-        creditsMusic: "Nhạc: JimmyQrg",
-        btnZombieArena: "Đấu trường zombie",
-        btnCrossfirePickMap: "Crossfire (PvP — chọn map)",
-        zombieArenaTitle: "ĐẤU TRƯỜNG ZOMBIE",
-        btnSingleplayer: "ĐƠN NHÂN",
-        btnCoopMode: "CO-OP",
-        btnBack: "← QUAY LẠI",
-        lobbyMultiplayer: "NHIỀU NGƯỜI CHƠI",
-        lobbyArenaCoop: "ARENA CO-OP",
-        lobbyCrossfireClassic: "CROSSFIRE (PvP) — CỔ ĐIỂN",
-        lobbyCrossfireGrid: "CROSSFIRE (PvP) — LƯỚI",
-        btnQuickPlay: "CHƠI NHANH",
-        btnCreateRoom: "TẠO PHÒNG",
-        btnJoinViaCode: "THAM GIA BẰNG MÃ",
-        joinViaCodeTitle: "THAM GIA BẰNG MÃ",
-        roomCodePlaceholder: "MÃ PHÒNG",
-        btnJoin: "THAM GIA",
-        menuSettings: "CÀI ĐẶT",
-        pvpMapTitle: "CROSSFIRE — MAP",
-        pvpMapDesc: "Chọn bố cục PvP rồi dùng nhanh / tạo / tham gia.",
-        pvpMapClassic: "CỔ ĐIỂN (GỐC)",
-        pvpMapGrid: "GRID KILLHOUSE",
-        pvpMapBack: "← QUAY LẠI",
-        hudHelpChat: "T để chat",
-        hudHelpLight: "L đèn và đèn pin",
-        hudHelpZoom: "Z zoom đèn pin",
-        hudGameTitleLine: "Zone No Light",
-        combatHit: "TRÚNG",
-        combatKill: "KILL!",
-        hintClick: "Nhấp bất kỳ đâu",
-        medkitHold: "GIỮ",
-        settingsLangTitle: "NGÔN NGỮ",
-        settingsLangLabel: "Ngôn ngữ game",
-        settingsLangHint: "Menu và HUD đổi ngay.",
-      },
-      id: {
-        gameTitle: "Zone No Light",
-        creditsGame: "Game oleh Tintly555",
-        creditsMusic: "Musik oleh JimmyQrg",
-        btnZombieArena: "Arena zombie",
-        btnCrossfirePickMap: "Crossfire (PvP — pilih peta)",
-        zombieArenaTitle: "ARENA ZOMBI",
-        btnSingleplayer: "PEMAIN TUNGGAL",
-        btnCoopMode: "KOOP",
-        btnBack: "← KEMBALI",
-        lobbyMultiplayer: "MULTIPEMAIN",
-        lobbyArenaCoop: "ARENA KOOP",
-        lobbyCrossfireClassic: "CROSSFIRE (PvP) — KLASIK",
-        lobbyCrossfireGrid: "CROSSFIRE (PvP) — GRID",
-        btnQuickPlay: "MAIN CEPAT",
-        btnCreateRoom: "BUAT RUANG",
-        btnJoinViaCode: "GABUNG KODE",
-        joinViaCodeTitle: "GABUNG KODE",
-        roomCodePlaceholder: "KODE RUANG",
-        btnJoin: "GABUNG",
-        menuSettings: "PENGATURAN",
-        pvpMapTitle: "CROSSFIRE — PETA",
-        pvpMapDesc: "Pilih tata letak PvP lalu cepat / buat / gabung.",
-        pvpMapClassic: "KLASIK (ASLI)",
-        pvpMapGrid: "GRID KILLHOUSE",
-        pvpMapBack: "← KEMBALI",
-        hudHelpChat: "T untuk chat",
-        hudHelpLight: "L lampu & senter",
-        hudHelpZoom: "Z zoom senter",
-        hudGameTitleLine: "Zone No Light",
-        combatHit: "KENA",
-        combatKill: "KILL!",
-        hintClick: "Klik di mana saja",
-        medkitHold: "TAHAN",
-        settingsLangTitle: "BAHASA",
-        settingsLangLabel: "Bahasa permainan",
-        settingsLangHint: "Menu dan HUD langsung berubah.",
-      }
-    };
-
+    const LANGUAGE_OPTIONS = LANG_META.map((o) => o.code);
+    const LANGUAGE_LABELS = Object.fromEntries(LANG_META.map((o) => [o.code, o.native]));
     /**
      * Sampled gait offsets for remote third-person legs (PvP). Used to stabilise stride frequency
      * across wide ping variance — keeps opponent footsteps visually anchored without extra bones.
@@ -3930,6 +3263,42 @@
     // hud-localisation-slot-0318: reserved for incremental HUD string rollout.
     // hud-localisation-slot-0319: reserved for incremental HUD string rollout.
 
+    const LOOK_SENS_BASE_YAW = 0.004;
+    const LOOK_SENS_BASE_PITCH = 0.0032;
+    const LOOK_SENS_PERCENT_MIN = 0.1;
+    const LOOK_SENS_PERCENT_MAX = 200;
+    const LOOK_SENS_PERCENT_DEFAULT = 100;
+
+    function clampLookSensPercent(p) {
+      return THREE.MathUtils.clamp(
+        typeof p === "number" && Number.isFinite(p) ? p : LOOK_SENS_PERCENT_DEFAULT,
+        LOOK_SENS_PERCENT_MIN,
+        LOOK_SENS_PERCENT_MAX
+      );
+    }
+
+    function formatLookSensPercent(p) {
+      const v = clampLookSensPercent(p);
+      if (v < 10 || Math.abs(v - Math.round(v)) > 0.05) return `${v.toFixed(1)}%`;
+      return `${Math.round(v)}%`;
+    }
+
+    function isAdsLookSensitivityActive() {
+      return (
+        player.health > 0 &&
+        state.weaponIndex !== 4 &&
+        !state.reloading &&
+        (state.ads || keys.shift)
+      );
+    }
+
+    function getLookSensitivityMul(ads = false) {
+      const p = ads
+        ? clampLookSensPercent(gameSettings.adsLookSensPercent)
+        : clampLookSensPercent(gameSettings.lookSensPercent);
+      return p / 100;
+    }
+
     /** Scales fog far plane (and matching near) — lower = darkness closes in sooner. */
     const RENDER_DISTANCE_LEVELS = [
       { label: "SHORT", scale: 0.62 },
@@ -3946,6 +3315,8 @@
       qualityIndex: 1,
       texturesOn: true,
       renderDistanceIndex: 2,
+      lookSensPercent: LOOK_SENS_PERCENT_DEFAULT,
+      adsLookSensPercent: LOOK_SENS_PERCENT_DEFAULT,
       language: "en",
     };
     let settingsModalOpen = false;
@@ -3970,6 +3341,12 @@
         if (typeof o.language === "string" && LANGUAGE_OPTIONS.includes(o.language)) {
           gameSettings.language = o.language;
         }
+        if (typeof o.lookSensPercent === "number") {
+          gameSettings.lookSensPercent = clampLookSensPercent(o.lookSensPercent);
+        }
+        if (typeof o.adsLookSensPercent === "number") {
+          gameSettings.adsLookSensPercent = clampLookSensPercent(o.adsLookSensPercent);
+        }
       } catch (_) {}
     }
 
@@ -3983,8 +3360,7 @@
 
     function tr(key, fallback = "") {
       const lang = LANGUAGE_OPTIONS.includes(gameSettings.language) ? gameSettings.language : "en";
-      const dict = I18N[lang] || I18N.en;
-      return dict[key] || I18N.en[key] || fallback;
+      return translateGame(lang, key, fallback);
     }
 
     function applyLanguageUI() {
@@ -4032,12 +3408,34 @@
       if (hintEl) hintEl.textContent = tr("hintClick", hintEl.textContent || "Click anywhere");
       const medkitHoldEl = document.querySelector(".medkit-hold-txt");
       if (medkitHoldEl) medkitHoldEl.textContent = tr("medkitHold", medkitHoldEl.textContent || "HOLD");
+      const tabAudio = document.getElementById("settingsTabAudio");
+      const tabGfx = document.getElementById("settingsTabGraphics");
+      const tabLang = document.getElementById("settingsTabLanguage");
+      const hAudio = document.getElementById("settingsHeadingAudio");
+      const hGfx = document.getElementById("settingsHeadingGraphics");
+      if (tabAudio) tabAudio.textContent = tr("settingsTabAudio", tabAudio.textContent);
+      if (tabGfx) tabGfx.textContent = tr("settingsTabGraphics", tabGfx.textContent);
+      if (tabLang) tabLang.textContent = tr("settingsTabLanguage", tabLang.textContent);
+      if (hAudio) hAudio.textContent = tr("settingsAudioH", hAudio.textContent);
+      if (hGfx) hGfx.textContent = tr("settingsGraphicsH", hGfx.textContent);
       const hLang = document.getElementById("settingsHeadingLanguage");
       const lLang = document.getElementById("languageLabel");
       const pLang = document.getElementById("languageHint");
-      if (hLang) hLang.textContent = tr("settingsLangTitle", hLang.textContent);
-      if (lLang) lLang.textContent = tr("settingsLangLabel", lLang.textContent);
+      if (hLang) hLang.textContent = tr("settingsLanguageH", tr("settingsLangTitle", hLang.textContent));
+      if (lLang) lLang.textContent = tr("languagePickLabel", tr("settingsLangLabel", lLang.textContent));
       if (pLang) pLang.textContent = tr("settingsLangHint", pLang.textContent);
+      const tabCtrl = document.getElementById("settingsTabControls");
+      const hCtrl = document.getElementById("settingsHeadingControls");
+      const lSens = document.getElementById("lookSensLabelText");
+      const pSens = document.getElementById("lookSensHint");
+      if (tabCtrl) tabCtrl.textContent = tr("settingsTabControls", tabCtrl.textContent);
+      if (hCtrl) hCtrl.textContent = tr("settingsControlsTitle", hCtrl.textContent);
+      if (lSens) lSens.textContent = tr("settingsLookSensLabel", lSens.textContent);
+      if (pSens) pSens.textContent = tr("settingsLookSensHint", pSens.textContent);
+      const lAdsSens = document.getElementById("adsLookSensLabelText");
+      const pAdsSens = document.getElementById("adsLookSensHint");
+      if (lAdsSens) lAdsSens.textContent = tr("settingsAdsLookSensLabel", lAdsSens.textContent);
+      if (pAdsSens) pAdsSens.textContent = tr("settingsAdsLookSensHint", pAdsSens.textContent);
       try {
         refreshFpsHelpForMap();
       } catch (_) {}
@@ -6926,12 +6324,13 @@
       pvpMapLights.push(cfSun);
     }
 
-    /** Bright open duel: compact 60×60 perimeter, low cover pillars only — no inner maze corridors. */
+    /** Bright open duel: compact 60×60 perimeter, standing-height cover (no crouch) — no inner maze corridors. */
     function buildMapCrossfireGrid() {
       clearPvpMapLights();
       const H = 4.5;
       const thick = 1.0;
       const trim = 0x70798a;
+      const EYE_Y = 1.65;
 
       const half = 30;
       addWallBox(half * 2, H, thick, 0, H / 2, -half);
@@ -6940,7 +6339,7 @@
       addWallBox(thick, H, half * 2, half, H / 2, 0);
 
       function pillar(px, pz, s = 2.4) {
-        const coverH = 1.65;
+        const coverH = EYE_Y + 1.55;
         addWallBox(s, coverH, s, px, coverH / 2, pz, trim);
       }
 
@@ -9574,8 +8973,9 @@
     document.addEventListener("mousemove", (e) => {
       if (!state.locked || paused || player.health <= 0) return;
 
-      player.yaw -= e.movementX * 0.004;
-      player.pitch -= e.movementY * 0.0032;
+      const sens = getLookSensitivityMul(isAdsLookSensitivityActive());
+      player.yaw -= e.movementX * LOOK_SENS_BASE_YAW * sens;
+      player.pitch -= e.movementY * LOOK_SENS_BASE_PITCH * sens;
 
       const limit = Math.PI / 2 - 0.01;
       player.pitch = Math.max(-limit, Math.min(limit, player.pitch));
@@ -10425,6 +9825,18 @@
       lblMasterVol.textContent = `${rngMasterVol.value}%`;
       lblMusicVol.textContent = `${rngMusicVol.value}%`;
       lblSfxVol.textContent = `${rngSfxVol.value}%`;
+      if (rngLookSens && lblLookSens) {
+        const ls = clampLookSensPercent(gameSettings.lookSensPercent);
+        gameSettings.lookSensPercent = ls;
+        rngLookSens.value = String(ls);
+        lblLookSens.textContent = formatLookSensPercent(ls);
+      }
+      if (rngAdsLookSens && lblAdsLookSens) {
+        const ads = clampLookSensPercent(gameSettings.adsLookSensPercent);
+        gameSettings.adsLookSensPercent = ads;
+        rngAdsLookSens.value = String(ads);
+        lblAdsLookSens.textContent = formatLookSensPercent(ads);
+      }
       qualityLabel.textContent = QUALITY_LABELS[gameSettings.qualityIndex] || "REGULAR";
       textureLabel.textContent = gameSettings.texturesOn ? "ON" : "OFF";
       const rdi = THREE.MathUtils.clamp(
@@ -11727,6 +11139,19 @@
     bindVolSlider(rngMasterVol, lblMasterVol, "masterVolume", applyAudioVolumes);
     bindVolSlider(rngMusicVol, lblMusicVol, "musicVolume", applyAudioVolumes);
     bindVolSlider(rngSfxVol, lblSfxVol, "soundVolume", applyAudioVolumes);
+
+    function bindLookSensSlider(rangeEl, labelEl, key) {
+      if (!rangeEl || !labelEl) return;
+      rangeEl.addEventListener("input", () => {
+        const v = clampLookSensPercent(+rangeEl.value || LOOK_SENS_PERCENT_DEFAULT);
+        gameSettings[key] = v;
+        rangeEl.value = String(v);
+        labelEl.textContent = formatLookSensPercent(v);
+        saveGameSettings();
+      });
+    }
+    bindLookSensSlider(rngLookSens, lblLookSens, "lookSensPercent");
+    bindLookSensSlider(rngAdsLookSens, lblAdsLookSens, "adsLookSensPercent");
 
     function cycleQuality(delta) {
       gameSettings.qualityIndex = (gameSettings.qualityIndex + delta + QUALITY_LEVELS.length) % QUALITY_LEVELS.length;
