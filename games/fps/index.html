@@ -7227,10 +7227,22 @@
         ${tr("hudGameTitleLine", "Zone No Light")}<br>
         WASD move | Space jump | R reload<br>
         Mouse aim | RMB zoom | L flashlight | Z beam small/med/wide<br>
-        Weapons: 1–4 | <b>5</b> Med Kit (hold <b>F</b> 10s to heal) | <b>6</b> AMR<br>
+        Weapons: 1–4 | <b>5</b> Med Kit (hold <b>F</b> or <b>LMB</b> 10s, +50 HP) | <b>6</b> AMR<br>
         Map: ${mapLabel}${MULTIPLAYER ? " (MP)" : ""}<br>
         Weapon: ${w.name}<br>
-        ${state.weaponIndex === 4 ? "" : `Bullets: ${w.ammo} / ${w.magSize}${state.reloading ? "（Refilling...）" : ""}<br>`}
+        ${
+          state.weaponIndex === 4
+            ? `Med Kit: ${w.ammo} use${w.ammo === 1 ? "" : "s"} — hold <b>F</b> or <b>LMB</b> 10s (+50 HP)${
+                player.health >= player.maxHealth
+                  ? " (health full)"
+                  : w.ammo <= 0
+                    ? " (used up)"
+                    : state.medKitNeedsRelease
+                      ? " (release key/mouse)"
+                      : ""
+              }<br>`
+            : `Bullets: ${w.ammo} / ${w.magSize}${state.reloading ? "（Refilling...）" : ""}<br>`
+        }
         Health: ${Math.max(0, Math.floor(player.health))} / ${player.maxHealth}<br>
         Score: ${state.score}
       `;
@@ -8406,8 +8418,60 @@
       root.userData.ejectNode = node;
     }
 
-    /** Visible view-model arms (sibling to gun mesh, drawn on top). */
-    function attachViewArms(parent, root, rPos, lPos) {
+    /** Per-weapon grip anchors on the view-model (local to gunGroup). */
+    const VIEW_HAND_GRIPS = {
+      0: {
+        r: [0.01, -0.045, 0.05],
+        rRot: [-1.02, -0.07, 0.04],
+        l: [0.02, -0.105, 0.045],
+        lRot: [-1.08, 0.14, -0.2],
+      },
+      1: {
+        r: [0.045, -0.055, 0.12],
+        rRot: [-1.04, -0.05, 0.03],
+        l: [-0.01, -0.125, 0.075],
+        lRot: [-1.1, 0.16, -0.24],
+      },
+      2: {
+        r: [0.05, -0.04, 0.2],
+        rRot: [-0.98, -0.04, 0.02],
+        l: [-0.02, -0.02, 0.1],
+        lRot: [-1.12, 0.1, -0.15],
+      },
+      3: {
+        r: [0.04, -0.05, 0.1],
+        rRot: [-1.03, -0.06, 0.04],
+        l: [-0.01, -0.12, 0.06],
+        lRot: [-1.09, 0.15, -0.22],
+      },
+      5: {
+        r: [0.03, -0.07, 0.18],
+        rRot: [-1.0, -0.05, 0.02],
+        l: [-0.03, -0.13, 0.11],
+        lRot: [-1.11, 0.17, -0.26],
+      },
+    };
+
+    function attachViewHandGrips(gunGroup, root, spec) {
+      if (!spec) return;
+      const rGrip = new THREE.Group();
+      rGrip.name = "viewGripR";
+      rGrip.position.set(spec.r[0], spec.r[1], spec.r[2]);
+      rGrip.rotation.order = "YXZ";
+      rGrip.rotation.set(spec.rRot[0], spec.rRot[1], spec.rRot[2]);
+      gunGroup.add(rGrip);
+      root.userData.gripR = rGrip;
+
+      const lGrip = new THREE.Group();
+      lGrip.name = "viewGripL";
+      lGrip.position.set(spec.l[0], spec.l[1], spec.l[2]);
+      lGrip.rotation.order = "YXZ";
+      lGrip.rotation.set(spec.lRot[0], spec.lRot[1], spec.lRot[2]);
+      gunGroup.add(lGrip);
+      root.userData.gripL = lGrip;
+    }
+
+    function makeViewHandMesh(side) {
       const mSkin = new THREE.MeshStandardMaterial({
         color: 0xc89d7c,
         roughness: 0.72,
@@ -8418,74 +8482,259 @@
         roughness: 0.88,
         depthWrite: false,
       });
-      const mkArm = () => {
-        const g = new THREE.Group();
-        const glove = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.16, 0.2), mGlove);
-        const skin = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.07, 0.16), mSkin);
-        skin.position.set(0, 0.06, -0.02);
-        glove.renderOrder = 25;
-        skin.renderOrder = 26;
-        g.add(glove);
-        g.add(skin);
-        g.renderOrder = 25;
-        return g;
-      };
-      const rArm = mkArm();
-      rArm.position.set(rPos[0], rPos[1], rPos[2]);
-      parent.add(rArm);
+      const g = new THREE.Group();
+      g.rotation.order = "YXZ";
+      g.name = side === "L" ? "viewHandL" : "viewHandR";
+      const palm = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.1, 0.18), mGlove);
+      const knuckle = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.06, 0.14), mSkin);
+      knuckle.position.set(0, 0.05, -0.04);
+      const fingers = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.05, 0.1), mGlove);
+      fingers.position.set(0, 0.04, -0.12);
+      const thumb = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.07), mGlove);
+      thumb.position.set(side === "L" ? 0.09 : -0.09, 0.02, -0.02);
+      thumb.rotation.z = side === "L" ? -0.45 : 0.45;
+      for (const m of [palm, knuckle, fingers, thumb]) {
+        m.renderOrder = 26;
+        g.add(m);
+      }
+      g.renderOrder = 25;
+      return g;
+    }
+
+    function attachViewArmsOnGrips(root) {
+      const rGrip = root.userData.gripR;
+      const lGrip = root.userData.gripL;
+      if (!rGrip) return;
+      const rArm = makeViewHandMesh("R");
+      rGrip.add(rArm);
       root.userData.viewArmR = rArm;
-      root.userData.armRBase = rArm.position.clone();
-      if (lPos) {
-        const lArm = mkArm();
-        lArm.position.set(lPos[0], lPos[1], lPos[2]);
-        parent.add(lArm);
+      root.userData.armRBasePos = new THREE.Vector3(0, 0, 0);
+      root.userData.armRBaseRot = new THREE.Euler(0, 0, 0, "YXZ");
+
+      if (lGrip) {
+        const lArm = makeViewHandMesh("L");
+        lGrip.add(lArm);
         root.userData.viewArmL = lArm;
-        root.userData.armLBase = lArm.position.clone();
+        root.userData.armLBasePos = new THREE.Vector3(0, 0, 0);
+        root.userData.armLBaseRot = new THREE.Euler(0, 0, 0, "YXZ");
+        const magHold = new THREE.Group();
+        magHold.name = "handMagHold";
+        magHold.visible = false;
+        magHold.position.set(0.02, -0.04, -0.06);
+        magHold.rotation.set(-0.35, 0.2, 0.15);
+        lArm.add(magHold);
+        root.userData.handMagHold = magHold;
       }
     }
 
-    function resetViewArms(ud) {
-      if (ud.viewArmR && ud.armRBase) ud.viewArmR.position.copy(ud.armRBase);
-      if (ud.viewArmL && ud.armLBase) ud.viewArmL.position.copy(ud.armLBase);
+    function setViewHandPose(arm, basePos, baseRot, dx, dy, dz, rx, ry, rz) {
+      if (!arm) return;
+      arm.position.set(basePos.x + dx, basePos.y + dy, basePos.z + dz);
+      arm.rotation.set(baseRot.x + rx, baseRot.y + ry, baseRot.z + rz);
     }
 
-    function applyViewArmReload(ud, wi, rp) {
-      if (!ud.armRBase) return;
-      const p = rp;
+    function hideHandMagProxy(ud) {
+      if (ud.handMagHold) ud.handMagHold.visible = false;
+      if (ud.handMagProxy) {
+        ud.handMagHold.remove(ud.handMagProxy);
+        ud.handMagProxy = null;
+      }
+    }
+
+    function syncHandMagProxy(ud, show, magMesh) {
+      if (!ud.handMagHold || !magMesh || !show) {
+        hideHandMagProxy(ud);
+        if (magMesh) magMesh.visible = true;
+        return;
+      }
+      if (!ud.handMagProxy) {
+        const proxy = magMesh.clone();
+        proxy.traverse((o) => {
+          if (o.isMesh) {
+            o.renderOrder = 27;
+            if (o.material) o.material = o.material.clone();
+          }
+        });
+        ud.handMagHold.add(proxy);
+        ud.handMagProxy = proxy;
+      }
+      ud.handMagHold.visible = true;
+      ud.handMagProxy.visible = true;
+      magMesh.visible = false;
+    }
+
+    function resetViewArms(ud) {
+      hideHandMagProxy(ud);
+      if (ud.viewArmR && ud.armRBasePos) {
+        ud.viewArmR.position.copy(ud.armRBasePos);
+        ud.viewArmR.rotation.copy(ud.armRBaseRot);
+      }
+      if (ud.viewArmL && ud.armLBasePos) {
+        ud.viewArmL.position.copy(ud.armLBasePos);
+        ud.viewArmL.rotation.copy(ud.armLBaseRot);
+      }
+    }
+
+    function applyViewArmIdlePose(ud, wi) {
+      if (wi === 4) return;
       resetViewArms(ud);
+      const bp = ud.armRBasePos;
+      const br = ud.armRBaseRot;
+      const lp = ud.armLBasePos;
+      const lr = ud.armLBaseRot;
+      if (!bp || !br) return;
       if (wi === 0) {
-        const rack = reloadPhase(p, 0.5, 1);
-        if (ud.viewArmR) {
-          ud.viewArmR.position.z = ud.armRBase.z + (rack > 0 ? 0.08 * rack : 0);
+        setViewHandPose(ud.viewArmR, bp, br, 0, 0, 0, 0, 0, 0);
+        setViewHandPose(ud.viewArmL, lp, lr, 0, 0, 0, 0, 0, 0.06);
+      } else if (wi === 1 || wi === 3) {
+        setViewHandPose(ud.viewArmR, bp, br, 0, 0, 0, 0, 0, 0);
+        setViewHandPose(ud.viewArmL, lp, lr, 0, 0, -0.02, 0.04, 0, 0.08);
+      } else if (wi === 2) {
+        setViewHandPose(ud.viewArmR, bp, br, 0, 0, -0.02, 0.05, 0, 0);
+        setViewHandPose(ud.viewArmL, lp, lr, 0, 0, 0.04, -0.08, 0.06, 0);
+      } else if (wi === 5) {
+        setViewHandPose(ud.viewArmR, bp, br, 0, 0, 0, 0, 0, 0);
+        setViewHandPose(ud.viewArmL, lp, lr, 0, 0, -0.02, 0.05, 0, 0.1);
+      }
+    }
+
+    /** Asymmetric reload: mag strip / insert / rack / pump / bolt — hands stay on grips, not floating. */
+    function applyViewArmReload(ud, wi, rp) {
+      const p = rp;
+      const bp = ud.armRBasePos;
+      const br = ud.armRBaseRot;
+      const lp = ud.armLBasePos;
+      const lr = ud.armLBaseRot;
+      if (!bp || !br) return;
+      hideHandMagProxy(ud);
+
+      if (wi === 0) {
+        const magOut = reloadPhase(p, 0, 0.3);
+        const magIn = reloadPhase(p, 0.3, 0.52);
+        const rack = reloadPhase(p, 0.52, 1);
+        if (magOut < 1) {
+          const t = magOut;
+          setViewHandPose(ud.viewArmL, lp, lr, -0.04 * t, -0.12 * t, 0.06 * t, -0.55 * t, 0.35 * t, -0.4 * t);
+          setViewHandPose(ud.viewArmR, bp, br, 0.02 * t, 0, -0.02 * t, 0.08 * t, 0, 0);
+          syncHandMagProxy(ud, t > 0.15, ud.animMag);
+        } else if (magIn < 1) {
+          const t = 1 - magIn;
+          setViewHandPose(ud.viewArmL, lp, lr, -0.04 * t, -0.1 * t, 0.04 * t, -0.45 * t, 0.28 * t, -0.32 * t);
+          setViewHandPose(ud.viewArmR, bp, br, 0, 0, 0, 0.05, 0, 0);
+          syncHandMagProxy(ud, true, ud.animMag);
+        } else {
+          setViewHandPose(ud.viewArmL, lp, lr, 0, 0, 0, 0, 0, 0.04);
+          syncHandMagProxy(ud, false);
         }
-        if (p < 0.5 && ud.viewArmL) {
-          const drop = 1 - reloadPhase(p, 0.32, 0.5);
-          ud.viewArmL.position.y = ud.armLBase.y - 0.1 * drop;
-          ud.viewArmL.position.z = ud.armLBase.z - 0.05 * drop;
+        if (rack > 0) {
+          let pull = 0;
+          if (rack < 0.45) pull = rack / 0.45;
+          else pull = 1 - (rack - 0.45) / 0.55;
+          setViewHandPose(ud.viewArmR, bp, br, 0, 0.02 * pull, 0.1 * pull, -0.12 * pull, 0, 0.06 * pull);
+          setViewHandPose(ud.viewArmL, lp, lr, 0, 0, 0, 0, 0, 0.02);
         }
       } else if (wi === 1 || wi === 3) {
-        const mag = Math.sin(p * Math.PI);
-        if (ud.viewArmL) {
-          ud.viewArmL.position.y = ud.armLBase.y - 0.08 * mag;
-          ud.viewArmL.position.z = ud.armLBase.z - 0.05 * mag;
+        const strip = reloadPhase(p, 0, 0.34);
+        const insert = reloadPhase(p, 0.34, 0.58);
+        const charge = reloadPhase(p, 0.58, 0.82);
+        const settle = reloadPhase(p, 0.82, 1);
+        if (strip < 1) {
+          const t = strip;
+          setViewHandPose(ud.viewArmR, bp, br, 0.03 * t, -0.02 * t, 0, 0.1 * t, -0.05 * t, 0);
+          setViewHandPose(
+            ud.viewArmL,
+            lp,
+            lr,
+            -0.08 * t,
+            -0.14 * t,
+            0.05 * t,
+            -0.7 * t,
+            0.42 * t,
+            -0.55 * t
+          );
+          syncHandMagProxy(ud, t > 0.2, ud.animMag);
+        } else if (insert < 1) {
+          const t = insert;
+          setViewHandPose(
+            ud.viewArmL,
+            lp,
+            lr,
+            -0.06 * (1 - t),
+            -0.18 * (1 - t) + 0.04 * t,
+            -0.05 * (1 - t),
+            -0.35 * (1 - t),
+            0.2 * (1 - t),
+            -0.25 * (1 - t)
+          );
+          setViewHandPose(ud.viewArmR, bp, br, 0.02, -0.03, 0.02, 0.06, 0, 0);
+          syncHandMagProxy(ud, t < 0.85, ud.animMag);
+        } else if (charge < 1) {
+          const t = charge;
+          setViewHandPose(ud.viewArmR, bp, br, 0, 0, 0.06 * t, -0.15 * t, 0, 0.04 * t);
+          setViewHandPose(ud.viewArmL, lp, lr, 0.05, -0.06, 0, 0.15, -0.12, 0.2);
+          hideHandMagProxy(ud);
+        } else {
+          const t = settle;
+          setViewHandPose(ud.viewArmR, bp, br, 0, 0, 0.06 * (1 - t), -0.15 * (1 - t), 0, 0.04 * (1 - t));
+          setViewHandPose(ud.viewArmL, lp, lr, 0.05 * (1 - t), -0.06 * (1 - t), 0, 0.15 * (1 - t), -0.12 * (1 - t), 0.2 * (1 - t));
         }
-        if (ud.viewArmR) ud.viewArmR.position.y = ud.armRBase.y - 0.02 * mag;
       } else if (wi === 2) {
-        const open = p < 0.14 ? p / 0.14 : p > 0.9 ? (1 - p) / 0.1 : 1;
-        if (ud.viewArmL) {
-          ud.viewArmL.position.y = ud.armLBase.y - 0.08 * open;
-          ud.viewArmL.position.z = ud.armLBase.z - 0.1 * open;
+        const openT = reloadPhase(p, 0, 0.14);
+        const loadT = reloadPhase(p, 0.14, 0.88);
+        const closeT = reloadPhase(p, 0.88, 1);
+        let breakOpen = 0;
+        if (openT < 1) breakOpen = openT;
+        else if (closeT > 0) breakOpen = 1 - closeT;
+        else breakOpen = 1;
+        setViewHandPose(
+          ud.viewArmR,
+          bp,
+          br,
+          0,
+          0.03 * breakOpen,
+          -0.05 * breakOpen,
+          0.12 * breakOpen,
+          0,
+          0
+        );
+        if (loadT > 0 && loadT < 1) {
+          const shellWave = Math.sin(loadT * Math.PI * 2.2);
+          setViewHandPose(
+            ud.viewArmL,
+            lp,
+            lr,
+            0.02 * shellWave,
+            -0.05 + 0.04 * shellWave,
+            0.08 - loadT * 0.12,
+            -0.25 - 0.15 * breakOpen,
+            0.18,
+            0.12
+          );
+        } else {
+          setViewHandPose(ud.viewArmL, lp, lr, 0, 0, 0.06 * breakOpen, -0.2 * breakOpen, 0.12 * breakOpen, 0.08);
         }
-        if (ud.viewArmR) ud.viewArmR.position.z = ud.armRBase.z + 0.04 * open;
       } else if (wi === 5) {
-        const bolt = p < 0.62 ? reloadPhase(p, 0, 0.62) : 1 - reloadPhase(p, 0.62, 1);
-        if (ud.viewArmR) {
-          ud.viewArmR.position.z = ud.armRBase.z + 0.1 * bolt;
-          ud.viewArmR.position.y = ud.armRBase.y + 0.02 * bolt;
-        }
-        const mag = Math.sin(p * Math.PI);
-        if (ud.viewArmL) {
-          ud.viewArmL.position.y = ud.armLBase.y - 0.08 * mag;
+        const boltOpen = reloadPhase(p, 0, 0.18);
+        const magStrip = reloadPhase(p, 0.18, 0.4);
+        const magSeat = reloadPhase(p, 0.4, 0.62);
+        const boltClose = reloadPhase(p, 0.62, 1);
+        let boltPull = 0;
+        if (boltOpen < 1) boltPull = boltOpen;
+        else if (boltClose > 0) boltPull = 1 - boltClose;
+        else boltPull = 1;
+        setViewHandPose(ud.viewArmR, bp, br, 0, 0.02 * boltPull, 0.12 * boltPull, -0.22 * boltPull, 0, 0.08 * boltPull);
+        if (magStrip < 1) {
+          const t = magStrip;
+          setViewHandPose(ud.viewArmL, lp, lr, -0.07 * t, -0.13 * t, 0.04 * t, -0.65 * t, 0.38 * t, -0.48 * t);
+          setViewHandPose(ud.viewArmR, bp, br, 0.02, 0, 0.08 * boltPull, -0.18 * boltPull, 0, 0.06 * boltPull);
+          syncHandMagProxy(ud, t > 0.25, ud.animMag);
+        } else if (magSeat < 1) {
+          const t = magSeat;
+          setViewHandPose(ud.viewArmL, lp, lr, -0.04 * (1 - t), -0.16 * (1 - t), -0.02 * (1 - t), -0.4 * (1 - t), 0.22 * (1 - t), -0.3 * (1 - t));
+          syncHandMagProxy(ud, t < 0.75, ud.animMag);
+        } else {
+          hideHandMagProxy(ud);
+          setViewHandPose(ud.viewArmL, lp, lr, 0.04, -0.05, 0, 0.12, -0.1, 0.15);
         }
       }
     }
@@ -8529,7 +8778,8 @@
         root.userData.animSlide = slideGrp;
         attachWeaponMag(gunGroup, root, 0, -0.1, 0.04, 0.05, 0.12, 0.08);
         gunGroup.position.set(0.26, -0.22, -0.72);
-        attachViewArms(root, root, [0.22, -0.3, -0.55], [0.04, -0.28, -0.58]);
+        attachViewHandGrips(gunGroup, root, VIEW_HAND_GRIPS[0]);
+        attachViewArmsOnGrips(root);
         adsOffset.set(-0.26, 0.095, 0.26);
 
         const muzzleNode = new THREE.Object3D();
@@ -8554,7 +8804,8 @@
         attachEjectPort(gunGroup, root, 0.055, 0.09, 0.08);
         attachWeaponMag(gunGroup, root, 0, -0.12, 0.06, 0.055, 0.16, 0.1);
         gunGroup.position.set(0.25, -0.22, -0.80);
-        attachViewArms(root, root, [0.24, -0.32, -0.62], [-0.02, -0.28, -0.66]);
+        attachViewHandGrips(gunGroup, root, VIEW_HAND_GRIPS[1]);
+        attachViewArmsOnGrips(root);
         adsOffset.set(-0.25, 0.10, 0.28);
 
         const muzzleNode = new THREE.Object3D();
@@ -8584,7 +8835,8 @@
         gunGroup.add(pumpGrp);
         root.userData.animPump = pumpGrp;
         attachEjectPort(gunGroup, root, 0.05, 0.1, 0.06);
-        attachViewArms(root, root, [0.22, -0.3, -0.64], [-0.04, -0.26, -0.58]);
+        attachViewHandGrips(gunGroup, root, VIEW_HAND_GRIPS[2]);
+        attachViewArmsOnGrips(root);
         const mBrass = new THREE.MeshStandardMaterial({
           color: 0xd4af37,
           metalness: 0.88,
@@ -8618,7 +8870,8 @@
         attachEjectPort(gunGroup, root, 0.048, 0.085, 0.04);
         attachWeaponMag(gunGroup, root, 0, -0.12, 0.04, 0.048, 0.14, 0.09);
         gunGroup.position.set(0.24, -0.22, -0.76);
-        attachViewArms(root, root, [0.23, -0.31, -0.58], [-0.03, -0.27, -0.62]);
+        attachViewHandGrips(gunGroup, root, VIEW_HAND_GRIPS[3]);
+        attachViewArmsOnGrips(root);
         adsOffset.set(-0.22, 0.085, 0.24);
 
         const muzzleNode = new THREE.Object3D();
@@ -8653,7 +8906,8 @@
         attachWeaponMag(gunGroup, root, 0, -0.14, 0.1, 0.06, 0.12, 0.11);
         attachEjectPort(gunGroup, root, 0.06, 0.1, 0.2);
         gunGroup.position.set(0.2, -0.2, -0.96);
-        attachViewArms(root, root, [0.2, -0.32, -0.72], [-0.06, -0.26, -0.78]);
+        attachViewHandGrips(gunGroup, root, VIEW_HAND_GRIPS[5]);
+        attachViewArmsOnGrips(root);
         adsOffset.set(-0.18, 0.12, 0.38);
 
         const muzzleNode = new THREE.Object3D();
@@ -8663,16 +8917,6 @@
       }
 
       root.add(gunGroup);
-      const armR = root.userData.viewArmR;
-      const armL = root.userData.viewArmL;
-      if (armR) {
-        root.remove(armR);
-        root.add(armR);
-      }
-      if (armL) {
-        root.remove(armL);
-        root.add(armL);
-      }
       root.userData.gun = gunGroup;
       root.userData.basePos = gunGroup.position.clone();
       root.userData.adsOffset = adsOffset.clone();
@@ -8728,6 +8972,32 @@
       const cl = Math.min(1, Math.max(0, p));
       medKitRingProgEl.style.strokeDashoffset = `${MED_KIT_RING_LEN * (1 - cl)}`;
       medKitRingProgEl.setAttribute("opacity", cl > 0.001 ? "1" : "0");
+    }
+
+    function isMedKitInputHeld() {
+      return keys.f || (state.weaponIndex === 4 && state.mouseDown);
+    }
+
+    function canMedKitHealNow() {
+      const wMed = weapons[4];
+      return (
+        state.weaponIndex === 4 &&
+        gameWorldReady &&
+        !paused &&
+        player.health > 0 &&
+        player.health < player.maxHealth &&
+        wMed.ammo > 0
+      );
+    }
+
+    function resetMedKitChargeState() {
+      state.medKitHealProgress = 0;
+      state.medKitRingVisual = 0;
+      state.medKitNeedsRelease = false;
+      state.medKitDefilling = false;
+      state.medKitDefillPhase = 0;
+      state.medKitDefillStart = 0;
+      applyMedKitRingVisual(0);
     }
 
     function getPlayerMoveSpeedMult() {
@@ -8942,13 +9212,19 @@
         const magIn = reloadPhase(p, 0.32, 0.5);
         const rack = reloadPhase(p, 0.5, 1);
         if (ud.animMag && magBase) {
-          if (p < 0.5) {
-            const drop = magOut < 1 ? magOut : 1 - magIn;
-            ud.animMag.position.y = magBase.y - 0.16 * drop;
-            ud.animMag.position.z = magBase.z - 0.06 * drop;
-            ud.animMag.position.x = magBase.x + 0.05 * drop;
+          const inHand = magOut > 0.15 && magOut < 0.95;
+          if (inHand) {
+            ud.animMag.visible = false;
           } else {
-            ud.animMag.position.copy(magBase);
+            ud.animMag.visible = true;
+            if (p < 0.52) {
+              const drop = magOut < 1 ? magOut : 1 - magIn;
+              ud.animMag.position.y = magBase.y - 0.16 * drop;
+              ud.animMag.position.z = magBase.z - 0.06 * drop;
+              ud.animMag.position.x = magBase.x + 0.05 * drop;
+            } else {
+              ud.animMag.position.copy(magBase);
+            }
           }
         }
         if (ud.animSlide && rack > 0) {
@@ -8962,15 +9238,23 @@
         const magOut = reloadPhase(p, 0, 0.32);
         const magIn = reloadPhase(p, 0.32, 0.58);
         if (ud.animMag && magBase) {
-          if (magOut < 1) {
-            ud.animMag.position.y = magBase.y - 0.18 * magOut;
-            ud.animMag.position.z = magBase.z - 0.07 * magOut;
-            ud.animMag.position.x = magBase.x + 0.06 * magOut;
-          } else if (magIn < 1) {
-            const t = 1 - magIn;
-            ud.animMag.position.y = magBase.y - 0.18 * t;
-            ud.animMag.position.z = magBase.z - 0.07 * t;
-            ud.animMag.position.x = magBase.x + 0.06 * t;
+          const inHand = magOut > 0.2 && magOut < 0.92;
+          if (inHand) {
+            ud.animMag.visible = false;
+          } else {
+            ud.animMag.visible = true;
+            if (magOut < 1) {
+              ud.animMag.position.y = magBase.y - 0.18 * magOut;
+              ud.animMag.position.z = magBase.z - 0.07 * magOut;
+              ud.animMag.position.x = magBase.x + 0.06 * magOut;
+            } else if (magIn < 1) {
+              const t = 1 - magIn;
+              ud.animMag.position.y = magBase.y - 0.18 * t;
+              ud.animMag.position.z = magBase.z - 0.07 * t;
+              ud.animMag.position.x = magBase.x + 0.06 * t;
+            } else {
+              ud.animMag.position.copy(magBase);
+            }
           }
         }
       } else if (wi === 2) {
@@ -9005,15 +9289,23 @@
         else boltPull = 0.34;
         if (ud.animBolt) ud.animBolt.position.z = boltPull;
         if (ud.animMag && magBase) {
-          if (magOut < 1) {
-            ud.animMag.position.y = magBase.y - 0.15 * magOut;
-            ud.animMag.position.z = magBase.z - 0.05 * magOut;
-            ud.animMag.position.x = magBase.x + 0.05 * magOut;
-          } else if (magIn < 1) {
-            const t = 1 - magIn;
-            ud.animMag.position.y = magBase.y - 0.15 * t;
-            ud.animMag.position.z = magBase.z - 0.05 * t;
-            ud.animMag.position.x = magBase.x + 0.05 * t;
+          const inHand = magOut > 0.22 && magOut < 0.88;
+          if (inHand) {
+            ud.animMag.visible = false;
+          } else {
+            ud.animMag.visible = true;
+            if (magOut < 1) {
+              ud.animMag.position.y = magBase.y - 0.15 * magOut;
+              ud.animMag.position.z = magBase.z - 0.05 * magOut;
+              ud.animMag.position.x = magBase.x + 0.05 * magOut;
+            } else if (magIn < 1) {
+              const t = 1 - magIn;
+              ud.animMag.position.y = magBase.y - 0.15 * t;
+              ud.animMag.position.z = magBase.z - 0.05 * t;
+              ud.animMag.position.x = magBase.x + 0.05 * t;
+            } else {
+              ud.animMag.position.copy(magBase);
+            }
           }
         }
       }
@@ -9023,7 +9315,7 @@
     /** View-model weapon parts: slide / bolt / pump / mag + kick. */
     function applyWeaponHandsAnim(activeWeapon, reloadProgress) {
       const ud = activeWeapon.userData;
-      resetViewArms(ud);
+      const wi = state.weaponIndex;
       if (ud.animSlide) {
         ud.animSlide.position.set(0, 0, 0);
         ud.animSlide.rotation.set(0, 0, 0);
@@ -9043,14 +9335,17 @@
       let offZ = 0;
       let rotX = 0;
       let rotZ = 0;
-      const wi = state.weaponIndex;
       const act = state.weaponAction;
       const t = getWeaponActionT();
       const k = Math.sin(t * Math.PI);
       const rp = reloadProgress;
 
-      if (state.reloading) {
+      if (state.reloading && wi !== 4) {
         applyReloadPartAnims(ud, wi, rp);
+      } else if (wi !== 4 && ud.viewArmR) {
+        applyViewArmIdlePose(ud, wi);
+      } else {
+        resetViewArms(ud);
       }
 
       if (wi === 0) {
@@ -9089,15 +9384,7 @@
       state.adsProgress = 0;
       state.reloading = false;
       state.reloadEnd = 0;
-      if (prev === 4 || index === 4) {
-        state.medKitHealProgress = 0;
-        state.medKitRingVisual = 0;
-        state.medKitNeedsRelease = false;
-        state.medKitDefilling = false;
-        state.medKitDefillPhase = 0;
-        state.medKitDefillStart = 0;
-        applyMedKitRingVisual(0);
-      }
+      if (prev === 4 || index === 4) resetMedKitChargeState();
       state.weaponAction = null;
       clearShellCasings();
       weaponModels.forEach((w, i) => {
@@ -9178,7 +9465,7 @@
       if (k === "d") keys.d = true;
       if (k === " ") keys.space = true;
       if (k === "shift") keys.shift = true;
-      if (k === "f") keys.f = true;
+      if (k === "f" || e.code === "KeyF") keys.f = true;
       if (k === "1") setWeapon(0);
       if (k === "2") setWeapon(1);
       if (k === "3") setWeapon(2);
@@ -9196,7 +9483,7 @@
       if (k === "d") keys.d = false;
       if (k === " ") keys.space = false;
       if (k === "shift") keys.shift = false;
-      if (k === "f") {
+      if (k === "f" || e.code === "KeyF") {
         keys.f = false;
         if (state.weaponIndex === 4) state.medKitNeedsRelease = false;
       }
@@ -9218,7 +9505,10 @@
     renderer.domElement.addEventListener("contextmenu", (e) => e.preventDefault());
 
     document.addEventListener("mouseup", (e) => {
-      if (e.button === 0) state.mouseDown = false;
+      if (e.button === 0) {
+        state.mouseDown = false;
+        if (state.weaponIndex === 4) state.medKitNeedsRelease = false;
+      }
     });
 
     document.addEventListener("mousedown", (e) => {
@@ -9656,7 +9946,7 @@
     }
 
     function updateMedKit(dt) {
-      if (state.weaponIndex !== 4 || player.health <= 0 || paused) return;
+      if (state.weaponIndex !== 4 || player.health <= 0 || paused || !gameWorldReady) return;
 
       if (state.medKitDefilling) {
         state.medKitDefillPhase += dt / MED_KIT_DEFILL_DURATION;
@@ -9675,7 +9965,7 @@
 
       const wMed = weapons[4];
       const canHeal = player.health < player.maxHealth && wMed.ammo > 0;
-      const wantsHold = keys.f && canHeal && !state.medKitNeedsRelease;
+      const wantsHold = isMedKitInputHeld() && canHeal && !state.medKitNeedsRelease;
 
       if (wantsHold) {
         state.medKitHealProgress += dt / MED_KIT_HEAL_DURATION;
@@ -9709,11 +9999,10 @@
 
     function isMedKitHoldHealing() {
       return (
-        state.weaponIndex === 4 &&
-        player.health > 0 &&
-        player.health < player.maxHealth &&
+        canMedKitHealNow() &&
         !state.medKitNeedsRelease &&
-        keys.f
+        !state.medKitDefilling &&
+        isMedKitInputHeld()
       );
     }
 
@@ -9763,7 +10052,7 @@
         reloadPushZ = wm.reloadPushZ;
       } else if (
         state.weaponIndex === 4 &&
-        keys.f &&
+        isMedKitInputHeld() &&
         state.medKitHealProgress > 0 &&
         player.health < player.maxHealth
       ) {
@@ -9778,7 +10067,7 @@
 
       const activeWeapon = weaponModels[state.weaponIndex];
       let animProgress = reloadProgress;
-      if (state.weaponIndex === 4 && keys.f) {
+      if (state.weaponIndex === 4 && isMedKitInputHeld()) {
         animProgress = Math.max(animProgress, state.medKitHealProgress);
       }
       const viewAnim = applyWeaponHandsAnim(activeWeapon, animProgress);
@@ -10080,6 +10369,7 @@
       keys.space = false;
       keys.shift = false;
       keys.f = false;
+      state.mouseDown = false;
       pauseOverlay.style.display = "flex";
       btnPauseRestart.style.display = isPvpCrossfireMap(CURRENT_MAP) ? "none" : "";
       crosshairEl.classList.add("hidden");
@@ -11133,6 +11423,7 @@
       for (const w of weapons) {
         w.ammo = w.magSize;
       }
+      resetMedKitChargeState();
 
       setWeapon(1);
       updateHud();
