@@ -8406,26 +8406,39 @@
       root.userData.ejectNode = node;
     }
 
-    /** Minimal FPS arms (grip + support) — move with reload, not full finger rigs. */
-    function attachViewArms(gunGroup, root, rPos, lPos) {
-      const mArm = new THREE.MeshStandardMaterial({ color: 0xc89d7c, roughness: 0.78 });
+    /** Visible view-model arms (sibling to gun mesh, drawn on top). */
+    function attachViewArms(parent, root, rPos, lPos) {
+      const mSkin = new THREE.MeshStandardMaterial({
+        color: 0xc89d7c,
+        roughness: 0.72,
+        depthWrite: false,
+      });
+      const mGlove = new THREE.MeshStandardMaterial({
+        color: 0x3a3528,
+        roughness: 0.88,
+        depthWrite: false,
+      });
       const mkArm = () => {
         const g = new THREE.Group();
-        const palm = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.12, 0.14), mArm);
-        palm.renderOrder = 15;
-        g.add(palm);
-        g.renderOrder = 15;
+        const glove = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.16, 0.2), mGlove);
+        const skin = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.07, 0.16), mSkin);
+        skin.position.set(0, 0.06, -0.02);
+        glove.renderOrder = 25;
+        skin.renderOrder = 26;
+        g.add(glove);
+        g.add(skin);
+        g.renderOrder = 25;
         return g;
       };
       const rArm = mkArm();
       rArm.position.set(rPos[0], rPos[1], rPos[2]);
-      gunGroup.add(rArm);
+      parent.add(rArm);
       root.userData.viewArmR = rArm;
       root.userData.armRBase = rArm.position.clone();
       if (lPos) {
         const lArm = mkArm();
         lArm.position.set(lPos[0], lPos[1], lPos[2]);
-        gunGroup.add(lArm);
+        parent.add(lArm);
         root.userData.viewArmL = lArm;
         root.userData.armLBase = lArm.position.clone();
       }
@@ -8447,16 +8460,16 @@
         }
         if (p < 0.5 && ud.viewArmL) {
           const drop = 1 - reloadPhase(p, 0.32, 0.5);
-          ud.viewArmL.position.y = ud.armLBase.y - 0.12 * drop;
-          ud.viewArmL.position.z = ud.armLBase.z + 0.05 * drop;
+          ud.viewArmL.position.y = ud.armLBase.y - 0.1 * drop;
+          ud.viewArmL.position.z = ud.armLBase.z - 0.05 * drop;
         }
       } else if (wi === 1 || wi === 3) {
         const mag = Math.sin(p * Math.PI);
         if (ud.viewArmL) {
-          ud.viewArmL.position.y = ud.armLBase.y - 0.1 * mag;
-          ud.viewArmL.position.z = ud.armLBase.z + 0.06 * mag;
+          ud.viewArmL.position.y = ud.armLBase.y - 0.08 * mag;
+          ud.viewArmL.position.z = ud.armLBase.z - 0.05 * mag;
         }
-        if (ud.viewArmR) ud.viewArmR.position.y = ud.armRBase.y - 0.03 * mag;
+        if (ud.viewArmR) ud.viewArmR.position.y = ud.armRBase.y - 0.02 * mag;
       } else if (wi === 2) {
         const open = p < 0.14 ? p / 0.14 : p > 0.9 ? (1 - p) / 0.1 : 1;
         if (ud.viewArmL) {
@@ -8515,9 +8528,8 @@
         gunGroup.add(slideGrp);
         root.userData.animSlide = slideGrp;
         attachWeaponMag(gunGroup, root, 0, -0.1, 0.04, 0.05, 0.12, 0.08);
-        attachViewArms(gunGroup, root, [0.07, -0.1, 0.06], [-0.06, -0.08, -0.02]);
-
         gunGroup.position.set(0.26, -0.22, -0.72);
+        attachViewArms(root, root, [0.22, -0.3, -0.55], [0.04, -0.28, -0.58]);
         adsOffset.set(-0.26, 0.095, 0.26);
 
         const muzzleNode = new THREE.Object3D();
@@ -8541,9 +8553,8 @@
         addMeshPart(gunGroup, new THREE.BoxGeometry(0.038, 0.024, 0.055), mDark, 0.04, 0.085, 0.1);
         attachEjectPort(gunGroup, root, 0.055, 0.09, 0.08);
         attachWeaponMag(gunGroup, root, 0, -0.12, 0.06, 0.055, 0.16, 0.1);
-        attachViewArms(gunGroup, root, [0.08, -0.11, 0.1], [-0.12, -0.06, -0.22]);
-
         gunGroup.position.set(0.25, -0.22, -0.80);
+        attachViewArms(root, root, [0.24, -0.32, -0.62], [-0.02, -0.28, -0.66]);
         adsOffset.set(-0.25, 0.10, 0.28);
 
         const muzzleNode = new THREE.Object3D();
@@ -8573,7 +8584,7 @@
         gunGroup.add(pumpGrp);
         root.userData.animPump = pumpGrp;
         attachEjectPort(gunGroup, root, 0.05, 0.1, 0.06);
-        attachViewArms(gunGroup, root, [0.08, -0.1, 0.12], [-0.1, -0.05, -0.12]);
+        attachViewArms(root, root, [0.22, -0.3, -0.64], [-0.04, -0.26, -0.58]);
         const mBrass = new THREE.MeshStandardMaterial({
           color: 0xd4af37,
           metalness: 0.88,
@@ -8606,9 +8617,8 @@
         addMeshPart(gunGroup, new THREE.BoxGeometry(0.04, 0.016, 0.016), mSight, 0, 0.07, 0.12);
         attachEjectPort(gunGroup, root, 0.048, 0.085, 0.04);
         attachWeaponMag(gunGroup, root, 0, -0.12, 0.04, 0.048, 0.14, 0.09);
-        attachViewArms(gunGroup, root, [0.08, -0.1, 0.08], [-0.11, -0.06, -0.16]);
-
         gunGroup.position.set(0.24, -0.22, -0.76);
+        attachViewArms(root, root, [0.23, -0.31, -0.58], [-0.03, -0.27, -0.62]);
         adsOffset.set(-0.22, 0.085, 0.24);
 
         const muzzleNode = new THREE.Object3D();
@@ -8642,9 +8652,8 @@
         root.userData.animBolt = boltGrp;
         attachWeaponMag(gunGroup, root, 0, -0.14, 0.1, 0.06, 0.12, 0.11);
         attachEjectPort(gunGroup, root, 0.06, 0.1, 0.2);
-        attachViewArms(gunGroup, root, [0.08, -0.11, 0.14], [-0.1, -0.05, -0.28]);
-
         gunGroup.position.set(0.2, -0.2, -0.96);
+        attachViewArms(root, root, [0.2, -0.32, -0.72], [-0.06, -0.26, -0.78]);
         adsOffset.set(-0.18, 0.12, 0.38);
 
         const muzzleNode = new THREE.Object3D();
@@ -8654,6 +8663,16 @@
       }
 
       root.add(gunGroup);
+      const armR = root.userData.viewArmR;
+      const armL = root.userData.viewArmL;
+      if (armR) {
+        root.remove(armR);
+        root.add(armR);
+      }
+      if (armL) {
+        root.remove(armL);
+        root.add(armL);
+      }
       root.userData.gun = gunGroup;
       root.userData.basePos = gunGroup.position.clone();
       root.userData.adsOffset = adsOffset.clone();
@@ -8854,18 +8873,29 @@
     function getWeaponReloadMotion(wi, rp) {
       const p = THREE.MathUtils.clamp(rp, 0, 1);
       const sin = Math.sin(p * Math.PI);
-      const out = { reloadRotX: 0, reloadRotY: 0, reloadRotZ: 0, reloadX: 0, reloadY: 0 };
+      const out = {
+        reloadRotX: 0,
+        reloadRotY: 0,
+        reloadRotZ: 0,
+        reloadX: 0,
+        reloadY: 0,
+        reloadPushZ: 0,
+      };
       if (wi === 0) {
-        out.reloadRotZ = -0.2 * sin;
-        out.reloadY = 0.05 * sin;
+        out.reloadRotZ = -0.08 * sin;
+        out.reloadY = 0.04 * sin;
+        out.reloadX = 0.025 * sin;
+        out.reloadPushZ = -0.07 * sin;
       } else if (wi === 1 || wi === 3) {
-        out.reloadRotZ = -0.32 * sin;
-        out.reloadRotX = -0.06 * sin;
-        out.reloadY = 0.07 * sin;
+        out.reloadRotZ = -0.1 * sin;
+        out.reloadY = 0.05 * sin;
+        out.reloadX = 0.035 * sin;
+        out.reloadPushZ = -0.08 * sin;
       } else if (wi === 2) {
         const open = p < 0.14 ? p / 0.14 : p > 0.9 ? (1 - p) / 0.1 : 1;
-        out.reloadY = 0.04 * open;
-        out.reloadX = -0.02 * open;
+        out.reloadY = 0.035 * open;
+        out.reloadX = 0.03 * open;
+        out.reloadPushZ = -0.06 * open;
       } else if (wi === 4) {
         if (p < 0.25) {
           const q = p / 0.25;
@@ -8885,8 +8915,10 @@
           out.reloadY = 0.08 * (1 - q);
         }
       } else if (wi === 5) {
-        out.reloadY = 0.05 * sin;
-        out.reloadRotX = -0.05 * sin;
+        out.reloadRotZ = -0.07 * sin;
+        out.reloadY = 0.07 * sin;
+        out.reloadX = 0.045 * sin;
+        out.reloadPushZ = -0.1 * sin;
       }
       return out;
     }
@@ -8921,8 +8953,8 @@
         }
         if (ud.animSlide && rack > 0) {
           let slideBack = 0;
-          if (rack < 0.52) slideBack = 0.34 * (rack / 0.52);
-          else slideBack = 0.34 * (1 - (rack - 0.52) / 0.48);
+          if (rack < 0.52) slideBack = 0.22 * (rack / 0.52);
+          else slideBack = 0.22 * (1 - (rack - 0.52) / 0.48);
           ud.animSlide.position.z = slideBack;
           ud.animSlide.rotation.x = -0.06 * slideBack;
         }
@@ -9023,38 +9055,24 @@
 
       if (wi === 0) {
         let slideBack = 0;
-        if (act === "slide") slideBack = 0.15 * k;
-        if (ud.animSlide && !state.reloading) {
-          ud.animSlide.position.z = slideBack;
-          offZ = slideBack * 0.9;
-          rotX = -0.1 * k;
-        } else if (state.reloading && ud.animSlide) {
-          offZ = ud.animSlide.position.z * 0.92;
-          rotX = -0.1 * ud.animSlide.position.z;
-        }
+        if (act === "slide") slideBack = 0.09 * k;
+        if (ud.animSlide) ud.animSlide.position.z = slideBack;
+        rotX = state.reloading ? 0 : -0.035 * k;
       } else if (wi === 1 || wi === 3) {
-        if (act === "auto") {
-          offZ = 0.045 * k;
-          rotX = -0.1 * k;
-        }
+        if (act === "auto") rotX = -0.04 * k;
       } else if (wi === 2) {
         let pumpZ = 0;
-        if (act === "pump" && !state.reloading) pumpZ = 0.2 * k;
+        if (act === "pump" && !state.reloading) pumpZ = 0.11 * k;
         if (ud.animPump) ud.animPump.position.z = pumpZ;
-        offZ = pumpZ * 0.85;
-        rotX = -0.06 * k;
+        rotX = -0.03 * k;
       } else if (wi === 5) {
-        let boltPull = 0;
         if (act === "bolt" && !state.reloading) {
-          if (t < 0.35) boltPull = 0.28 * (t / 0.35);
-          else if (t < 0.65) boltPull = 0.28;
-          else boltPull = 0.28 * (1 - (t - 0.65) / 0.35);
+          let boltPull = 0;
+          if (t < 0.35) boltPull = 0.22 * (t / 0.35);
+          else if (t < 0.65) boltPull = 0.22;
+          else boltPull = 0.22 * (1 - (t - 0.65) / 0.35);
           if (ud.animBolt) ud.animBolt.position.z = boltPull;
-          rotX = -0.12 * k;
-          offZ = boltPull * 0.4;
-        } else if (state.reloading && ud.animBolt) {
-          offZ = ud.animBolt.position.z * 0.45;
-          rotX = -0.1 * ud.animBolt.position.z;
+          rotX = -0.04 * k;
         }
       } else if (wi === 4 && rp > 0) {
         offY = -0.05 * Math.sin(rp * Math.PI);
@@ -9729,6 +9747,7 @@
       let reloadRotZ = 0;
       let reloadRotY = 0;
       let reloadRotX = 0;
+      let reloadPushZ = 0;
       let reloadProgress = 0;
 
       if (state.reloading) {
@@ -9741,6 +9760,7 @@
         reloadRotZ = wm.reloadRotZ;
         reloadX = wm.reloadX;
         reloadY = wm.reloadY;
+        reloadPushZ = wm.reloadPushZ;
       } else if (
         state.weaponIndex === 4 &&
         keys.f &&
@@ -9753,6 +9773,7 @@
         reloadRotZ = wm.reloadRotZ;
         reloadX = wm.reloadX;
         reloadY = wm.reloadY;
+        reloadPushZ = wm.reloadPushZ;
       }
 
       const activeWeapon = weaponModels[state.weaponIndex];
@@ -9814,7 +9835,7 @@
       weaponRoot.position.set(
         state.weaponBobX + reloadX,
         WEAPON_VIEW_DROP_Y - state.recoil - state.weaponBobY + reloadY,
-        0
+        reloadPushZ
       );
       weaponRoot.rotation.set(
         state.recoil * (usingAds ? 0.7 : 1.0) + reloadRotX,
