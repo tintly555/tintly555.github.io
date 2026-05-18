@@ -5981,7 +5981,9 @@
       mesh.receiveShadow = true;
       scene.add(mesh);
       wallMeshes.push(mesh);
-      wallBoxes.push(new THREE.Box3().setFromObject(mesh));
+      const wallBox = new THREE.Box3().setFromObject(mesh);
+      mesh.userData.wallBox = wallBox;
+      wallBoxes.push(wallBox);
       _texturedMeshes.push({ mesh, faceRepeats, tint: color });
       return mesh;
     }
@@ -5997,11 +5999,27 @@
     /** Match moon/hemi π convention; punctual lights scaled separately from global brightness. */
     const MAZE_LIGHT_INTENSITY_SCALE = Math.PI;
     let mazeChunks = new Map();
+    const mazeGridCache = new Map();
     let mazeWorldSeed = 2166136261;
     let mazeChunkPollAcc = 0;
+    let mazeNavRebuildRow = 0;
     /** WebGL forward shading has a hard limit on fragment light uniforms — register maze lamps and cull visibility each frame. */
     const mazeCullableLights = [];
     const MAX_MAZE_LIGHTS_ACTIVE = 34;
+
+    function clearMazeGridCache() {
+      mazeGridCache.clear();
+    }
+
+    function getMazeChunkGrid(cx, cz) {
+      const key = `${cx},${cz}`;
+      let grid = mazeGridCache.get(key);
+      if (!grid) {
+        grid = generateMazeChunkGrid(cx, cz);
+        mazeGridCache.set(key, grid);
+      }
+      return grid;
+    }
 
     function mazeHashSeed(cx, cz, salt = 0) {
       let h = mazeWorldSeed ^ salt ^ (cx * 73856093) ^ (cz * 19349663) ^ (cx * cz * 83492791);
@@ -6228,9 +6246,9 @@
       return dx * dx + dz * dz <= r * r + 1e-8;
     }
 
-    /** True if a circle in XZ hits any wall segment from generateMazeChunkGrid (matches pushWall AABBs). */
+    /** True if a circle in XZ hits any wall segment (matches pushWall AABBs). */
     function arenaCircleHitsMazeGrid(worldX, worldZ, radius, chunkCx, chunkCz) {
-      const { vert, horiz } = generateMazeChunkGrid(chunkCx, chunkCz);
+      const { vert, horiz } = getMazeChunkGrid(chunkCx, chunkCz);
       const ox = chunkCx * MAZE_CHUNK_WORLD;
       const oz = chunkCz * MAZE_CHUNK_WORLD;
       const cw = MAZE_CELL_SIZE;
@@ -6239,8 +6257,14 @@
       const t = MAZE_WALL_THICK;
       const hz = cw + 0.02;
       const hx = cw + 0.02;
-      for (let ix = 0; ix <= w; ix++) {
-        for (let iy = 0; iy < h; iy++) {
+      const lx = worldX - ox;
+      const lz = worldZ - oz;
+      const ixMin = Math.max(0, Math.floor((lx - radius - hx) / cw));
+      const ixMax = Math.min(w, Math.ceil((lx + radius + hx) / cw));
+      const iyMin = Math.max(0, Math.floor((lz - radius - hz) / cw));
+      const iyMax = Math.min(h, Math.ceil((lz + radius + hz) / cw));
+      for (let ix = ixMin; ix <= ixMax; ix++) {
+        for (let iy = iyMin; iy < iyMax; iy++) {
           if (!vert[ix][iy]) continue;
           const wx = ox + ix * cw;
           const wz = oz + (iy + 0.5) * cw;
@@ -6251,8 +6275,8 @@
           if (circleXZIntersectsRect(worldX, worldZ, radius, minX, maxX, minZ, maxZ)) return true;
         }
       }
-      for (let ix = 0; ix < w; ix++) {
-        for (let iy = 0; iy <= h; iy++) {
+      for (let ix = ixMin; ix < ixMax; ix++) {
+        for (let iy = iyMin; iy <= iyMax; iy++) {
           if (!horiz[ix][iy]) continue;
           const wx = ox + (ix + 0.5) * cw;
           const wz = oz + iy * cw;
@@ -6261,6 +6285,17 @@
           const minZ = wz - t * 0.5;
           const maxZ = wz + t * 0.5;
           if (circleXZIntersectsRect(worldX, worldZ, radius, minX, maxX, minZ, maxZ)) return true;
+        }
+      }
+      return false;
+    }
+
+    function arenaPointBlocked(wx, wz, radius = 0.34) {
+      const pcx = Math.floor(wx / MAZE_CHUNK_WORLD);
+      const pcz = Math.floor(wz / MAZE_CHUNK_WORLD);
+      for (let dz = -1; dz <= 1; dz++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          if (arenaCircleHitsMazeGrid(wx, wz, radius, pcx + dx, pcz + dz)) return true;
         }
       }
       return false;
@@ -6349,7 +6384,7 @@
       const ox = cx * MAZE_CHUNK_WORLD;
       const oz = cz * MAZE_CHUNK_WORLD;
       const cw = MAZE_CELL_SIZE;
-      const { vert, horiz, lightsPlan } = generateMazeChunkGrid(cx, cz);
+      const { vert, horiz, lightsPlan } = getMazeChunkGrid(cx, cz);
       const w = MAZE_CELLS;
       const h = MAZE_CELLS;
 
@@ -6584,7 +6619,10 @@
       const cx = camera.position.x;
       const cy = camera.position.y;
       const cz = camera.position.z;
-      const scored = mazeCullableLights.map((L) => {
+      const maxV = MAX_MAZE_LIGHTS_ACTIVE;
+      const top = [];
+      for (let li = 0; li < mazeCullableLights.length; li++) {
+        const L = mazeCullableLights[li];
         const p = L.position;
         const dx = p.x - cx;
         const dy = p.y - cy;
@@ -6592,12 +6630,24 @@
         let d2 = dx * dx + dz * dz + dy * dy * 0.45;
         if (L.isSpotLight) d2 *= 0.5;
         else if (L.isPointLight && p.y < MAZE_CEILING_LIGHT_Y - 0.5) d2 *= 0.65;
-        return { L, d2 };
-      });
-      scored.sort((a, b) => a.d2 - b.d2);
-      const maxV = MAX_MAZE_LIGHTS_ACTIVE;
-      for (let i = 0; i < scored.length; i++) {
-        scored[i].L.visible = i < maxV;
+        if (top.length < maxV) {
+          top.push({ L, d2 });
+          if (top.length === maxV) top.sort((a, b) => a.d2 - b.d2);
+        } else if (d2 < top[maxV - 1].d2) {
+          top[maxV - 1] = { L, d2 };
+          let i = maxV - 1;
+          while (i > 0 && top[i].d2 < top[i - 1].d2) {
+            const swap = top[i];
+            top[i] = top[i - 1];
+            top[i - 1] = swap;
+            i--;
+          }
+        }
+      }
+      const visible = new Set();
+      for (let i = 0; i < top.length; i++) visible.add(top[i].L);
+      for (let li = 0; li < mazeCullableLights.length; li++) {
+        mazeCullableLights[li].visible = visible.has(mazeCullableLights[li]);
       }
     }
 
@@ -6607,6 +6657,12 @@
       if (!ch) return;
       pruneMazeCullLightsForChunk(key);
       for (const mesh of ch.meshes) {
+        const box = mesh.userData.wallBox;
+        if (box) {
+          const bi = wallBoxes.indexOf(box);
+          if (bi >= 0) wallBoxes.splice(bi, 1);
+          delete mesh.userData.wallBox;
+        }
         scene.remove(mesh);
         const wi = wallMeshes.indexOf(mesh);
         if (wi >= 0) wallMeshes.splice(wi, 1);
@@ -6629,15 +6685,12 @@
         if (L.target) scene.remove(L.target);
         if (L.dispose) L.dispose();
       }
-      wallBoxes.length = 0;
-      for (const m of wallMeshes) {
-        wallBoxes.push(new THREE.Box3().setFromObject(m));
-      }
       mazeChunks.delete(key);
     }
 
     function clearAllMazeChunks() {
       mazeCullableLights.length = 0;
+      clearMazeGridCache();
       for (const k of [...mazeChunks.keys()]) {
         const [sx, sz] = k.split(",").map(Number);
         unloadMazeChunk(sx, sz);
@@ -6662,15 +6715,17 @@
         }
       }
 
-      rebuildMazeNavGrid(pcx, pcz);
+      beginMazeNavRebuild(pcx, pcz);
     }
 
     let mazeNavAnchorCx = null;
     let mazeNavAnchorCz = null;
 
-    function rebuildMazeNavGrid(pcx, pcz) {
+    function beginMazeNavRebuild(pcx, pcz) {
       if (CURRENT_MAP !== "arena") return;
-      if (mazeNavAnchorCx === pcx && mazeNavAnchorCz === pcz && navGrid) return;
+      if (mazeNavAnchorCx === pcx && mazeNavAnchorCz === pcz && navGrid && mazeNavRebuildRow >= navRows) {
+        return;
+      }
       mazeNavAnchorCx = pcx;
       mazeNavAnchorCz = pcz;
       const padChunks = 4;
@@ -6680,18 +6735,36 @@
       navCols = Math.ceil(span / NAV_CELL);
       navRows = Math.ceil(span / NAV_CELL);
       navGrid = new Uint8Array(navCols * navRows);
-      for (let r = 0; r < navRows; r++) {
-        for (let c = 0; c < navCols; c++) {
-          const wx = navMinX + (c + 0.5) * NAV_CELL;
-          const wz = navMinZ + (r + 0.5) * NAV_CELL;
-          navGrid[r * navCols + c] = enemyCollidesWall(wx, wz, NAV_RADIUS) ? 1 : 0;
-        }
-      }
       const total = navCols * navRows;
       flowDirX = new Float32Array(total);
       flowDirZ = new Float32Array(total);
       flowPlayerC = -1;
       flowPlayerR = -1;
+      mazeNavRebuildRow = 0;
+    }
+
+    /** Spread nav BFS grid build across frames (same result, avoids 50k+ wall-box tests in one tick). */
+    function stepMazeNavRebuild(rowsPerFrame = 14) {
+      if (CURRENT_MAP !== "arena" || !navGrid) return;
+      const end = Math.min(navRows, mazeNavRebuildRow + rowsPerFrame);
+      for (let r = mazeNavRebuildRow; r < end; r++) {
+        const rowOff = r * navCols;
+        for (let c = 0; c < navCols; c++) {
+          const wx = navMinX + (c + 0.5) * NAV_CELL;
+          const wz = navMinZ + (r + 0.5) * NAV_CELL;
+          navGrid[rowOff + c] = arenaPointBlocked(wx, wz, NAV_RADIUS) ? 1 : 0;
+        }
+      }
+      mazeNavRebuildRow = end;
+      if (mazeNavRebuildRow >= navRows) {
+        flowPlayerC = -1;
+        flowPlayerR = -1;
+      }
+    }
+
+    function rebuildMazeNavGrid(pcx, pcz) {
+      beginMazeNavRebuild(pcx, pcz);
+      stepMazeNavRebuild(navRows);
     }
 
     const pvpMapLights = [];
@@ -6754,6 +6827,8 @@
       mazeChunkPollAcc = 0;
       mazeNavAnchorCx = null;
       mazeNavAnchorCz = null;
+      mazeNavRebuildRow = 0;
+      clearMazeGridCache();
       buildMazeChunk(0, 0);
     }
 
@@ -6762,24 +6837,30 @@
       const pcx = Math.floor(player.position.x / MAZE_CHUNK_WORLD);
       const pcz = Math.floor(player.position.z / MAZE_CHUNK_WORLD);
       const R = 2;
-      let pickCx = null;
-      let pickCz = null;
-      let bestPri = Infinity;
-      for (let dz = -R; dz <= R; dz++) {
-        for (let dx = -R; dx <= R; dx++) {
-          const cx = pcx + dx;
-          const cz = pcz + dz;
-          const key = `${cx},${cz}`;
-          if (mazeChunks.has(key)) continue;
-          const pri = dx * dx + dz * dz;
-          if (pri < bestPri) {
-            bestPri = pri;
-            pickCx = cx;
-            pickCz = cz;
+      let built = 0;
+      const buildBudget = mazeChunks.size < 12 ? 2 : 1;
+      while (built < buildBudget) {
+        let pickCx = null;
+        let pickCz = null;
+        let bestPri = Infinity;
+        for (let dz = -R; dz <= R; dz++) {
+          for (let dx = -R; dx <= R; dx++) {
+            const cx = pcx + dx;
+            const cz = pcz + dz;
+            const key = `${cx},${cz}`;
+            if (mazeChunks.has(key)) continue;
+            const pri = dx * dx + dz * dz;
+            if (pri < bestPri) {
+              bestPri = pri;
+              pickCx = cx;
+              pickCz = cz;
+            }
           }
         }
+        if (pickCx === null) break;
+        buildMazeChunk(pickCx, pickCz);
+        built++;
       }
-      if (pickCx !== null) buildMazeChunk(pickCx, pickCz);
     }
 
     function buildMapCrossfire() {
@@ -7268,6 +7349,9 @@
     updateHud();
 
     function collidesWithWalls(pos) {
+      if (CURRENT_MAP === "arena") {
+        return arenaPointBlocked(pos.x, pos.z, player.radius);
+      }
       const sphere = new THREE.Sphere(new THREE.Vector3(pos.x, 1.0, pos.z), player.radius);
       for (const box of wallBoxes) {
         if (box.intersectsSphere(sphere)) return true;
@@ -7566,6 +7650,9 @@
     }
 
     function drawEnemyHp(enemy) {
+      const ratio = Math.max(0, enemy.hp / enemy.maxHp);
+      if (enemy._hpBarRatio === ratio) return;
+      enemy._hpBarRatio = ratio;
       const ctx = enemy.hpCtx;
       ctx.clearRect(0, 0, 128, 24);
       ctx.fillStyle = "rgba(0,0,0,0.55)";
@@ -9482,17 +9569,23 @@
       compileSceneShaders();
     }
 
+    const _enemyWallSphere = new THREE.Sphere();
+
     function enemyCollidesWall(nextX, nextZ, radius = 0.34) {
-      const sphere = new THREE.Sphere(new THREE.Vector3(nextX, 1.0, nextZ), radius);
+      if (CURRENT_MAP === "arena") {
+        return arenaPointBlocked(nextX, nextZ, radius);
+      }
+      _enemyWallSphere.center.set(nextX, 1.0, nextZ);
+      _enemyWallSphere.radius = radius;
       for (const box of wallBoxes) {
-        if (box.intersectsSphere(sphere)) return true;
+        if (box.intersectsSphere(_enemyWallSphere)) return true;
       }
       return false;
     }
 
     /** Prefer high-degree maze cells (actual grid), then near chunk center, until collision-free. */
     function pickOpenMazeSpawnInChunk(cx, cz) {
-      const { vert, horiz } = generateMazeChunkGrid(cx, cz);
+      const { vert, horiz } = getMazeChunkGrid(cx, cz);
       const ox = cx * MAZE_CHUNK_WORLD;
       const oz = cz * MAZE_CHUNK_WORLD;
       const cw = MAZE_CELL_SIZE;
@@ -10469,7 +10562,27 @@
     const _visRay = new THREE.Raycaster();
     let visFrameCounter = 0;
 
+    function arenaLosBlocked(x0, z0, x1, z1) {
+      const dx = x1 - x0;
+      const dz = z1 - z0;
+      const len = Math.hypot(dx, dz);
+      if (len < 0.12) return false;
+      const steps = Math.min(22, Math.max(4, Math.ceil(len / 2.2)));
+      for (let i = 1; i < steps; i++) {
+        const t = i / steps;
+        const wx = x0 + dx * t;
+        const wz = z0 + dz * t;
+        if (arenaPointBlocked(wx, wz, 0.34)) return true;
+      }
+      return false;
+    }
+
     function canSeePoint(ex, ey, ez, px, py, pz) {
+      if (CURRENT_MAP === "arena") {
+        const d = Math.hypot(px - ex, pz - ez);
+        if (d < 0.1) return true;
+        return !arenaLosBlocked(ex, ez, px, pz);
+      }
       _visOrigin.set(ex, ey, ez);
       _visDir.set(px - ex, py - ey, pz - ez);
       const d = _visDir.length();
@@ -10609,7 +10722,7 @@
       }
 
       visFrameCounter++;
-      if ((visFrameCounter % 6) === 0) rebuildFlowField();
+      if ((visFrameCounter % 8) === 0) rebuildFlowField();
 
       for (let ei = 0; ei < state.enemies.length; ei++) {
         const enemy = state.enemies[ei];
@@ -10618,6 +10731,7 @@
           if (enemy.respawnTimer <= 0) {
             enemy.alive = true;
             enemy.hp = enemy.maxHp;
+            enemy._hpBarRatio = -1;
             enemy.group.visible = true;
             const sp = findSpawnPosition(SPAWN_MIN_DIST_BASE);
             enemy.group.position.set(sp.x, 0, sp.z);
@@ -10730,15 +10844,14 @@
 
           let gunnerLosClear = false;
           if (enemy.ranged && dist < enemy.rangeDistance) {
-            _visOrigin.set(enemy.group.position.x, 1.6, enemy.group.position.z);
-            _enemyShotDir.set(dx, (target.y ?? 1.65) - 1.6, dz);
-            if (_enemyShotDir.lengthSq() > 1e-10) {
-              _enemyShotDir.normalize();
-              _visRay.set(_visOrigin, _enemyShotDir);
-              _visRay.near = 0;
-              _visRay.far = Math.min(dist, enemy.rangeDistance) + 0.08;
-              gunnerLosClear = _visRay.intersectObjects(wallMeshes, false).length === 0;
-            }
+            gunnerLosClear = canSeePoint(
+              enemy.group.position.x,
+              1.6,
+              enemy.group.position.z,
+              target.x,
+              target.y ?? 1.65,
+              target.z
+            );
           }
           if (enemy.ranged && dist < enemy.rangeDistance && gunnerLosClear) {
             enemy.rangedLosAcquireTimer += dt;
@@ -10765,10 +10878,21 @@
             _enemyShotDir.z += (Math.random() - 0.5) * spr * 2;
             _enemyShotDir.y += (Math.random() - 0.5) * spr * 0.5;
             _enemyShotDir.normalize();
-            _visRay.set(_visOrigin, _enemyShotDir);
-            _visRay.near = 0;
-            _visRay.far = Math.min(dist, enemy.rangeDistance);
-            if (_visRay.intersectObjects(wallMeshes, false).length === 0) {
+            const shotEndX =
+              enemy.group.position.x + _enemyShotDir.x * Math.min(dist, enemy.rangeDistance);
+            const shotEndZ =
+              enemy.group.position.z + _enemyShotDir.z * Math.min(dist, enemy.rangeDistance);
+            const shotEndY = 1.6 + _enemyShotDir.y * Math.min(dist, enemy.rangeDistance);
+            if (
+              canSeePoint(
+                enemy.group.position.x,
+                1.6,
+                enemy.group.position.z,
+                shotEndX,
+                shotEndY,
+                shotEndZ
+              )
+            ) {
               enemy.attackCooldownTimer = enemy.attackCooldown;
               applyCoopZombieDamageToTarget(enemy);
               _tracerEnd.set(
@@ -11098,6 +11222,9 @@
       if (CURRENT_MAP === "arena" && started && gameWorldReady) {
         updateInfiniteMaze(dt);
         processOneMazeChunkBuild();
+        if (navGrid && mazeNavRebuildRow < navRows) {
+          stepMazeNavRebuild(18);
+        }
         cullMazeLightsNearCamera();
       }
 
@@ -11610,7 +11737,6 @@
       syncSettingsUI();
       saveGameSettings();
       applySceneFogAndCameraFar();
-      compileSceneShaders();
     }
     btnRenderDistPrev.addEventListener("click", () => cycleRenderDistance(-1));
     btnRenderDistNext.addEventListener("click", () => cycleRenderDistance(1));
