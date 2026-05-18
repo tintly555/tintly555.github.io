@@ -8402,11 +8402,11 @@
     const WEAPON_VIEW_DROP_Y = -0.032;
 
     const VIEW_MAG_MAT = new THREE.MeshStandardMaterial({
-      color: 0x6a5c48,
-      roughness: 0.55,
-      metalness: 0.4,
-      emissive: 0x2a2218,
-      emissiveIntensity: 0.35,
+      color: 0x2a3d5c,
+      roughness: 0.42,
+      metalness: 0.58,
+      emissive: 0x101820,
+      emissiveIntensity: 0.22,
     });
 
     function attachWeaponMag(gunGroup, root, x, y, z, w, h, d) {
@@ -8737,7 +8737,7 @@
         adsOffset.set(-0.175, 0.105, 0.24);
 
         const muzzleNode = new THREE.Object3D();
-        muzzleNode.position.set(0, 0.082, -0.42);
+        muzzleNode.position.set(0, 0.05, -0.46);
         barrelGrp.add(muzzleNode);
         root.userData.muzzleNode = muzzleNode;
 
@@ -9725,8 +9725,9 @@
             (w.spreadBase + state.spreadBloom) * spreadMultiplier * movingPenalty * adsPenalty;
         }
         const dir = getWeaponDirection(totalSpread);
-        // Hits follow crosshair (camera ray). Tracer still draws muzzle → impact.
-        const ray = new THREE.Raycaster(camera.position, dir, 0.02, 160);
+        const rayOrigin =
+          state.weaponIndex === 2 ? muzzleStart : camera.position;
+        const ray = new THREE.Raycaster(rayOrigin, dir, 0.02, 160);
         ray.camera = camera;
 
         let bestEnemy = null;
@@ -9822,7 +9823,7 @@
             nz: normal.z,
           });
         } else {
-          const missEnd = _crosshairHit.copy(camera.position).addScaledVector(dir, 160);
+          const missEnd = _crosshairHit.copy(rayOrigin).addScaledVector(dir, 160);
           createBulletTrail(muzzleStart, missEnd, w.color);
           emitShootNetwork(muzzleStart, missEnd, w.color, "miss");
         }
