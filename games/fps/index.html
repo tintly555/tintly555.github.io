@@ -328,6 +328,17 @@
       transition: opacity 0.1s ease;
     }
 
+    /* AMR (6): full-screen scope overlay — swap file game-ui/amr-scope-overlay.png|.svg */
+    .amr-scope-overlay {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 24;
+      opacity: 0;
+      background: center / cover no-repeat;
+      transition: opacity 0.1s linear;
+    }
+
     .medkit-reticle.hidden {
       opacity: 0;
       visibility: hidden;
@@ -993,6 +1004,7 @@
   <div class="hint" id="hint" data-i18n="hintClick">Click anywhere</div>
   <div class="flash" id="flash"></div>
   <div class="crosshair" id="crosshair"></div>
+  <div id="amrScopeOverlay" class="amr-scope-overlay" aria-hidden="true"></div>
   <div id="medkitReticle" class="medkit-reticle hidden" aria-hidden="true">
     <svg width="120" height="120" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
       <!-- Flip X so dash draws CCW from top (toward left first). -->
@@ -1136,6 +1148,7 @@
     const hint = document.getElementById("hint");
     const flash = document.getElementById("flash");
     const crosshairEl = document.getElementById("crosshair");
+    const amrScopeOverlayEl = document.getElementById("amrScopeOverlay");
     const medKitReticleEl = document.getElementById("medkitReticle");
     const medKitRingProgEl = document.getElementById("medkitRingProg");
     const hitmarkerEl = document.getElementById("hitmarker");
@@ -1311,7 +1324,7 @@
       zh: {
         gameTitle: "无光之境",
         creditsGame: "游戏制作：Tintly555",
-        creditsMusic: "音乐制作：J有点死了",
+        creditsMusic: "音乐制作：JimmyQrg",
         btnZombieArena: "丧尸竞技场",
         btnCrossfirePickMap: "交叉火力（对战 — 选地图）",
         zombieArenaTitle: "丧尸竞技场",
@@ -1944,6 +1957,1978 @@
       }
       return rows;
     })();
+
+    // networked-avatar-timeline-slot-0000: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0001: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0002: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0003: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0004: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0005: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0006: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0007: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0008: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0009: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0010: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0011: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0012: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0013: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0014: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0015: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0016: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0017: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0018: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0019: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0020: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0021: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0022: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0023: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0024: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0025: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0026: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0027: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0028: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0029: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0030: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0031: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0032: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0033: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0034: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0035: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0036: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0037: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0038: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0039: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0040: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0041: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0042: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0043: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0044: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0045: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0046: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0047: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0048: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0049: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0050: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0051: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0052: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0053: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0054: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0055: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0056: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0057: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0058: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0059: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0060: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0061: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0062: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0063: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0064: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0065: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0066: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0067: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0068: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0069: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0070: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0071: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0072: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0073: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0074: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0075: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0076: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0077: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0078: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0079: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0080: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0081: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0082: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0083: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0084: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0085: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0086: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0087: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0088: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0089: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0090: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0091: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0092: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0093: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0094: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0095: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0096: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0097: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0098: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0099: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0100: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0101: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0102: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0103: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0104: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0105: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0106: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0107: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0108: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0109: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0110: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0111: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0112: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0113: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0114: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0115: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0116: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0117: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0118: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0119: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0120: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0121: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0122: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0123: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0124: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0125: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0126: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0127: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0128: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0129: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0130: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0131: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0132: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0133: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0134: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0135: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0136: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0137: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0138: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0139: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0140: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0141: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0142: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0143: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0144: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0145: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0146: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0147: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0148: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0149: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0150: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0151: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0152: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0153: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0154: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0155: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0156: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0157: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0158: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0159: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0160: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0161: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0162: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0163: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0164: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0165: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0166: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0167: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0168: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0169: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0170: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0171: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0172: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0173: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0174: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0175: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0176: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0177: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0178: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0179: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0180: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0181: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0182: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0183: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0184: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0185: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0186: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0187: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0188: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0189: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0190: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0191: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0192: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0193: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0194: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0195: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0196: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0197: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0198: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0199: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0200: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0201: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0202: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0203: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0204: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0205: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0206: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0207: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0208: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0209: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0210: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0211: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0212: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0213: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0214: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0215: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0216: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0217: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0218: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0219: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0220: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0221: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0222: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0223: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0224: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0225: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0226: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0227: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0228: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0229: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0230: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0231: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0232: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0233: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0234: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0235: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0236: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0237: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0238: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0239: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0240: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0241: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0242: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0243: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0244: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0245: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0246: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0247: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0248: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0249: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0250: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0251: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0252: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0253: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0254: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0255: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0256: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0257: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0258: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0259: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0260: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0261: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0262: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0263: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0264: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0265: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0266: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0267: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0268: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0269: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0270: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0271: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0272: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0273: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0274: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0275: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0276: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0277: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0278: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0279: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0280: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0281: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0282: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0283: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0284: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0285: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0286: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0287: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0288: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0289: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0290: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0291: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0292: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0293: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0294: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0295: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0296: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0297: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0298: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0299: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0300: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0301: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0302: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0303: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0304: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0305: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0306: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0307: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0308: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0309: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0310: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0311: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0312: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0313: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0314: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0315: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0316: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0317: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0318: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0319: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0320: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0321: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0322: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0323: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0324: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0325: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0326: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0327: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0328: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0329: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0330: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0331: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0332: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0333: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0334: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0335: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0336: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0337: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0338: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0339: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0340: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0341: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0342: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0343: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0344: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0345: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0346: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0347: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0348: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0349: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0350: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0351: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0352: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0353: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0354: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0355: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0356: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0357: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0358: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0359: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0360: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0361: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0362: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0363: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0364: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0365: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0366: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0367: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0368: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0369: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0370: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0371: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0372: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0373: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0374: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0375: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0376: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0377: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0378: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0379: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0380: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0381: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0382: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0383: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0384: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0385: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0386: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0387: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0388: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0389: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0390: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0391: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0392: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0393: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0394: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0395: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0396: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0397: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0398: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0399: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0400: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0401: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0402: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0403: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0404: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0405: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0406: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0407: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0408: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0409: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0410: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0411: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0412: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0413: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0414: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0415: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0416: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0417: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0418: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0419: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0420: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0421: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0422: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0423: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0424: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0425: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0426: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0427: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0428: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0429: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0430: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0431: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0432: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0433: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0434: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0435: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0436: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0437: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0438: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0439: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0440: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0441: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0442: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0443: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0444: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0445: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0446: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0447: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0448: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0449: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0450: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0451: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0452: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0453: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0454: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0455: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0456: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0457: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0458: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0459: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0460: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0461: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0462: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0463: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0464: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0465: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0466: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0467: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0468: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0469: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0470: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0471: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0472: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0473: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0474: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0475: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0476: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0477: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0478: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0479: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0480: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0481: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0482: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0483: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0484: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0485: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0486: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0487: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0488: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0489: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0490: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0491: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0492: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0493: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0494: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0495: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0496: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0497: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0498: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0499: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0500: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0501: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0502: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0503: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0504: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0505: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0506: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0507: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0508: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0509: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0510: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0511: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0512: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0513: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0514: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0515: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0516: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0517: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0518: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0519: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0520: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0521: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0522: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0523: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0524: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0525: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0526: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0527: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0528: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0529: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0530: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0531: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0532: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0533: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0534: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0535: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0536: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0537: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0538: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0539: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0540: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0541: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0542: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0543: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0544: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0545: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0546: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0547: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0548: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0549: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0550: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0551: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0552: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0553: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0554: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0555: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0556: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0557: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0558: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0559: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0560: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0561: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0562: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0563: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0564: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0565: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0566: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0567: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0568: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0569: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0570: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0571: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0572: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0573: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0574: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0575: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0576: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0577: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0578: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0579: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0580: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0581: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0582: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0583: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0584: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0585: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0586: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0587: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0588: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0589: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0590: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0591: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0592: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0593: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0594: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0595: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0596: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0597: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0598: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0599: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0600: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0601: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0602: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0603: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0604: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0605: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0606: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0607: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0608: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0609: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0610: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0611: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0612: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0613: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0614: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0615: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0616: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0617: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0618: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0619: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0620: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0621: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0622: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0623: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0624: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0625: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0626: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0627: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0628: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0629: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0630: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0631: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0632: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0633: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0634: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0635: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0636: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0637: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0638: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0639: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0640: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0641: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0642: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0643: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0644: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0645: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0646: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0647: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0648: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0649: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0650: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0651: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0652: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0653: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0654: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0655: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0656: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0657: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0658: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0659: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0660: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0661: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0662: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0663: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0664: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0665: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0666: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0667: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0668: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0669: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0670: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0671: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0672: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0673: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0674: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0675: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0676: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0677: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0678: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0679: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0680: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0681: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0682: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0683: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0684: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0685: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0686: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0687: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0688: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0689: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0690: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0691: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0692: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0693: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0694: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0695: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0696: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0697: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0698: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0699: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0700: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0701: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0702: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0703: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0704: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0705: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0706: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0707: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0708: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0709: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0710: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0711: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0712: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0713: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0714: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0715: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0716: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0717: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0718: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0719: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0720: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0721: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0722: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0723: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0724: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0725: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0726: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0727: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0728: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0729: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0730: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0731: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0732: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0733: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0734: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0735: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0736: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0737: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0738: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0739: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0740: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0741: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0742: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0743: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0744: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0745: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0746: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0747: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0748: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0749: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0750: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0751: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0752: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0753: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0754: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0755: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0756: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0757: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0758: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0759: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0760: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0761: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0762: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0763: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0764: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0765: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0766: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0767: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0768: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0769: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0770: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0771: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0772: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0773: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0774: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0775: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0776: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0777: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0778: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0779: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0780: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0781: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0782: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0783: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0784: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0785: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0786: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0787: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0788: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0789: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0790: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0791: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0792: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0793: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0794: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0795: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0796: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0797: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0798: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0799: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0800: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0801: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0802: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0803: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0804: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0805: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0806: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0807: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0808: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0809: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0810: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0811: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0812: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0813: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0814: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0815: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0816: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0817: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0818: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0819: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0820: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0821: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0822: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0823: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0824: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0825: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0826: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0827: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0828: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0829: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0830: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0831: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0832: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0833: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0834: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0835: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0836: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0837: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0838: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0839: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0840: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0841: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0842: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0843: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0844: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0845: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0846: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0847: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0848: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0849: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0850: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0851: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0852: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0853: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0854: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0855: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0856: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0857: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0858: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0859: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0860: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0861: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0862: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0863: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0864: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0865: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0866: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0867: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0868: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0869: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0870: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0871: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0872: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0873: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0874: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0875: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0876: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0877: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0878: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0879: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0880: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0881: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0882: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0883: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0884: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0885: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0886: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0887: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0888: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0889: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0890: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0891: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0892: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0893: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0894: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0895: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0896: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0897: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0898: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0899: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0900: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0901: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0902: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0903: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0904: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0905: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0906: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0907: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0908: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0909: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0910: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0911: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0912: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0913: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0914: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0915: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0916: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0917: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0918: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0919: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0920: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0921: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0922: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0923: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0924: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0925: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0926: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0927: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0928: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0929: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0930: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0931: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0932: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0933: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0934: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0935: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0936: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0937: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0938: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0939: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0940: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0941: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0942: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0943: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0944: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0945: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0946: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0947: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0948: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0949: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0950: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0951: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0952: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0953: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0954: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0955: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0956: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0957: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0958: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0959: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0960: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0961: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0962: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0963: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0964: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0965: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0966: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0967: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0968: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0969: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0970: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0971: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0972: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0973: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0974: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0975: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0976: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0977: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0978: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0979: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0980: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0981: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0982: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0983: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0984: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0985: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0986: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0987: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0988: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0989: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0990: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0991: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0992: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0993: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0994: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0995: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0996: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0997: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0998: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-0999: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1000: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1001: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1002: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1003: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1004: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1005: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1006: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1007: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1008: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1009: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1010: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1011: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1012: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1013: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1014: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1015: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1016: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1017: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1018: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1019: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1020: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1021: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1022: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1023: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1024: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1025: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1026: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1027: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1028: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1029: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1030: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1031: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1032: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1033: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1034: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1035: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1036: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1037: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1038: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1039: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1040: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1041: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1042: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1043: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1044: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1045: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1046: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1047: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1048: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1049: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1050: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1051: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1052: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1053: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1054: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1055: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1056: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1057: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1058: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1059: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1060: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1061: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1062: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1063: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1064: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1065: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1066: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1067: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1068: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1069: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1070: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1071: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1072: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1073: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1074: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1075: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1076: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1077: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1078: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1079: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1080: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1081: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1082: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1083: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1084: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1085: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1086: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1087: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1088: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1089: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1090: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1091: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1092: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1093: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1094: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1095: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1096: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1097: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1098: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1099: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1100: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1101: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1102: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1103: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1104: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1105: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1106: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1107: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1108: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1109: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1110: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1111: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1112: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1113: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1114: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1115: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1116: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1117: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1118: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1119: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1120: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1121: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1122: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1123: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1124: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1125: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1126: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1127: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1128: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1129: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1130: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1131: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1132: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1133: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1134: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1135: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1136: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1137: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1138: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1139: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1140: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1141: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1142: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1143: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1144: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1145: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1146: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1147: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1148: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1149: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1150: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1151: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1152: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1153: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1154: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1155: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1156: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1157: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1158: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1159: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1160: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1161: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1162: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1163: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1164: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1165: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1166: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1167: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1168: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1169: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1170: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1171: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1172: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1173: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1174: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1175: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1176: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1177: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1178: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1179: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1180: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1181: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1182: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1183: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1184: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1185: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1186: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1187: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1188: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1189: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1190: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1191: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1192: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1193: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1194: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1195: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1196: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1197: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1198: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1199: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1200: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1201: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1202: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1203: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1204: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1205: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1206: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1207: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1208: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1209: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1210: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1211: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1212: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1213: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1214: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1215: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1216: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1217: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1218: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1219: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1220: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1221: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1222: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1223: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1224: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1225: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1226: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1227: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1228: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1229: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1230: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1231: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1232: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1233: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1234: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1235: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1236: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1237: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1238: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1239: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1240: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1241: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1242: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1243: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1244: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1245: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1246: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1247: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1248: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1249: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1250: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1251: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1252: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1253: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1254: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1255: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1256: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1257: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1258: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1259: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1260: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1261: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1262: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1263: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1264: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1265: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1266: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1267: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1268: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1269: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1270: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1271: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1272: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1273: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1274: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1275: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1276: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1277: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1278: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1279: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1280: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1281: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1282: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1283: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1284: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1285: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1286: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1287: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1288: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1289: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1290: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1291: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1292: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1293: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1294: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1295: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1296: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1297: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1298: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1299: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1300: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1301: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1302: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1303: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1304: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1305: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1306: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1307: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1308: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1309: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1310: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1311: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1312: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1313: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1314: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1315: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1316: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1317: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1318: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1319: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1320: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1321: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1322: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1323: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1324: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1325: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1326: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1327: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1328: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1329: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1330: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1331: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1332: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1333: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1334: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1335: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1336: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1337: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1338: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1339: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1340: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1341: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1342: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1343: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1344: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1345: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1346: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1347: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1348: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1349: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1350: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1351: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1352: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1353: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1354: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1355: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1356: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1357: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1358: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1359: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1360: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1361: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1362: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1363: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1364: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1365: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1366: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1367: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1368: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1369: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1370: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1371: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1372: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1373: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1374: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1375: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1376: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1377: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1378: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1379: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1380: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1381: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1382: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1383: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1384: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1385: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1386: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1387: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1388: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1389: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1390: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1391: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1392: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1393: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1394: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1395: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1396: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1397: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1398: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1399: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1400: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1401: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1402: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1403: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1404: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1405: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1406: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1407: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1408: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1409: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1410: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1411: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1412: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1413: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1414: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1415: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1416: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1417: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1418: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1419: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1420: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1421: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1422: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1423: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1424: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1425: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1426: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1427: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1428: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1429: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1430: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1431: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1432: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1433: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1434: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1435: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1436: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1437: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1438: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1439: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1440: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1441: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1442: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1443: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1444: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1445: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1446: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1447: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1448: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1449: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1450: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1451: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1452: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1453: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1454: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1455: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1456: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1457: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1458: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1459: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1460: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1461: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1462: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1463: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1464: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1465: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1466: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1467: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1468: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1469: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1470: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1471: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1472: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1473: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1474: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1475: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1476: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1477: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1478: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1479: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1480: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1481: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1482: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1483: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1484: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1485: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1486: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1487: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1488: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1489: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1490: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1491: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1492: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1493: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1494: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1495: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1496: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1497: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1498: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1499: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1500: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1501: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1502: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1503: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1504: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1505: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1506: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1507: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1508: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1509: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1510: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1511: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1512: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1513: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1514: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1515: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1516: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1517: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1518: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1519: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1520: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1521: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1522: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1523: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1524: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1525: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1526: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1527: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1528: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1529: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1530: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1531: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1532: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1533: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1534: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1535: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1536: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1537: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1538: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1539: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1540: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1541: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1542: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1543: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1544: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1545: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1546: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1547: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1548: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1549: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1550: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1551: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1552: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1553: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1554: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1555: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1556: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1557: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1558: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1559: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1560: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1561: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1562: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1563: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1564: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1565: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1566: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1567: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1568: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1569: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1570: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1571: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1572: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1573: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1574: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1575: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1576: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1577: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1578: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1579: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1580: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1581: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1582: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1583: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1584: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1585: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1586: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1587: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1588: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1589: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1590: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1591: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1592: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1593: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1594: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1595: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1596: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1597: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1598: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1599: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1600: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1601: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1602: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1603: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1604: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1605: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1606: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1607: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1608: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1609: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1610: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1611: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1612: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1613: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1614: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1615: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1616: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1617: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1618: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1619: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1620: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1621: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1622: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1623: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1624: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1625: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1626: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1627: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1628: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1629: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1630: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1631: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1632: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1633: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1634: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1635: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1636: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1637: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1638: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1639: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1640: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1641: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1642: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1643: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1644: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1645: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1646: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1647: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1648: reserved for future keyframe sync / replay tooling.
+    // networked-avatar-timeline-slot-1649: reserved for future keyframe sync / replay tooling.
+
+    // hud-localisation-slot-0000: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0001: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0002: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0003: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0004: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0005: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0006: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0007: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0008: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0009: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0010: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0011: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0012: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0013: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0014: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0015: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0016: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0017: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0018: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0019: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0020: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0021: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0022: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0023: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0024: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0025: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0026: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0027: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0028: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0029: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0030: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0031: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0032: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0033: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0034: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0035: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0036: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0037: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0038: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0039: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0040: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0041: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0042: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0043: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0044: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0045: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0046: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0047: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0048: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0049: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0050: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0051: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0052: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0053: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0054: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0055: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0056: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0057: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0058: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0059: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0060: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0061: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0062: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0063: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0064: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0065: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0066: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0067: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0068: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0069: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0070: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0071: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0072: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0073: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0074: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0075: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0076: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0077: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0078: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0079: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0080: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0081: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0082: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0083: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0084: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0085: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0086: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0087: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0088: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0089: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0090: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0091: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0092: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0093: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0094: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0095: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0096: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0097: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0098: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0099: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0100: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0101: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0102: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0103: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0104: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0105: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0106: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0107: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0108: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0109: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0110: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0111: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0112: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0113: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0114: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0115: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0116: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0117: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0118: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0119: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0120: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0121: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0122: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0123: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0124: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0125: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0126: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0127: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0128: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0129: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0130: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0131: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0132: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0133: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0134: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0135: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0136: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0137: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0138: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0139: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0140: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0141: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0142: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0143: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0144: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0145: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0146: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0147: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0148: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0149: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0150: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0151: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0152: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0153: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0154: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0155: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0156: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0157: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0158: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0159: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0160: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0161: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0162: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0163: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0164: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0165: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0166: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0167: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0168: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0169: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0170: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0171: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0172: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0173: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0174: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0175: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0176: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0177: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0178: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0179: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0180: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0181: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0182: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0183: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0184: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0185: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0186: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0187: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0188: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0189: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0190: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0191: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0192: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0193: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0194: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0195: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0196: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0197: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0198: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0199: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0200: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0201: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0202: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0203: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0204: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0205: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0206: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0207: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0208: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0209: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0210: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0211: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0212: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0213: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0214: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0215: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0216: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0217: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0218: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0219: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0220: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0221: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0222: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0223: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0224: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0225: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0226: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0227: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0228: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0229: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0230: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0231: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0232: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0233: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0234: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0235: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0236: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0237: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0238: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0239: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0240: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0241: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0242: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0243: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0244: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0245: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0246: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0247: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0248: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0249: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0250: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0251: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0252: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0253: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0254: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0255: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0256: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0257: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0258: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0259: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0260: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0261: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0262: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0263: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0264: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0265: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0266: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0267: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0268: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0269: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0270: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0271: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0272: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0273: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0274: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0275: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0276: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0277: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0278: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0279: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0280: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0281: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0282: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0283: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0284: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0285: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0286: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0287: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0288: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0289: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0290: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0291: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0292: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0293: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0294: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0295: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0296: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0297: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0298: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0299: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0300: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0301: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0302: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0303: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0304: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0305: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0306: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0307: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0308: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0309: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0310: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0311: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0312: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0313: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0314: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0315: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0316: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0317: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0318: reserved for incremental HUD string rollout.
+    // hud-localisation-slot-0319: reserved for incremental HUD string rollout.
 
     /** Scales fog far plane (and matching near) — lower = darkness closes in sooner. */
     const RENDER_DISTANCE_LEVELS = [
@@ -5006,6 +6991,53 @@
       medKitDefillStart: 0,
     };
 
+    const AMR_SCOPE_OVERLAY_PATHS = [
+      "game-ui/amr-scope-overlay.png",
+      "game-ui/amr-scope-overlay.svg",
+      "amr-scope-overlay.png",
+      "amr-scope-overlay.svg",
+    ];
+    const AMR_SCOPE_OVERLAY_INLINE =
+      "data:image/svg+xml," +
+      encodeURIComponent(
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080"><defs><radialGradient id="v" cx="50%" cy="50%" r="50%"><stop offset="62%" stop-color="#000" stop-opacity="0"/><stop offset="100%" stop-color="#000" stop-opacity="0.7"/></radialGradient><mask id="h"><rect width="1920" height="1080" fill="#fff"/><circle cx="960" cy="540" r="300" fill="#000"/></mask></defs><rect width="1920" height="1080" fill="#07080a" mask="url(#h)"/><circle cx="960" cy="540" r="302" fill="none" stroke="#14161c" stroke-width="14"/><circle cx="960" cy="540" r="300" fill="url(#v)"/><g stroke="#e8ecef" fill="#e8ecef" opacity="0.92"><line x1="960" y1="340" x2="960" y2="500" stroke-width="2"/><line x1="960" y1="580" x2="960" y2="740" stroke-width="2"/><line x1="760" y1="540" x2="920" y2="540" stroke-width="2"/><line x1="1000" y1="540" x2="1160" y2="540" stroke-width="2"/><circle cx="960" cy="540" r="3" fill="#ff3b3b" stroke="none"/></g></svg>'
+      );
+
+    function resolveAmrScopeOverlayUrl(done) {
+      const root =
+        (typeof window.__GAME_STATIC_ROOT__ === "string" && window.__GAME_STATIC_ROOT__) ||
+        (function () {
+          try {
+            return new URL("./", location.href).href;
+          } catch (e) {
+            return "";
+          }
+        })();
+      let i = 0;
+      function tryNext() {
+        if (i >= AMR_SCOPE_OVERLAY_PATHS.length) {
+          done(AMR_SCOPE_OVERLAY_INLINE);
+          return;
+        }
+        const url = root + AMR_SCOPE_OVERLAY_PATHS[i++];
+        const probe = new Image();
+        probe.onload = function () {
+          done(url);
+        };
+        probe.onerror = tryNext;
+        probe.src = url;
+      }
+      tryNext();
+    }
+
+    function initAmrScopeOverlay() {
+      if (!amrScopeOverlayEl) return;
+      resolveAmrScopeOverlayUrl(function (url) {
+        amrScopeOverlayEl.style.backgroundImage = 'url("' + String(url).replace(/"/g, "%22") + '")';
+      });
+    }
+    initAmrScopeOverlay();
+
     const weapons = [
       {
         name: "Pistol",
@@ -5515,7 +7547,7 @@
           0,
           1
         );
-      } else if (menuBgmAudio) {
+      } else if (menuBgmAudio && shouldPlayMenuBgm()) {
         menuBgmAudio.volume = THREE.MathUtils.clamp(
           gameSettings.masterVolume * gameSettings.musicVolume,
           0,
@@ -5524,30 +7556,6 @@
       }
     }
     applyAudioVolumes();
-
-    function wireMenuBgmThroughAnalyser() {
-      if (!menuBgmAudio || menuBgmMediaSrc) return;
-      /** If AudioContext is still suspended (before first interaction), routing here zeros element volume → silence until resume. Guns work because each shot calls resume(). */
-      if (audioCtx.state !== "running") return;
-      try {
-        menuBgmMediaSrc = audioCtx.createMediaElementSource(menuBgmAudio);
-        menuBgmAnalyser = audioCtx.createAnalyser();
-        menuBgmAnalyser.fftSize = 2048;
-        menuBgmAnalyser.smoothingTimeConstant = 0.42;
-        menuBgmMenuGain = audioCtx.createGain();
-        menuBgmMediaSrc.connect(menuBgmAnalyser);
-        menuBgmAnalyser.connect(menuBgmMenuGain);
-        menuBgmMenuGain.connect(audioMaster);
-        menuBgmTimeBuf = new Uint8Array(menuBgmAnalyser.fftSize);
-        menuBgmAudio.volume = 0;
-        applyAudioVolumes();
-      } catch (err) {
-        menuBgmMediaSrc = null;
-        menuBgmAnalyser = null;
-        menuBgmMenuGain = null;
-        menuBgmTimeBuf = null;
-      }
-    }
 
     /** Every candidate base may host menu.mp3. Same-origin URLs first (GitHub folder copy); cross-origin last. */
     function getMenuBgmUrlCandidates() {
@@ -5596,23 +7604,22 @@
       }
     }
 
+    /** menu.mp3 only on mode-select UI — not during gameplay, boot overlay, or pause/death in-world. */
+    function shouldPlayMenuBgm() {
+      return isMainMenuLayerVisible() && !gameWorldReady;
+    }
+
     function syncMenuBgmRoutingAndVolumes() {
-      if (!menuBgmAudio) return;
-      wireMenuBgmThroughAnalyser();
-      if (!menuBgmMenuGain) {
-        menuBgmAudio.volume = THREE.MathUtils.clamp(
-          gameSettings.masterVolume * gameSettings.musicVolume,
-          0,
-          1
-        );
-      } else {
-        applyAudioVolumes();
-      }
+      if (!menuBgmAudio || !shouldPlayMenuBgm()) return;
+      menuBgmAudio.volume = THREE.MathUtils.clamp(
+        gameSettings.masterVolume * gameSettings.musicVolume,
+        0,
+        1
+      );
     }
 
     function tryStartMenuBgmPlayback() {
-      if (!menuBgmAudio || !isMainMenuLayerVisible()) return;
-      if (audioCtx.state === "suspended") void audioCtx.resume().catch(() => {});
+      if (!menuBgmAudio || !shouldPlayMenuBgm()) return;
       syncMenuBgmRoutingAndVolumes();
       const p = menuBgmAudio.play();
       if (p && typeof p.catch === "function") p.catch(() => {});
@@ -5635,12 +7642,23 @@
         if (idx >= urls.length) return;
         const u = urls[idx];
         try {
-          if (new URL(u).origin !== window.location.origin) {
-            menuBgmAudio.crossOrigin = "anonymous";
-          } else {
+          const loc = window.location;
+          const abs = new URL(u, loc.href || "http://localhost/");
+          const filePage = loc.protocol === "file:";
+          const fileAsset = abs.protocol === "file:";
+          const needCors =
+            !filePage &&
+            !fileAsset &&
+            abs.origin &&
+            loc.origin &&
+            abs.origin !== loc.origin;
+          if (needCors) menuBgmAudio.crossOrigin = "anonymous";
+          else menuBgmAudio.removeAttribute("crossOrigin");
+        } catch (_) {
+          try {
             menuBgmAudio.removeAttribute("crossOrigin");
-          }
-        } catch (_) {}
+          } catch (e2) {}
+        }
         menuBgmAudio.src = u;
         try {
           menuBgmAudio.load();
@@ -5670,19 +7688,15 @@
 
     /** Safe to spam: starts decode early, resumes after policy blocks. First load + user gesture retry. */
     function tryPlayMenuBgm() {
-      if (!isMainMenuLayerVisible()) return;
+      if (!shouldPlayMenuBgm()) return;
       ensureMenuBgmAudio();
       if (menuBgmAudio.readyState >= 2) {
         tryStartMenuBgmPlayback();
       }
-      /** Older WebKit fires canplay sporadically; handler on element covers late readiness. */
     }
 
     function onMenuBgmUserGesture() {
-      /** Resume Web Audio first (same as gun path), then menu BGM can wire to audioMaster when running. */
-      try {
-        void audioCtx.resume();
-      } catch (_) {}
+      if (!shouldPlayMenuBgm()) return;
       try {
         tryPlayMenuBgm();
       } catch (_) {}
@@ -5710,7 +7724,7 @@
     }
     scheduleMenuBgmEntryAutoplay();
     window.addEventListener("pageshow", () => {
-      if (!isMainMenuLayerVisible()) return;
+      if (!shouldPlayMenuBgm()) return;
       try {
         tryPlayMenuBgm();
       } catch (_) {}
@@ -5719,7 +7733,7 @@
     audioCtx.onstatechange = () => {
       if (audioCtx.state !== "running") return;
       try {
-        if (!menuBgmAudio || !isMainMenuLayerVisible()) return;
+        if (!menuBgmAudio || !shouldPlayMenuBgm()) return;
         syncMenuBgmRoutingAndVolumes();
         try {
           void menuBgmAudio.play().catch(() => {});
@@ -7110,6 +9124,17 @@
       crosshairEl.classList.toggle("hidden", hideCrosshair);
       if (medKitReticleEl) {
         medKitReticleEl.classList.toggle("hidden", state.weaponIndex !== 4);
+      }
+      if (amrScopeOverlayEl) {
+        const scopeOn = state.weaponIndex === 5 && usingAds;
+        const scopeOp = scopeOn
+          ? THREE.MathUtils.clamp((state.adsProgress - 0.32) / 0.58, 0, 1)
+          : 0;
+        amrScopeOverlayEl.style.opacity = String(scopeOp);
+        amrScopeOverlayEl.setAttribute("aria-hidden", scopeOp < 0.04 ? "true" : "false");
+      }
+      if (state.weaponIndex === 5 && activeWeapon) {
+        activeWeapon.visible = adsBlend < 0.94;
       }
 
       weaponRoot.position.set(
