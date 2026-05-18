@@ -6290,17 +6290,6 @@
       return false;
     }
 
-    function arenaPointBlocked(wx, wz, radius = 0.34) {
-      const pcx = Math.floor(wx / MAZE_CHUNK_WORLD);
-      const pcz = Math.floor(wz / MAZE_CHUNK_WORLD);
-      for (let dz = -1; dz <= 1; dz++) {
-        for (let dx = -1; dx <= 1; dx++) {
-          if (arenaCircleHitsMazeGrid(wx, wz, radius, pcx + dx, pcz + dz)) return true;
-        }
-      }
-      return false;
-    }
-
     /** Spawn / respawn: valid even when maze chunks are not built yet (no wall meshes). */
     function arenaXZClearForSpawn(x, z, radius = 0.5) {
       const pcx = Math.floor(x / MAZE_CHUNK_WORLD);
@@ -6715,17 +6704,66 @@
         }
       }
 
-      beginMazeNavRebuild(pcx, pcz);
+      rebuildMazeNavGrid(pcx, pcz);
     }
 
     let mazeNavAnchorCx = null;
     let mazeNavAnchorCz = null;
 
-    function beginMazeNavRebuild(pcx, pcz) {
-      if (CURRENT_MAP !== "arena") return;
-      if (mazeNavAnchorCx === pcx && mazeNavAnchorCz === pcz && navGrid && mazeNavRebuildRow >= navRows) {
-        return;
+    function markNavRectBlocked(minX, maxX, minZ, maxZ) {
+      const c0 = Math.max(0, Math.floor((minX - navMinX) / NAV_CELL));
+      const c1 = Math.min(navCols - 1, Math.floor((maxX - navMinX) / NAV_CELL));
+      const r0 = Math.max(0, Math.floor((minZ - navMinZ) / NAV_CELL));
+      const r1 = Math.min(navRows - 1, Math.floor((maxZ - navMinZ) / NAV_CELL));
+      for (let r = r0; r <= r1; r++) {
+        const rowOff = r * navCols;
+        for (let c = c0; c <= c1; c++) navGrid[rowOff + c] = 1;
       }
+    }
+
+    function stampChunkWallsIntoNavGrid(chunkCx, chunkCz) {
+      const { vert, horiz } = getMazeChunkGrid(chunkCx, chunkCz);
+      const ox = chunkCx * MAZE_CHUNK_WORLD;
+      const oz = chunkCz * MAZE_CHUNK_WORLD;
+      const cw = MAZE_CELL_SIZE;
+      const w = MAZE_CELLS;
+      const h = MAZE_CELLS;
+      const t = MAZE_WALL_THICK;
+      const hz = cw + 0.02;
+      const hx = cw + 0.02;
+      const inf = NAV_RADIUS + t * 0.55;
+      for (let ix = 0; ix <= w; ix++) {
+        for (let iy = 0; iy < h; iy++) {
+          if (!vert[ix][iy]) continue;
+          const wx = ox + ix * cw;
+          const wz = oz + (iy + 0.5) * cw;
+          markNavRectBlocked(
+            wx - t * 0.5 - inf,
+            wx + t * 0.5 + inf,
+            wz - hz * 0.5 - inf,
+            wz + hz * 0.5 + inf
+          );
+        }
+      }
+      for (let ix = 0; ix < w; ix++) {
+        for (let iy = 0; iy <= h; iy++) {
+          if (!horiz[ix][iy]) continue;
+          const wx = ox + (ix + 0.5) * cw;
+          const wz = oz + iy * cw;
+          markNavRectBlocked(
+            wx - hx * 0.5 - inf,
+            wx + hx * 0.5 + inf,
+            wz - t * 0.5 - inf,
+            wz + t * 0.5 + inf
+          );
+        }
+      }
+    }
+
+    /** Stamp procedural walls into nav (~O(wall segments)), not O(cells × walls). */
+    function rebuildMazeNavGrid(pcx, pcz) {
+      if (CURRENT_MAP !== "arena") return;
+      if (mazeNavAnchorCx === pcx && mazeNavAnchorCz === pcz && navGrid) return;
       mazeNavAnchorCx = pcx;
       mazeNavAnchorCz = pcz;
       const padChunks = 4;
@@ -6740,31 +6778,12 @@
       flowDirZ = new Float32Array(total);
       flowPlayerC = -1;
       flowPlayerR = -1;
-      mazeNavRebuildRow = 0;
-    }
-
-    /** Spread nav BFS grid build across frames (same result, avoids 50k+ wall-box tests in one tick). */
-    function stepMazeNavRebuild(rowsPerFrame = 14) {
-      if (CURRENT_MAP !== "arena" || !navGrid) return;
-      const end = Math.min(navRows, mazeNavRebuildRow + rowsPerFrame);
-      for (let r = mazeNavRebuildRow; r < end; r++) {
-        const rowOff = r * navCols;
-        for (let c = 0; c < navCols; c++) {
-          const wx = navMinX + (c + 0.5) * NAV_CELL;
-          const wz = navMinZ + (r + 0.5) * NAV_CELL;
-          navGrid[rowOff + c] = arenaPointBlocked(wx, wz, NAV_RADIUS) ? 1 : 0;
+      for (let cz = pcz - padChunks; cz <= pcz + padChunks; cz++) {
+        for (let cx = pcx - padChunks; cx <= pcx + padChunks; cx++) {
+          stampChunkWallsIntoNavGrid(cx, cz);
         }
       }
-      mazeNavRebuildRow = end;
-      if (mazeNavRebuildRow >= navRows) {
-        flowPlayerC = -1;
-        flowPlayerR = -1;
-      }
-    }
-
-    function rebuildMazeNavGrid(pcx, pcz) {
-      beginMazeNavRebuild(pcx, pcz);
-      stepMazeNavRebuild(navRows);
+      mazeNavRebuildRow = navRows;
     }
 
     const pvpMapLights = [];
@@ -6838,7 +6857,7 @@
       const pcz = Math.floor(player.position.z / MAZE_CHUNK_WORLD);
       const R = 2;
       let built = 0;
-      const buildBudget = mazeChunks.size < 12 ? 2 : 1;
+      const buildBudget = 1;
       while (built < buildBudget) {
         let pickCx = null;
         let pickCz = null;
@@ -7348,13 +7367,13 @@
     }
     updateHud();
 
+    const _playerWallSphere = new THREE.Sphere();
+
     function collidesWithWalls(pos) {
-      if (CURRENT_MAP === "arena") {
-        return arenaPointBlocked(pos.x, pos.z, player.radius);
-      }
-      const sphere = new THREE.Sphere(new THREE.Vector3(pos.x, 1.0, pos.z), player.radius);
+      _playerWallSphere.center.set(pos.x, 1.0, pos.z);
+      _playerWallSphere.radius = player.radius;
       for (const box of wallBoxes) {
-        if (box.intersectsSphere(sphere)) return true;
+        if (box.intersectsSphere(_playerWallSphere)) return true;
       }
       return false;
     }
@@ -7582,7 +7601,14 @@
       root.add(torsoRoot, leftArmRoot, rightArmRoot, leftLegRoot, rightLegRoot);
       const fy0 = Math.random() * Math.PI * 2;
       root.position.set(x, 0, z);
-      root.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+      chest.castShadow = true;
+      belly.castShadow = true;
+      skull.castShadow = true;
+      root.traverse((o) => {
+        if (!o.isMesh) return;
+        o.receiveShadow = true;
+        if (!o.castShadow) o.castShadow = false;
+      });
 
       scene.add(root);
 
@@ -9572,8 +9598,21 @@
     const _enemyWallSphere = new THREE.Sphere();
 
     function enemyCollidesWall(nextX, nextZ, radius = 0.34) {
-      if (CURRENT_MAP === "arena") {
-        return arenaPointBlocked(nextX, nextZ, radius);
+      if (CURRENT_MAP === "arena" && navGrid) {
+        const c0 = ((nextX - navMinX) / NAV_CELL) | 0;
+        const r0 = ((nextZ - navMinZ) / NAV_CELL) | 0;
+        const cellR = Math.max(1, Math.ceil(radius / NAV_CELL));
+        for (let dr = -cellR; dr <= cellR; dr++) {
+          const r = r0 + dr;
+          if (r < 0 || r >= navRows) return true;
+          const rowOff = r * navCols;
+          for (let dc = -cellR; dc <= cellR; dc++) {
+            const c = c0 + dc;
+            if (c < 0 || c >= navCols) return true;
+            if (navGrid[rowOff + c]) return true;
+          }
+        }
+        return false;
       }
       _enemyWallSphere.center.set(nextX, 1.0, nextZ);
       _enemyWallSphere.radius = radius;
@@ -10425,6 +10464,8 @@
     let navMinX = 0, navMinZ = 0, navCols = 0, navRows = 0;
     let flowDirX = null, flowDirZ = null;
     let flowPlayerC = -1, flowPlayerR = -1;
+    let _flowDistBuf = null;
+    let _flowDistBufLen = 0;
 
     function buildNavGrid() {
       if (CURRENT_MAP === "arena") {
@@ -10471,7 +10512,12 @@
       flowPlayerR = pr;
 
       const total = navCols * navRows;
-      const dist = new Uint16Array(total).fill(65535);
+      if (!_flowDistBuf || _flowDistBufLen < total) {
+        _flowDistBuf = new Uint16Array(total);
+        _flowDistBufLen = total;
+      }
+      const dist = _flowDistBuf;
+      dist.fill(65535, 0, total);
       const goalIdx = pr * navCols + pc;
       dist[goalIdx] = 0;
 
@@ -10562,27 +10608,7 @@
     const _visRay = new THREE.Raycaster();
     let visFrameCounter = 0;
 
-    function arenaLosBlocked(x0, z0, x1, z1) {
-      const dx = x1 - x0;
-      const dz = z1 - z0;
-      const len = Math.hypot(dx, dz);
-      if (len < 0.12) return false;
-      const steps = Math.min(22, Math.max(4, Math.ceil(len / 2.2)));
-      for (let i = 1; i < steps; i++) {
-        const t = i / steps;
-        const wx = x0 + dx * t;
-        const wz = z0 + dz * t;
-        if (arenaPointBlocked(wx, wz, 0.34)) return true;
-      }
-      return false;
-    }
-
     function canSeePoint(ex, ey, ez, px, py, pz) {
-      if (CURRENT_MAP === "arena") {
-        const d = Math.hypot(px - ex, pz - ez);
-        if (d < 0.1) return true;
-        return !arenaLosBlocked(ex, ez, px, pz);
-      }
       _visOrigin.set(ex, ey, ez);
       _visDir.set(px - ex, py - ey, pz - ez);
       const d = _visDir.length();
@@ -10779,13 +10805,17 @@
             let sx = 0;
             let sz = 0;
             const flow = getFlowDirection(enemy.group.position.x, enemy.group.position.z);
-            const losClear = clearLosToTarget(
-              enemy.group.position.x,
-              enemy.group.position.z,
-              target.x,
-              target.z,
-              target.y ?? 1.65
-            );
+            let losClear = enemy._lastLosClear;
+            if (losClear === undefined || (visFrameCounter + ei) % 2 === 0) {
+              losClear = clearLosToTarget(
+                enemy.group.position.x,
+                enemy.group.position.z,
+                target.x,
+                target.z,
+                target.y ?? 1.65
+              );
+              enemy._lastLosClear = losClear;
+            }
 
             if (losClear && dLen > 0.02) {
               const inv = 1 / dLen;
@@ -11222,9 +11252,6 @@
       if (CURRENT_MAP === "arena" && started && gameWorldReady) {
         updateInfiniteMaze(dt);
         processOneMazeChunkBuild();
-        if (navGrid && mazeNavRebuildRow < navRows) {
-          stepMazeNavRebuild(18);
-        }
         cullMazeLightsNearCamera();
       }
 
