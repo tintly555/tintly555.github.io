@@ -4715,7 +4715,7 @@
     const _trailVecDir = new THREE.Vector3();
     const _trailVecUp = new THREE.Vector3(0, 1, 0);
 
-    /** Visual tracer: exact muzzle → hit (same line as gameplay ray). */
+    /** Visual tracer: muzzle → crosshair hit (gameplay ray is from camera). */
     function bulletTrailEndpoints(muzzle, hit) {
       const start = _trailVecA.copy(muzzle);
       const end = _trailVecB.copy(hit);
@@ -7022,7 +7022,14 @@
       medKitDefilling: false,
       medKitDefillPhase: 0,
       medKitDefillStart: 0,
+      weaponAction: null,
+      weaponActionStart: 0,
+      weaponActionDur: 320,
+      shellCasings: [],
     };
+
+    const PLAYER_SPEED_AMR = 0.58;
+    const PLAYER_SPEED_AMR_ADS = 0.42;
 
     const AMR_SCOPE_OVERLAY_PATHS = [
       "game-ui/amr-scope-overlay.png",
@@ -7185,8 +7192,8 @@
         spreadBase: 0.092,
         spreadBloomAdd: 0.018,
         spreadBloomMax: 0.14,
-        recover: 0.038,
-        recoil: 0.088,
+        recover: 0.032,
+        recoil: 0.2,
         damageHead: 220,
         damageBody: 220,
         damageLegs: 90,
@@ -7818,12 +7825,101 @@
       return buf;
     }
 
+    /** AMR: heavy sub boom + long thunder tail (anti-materiel rifle). */
+    function playAmrGunSound() {
+      if (audioCtx.state === "suspended") void audioCtx.resume();
+      const now = audioCtx.currentTime;
+
+      const sub = audioCtx.createOscillator();
+      sub.type = "sine";
+      sub.frequency.setValueAtTime(48, now);
+      sub.frequency.exponentialRampToValueAtTime(22, now + 0.62);
+      const subG = audioCtx.createGain();
+      subG.gain.setValueAtTime(0.0001, now);
+      subG.gain.exponentialRampToValueAtTime(1.35, now + 0.02);
+      subG.gain.exponentialRampToValueAtTime(0.0001, now + 0.72);
+      sub.connect(subG);
+      subG.connect(audioSfx);
+      sub.start(now);
+      sub.stop(now + 0.75);
+
+      const boom = audioCtx.createBufferSource();
+      boom.buffer = getGunNoiseBuffer(0.55);
+      const boomLp = audioCtx.createBiquadFilter();
+      boomLp.type = "lowpass";
+      boomLp.frequency.setValueAtTime(320, now);
+      boomLp.frequency.exponentialRampToValueAtTime(90, now + 0.4);
+      const boomG = audioCtx.createGain();
+      boomG.gain.setValueAtTime(0.0001, now);
+      boomG.gain.exponentialRampToValueAtTime(1.05, now + 0.012);
+      boomG.gain.exponentialRampToValueAtTime(0.0001, now + 0.62);
+      boom.connect(boomLp);
+      boomLp.connect(boomG);
+      boomG.connect(audioSfx);
+      boom.start(now);
+      boom.stop(now + 0.65);
+
+      const crack = audioCtx.createBufferSource();
+      crack.buffer = getGunNoiseBuffer(0.14);
+      const crackBp = audioCtx.createBiquadFilter();
+      crackBp.type = "bandpass";
+      crackBp.frequency.setValueAtTime(1800, now);
+      crackBp.Q.setValueAtTime(0.45, now);
+      const crackG = audioCtx.createGain();
+      crackG.gain.setValueAtTime(0.0001, now);
+      crackG.gain.exponentialRampToValueAtTime(0.92, now + 0.004);
+      crackG.gain.exponentialRampToValueAtTime(0.0001, now + 0.12);
+      crack.connect(crackBp);
+      crackBp.connect(crackG);
+      crackG.connect(audioSfx);
+      crack.start(now);
+      crack.stop(now + 0.14);
+
+      const tail = audioCtx.createBufferSource();
+      tail.buffer = getGunNoiseBuffer(1.05);
+      const tailBp = audioCtx.createBiquadFilter();
+      tailBp.type = "bandpass";
+      tailBp.frequency.setValueAtTime(420, now + 0.05);
+      tailBp.Q.setValueAtTime(0.35, now);
+      const tailG = audioCtx.createGain();
+      tailG.gain.setValueAtTime(0.0001, now + 0.04);
+      tailG.gain.exponentialRampToValueAtTime(0.72, now + 0.09);
+      tailG.gain.exponentialRampToValueAtTime(0.0001, now + 1.05);
+      tail.connect(tailBp);
+      tailBp.connect(tailG);
+      tailG.connect(audioSfx);
+      tail.start(now + 0.035);
+      tail.stop(now + 1.08);
+
+      const echoIn = audioCtx.createGain();
+      echoIn.gain.setValueAtTime(0.38, now);
+      const delay = audioCtx.createDelay(1.2);
+      delay.delayTime.setValueAtTime(0.16, now);
+      const fb = audioCtx.createGain();
+      fb.gain.setValueAtTime(0.48, now);
+      const echoLp = audioCtx.createBiquadFilter();
+      echoLp.type = "lowpass";
+      echoLp.frequency.setValueAtTime(520, now);
+      boomG.connect(echoIn);
+      tailG.connect(echoIn);
+      echoIn.connect(delay);
+      delay.connect(echoLp);
+      echoLp.connect(audioSfx);
+      delay.connect(fb);
+      fb.connect(delay);
+      fb.gain.exponentialRampToValueAtTime(0.0001, now + 1.35);
+    }
+
     /** Layered tactical gunshots: bright crack + body + mechanical tail + short room echo. */
     function playGunSound(w) {
       if (audioCtx.state === "suspended") void audioCtx.resume();
+      const idx = state.weaponIndex;
+      if (idx === 5) {
+        playAmrGunSound();
+        return;
+      }
       void w;
       const now = audioCtx.currentTime;
-      const idx = state.weaponIndex;
       const presets = [
         { crackMs: 64, crackFc: 4300, crackQ: 0.84, crackG: 0.52, bodyMs: 170, bodyFc: 980, bodyG: 0.2, mechHz: 980, mechG: 0.03, tailMs: 260, tailFc: 1200, tailG: 0.08, echoDelay: 0.072, echoFb: 0.26, echoG: 0.08 },
         { crackMs: 88, crackFc: 3600, crackQ: 0.72, crackG: 0.68, bodyMs: 250, bodyFc: 740, bodyG: 0.28, mechHz: 760, mechG: 0.045, tailMs: 330, tailFc: 900, tailG: 0.12, echoDelay: 0.082, echoFb: 0.31, echoG: 0.11 },
@@ -8313,15 +8409,18 @@
 
       if (type === 0) {
         addMeshPart(gunGroup, new THREE.BoxGeometry(0.09, 0.11, 0.36), mMetal, 0, 0.01, -0.02);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.085, 0.055, 0.22), mLight, 0, 0.06, -0.12);
         addMeshPart(gunGroup, new THREE.BoxGeometry(0.04, 0.06, 0.12), mDark, 0, -0.03, -0.08);
         addMeshPart(gunGroup, new THREE.BoxGeometry(0.05, 0.028, 0.08), mBlack, 0, -0.055, 0.02);
         addMeshPart(gunGroup, new THREE.BoxGeometry(0.035, 0.022, 0.05), mBlack, 0, -0.07, 0.06);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.06, 0.02, 0.018), mSight, 0, 0.078, 0.06);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.006, 0.048, 0.014), mSight, 0, 0.09, -0.17);
-        addMeshPart(gunGroup, new THREE.SphereGeometry(0.004, 8, 8), mDot, 0, 0.112, -0.17);
         addMeshPart(gunGroup, new THREE.BoxGeometry(0.09, 0.19, 0.11), mBlack, 0, -0.16, 0.09);
         addMeshPart(gunGroup, new THREE.BoxGeometry(0.11, 0.045, 0.09), mBlack, 0, -0.055, 0.09);
+        const slideGrp = new THREE.Group();
+        addMeshPart(slideGrp, new THREE.BoxGeometry(0.085, 0.055, 0.22), mLight, 0, 0.06, -0.12);
+        addMeshPart(slideGrp, new THREE.BoxGeometry(0.06, 0.02, 0.018), mSight, 0, 0.078, 0.06);
+        addMeshPart(slideGrp, new THREE.BoxGeometry(0.006, 0.048, 0.014), mSight, 0, 0.09, -0.17);
+        addMeshPart(slideGrp, new THREE.SphereGeometry(0.004, 8, 8), mDot, 0, 0.112, -0.17);
+        gunGroup.add(slideGrp);
+        root.userData.animSlide = slideGrp;
 
         const rH = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.15, 0.17), mGlove);
         rH.position.set(0, -0.12, 0.08); gunGroup.add(rH);
@@ -8349,6 +8448,11 @@
         addMeshPart(gunGroup, new THREE.BoxGeometry(0.055, 0.05, 0.12), mDark, 0, -0.07, 0.06);
         addMeshPart(gunGroup, new THREE.BoxGeometry(0.008, 0.035, 0.014), mSight, 0, 0.1, -0.36);
         addMeshPart(gunGroup, new THREE.SphereGeometry(0.004, 6, 6), mDot, 0, 0.116, -0.36);
+        const chargeGrp = new THREE.Group();
+        addMeshPart(chargeGrp, new THREE.BoxGeometry(0.04, 0.022, 0.06), mLight, 0.06, 0.09, 0.12);
+        gunGroup.add(chargeGrp);
+        root.userData.animCharge = chargeGrp;
+        root.userData.ejectPort = new THREE.Vector3(0.055, 0.09, 0.08);
 
         const rH = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.15, 0.17), mGlove);
         rH.position.set(0, -0.12, 0.12); gunGroup.add(rH);
@@ -8364,16 +8468,22 @@
         root.userData.muzzleNode = muzzleNode;
 
       } else if (type === 2) {
+        const barrelGrp = new THREE.Group();
+        addMeshPart(barrelGrp, new THREE.CylinderGeometry(0.042, 0.046, 0.58, 12), mMetal, 0, 0.04, -0.22, barrelZ, 0, 0);
+        addMeshPart(barrelGrp, new THREE.BoxGeometry(0.055, 0.035, 0.02), mSight, 0, 0.09, 0.2);
+        addMeshPart(barrelGrp, new THREE.BoxGeometry(0.03, 0.065, 0.02), mSight, 0, 0.1, -0.36);
+        gunGroup.add(barrelGrp);
+        root.userData.animBarrel = barrelGrp;
+        const pumpGrp = new THREE.Group();
+        addMeshPart(pumpGrp, new THREE.BoxGeometry(0.12, 0.08, 0.2), mWood, 0, -0.06, -0.06);
+        addMeshPart(pumpGrp, new THREE.BoxGeometry(0.06, 0.1, 0.06), mDark, 0, 0.02, -0.12);
+        gunGroup.add(pumpGrp);
+        root.userData.animPump = pumpGrp;
+        root.userData.ejectPort = new THREE.Vector3(0.045, 0.1, 0.02);
         addMeshPart(gunGroup, new THREE.BoxGeometry(0.17, 0.15, 0.48), mLight, 0, 0, 0.06);
-        addMeshPart(gunGroup, new THREE.CylinderGeometry(0.042, 0.046, 0.58, 12), mMetal, 0, 0.04, -0.22, barrelZ, 0, 0);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.12, 0.08, 0.2), mWood, 0, -0.06, -0.06);
         addMeshPart(gunGroup, new THREE.BoxGeometry(0.14, 0.15, 0.26), mWoodD, 0, 0, 0.5);
         addMeshPart(gunGroup, new THREE.BoxGeometry(0.12, 0.09, 0.14), mWoodD, 0, -0.055, 0.38);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.06, 0.1, 0.06), mDark, 0, 0.02, -0.12);
         addMeshPart(gunGroup, new THREE.BoxGeometry(0.08, 0.035, 0.05), mBlack, 0, -0.055, 0.12);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.055, 0.035, 0.02), mSight, 0, 0.09, 0.2);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.03, 0.065, 0.02), mSight, 0, 0.1, -0.36);
-
         const rH = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.15, 0.17), mGlove);
         rH.position.set(0, -0.11, 0.14); gunGroup.add(rH);
         const lH = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.13, 0.15), mGlove);
@@ -8397,6 +8507,7 @@
         addMeshPart(gunGroup, new THREE.BoxGeometry(0.09, 0.06, 0.28), mDark, 0, 0.055, -0.04);
         addMeshPart(gunGroup, new THREE.BoxGeometry(0.018, 0.038, 0.018), mSight, 0, 0.08, -0.26);
         addMeshPart(gunGroup, new THREE.BoxGeometry(0.04, 0.016, 0.016), mSight, 0, 0.07, 0.12);
+        root.userData.ejectPort = new THREE.Vector3(0.048, 0.085, 0.04);
 
         const rH = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.15, 0.17), mGlove);
         rH.position.set(0, -0.11, 0.1); gunGroup.add(rH);
@@ -8430,6 +8541,11 @@
         addMeshPart(gunGroup, new THREE.BoxGeometry(0.014, 0.05, 0.1), mGreen, 0.052, -0.04, -0.18, 0, 0, 0.45);
         addMeshPart(gunGroup, new THREE.BoxGeometry(0.02, 0.008, 0.06), mMetal, -0.05, -0.07, -0.28);
         addMeshPart(gunGroup, new THREE.BoxGeometry(0.02, 0.008, 0.06), mMetal, 0.05, -0.07, -0.28);
+        const boltGrp = new THREE.Group();
+        addMeshPart(boltGrp, new THREE.BoxGeometry(0.055, 0.045, 0.14), mLight, 0, 0.07, 0.18);
+        addMeshPart(boltGrp, new THREE.BoxGeometry(0.022, 0.035, 0.04), mMetal, 0, 0.1, 0.24);
+        gunGroup.add(boltGrp);
+        root.userData.animBolt = boltGrp;
 
         const rH = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.16, 0.18), mGlove);
         rH.position.set(0, -0.12, 0.16); gunGroup.add(rH);
@@ -8503,11 +8619,172 @@
       medKitRingProgEl.setAttribute("opacity", cl > 0.001 ? "1" : "0");
     }
 
+    function getPlayerMoveSpeedMult() {
+      if (state.weaponIndex !== 5) return 1;
+      const adsOn = (state.ads || keys.shift) && state.adsProgress > 0.35;
+      return adsOn ? PLAYER_SPEED_AMR_ADS : PLAYER_SPEED_AMR;
+    }
+
+    function startWeaponFireAnim() {
+      const wi = state.weaponIndex;
+      if (wi === 0) {
+        state.weaponAction = "slide";
+        state.weaponActionDur = 300;
+      } else if (wi === 1 || wi === 3) {
+        state.weaponAction = "auto";
+        state.weaponActionDur = 110;
+      } else if (wi === 2) {
+        state.weaponAction = "pump";
+        state.weaponActionDur = 440;
+      } else if (wi === 5) {
+        state.weaponAction = "bolt";
+        state.weaponActionDur = 540;
+      } else return;
+      state.weaponActionStart = performance.now();
+    }
+
+    function getWeaponActionT() {
+      if (!state.weaponAction) return 1;
+      const t = (performance.now() - state.weaponActionStart) / state.weaponActionDur;
+      if (t >= 1) {
+        state.weaponAction = null;
+        return 1;
+      }
+      return t;
+    }
+
+    const _shellEjectPos = new THREE.Vector3();
+    const _shellEjectVel = new THREE.Vector3();
+
+    function ejectShellCasing(wm) {
+      if (!wm || !wm.userData.ejectPort) return;
+      _shellEjectPos.copy(wm.userData.ejectPort);
+      wm.updateMatrixWorld(true);
+      _shellEjectPos.applyMatrix4(wm.matrixWorld);
+      const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+      const up = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion);
+      const fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+      _shellEjectVel.copy(right).multiplyScalar(2.1 + Math.random() * 0.9);
+      _shellEjectVel.addScaledVector(up, 1.35 + Math.random() * 0.55);
+      _shellEjectVel.addScaledVector(fwd, -0.3);
+      const wi = state.weaponIndex;
+      const shellLen = wi === 2 ? 0.028 : 0.017;
+      const shellRad = wi === 2 ? 0.0075 : 0.0042;
+      const geom = new THREE.CylinderGeometry(shellRad, shellRad * 1.15, shellLen, 6);
+      const mat = new THREE.MeshStandardMaterial({
+        color: 0xc9a227,
+        metalness: 0.88,
+        roughness: 0.3,
+      });
+      const mesh = new THREE.Mesh(geom, mat);
+      mesh.rotation.set(Math.random() * 2.5, Math.random() * 2.5, Math.random() * 2.5);
+      mesh.position.copy(_shellEjectPos);
+      scene.add(mesh);
+      state.shellCasings.push({
+        mesh,
+        vel: _shellEjectVel.clone(),
+        rv: new THREE.Vector3(
+          (Math.random() - 0.5) * 16,
+          (Math.random() - 0.5) * 16,
+          (Math.random() - 0.5) * 16
+        ),
+        life: 1.35,
+      });
+    }
+
+    function updateShellCasings(dt) {
+      for (let i = state.shellCasings.length - 1; i >= 0; i--) {
+        const s = state.shellCasings[i];
+        s.life -= dt;
+        s.vel.y -= 11 * dt;
+        s.mesh.position.addScaledVector(s.vel, dt);
+        s.mesh.rotation.x += s.rv.x * dt;
+        s.mesh.rotation.y += s.rv.y * dt;
+        s.mesh.rotation.z += s.rv.z * dt;
+        if (s.life <= 0) {
+          scene.remove(s.mesh);
+          s.mesh.geometry.dispose();
+          s.mesh.material.dispose();
+          state.shellCasings.splice(i, 1);
+        }
+      }
+    }
+
+    function applyWeaponPartAnims(activeWeapon, reloadProgress) {
+      const ud = activeWeapon.userData;
+      const wi = state.weaponIndex;
+      const act = state.weaponAction;
+      const t = getWeaponActionT();
+
+      if (ud.animSlide) {
+        let back = 0;
+        if (act === "slide") {
+          if (t < 0.3) back = 0.075 * (t / 0.3);
+          else back = 0.075 * (1 - (t - 0.3) / 0.7);
+        } else if (state.reloading && wi === 0) {
+          back =
+            reloadProgress < 0.5
+              ? 0.09
+              : 0.09 * (1 - (reloadProgress - 0.5) / 0.5);
+        }
+        ud.animSlide.position.z = back;
+      }
+
+      if (ud.animBolt) {
+        let pull = 0;
+        if (act === "bolt") {
+          if (t < 0.4) pull = 0.15 * (t / 0.4);
+          else if (t < 0.7) pull = 0.15;
+          else pull = 0.15 * (1 - (t - 0.7) / 0.3);
+        } else if (state.reloading && wi === 5) {
+          if (reloadProgress < 0.32) pull = 0.17 * (reloadProgress / 0.32);
+          else if (reloadProgress < 0.68) pull = 0.17;
+          else pull = 0.17 * (1 - (reloadProgress - 0.68) / 0.32);
+        }
+        ud.animBolt.position.z = pull;
+      }
+
+      if (ud.animPump) {
+        let pz = 0;
+        if (act === "pump") {
+          if (t < 0.35) pz = 0.15 * (t / 0.35);
+          else pz = 0.15 * (1 - (t - 0.35) / 0.65);
+        } else if (state.reloading && wi === 2) {
+          pz = 0.12 * Math.sin(reloadProgress * Math.PI);
+        }
+        ud.animPump.position.z = pz;
+      }
+
+      if (ud.animBarrel) {
+        let tilt = 0;
+        if (state.reloading && wi === 2) {
+          if (reloadProgress < 0.22) tilt = -0.48 * (reloadProgress / 0.22);
+          else if (reloadProgress < 0.78) tilt = -0.48;
+          else tilt = -0.48 * (1 - (reloadProgress - 0.78) / 0.22);
+        } else if (act === "pump" && t < 0.18) {
+          tilt = -0.1 * (t / 0.18);
+        }
+        ud.animBarrel.rotation.x = tilt;
+      }
+
+      if (ud.animCharge) {
+        let pull = 0;
+        if (act === "auto") pull = 0.055 * Math.sin(t * Math.PI);
+        else if (state.reloading && wi === 1) {
+          if (reloadProgress < 0.45) pull = 0.08 * (reloadProgress / 0.45);
+          else pull = 0.08 * (1 - (reloadProgress - 0.45) / 0.55);
+        }
+        ud.animCharge.position.x = 0.06 + pull;
+      }
+    }
+
     function setWeapon(index) {
       const prev = state.weaponIndex;
       state.weaponIndex = THREE.MathUtils.clamp(index | 0, 0, weaponModels.length - 1);
       state.ads = false;
       state.adsProgress = 0;
+      state.reloading = false;
+      state.reloadEnd = 0;
       if (prev === 4 || index === 4) {
         state.medKitHealProgress = 0;
         state.medKitRingVisual = 0;
@@ -8517,6 +8794,7 @@
         state.medKitDefillStart = 0;
         applyMedKitRingVisual(0);
       }
+      state.weaponAction = null;
       weaponModels.forEach((w, i) => {
         w.visible = i === index;
       });
@@ -8622,7 +8900,11 @@
       if (player.health <= 0 || paused) return;
       if (e.button === 0) {
         state.mouseDown = true;
-        tryShoot();
+        if (state.weaponIndex === 4) {
+          if (player.health < player.maxHealth) state.medKitNeedsRelease = false;
+        } else {
+          tryShoot();
+        }
       }
     });
 
@@ -8831,33 +9113,39 @@
       const t1 = (-b - s) * inv2a;
       const t2 = (-b + s) * inv2a;
       const eps = 1e-4;
-      if (t1 >= eps) return t1;
-      if (t2 >= eps) return t2;
-      return null;
+      if (c < 0) return 0;
+      let best = null;
+      if (t1 >= eps) best = t1;
+      if (t2 >= eps && (best === null || t2 < best)) best = t2;
+      return best;
     }
 
     /** Head / torso / leg spheres in humanoid root space (zombies + remote PvP avatars). */
     function humanoidHitAlongRay(raycaster, rootGroup) {
+      rootGroup.updateMatrixWorld(true);
       _invEnemyMat.copy(rootGroup.matrixWorld).invert();
       _ehLo.copy(raycaster.ray.origin).applyMatrix4(_invEnemyMat);
       _ehLd.copy(raycaster.ray.direction).transformDirection(_invEnemyMat).normalize();
       const volumes = [
-        { cx: 0, cy: 1.82, cz: 0, r: 0.27, zone: "head" },
-        { cx: 0, cy: 1.12, cz: 0, r: 0.46, zone: "body" },
-        { cx: 0, cy: 0.42, cz: 0, r: 0.42, zone: "leg" },
+        { cx: 0, cy: 1.82, cz: 0, r: 0.3, zone: "head" },
+        { cx: 0, cy: 1.12, cz: 0, r: 0.52, zone: "body" },
+        { cx: 0, cy: 0.42, cz: 0, r: 0.46, zone: "leg" },
       ];
-      let bestT = Infinity;
+      let bestLocalT = Infinity;
       let zone = null;
       for (let vi = 0; vi < volumes.length; vi++) {
         const v = volumes[vi];
         const t = raySphereParam(_ehLo, _ehLd, v.cx, v.cy, v.cz, v.r);
-        if (t !== null && t < bestT) {
-          bestT = t;
+        if (t !== null && t < bestLocalT) {
+          bestLocalT = t;
           zone = v.zone;
         }
       }
-      if (bestT === Infinity || zone === null) return null;
-      return { t: bestT, zone };
+      if (bestLocalT === Infinity || zone === null) return null;
+      _ehHitWorld.copy(_ehLd).multiplyScalar(bestLocalT).add(_ehLo);
+      _ehHitWorld.applyMatrix4(rootGroup.matrixWorld);
+      const worldT = _ehHitWorld.distanceTo(raycaster.ray.origin);
+      return { t: worldT, zone };
     }
 
     /** Hit volumes are fixed in zombie root space so torso sway does not move hitboxes. */
@@ -8910,22 +9198,31 @@
       } else if (state.weaponIndex === 5) {
         const adsReady = shootingAds && state.adsProgress >= 0.88;
         spreadMultiplier = adsReady ? 0 : 4.35;
-        recoilMultiplier = adsReady ? 0.42 : 1.05;
+        recoilMultiplier = adsReady ? 0.62 : 1.45;
       }
       state.recoil += w.recoil * recoilMultiplier;
+      if (state.weaponIndex === 5) {
+        player.pitch += 0.022 * recoilMultiplier;
+        const pitchLim = Math.PI / 2 - 0.01;
+        player.pitch = Math.max(-pitchLim, Math.min(pitchLim, player.pitch));
+      }
       state.spreadBloom = Math.min(
         w.spreadBloomMax,
         state.spreadBloom + w.spreadBloomAdd
       );
 
       const muzzleStart = new THREE.Vector3();
-      const _shootRayOrigin = new THREE.Vector3();
+      const _crosshairHit = new THREE.Vector3();
 
       playGunSound(w);
+      startWeaponFireAnim();
+      const _fireWm = weaponModels[state.weaponIndex];
+      if (state.weaponIndex === 1 || state.weaponIndex === 2 || state.weaponIndex === 3) {
+        ejectShellCasing(_fireWm);
+      }
 
       for (let i = 0; i < w.pellets; i++) {
         getActiveMuzzleWorld(muzzleStart);
-        _shootRayOrigin.copy(muzzleStart);
 
         const movingPenalty = (keys.w || keys.a || keys.s || keys.d) ? 1.25 : 1;
         const adsPenalty = shootingAds ? 1 : 1.8;
@@ -8946,7 +9243,8 @@
             (w.spreadBase + state.spreadBloom) * spreadMultiplier * movingPenalty * adsPenalty;
         }
         const dir = getWeaponDirection(totalSpread);
-        const ray = new THREE.Raycaster(_shootRayOrigin, dir, 0, 160);
+        // Hits follow crosshair (camera ray). Tracer still draws muzzle → impact.
+        const ray = new THREE.Raycaster(camera.position, dir, 0.02, 160);
         ray.camera = camera;
 
         let bestEnemy = null;
@@ -8955,6 +9253,7 @@
 
         for (const enemy of state.enemies) {
           if (!enemy.alive) continue;
+          enemy.group.updateMatrixWorld(true);
           const hit = enemyHitAlongRay(ray, enemy);
           if (hit && hit.t < bestEnemyHitT) {
             bestEnemy = enemy;
@@ -9041,7 +9340,7 @@
             nz: normal.z,
           });
         } else {
-          const missEnd = _ehHitWorld.copy(muzzleStart).addScaledVector(dir, 160);
+          const missEnd = _crosshairHit.copy(camera.position).addScaledVector(dir, 160);
           createBulletTrail(muzzleStart, missEnd, w.color);
           emitShootNetwork(muzzleStart, missEnd, w.color, "miss");
         }
@@ -9051,7 +9350,7 @@
     }
 
     function updateMedKit(dt) {
-      if (!medKitRingProgEl || state.weaponIndex !== 4 || player.health <= 0 || paused) return;
+      if (state.weaponIndex !== 4 || player.health <= 0 || paused) return;
 
       if (!state.mouseDown) {
         state.medKitNeedsRelease = false;
@@ -9072,13 +9371,15 @@
         return;
       }
 
-      const canHeal = player.health < player.maxHealth;
+      const wMed = weapons[4];
+      const canHeal = player.health < player.maxHealth && wMed.ammo > 0;
       const wantsHold = state.mouseDown && canHeal && !state.medKitNeedsRelease;
 
       if (wantsHold) {
         state.medKitHealProgress += dt / MED_KIT_HEAL_DURATION;
         if (state.medKitHealProgress >= 1) {
           player.health = Math.min(player.maxHealth, player.health + 50);
+          wMed.ammo = Math.max(0, wMed.ammo - 1);
           state.medKitHealProgress = 0;
           state.medKitRingVisual = 0;
           state.medKitNeedsRelease = true;
@@ -9128,10 +9429,11 @@
       let bobY = 0;
       let bobRotZ = 0;
 
+      const moveBobScale = state.weaponIndex === 5 ? 0.72 : 1;
       if (isMoving && player.onGround && !usingAds) {
-        bobX = Math.sin(t * 5.5) * 0.005;
-        bobY = Math.abs(Math.cos(t * 11)) * 0.007;
-        bobRotZ = Math.sin(t * 5.5) * 0.008;
+        bobX = Math.sin(t * 5.5) * 0.005 * moveBobScale;
+        bobY = Math.abs(Math.cos(t * 11)) * 0.007 * moveBobScale;
+        bobRotZ = Math.sin(t * 5.5) * 0.008 * moveBobScale;
       }
 
       state.weaponBobX = dampScalar(state.weaponBobX, bobX, dt, 16);
@@ -9142,32 +9444,38 @@
       let reloadY = 0;
       let reloadRotZ = 0;
       let reloadRotY = 0;
+      let reloadProgress = 0;
 
       if (state.reloading) {
         const total = weapon().reloadTime;
         const remaining = state.reloadEnd - performance.now();
-        const progress = THREE.MathUtils.clamp(1 - remaining / total, 0, 1);
+        reloadProgress = THREE.MathUtils.clamp(1 - remaining / total, 0, 1);
+        const wiReload = state.weaponIndex;
+        const useGenericReload = wiReload === 3 || wiReload === 4;
 
-        if (progress < 0.25) {
-          const p = progress / 0.25;
-          reloadRotZ = -1.0 * p;
-          reloadRotY = -0.35 * p;
-          reloadY = 0.08 * p;
-        } else if (progress < 0.8) {
-          const p = (progress - 0.25) / 0.55;
-          reloadRotZ = -1.0;
-          reloadRotY = -0.35;
-          reloadY = 0.08 + Math.sin(p * Math.PI * 3) * 0.05;
-          reloadX = -0.03;
-        } else {
-          const p = (progress - 0.8) / 0.2;
-          reloadRotZ = -1.0 * (1 - p);
-          reloadRotY = -0.35 * (1 - p);
-          reloadY = 0.08 * (1 - p);
+        if (useGenericReload) {
+          if (reloadProgress < 0.25) {
+            const p = reloadProgress / 0.25;
+            reloadRotZ = -1.0 * p;
+            reloadRotY = -0.35 * p;
+            reloadY = 0.08 * p;
+          } else if (reloadProgress < 0.8) {
+            const p = (reloadProgress - 0.25) / 0.55;
+            reloadRotZ = -1.0;
+            reloadRotY = -0.35;
+            reloadY = 0.08 + Math.sin(p * Math.PI * 3) * 0.05;
+            reloadX = -0.03;
+          } else {
+            const p = (reloadProgress - 0.8) / 0.2;
+            reloadRotZ = -1.0 * (1 - p);
+            reloadRotY = -0.35 * (1 - p);
+            reloadY = 0.08 * (1 - p);
+          }
         }
       }
 
       const activeWeapon = weaponModels[state.weaponIndex];
+      applyWeaponPartAnims(activeWeapon, reloadProgress);
       const gun = activeWeapon.userData.gun;
       const basePos = activeWeapon.userData.basePos;
       const adsOffset = activeWeapon.userData.adsOffset;
@@ -9275,7 +9583,7 @@
       }
 
       if (move.lengthSq() > 0) {
-        move.normalize().multiplyScalar(player.speed * dt);
+        move.normalize().multiplyScalar(player.speed * getPlayerMoveSpeedMult() * dt);
         const next = player.position.clone().add(new THREE.Vector3(move.x, 0, move.z));
         const resolved = resolveWallSliding(next);
         player.position.x = resolved.x;
@@ -10060,6 +10368,7 @@
       updateBlood(dt);
       updateSparks(dt);
       updateTracers(dt);
+      updateShellCasings(dt);
       updateHitIndicators(dt);
       const now = performance.now();
       if (!chatOpen && now - _lastChatRefresh > 1000) {
@@ -10321,7 +10630,13 @@
         updateHud();
       }
 
-      if (player.health > 0 && !paused && state.mouseDown && weapon().auto) {
+      if (
+        player.health > 0 &&
+        !paused &&
+        state.mouseDown &&
+        state.weaponIndex !== 4 &&
+        weapon().auto
+      ) {
         tryShoot();
       }
 
