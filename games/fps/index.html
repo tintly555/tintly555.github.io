@@ -6590,6 +6590,7 @@
       }
 
       mazeChunks.set(key, { meshes: chunkMeshes, lights: chunkLights });
+      invalidateArenaNavGrid();
     }
 
     function registerMazeCullLight(light, chunkKey) {
@@ -6675,6 +6676,7 @@
         if (L.dispose) L.dispose();
       }
       mazeChunks.delete(key);
+      invalidateArenaNavGrid();
     }
 
     function clearAllMazeChunks() {
@@ -6731,7 +6733,7 @@
       const t = MAZE_WALL_THICK;
       const hz = cw + 0.02;
       const hx = cw + 0.02;
-      const inf = NAV_RADIUS + t * 0.55;
+      const inf = NAV_RADIUS * 0.45 + t * 0.35;
       for (let ix = 0; ix <= w; ix++) {
         for (let iy = 0; iy < h; iy++) {
           if (!vert[ix][iy]) continue;
@@ -6760,7 +6762,7 @@
       }
     }
 
-    /** Stamp procedural walls into nav (~O(wall segments)), not O(cells × walls). */
+    /** Nav matches loaded maze chunks only — avoids invisible walls in unbuilt chunks. */
     function rebuildMazeNavGrid(pcx, pcz) {
       if (CURRENT_MAP !== "arena") return;
       if (mazeNavAnchorCx === pcx && mazeNavAnchorCz === pcz && navGrid) return;
@@ -6778,12 +6780,20 @@
       flowDirZ = new Float32Array(total);
       flowPlayerC = -1;
       flowPlayerR = -1;
-      for (let cz = pcz - padChunks; cz <= pcz + padChunks; cz++) {
-        for (let cx = pcx - padChunks; cx <= pcx + padChunks; cx++) {
-          stampChunkWallsIntoNavGrid(cx, cz);
-        }
+      navGrid.fill(0);
+      for (const key of mazeChunks.keys()) {
+        const [cx, cz] = key.split(",").map(Number);
+        if (Math.abs(cx - pcx) > padChunks || Math.abs(cz - pcz) > padChunks) continue;
+        stampChunkWallsIntoNavGrid(cx, cz);
       }
       mazeNavRebuildRow = navRows;
+    }
+
+    function invalidateArenaNavGrid() {
+      mazeNavAnchorCx = null;
+      mazeNavAnchorCz = null;
+      flowPlayerC = -1;
+      flowPlayerR = -1;
     }
 
     const pvpMapLights = [];
@@ -9598,22 +9608,6 @@
     const _enemyWallSphere = new THREE.Sphere();
 
     function enemyCollidesWall(nextX, nextZ, radius = 0.34) {
-      if (CURRENT_MAP === "arena" && navGrid) {
-        const c0 = ((nextX - navMinX) / NAV_CELL) | 0;
-        const r0 = ((nextZ - navMinZ) / NAV_CELL) | 0;
-        const cellR = Math.max(1, Math.ceil(radius / NAV_CELL));
-        for (let dr = -cellR; dr <= cellR; dr++) {
-          const r = r0 + dr;
-          if (r < 0 || r >= navRows) return true;
-          const rowOff = r * navCols;
-          for (let dc = -cellR; dc <= cellR; dc++) {
-            const c = c0 + dc;
-            if (c < 0 || c >= navCols) return true;
-            if (navGrid[rowOff + c]) return true;
-          }
-        }
-        return false;
-      }
       _enemyWallSphere.center.set(nextX, 1.0, nextZ);
       _enemyWallSphere.radius = radius;
       for (const box of wallBoxes) {
