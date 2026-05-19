@@ -4,6 +4,9 @@
   Self-hosted same tree: open game-self-hosted.html (empty game-multiplayer-origin, empty game-static-prefix).
   Crossfire = PVP; Arena = PVE / co-op vs zombies.
 -->
+<!--
+  Swap Med Kit and AMR weapon positions (4↔5) and improve lighting 让AMR和Swap Med Kit没法使用，所以退回merge versions
+-->
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -987,7 +990,8 @@
     <div class="menu-panels-wrap">
     <div id="menuMain" style="display:flex;flex-direction:column;align-items:center;gap:10px;">
       <h1 id="menuGameTitle" data-i18n="gameTitle">Zone No Light</h1>
-      <p id="menuCreditsGame" data-i18n="creditsGame">Game and Music by Tintly555 and J有点死了</p>
+      <p id="menuCreditsGame" data-i18n="creditsGame">Game by Tintly555</p>
+      <p id="menuCreditsMusic" data-i18n="creditsMusic">Music by JimmyQrg</p>
       <button type="button" id="btnArena" data-i18n="btnZombieArena">Zombie Arena</button>
       <button type="button" id="btnTraining" data-i18n="btnTrainingCamp">Training Camp</button>
       <button type="button" id="btnCrossfire" data-i18n="btnCrossfirePickMap">Crossfire (PVP — select map)</button>
@@ -4930,7 +4934,7 @@
     }
 
     /** First frames after load / tab focus: keep syncing until layout stabilizes (mitigates black GL canvas until manual resize). */
-    let _rendererSyncWarmupFrames = 240;
+    let _rendererSyncWarmupFrames = 0;
 
     applyGraphicsQuality();
     requestAnimationFrame(() => {
@@ -6474,24 +6478,24 @@
         [-20, 20], [0, 20], [20, 20],
       ];
       for (const [lx, lz] of lightPos) {
-        const L = createPhysicalPointLight(0xfff6ee, 680, 200, 2.4);
+        const L = createPhysicalPointLight(0xfff6ee, 520, 150, 2.2);
         L.position.set(lx, H + 1.2, lz);
         L.castShadow = false;
         scene.add(L);
         pvpMapLights.push(L);
       }
-      const rimTop = createPhysicalPointLight(0xeaf6ff, 520, 220, 2.4);
+      const rimTop = createPhysicalPointLight(0xeaf6ff, 380, 180, 2.4);
       rimTop.position.set(0, H + 8, 0);
       rimTop.castShadow = false;
       scene.add(rimTop);
       pvpMapLights.push(rimTop);
-      const ambFill = new THREE.AmbientLight(0xd4e2f5, 3.2);
+      const ambFill = new THREE.AmbientLight(0xd4e2f5, 2.1);
       scene.add(ambFill);
       pvpMapLights.push(ambFill);
-      const hemiFill = new THREE.HemisphereLight(0xeef6ff, 0x7a7068, 6.5);
+      const hemiFill = new THREE.HemisphereLight(0xeef6ff, 0x5c5348, 4.2);
       scene.add(hemiFill);
       pvpMapLights.push(hemiFill);
-      const sunFill = new THREE.DirectionalLight(0xfff6ea, 14.5);
+      const sunFill = new THREE.DirectionalLight(0xfff6ea, 9.5);
       sunFill.position.set(18, 42, 14);
       sunFill.castShadow = false;
       scene.add(sunFill);
@@ -6642,19 +6646,19 @@
         [-14, -12], [0, -12], [14, -12], [-8, -18], [8, -18], [0, -8],
       ];
       for (const [lx, lz] of lightPos) {
-        const L = createPhysicalPointLight(0xfff6ee, 680, 200, 2.4);
+        const L = createPhysicalPointLight(0xfff6ee, 480, 140, 2.2);
         L.position.set(lx, H + 1.1, lz);
         L.castShadow = false;
         scene.add(L);
         pvpMapLights.push(L);
       }
-      const ambFill = new THREE.AmbientLight(0xd4e2f5, 3.2);
+      const ambFill = new THREE.AmbientLight(0xd4e2f5, 2.1);
       scene.add(ambFill);
       pvpMapLights.push(ambFill);
-      const hemiFill = new THREE.HemisphereLight(0xeef6ff, 0x7a7068, 6.5);
+      const hemiFill = new THREE.HemisphereLight(0xeef6ff, 0x5c5348, 4.2);
       scene.add(hemiFill);
       pvpMapLights.push(hemiFill);
-      const sunFill = new THREE.DirectionalLight(0xfff6ea, 14.5);
+      const sunFill = new THREE.DirectionalLight(0xfff6ea, 9.5);
       sunFill.position.set(18, 42, 14);
       sunFill.castShadow = false;
       scene.add(sunFill);
@@ -6960,27 +6964,6 @@
         adsSpeed: 10,
       },
       {
-        name: "AMR",
-        fireDelay: 1380,
-        auto: false,
-        pellets: 1,
-        spreadBase: 0.092,
-        spreadBloomAdd: 0.018,
-        spreadBloomMax: 0.14,
-        recover: 0.032,
-        recoil: 0.2,
-        damageHead: 220,
-        damageBody: 220,
-        damageLegs: 90,
-        color: 0xd4c4ff,
-        magSize: 5,
-        ammo: 5,
-        reloadTime: 3400,
-        soundBase: 340,
-        adsFov: 26,
-        adsSpeed: 5.2,
-      },
-      {
         name: "Med Kit",
         fireDelay: 1e9,
         auto: false,
@@ -7000,6 +6983,27 @@
         soundBase: 440,
         adsFov: 75,
         adsSpeed: 10,
+      },
+      {
+        name: "AMR",
+        fireDelay: 1380,
+        auto: false,
+        pellets: 1,
+        spreadBase: 0.092,
+        spreadBloomAdd: 0.018,
+        spreadBloomMax: 0.14,
+        recover: 0.032,
+        recoil: 0.2,
+        damageHead: 220,
+        damageBody: 220,
+        damageLegs: 90,
+        color: 0xd4c4ff,
+        magSize: 5,
+        ammo: 5,
+        reloadTime: 3400,
+        soundBase: 340,
+        adsFov: 26,
+        adsSpeed: 5.2,
       },
     ];
     function weapon() {
@@ -7025,12 +7029,12 @@
         ${tr("hudGameTitleLine", "Zone No Light")}<br>
         WASD move | Space jump | R reload<br>
         Mouse aim | RMB zoom | L flashlight | Z beam small/med/wide<br>
-        Weapons: 1–4 | <b>5</b> AMR | <b>6</b> Med Kit (hold <b>F</b> or <b>LMB</b> 2.5s, +50 HP)<br>
+        Weapons: 1–4 | <b>5</b> Med Kit (hold <b>F</b> or <b>LMB</b> 10s, +50 HP) | <b>6</b> AMR<br>
         Map: ${mapLabel}${MULTIPLAYER ? " (MP)" : ""}<br>
         Weapon: ${w.name}<br>
         ${
-          state.weaponIndex === 5
-            ? `Med Kit: ${w.ammo} use${w.ammo === 1 ? "" : "s"} — hold <b>F</b> or <b>LMB</b> 2.5s (+50 HP)${
+          state.weaponIndex === 4
+            ? `Med Kit: ${w.ammo} use${w.ammo === 1 ? "" : "s"} — hold <b>F</b> or <b>LMB</b> 10s (+50 HP)${
                 player.health >= player.maxHealth
                   ? " (health full)"
                   : w.ammo <= 0
@@ -8649,8 +8653,8 @@
       makeWeaponModel(1),
       makeWeaponModel(2),
       makeWeaponModel(3),
-      makeWeaponModel(5),
       makeMedKitModel(),
+      makeWeaponModel(5),
     ];
 
     weaponModels.forEach((w, i) => {
@@ -8670,13 +8674,13 @@
     }
 
     function isMedKitInputHeld() {
-      return keys.f || (state.weaponIndex === 5 && state.mouseDown);
+      return keys.f || (state.weaponIndex === 4 && state.mouseDown);
     }
 
     function canMedKitHealNow() {
-      const wMed = weapons[5];
+      const wMed = weapons[4];
       return (
-        state.weaponIndex === 5 &&
+        state.weaponIndex === 4 &&
         gameWorldReady &&
         !paused &&
         player.health > 0 &&
@@ -9091,7 +9095,7 @@
     }
 
     function startReload() {
-      if (state.weaponIndex === 5) return;
+      if (state.weaponIndex === 4) return;
       const w = weapon();
       if (state.reloading) return;
       if (w.ammo >= w.magSize) return;
@@ -9182,7 +9186,7 @@
       if (k === "shift") keys.shift = false;
       if (k === "f" || e.code === "KeyF") {
         keys.f = false;
-        if (state.weaponIndex === 5) state.medKitNeedsRelease = false;
+        if (state.weaponIndex === 4) state.medKitNeedsRelease = false;
       }
     });
 
@@ -9204,7 +9208,7 @@
     document.addEventListener("mouseup", (e) => {
       if (e.button === 0) {
         state.mouseDown = false;
-        if (state.weaponIndex === 5) state.medKitNeedsRelease = false;
+        if (state.weaponIndex === 4) state.medKitNeedsRelease = false;
       }
     });
 
@@ -9472,7 +9476,7 @@
 
     function tryShoot() {
       if (!gameWorldReady || paused || player.health <= 0) return;
-      if (state.weaponIndex === 5) return;
+      if (state.weaponIndex === 4) return;
       const now = performance.now();
       const w = weapon();
       const shootingAds = (state.ads || keys.shift) && !state.reloading && player.health > 0;
@@ -9506,13 +9510,13 @@
       } else if (state.weaponIndex === 3) {
         spreadMultiplier = shootingAds ? 0.5 : 1.0;
         recoilMultiplier = 0.90;
-      } else if (state.weaponIndex === 4) {
+      } else if (state.weaponIndex === 5) {
         const adsReady = shootingAds && state.adsProgress >= 0.88;
         spreadMultiplier = adsReady ? 0 : 4.35;
         recoilMultiplier = adsReady ? 0.62 : 1.45;
       }
       state.recoil += w.recoil * recoilMultiplier;
-      if (state.weaponIndex === 4) {
+      if (state.weaponIndex === 5) {
         player.pitch += 0.022 * recoilMultiplier;
         const pitchLim = Math.PI / 2 - 0.01;
         player.pitch = Math.max(-pitchLim, Math.min(pitchLim, player.pitch));
@@ -9535,7 +9539,7 @@
         const movingPenalty = (keys.w || keys.a || keys.s || keys.d) ? 1.25 : 1;
         const adsPenalty = shootingAds ? 1 : 1.8;
         let totalSpread;
-        if (state.weaponIndex === 4) {
+        if (state.weaponIndex === 5) {
           const adsReady = shootingAds && state.adsProgress >= 0.88;
           if (adsReady) {
             totalSpread = 0;
@@ -9687,7 +9691,7 @@
         return;
       }
 
-      const wMed = weapons[5];
+      const wMed = weapons[4];
       const canHeal = player.health < player.maxHealth && wMed.ammo > 0;
       const wantsHold = isMedKitInputHeld() && canHeal && !state.medKitNeedsRelease;
 
@@ -9775,7 +9779,7 @@
         reloadY = wm.reloadY;
         reloadPushZ = wm.reloadPushZ;
       } else if (
-        state.weaponIndex === 5 &&
+        state.weaponIndex === 4 &&
         isMedKitInputHeld() &&
         state.medKitHealProgress > 0 &&
         player.health < player.maxHealth
@@ -9791,7 +9795,7 @@
 
       const activeWeapon = weaponModels[state.weaponIndex];
       let animProgress = reloadProgress;
-      if (state.weaponIndex === 5 && isMedKitInputHeld()) {
+      if (state.weaponIndex === 4 && isMedKitInputHeld()) {
         animProgress = Math.max(animProgress, state.medKitHealProgress);
       }
       const viewAnim = applyWeaponHandsAnim(activeWeapon, animProgress);
@@ -9809,7 +9813,7 @@
       const targetScale =
         usingAds && state.weaponIndex === 1
           ? 1.18
-          : usingAds && state.weaponIndex === 4
+          : usingAds && state.weaponIndex === 5
             ? 1.08
             : 1.0;
       const scaleVec = new THREE.Vector3(targetScale, targetScale, targetScale);
@@ -9828,20 +9832,20 @@
       gun.rotation.z = viewAnim.rotZ;
          
       const hideCrosshair =
-        (usingAds && state.weaponIndex !== 1) || state.weaponIndex === 5;
+        (usingAds && state.weaponIndex !== 1) || state.weaponIndex === 4;
       crosshairEl.classList.toggle("hidden", hideCrosshair);
       if (medKitReticleEl) {
-        medKitReticleEl.classList.toggle("hidden", state.weaponIndex !== 5);
+        medKitReticleEl.classList.toggle("hidden", state.weaponIndex !== 4);
       }
       if (amrScopeOverlayEl) {
-        const scopeOn = state.weaponIndex === 4 && usingAds;
+        const scopeOn = state.weaponIndex === 5 && usingAds;
         const scopeOp = scopeOn
           ? THREE.MathUtils.clamp((state.adsProgress - 0.32) / 0.58, 0, 1)
           : 0;
         amrScopeOverlayEl.style.opacity = String(scopeOp);
         amrScopeOverlayEl.setAttribute("aria-hidden", scopeOp < 0.04 ? "true" : "false");
       }
-      if (state.weaponIndex === 4 && activeWeapon) {
+      if (state.weaponIndex === 5 && activeWeapon) {
         activeWeapon.visible = adsBlend < 0.94;
       }
 
