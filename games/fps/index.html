@@ -4784,13 +4784,13 @@
     }
 
     function getCurrentMapFogColor() {
-      if (isTrainingMap(CURRENT_MAP)) return 0x8ea6c6;
-      return CURRENT_MAP === "crossfire_grid" ? 0x8ea6c6 : 0x070504;
+      if (isBrightIndoorMap(CURRENT_MAP)) return 0x8ea6c6;
+      return 0x070504;
     }
 
     function getCurrentMapBackgroundColor() {
-      if (isTrainingMap(CURRENT_MAP)) return 0xa9c3e6;
-      return CURRENT_MAP === "crossfire_grid" ? 0xa9c3e6 : 0x070504;
+      if (isBrightIndoorMap(CURRENT_MAP)) return 0xa9c3e6;
+      return 0x070504;
     }
 
     /** Distance fog + camera far: darkness and light fade beyond render distance (scaled by preset). */
@@ -4798,7 +4798,7 @@
       if (!scene.fog || !scene.fog.isFog) return;
       let far;
       let near;
-      if (CURRENT_MAP === "crossfire_grid" || isTrainingMap(CURRENT_MAP)) {
+      if (isBrightIndoorMap(CURRENT_MAP)) {
         const rdIdx = THREE.MathUtils.clamp(
           gameSettings.renderDistanceIndex | 0,
           0,
@@ -8659,7 +8659,7 @@
       weaponRoot.add(w);
     });
 
-    const MED_KIT_HEAL_DURATION = 10;
+    const MED_KIT_HEAL_DURATION = 2.5;
     const MED_KIT_RING_LEN = 2 * Math.PI * 44;
     const MED_KIT_DEFILL_DURATION = 0.18;
 
@@ -10326,11 +10326,12 @@
     const _visRay = new THREE.Raycaster();
     let visFrameCounter = 0;
 
-    function canSeePoint(ex, ey, ez, px, py, pz) {
+    function canSeePoint(ex, ey, ez, px, py, pz, maxDist = 28) {
       _visOrigin.set(ex, ey, ez);
       _visDir.set(px - ex, py - ey, pz - ez);
       const d = _visDir.length();
       if (d < 0.1) return true;
+      if (d > maxDist) return false;
       _visDir.multiplyScalar(1 / d);
       _visRay.set(_visOrigin, _visDir);
       _visRay.near = 0;
@@ -10466,7 +10467,50 @@
       }
 
       visFrameCounter++;
-      if ((visFrameCounter % 8) === 0) rebuildFlowField();
+      if ((visFrameCounter % 16) === 0) {
+        if (mazeNavRebuildRow < navRows) {
+          const startRow = mazeNavRebuildRow;
+          const endRow = Math.min(startRow + 6, navRows);
+          for (let r = startRow; r < endRow; r++) {
+            for (let c = 0; c < navCols; c++) {
+              const idx = r * navCols + c;
+              if (navGrid[idx]) continue;
+              let bestD = dist[idx];
+              let bx = 0, bz = 0;
+              for (let dr = -1; dr <= 1; dr++) {
+                const nr = r + dr;
+                if (nr < 0 || nr >= navRows) continue;
+                for (let dc = -1; dc <= 1; dc++) {
+                  if (dr === 0 && dc === 0) continue;
+                  const nc = c + dc;
+                  if (nc < 0 || nc >= navCols) continue;
+                  const nIdx = nr * navCols + nc;
+                  if (navGrid[nIdx]) continue;
+                  if (dr !== 0 && dc !== 0) {
+                    if (navGrid[r * navCols + nc] || navGrid[nr * navCols + c]) continue;
+                  }
+                  if (dist[nIdx] < bestD) {
+                    bestD = dist[nIdx];
+                    bx = dc;
+                    bz = dr;
+                  }
+                }
+              }
+              if (bx !== 0 || bz !== 0) {
+                const len = Math.sqrt(bx * bx + bz * bz);
+                flowDirX[idx] = bx / len;
+                flowDirZ[idx] = bz / len;
+              } else {
+                flowDirX[idx] = 0;
+                flowDirZ[idx] = 0;
+              }
+            }
+          }
+          mazeNavRebuildRow = endRow;
+        } else if (flowPlayerC >= 0 && flowPlayerR >= 0) {
+          rebuildFlowField();
+        }
+      }
 
       for (let ei = 0; ei < state.enemies.length; ei++) {
         const enemy = state.enemies[ei];
@@ -11094,6 +11138,7 @@
       gameBootLabel.textContent = "Building world…";
       weaponRoot.visible = false;
       setLocalPlayerLights(false);
+      syncGameRendererSize();
 
       hideDeathScreen();
       hidePause();
