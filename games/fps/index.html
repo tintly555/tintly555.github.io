@@ -236,6 +236,43 @@
       cursor: default;
     }
 
+    #trainingScoreboard {
+      position: fixed;
+      left: 10px;
+      bottom: 10px;
+      z-index: 42;
+      display: none;
+      min-width: 220px;
+      max-width: 280px;
+      padding: 12px 14px;
+      border-radius: 10px;
+      background: rgba(0, 0, 0, 0.62);
+      border: 1px solid rgba(79, 209, 255, 0.35);
+      backdrop-filter: blur(5px);
+      font-family: var(--game-font-ui);
+      font-size: 12px;
+      line-height: 1.55;
+      color: rgba(232, 238, 252, 0.92);
+      pointer-events: none;
+      user-select: none;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+    }
+    #trainingScoreboard h3 {
+      margin: 0 0 8px 0;
+      font-size: 14px;
+      letter-spacing: 0.14em;
+      color: #c8e8ff;
+    }
+    #trainingScoreboard .train-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    #trainingScoreboard .train-row b {
+      color: #fff;
+      font-weight: 600;
+    }
+
     .hud {
       position: fixed;
       top: 10px;
@@ -953,6 +990,7 @@
       <p id="menuCreditsGame" data-i18n="creditsGame">Game by Tintly555</p>
       <p id="menuCreditsMusic" data-i18n="creditsMusic">Music by JimmyQrg</p>
       <button type="button" id="btnArena" data-i18n="btnZombieArena">Zombie Arena</button>
+      <button type="button" id="btnTraining" data-i18n="btnTrainingCamp">Training Camp</button>
       <button type="button" id="btnCrossfire" data-i18n="btnCrossfirePickMap">Crossfire (PVP — select map)</button>
       <button type="button" id="btnMenuSettings" data-i18n="menuSettings">SETTINGS</button>
     </div>
@@ -961,6 +999,13 @@
       <button type="button" id="btnArenaSingle" data-i18n="btnSingleplayer">SINGLEPLAYER</button>
       <button type="button" id="btnArenaCoop" data-i18n="btnCoopMode">CO-OP MODE</button>
       <button type="button" id="btnArenaBack" data-i18n="btnBack">← BACK</button>
+    </div>
+    <div id="menuTrainingMode" style="display:none;flex-direction:column;align-items:center;gap:10px;">
+      <h2 id="menuTrainingHeading" style="font-family:var(--game-font-ui);font-size:28px;margin:0 0 14px 0;letter-spacing:3px;" data-i18n="trainingCampTitle">TRAINING CAMP</h2>
+      <p id="menuTrainingDesc" style="font-family:var(--game-font-ui);font-size:12px;opacity:0.78;margin:0 0 8px 0;max-width:320px;text-align:center;line-height:1.45;" data-i18n="trainingCampDesc">Shoot moving player-model dummies. Head / body / leg hits score differently.</p>
+      <button type="button" id="btnTrainingSingle" data-i18n="btnSingleplayer">SINGLEPLAYER</button>
+      <button type="button" id="btnTrainingCoop" data-i18n="btnCoopMode">CO-OP MODE</button>
+      <button type="button" id="btnTrainingBack" data-i18n="btnBack">← BACK</button>
     </div>
     <div id="menuPvpMaps" style="display:none;flex-direction:column;align-items:center;gap:10px;">
       <h2 style="font-family:var(--game-font-ui);font-size:24px;margin:0 0 10px 0;letter-spacing:2px;" data-i18n="pvpMapTitle">CROSSFIRE — MAP</h2>
@@ -995,6 +1040,16 @@
   <div id="shadeOverlay" aria-hidden="true"></div>
   <div id="warFilmOverlay" aria-hidden="true"></div>
   <div class="hud" id="hud"></div>
+  <div id="trainingScoreboard" aria-live="polite">
+    <h3 id="trainingScoreTitle">TRAINING</h3>
+    <div class="train-row"><span id="trainingLblYou">You</span><b id="trainYouPts">0</b></div>
+    <div id="trainTeamRow" class="train-row"><span id="trainingLblTeam">Team</span><b id="trainTeamPts">0</b></div>
+    <div class="train-row"><span id="trainingLblHits">Hits</span><b id="trainYouHits">0</b></div>
+    <div class="train-row"><span id="trainingLblHead">Head</span><b id="trainYouHead">0</b></div>
+    <div class="train-row"><span id="trainingLblBody">Body</span><b id="trainYouBody">0</b></div>
+    <div class="train-row"><span id="trainingLblLeg">Legs</span><b id="trainYouLeg">0</b></div>
+    <div class="train-row"><span id="trainingLblAcc">Accuracy</span><b id="trainYouAcc">—</b></div>
+  </div>
   <div id="fpsOverlay" style="position:fixed;top:10px;right:14px;z-index:45;pointer-events:none;text-align:right;font-family:var(--game-font-ui);font-size:13px;color:rgba(245,248,255,0.92);text-shadow:0 1px 5px rgba(0,0,0,0.85);line-height:1.4;">
     <div id="fpsValue">— FPS</div>
     <div id="fpsChatHint" style="opacity:0.72;font-size:11px;margin-top:3px;letter-spacing:0.02em;" data-i18n="hudHelpChat">Press T to chat</div>
@@ -1199,6 +1254,20 @@
     const lobbyError = document.getElementById("lobbyError");
     const btnArena = document.getElementById("btnArena");
     const btnCrossfire = document.getElementById("btnCrossfire");
+    const btnTraining = document.getElementById("btnTraining");
+    const menuTrainingMode = document.getElementById("menuTrainingMode");
+    const btnTrainingSingle = document.getElementById("btnTrainingSingle");
+    const btnTrainingCoop = document.getElementById("btnTrainingCoop");
+    const btnTrainingBack = document.getElementById("btnTrainingBack");
+    const trainingScoreboardEl = document.getElementById("trainingScoreboard");
+    const trainYouPts = document.getElementById("trainYouPts");
+    const trainTeamPts = document.getElementById("trainTeamPts");
+    const trainYouHits = document.getElementById("trainYouHits");
+    const trainYouHead = document.getElementById("trainYouHead");
+    const trainYouBody = document.getElementById("trainYouBody");
+    const trainYouLeg = document.getElementById("trainYouLeg");
+    const trainYouAcc = document.getElementById("trainYouAcc");
+    const trainTeamRow = document.getElementById("trainTeamRow");
     const btnArenaSingle = document.getElementById("btnArenaSingle");
     const btnArenaCoop = document.getElementById("btnArenaCoop");
     const btnArenaBack = document.getElementById("btnArenaBack");
@@ -3376,6 +3445,29 @@
       if (menuCreditsMusic) menuCreditsMusic.textContent = tr("creditsMusic", menuCreditsMusic.textContent);
       if (menuZombieArenaHeading) menuZombieArenaHeading.textContent = tr("zombieArenaTitle", menuZombieArenaHeading.textContent);
       if (btnArena) btnArena.textContent = tr("btnZombieArena", btnArena.textContent);
+      if (btnTraining) btnTraining.textContent = tr("btnTrainingCamp", btnTraining.textContent);
+      const menuTrainingHeading = document.getElementById("menuTrainingHeading");
+      const menuTrainingDesc = document.getElementById("menuTrainingDesc");
+      if (menuTrainingHeading) menuTrainingHeading.textContent = tr("trainingCampTitle", menuTrainingHeading.textContent);
+      if (menuTrainingDesc) menuTrainingDesc.textContent = tr("trainingCampDesc", menuTrainingDesc.textContent);
+      if (btnTrainingSingle) btnTrainingSingle.textContent = tr("btnSingleplayer", btnTrainingSingle.textContent);
+      if (btnTrainingCoop) btnTrainingCoop.textContent = tr("btnCoopMode", btnTrainingCoop.textContent);
+      if (btnTrainingBack) btnTrainingBack.textContent = tr("btnBack", btnTrainingBack.textContent);
+      const trainingScoreTitle = document.getElementById("trainingScoreTitle");
+      if (trainingScoreTitle) trainingScoreTitle.textContent = tr("trainingScoreTitle", trainingScoreTitle.textContent);
+      const lblMap = {
+        trainingLblYou: "trainingScoreYou",
+        trainingLblTeam: "trainingScoreTeam",
+        trainingLblHits: "trainingScoreHits",
+        trainingLblHead: "trainingScoreHead",
+        trainingLblBody: "trainingScoreBody",
+        trainingLblLeg: "trainingScoreLeg",
+        trainingLblAcc: "trainingScoreAcc",
+      };
+      for (const [elId, key] of Object.entries(lblMap)) {
+        const el = document.getElementById(elId);
+        if (el) el.textContent = tr(key, el.textContent);
+      }
       if (btnCrossfire) btnCrossfire.textContent = tr("btnCrossfirePickMap", btnCrossfire.textContent);
       const menuSettingsBtn = document.getElementById("btnMenuSettings");
       const pvpTitle = document.querySelector("#menuPvpMaps h2");
@@ -3447,6 +3539,25 @@
     function isPvpCrossfireMap(m) {
       return m === "crossfire" || m === "crossfire_grid";
     }
+    function isTrainingMap(m) {
+      return m === "training";
+    }
+    function isBrightIndoorMap(m) {
+      return m === "crossfire_grid" || m === "training";
+    }
+    let TRAINING_COOP = false;
+    const TRAINING_POINTS = { head: 100, body: 50, leg: 25 };
+    const TRAINING_LANES = [
+      { xMin: -15, xMax: -11, z: -14, speed: 2.0 },
+      { xMin: -4, xMax: 0, z: -14, speed: 2.35 },
+      { xMin: 7, xMax: 11, z: -14, speed: 1.85 },
+      { xMin: -11, xMax: -7, z: -18, speed: 2.15 },
+      { xMin: 3, xMax: 7, z: -18, speed: 2.5 },
+    ];
+    function freshTrainingStats() {
+      return { points: 0, hits: 0, head: 0, body: 0, leg: 0, shots: 0 };
+    }
+    let trainingStats = { you: freshTrainingStats(), team: freshTrainingStats() };
     let MULTIPLAYER = false;
     /** True only for Zombie Arena played via ARENA CO-OP lobby (no damage vs other players). */
     let ARENA_COOP = false;
@@ -3880,7 +3991,12 @@
       }
     });
 
+    socket.on("trainingHit", (data) => {
+      applyRemoteTrainingHit(data);
+    });
+
     socket.on("damaged", (data) => {
+      if (isTrainingMap(CURRENT_MAP)) return;
       if (!gameWorldReady) return;
       if (player.health <= 0) return;
       if (performance.now() < player.spawnProtectUntil) return;
@@ -4293,7 +4409,7 @@
 
     function createRemotePlayer(name) {
       const group = new THREE.Group();
-      const duelBright = CURRENT_MAP === "crossfire_grid";
+      const duelBright = isBrightIndoorMap(CURRENT_MAP);
       const hueShift = hashRemoteTint(name || "player");
       const pal = applyRemoteAvatarPalette({ duelBright, hueShift });
       const mCamo1 = pal.mCamo1;
@@ -4668,10 +4784,12 @@
     }
 
     function getCurrentMapFogColor() {
+      if (isTrainingMap(CURRENT_MAP)) return 0x8ea6c6;
       return CURRENT_MAP === "crossfire_grid" ? 0x8ea6c6 : 0x070504;
     }
 
     function getCurrentMapBackgroundColor() {
+      if (isTrainingMap(CURRENT_MAP)) return 0xa9c3e6;
       return CURRENT_MAP === "crossfire_grid" ? 0xa9c3e6 : 0x070504;
     }
 
@@ -4680,7 +4798,7 @@
       if (!scene.fog || !scene.fog.isFog) return;
       let far;
       let near;
-      if (CURRENT_MAP === "crossfire_grid") {
+      if (CURRENT_MAP === "crossfire_grid" || isTrainingMap(CURRENT_MAP)) {
         const rdIdx = THREE.MathUtils.clamp(
           gameSettings.renderDistanceIndex | 0,
           0,
@@ -6382,10 +6500,179 @@
       ceiling.visible = false;
     }
 
+    function resetTrainingSession() {
+      trainingStats.you = freshTrainingStats();
+      trainingStats.team = freshTrainingStats();
+      updateTrainingScoreboardUI();
+    }
+
+    function setTrainingScoreboardVisible(on) {
+      if (trainingScoreboardEl) trainingScoreboardEl.style.display = on ? "block" : "none";
+      if (trainTeamRow) {
+        trainTeamRow.style.display =
+          on && MULTIPLAYER && TRAINING_COOP ? "flex" : "none";
+      }
+    }
+
+    function trainingAccuracyPct(stats) {
+      if (!stats || !stats.shots) return "—";
+      return `${Math.round((stats.hits / stats.shots) * 100)}%`;
+    }
+
+    function updateTrainingScoreboardUI() {
+      if (!isTrainingMap(CURRENT_MAP)) return;
+      const y = trainingStats.you;
+      const t = trainingStats.team;
+      if (trainYouPts) trainYouPts.textContent = String(y.points);
+      if (trainTeamPts) trainTeamPts.textContent = String(t.points);
+      if (trainYouHits) trainYouHits.textContent = String(y.hits);
+      if (trainYouHead) trainYouHead.textContent = String(y.head);
+      if (trainYouBody) trainYouBody.textContent = String(y.body);
+      if (trainYouLeg) trainYouLeg.textContent = String(y.leg);
+      if (trainYouAcc) trainYouAcc.textContent = trainingAccuracyPct(y);
+    }
+
+    function registerTrainingShot() {
+      if (!isTrainingMap(CURRENT_MAP)) return;
+      trainingStats.you.shots++;
+      if (!MULTIPLAYER || !TRAINING_COOP) {
+        trainingStats.team.shots++;
+      }
+      updateTrainingScoreboardUI();
+    }
+
+    function registerTrainingHit(zone) {
+      if (!isTrainingMap(CURRENT_MAP)) return;
+      const z = zone === "head" || zone === "leg" ? zone : "body";
+      const pts = TRAINING_POINTS[z] || TRAINING_POINTS.body;
+      const y = trainingStats.you;
+      y.points += pts;
+      y.hits++;
+      y[z]++;
+      trainingStats.team.points += pts;
+      trainingStats.team.hits++;
+      trainingStats.team[z]++;
+      updateTrainingScoreboardUI();
+      if (MULTIPLAYER && TRAINING_COOP) {
+        try {
+          socket.emit("trainingHit", { zone: z, points: pts });
+        } catch (_) {}
+      }
+    }
+
+    function applyRemoteTrainingHit(data) {
+      if (!isTrainingMap(CURRENT_MAP) || !MULTIPLAYER || !TRAINING_COOP || !data) return;
+      if (data.id != null && String(data.id) === String(socket.id)) return;
+      const z = data.zone === "head" || data.zone === "leg" ? data.zone : "body";
+      const pts =
+        typeof data.points === "number" ? data.points : TRAINING_POINTS[z] || TRAINING_POINTS.body;
+      const t = trainingStats.team;
+      t.points += pts;
+      t.hits++;
+      t[z]++;
+      updateTrainingScoreboardUI();
+    }
+
+    function makeTrainingDummy(idx, lane) {
+      const label = `${tr("trainingDummyName", "Target")} ${idx + 1}`;
+      const avatar = createRemotePlayer(label);
+      avatar.group.rotation.y = Math.PI;
+      avatar.group.position.set((lane.xMin + lane.xMax) * 0.5, 0, lane.z);
+      if (avatar.nameSprite) avatar.nameSprite.visible = false;
+      scene.add(avatar.group);
+      return {
+        trainingDummy: true,
+        alive: true,
+        hp: 9999,
+        maxHp: 9999,
+        group: avatar.group,
+        lane,
+        patrolDir: 1,
+        patrolSpeed: lane.speed,
+        walkPhase: Math.random() * Math.PI * 2,
+      };
+    }
+
+    function rebuildTrainingDummies() {
+      for (const e of state.enemies) {
+        if (e.group) scene.remove(e.group);
+      }
+      state.enemies.length = 0;
+      resetTrainingSession();
+      TRAINING_LANES.forEach((lane, i) => {
+        state.enemies.push(makeTrainingDummy(i, lane));
+      });
+    }
+
+    function updateTrainingDummies(dt) {
+      if (!isTrainingMap(CURRENT_MAP) || !gameWorldReady) return;
+      for (const enemy of state.enemies) {
+        if (!enemy.trainingDummy || !enemy.alive) continue;
+        const lane = enemy.lane;
+        let x = enemy.group.position.x + enemy.patrolDir * enemy.patrolSpeed * dt;
+        if (x >= lane.xMax) {
+          x = lane.xMax;
+          enemy.patrolDir = -1;
+        } else if (x <= lane.xMin) {
+          x = lane.xMin;
+          enemy.patrolDir = 1;
+        }
+        enemy.group.position.x = x;
+        enemy.walkPhase += dt * (2.4 + enemy.patrolSpeed * 0.35);
+        enemy.group.position.y = Math.sin(enemy.walkPhase) * 0.04;
+        enemy.group.rotation.y = Math.PI;
+      }
+    }
+
+    function buildMapTraining() {
+      clearPvpMapLights();
+      const H = 4.5;
+      const thick = 1.0;
+      const trim = 0x70798a;
+      const half = 28;
+      addWallBox(half * 2, H, thick, 0, H / 2, -half);
+      addWallBox(half * 2, H, thick, 0, H / 2, half);
+      addWallBox(thick, H, half * 2, -half, H / 2, 0);
+      addWallBox(thick, H, half * 2, half, H / 2, 0);
+      addWallBox(8, 2.2, thick, -12, 1.1, -10, trim);
+      addWallBox(8, 2.2, thick, 12, 1.1, -10, trim);
+      addWallBox(8, 2.2, thick, -4, 1.1, -20, trim);
+      addWallBox(8, 2.2, thick, 8, 1.1, -20, trim);
+      const lightPos = [
+        [-14, -12], [0, -12], [14, -12], [-8, -18], [8, -18], [0, -8],
+      ];
+      for (const [lx, lz] of lightPos) {
+        const L = createPhysicalPointLight(0xfff6ee, 480, 140, 2.2);
+        L.position.set(lx, H + 1.1, lz);
+        L.castShadow = false;
+        scene.add(L);
+        pvpMapLights.push(L);
+      }
+      const ambFill = new THREE.AmbientLight(0xd4e2f5, 2.1);
+      scene.add(ambFill);
+      pvpMapLights.push(ambFill);
+      const hemiFill = new THREE.HemisphereLight(0xeef6ff, 0x5c5348, 4.2);
+      scene.add(hemiFill);
+      pvpMapLights.push(hemiFill);
+      const sunFill = new THREE.DirectionalLight(0xfff6ea, 9.5);
+      sunFill.position.set(18, 42, 14);
+      sunFill.castShadow = false;
+      scene.add(sunFill);
+      pvpMapLights.push(sunFill);
+      ceiling.visible = false;
+    }
+
+    function lobbyMapFromPending() {
+      if (pendingLobbyMode === "crossfire") return PENDING_PVP_MAP;
+      if (pendingLobbyMode === "training-coop") return "training";
+      return "arena";
+    }
+
     const MAP_BUILDERS = {
       arena: buildMapArena,
       crossfire: buildMapCrossfire,
       crossfire_grid: buildMapCrossfireGrid,
+      training: buildMapTraining,
     };
 
     const ZOMBIE_COUNT = 32;
@@ -6726,11 +7013,13 @@
       const mapLabel =
         CURRENT_MAP === "arena"
           ? (lang === "zh" ? "僵尸竞技场" : "zombie arena")
-          : CURRENT_MAP === "crossfire_grid"
-            ? (lang === "zh" ? "单挑 PVP - 新地图" : "crossfire PVP - bright duel map")
-            : isPvpCrossfireMap(CURRENT_MAP)
-              ? (lang === "zh" ? "单挑 PVP - 经典地图" : "crossfire PVP - classic")
-              : CURRENT_MAP;
+          : isTrainingMap(CURRENT_MAP)
+            ? tr("mapTraining", lang === "zh" ? "训练营" : "training camp")
+            : CURRENT_MAP === "crossfire_grid"
+              ? (lang === "zh" ? "单挑 PVP - 新地图" : "crossfire PVP - bright duel map")
+              : isPvpCrossfireMap(CURRENT_MAP)
+                ? (lang === "zh" ? "单挑 PVP - 经典地图" : "crossfire PVP - classic")
+                : CURRENT_MAP;
       hud.innerHTML = `
         ${roomLine}
         ${tr("hudGameTitleLine", "Zone No Light")}<br>
@@ -6753,7 +7042,7 @@
             : `Bullets: ${w.ammo} / ${w.magSize}${state.reloading ? "（Refilling...）" : ""}<br>`
         }
         Health: ${Math.max(0, Math.floor(player.health))} / ${player.maxHealth}<br>
-        Score: ${state.score}
+        ${isTrainingMap(CURRENT_MAP) ? "" : `Score: ${state.score}`}
       `;
       refreshFpsHelpForMap();
     }
@@ -6764,7 +7053,7 @@
       const elZ = document.getElementById("fpsHintZoom");
       if (!elL || !elZ) return;
       const inGame = gameWorldReady && menuEl && menuEl.style.display === "none";
-      if (CURRENT_MAP === "crossfire_grid" && inGame) {
+      if (isBrightIndoorMap(CURRENT_MAP) && inGame) {
         const zh = gameSettings.language === "zh";
         elL.textContent = zh ? "室外单挑亮图：手电已关（无需照明）" : "Bright duel map — flashlight stays off";
         elZ.style.display = "none";
@@ -7908,7 +8197,7 @@
         return;
       }
       /** Bright open-roof duel map: keep flashlight/body fill off (matches HUD hint). */
-      if (CURRENT_MAP === "crossfire_grid") {
+      if (isBrightIndoorMap(CURRENT_MAP)) {
         setLocalPlayerLights(false);
         return;
       }
@@ -8833,7 +9122,7 @@
         !chatOpen &&
         !settingsModalOpen
       ) {
-        if (CURRENT_MAP === "crossfire_grid") {
+        if (isBrightIndoorMap(CURRENT_MAP)) {
           e.preventDefault();
           return;
         }
@@ -8851,7 +9140,7 @@
         !chatOpen &&
         !settingsModalOpen
       ) {
-        if (CURRENT_MAP === "crossfire_grid") {
+        if (isBrightIndoorMap(CURRENT_MAP)) {
           e.preventDefault();
           return;
         }
@@ -8988,6 +9277,11 @@
         player.position.set(0, 1.65, CURRENT_MAP === "crossfire_grid" ? 22 : 34);
         floor.visible = true;
         ceiling.visible = CURRENT_MAP !== "crossfire_grid";
+      } else if (isTrainingMap(CURRENT_MAP)) {
+        player.position.set(0, 1.65, 22);
+        player.yaw = Math.PI;
+        floor.visible = true;
+        ceiling.visible = false;
       } else {
         floor.visible = false;
         ceiling.visible = false;
@@ -9077,6 +9371,11 @@
         scene.remove(enemy.group);
       }
       state.enemies.length = 0;
+
+      if (isTrainingMap(CURRENT_MAP)) {
+        rebuildTrainingDummies();
+        return;
+      }
 
       _spawnRng = MULTIPLAYER && ARENA_COOP && activeRoomId
         ? mulberry32(hashRoomSeed(activeRoomId))
@@ -9187,6 +9486,7 @@
 
       state.lastShot = now;
       w.ammo -= 1;
+      if (isTrainingMap(CURRENT_MAP)) registerTrainingShot();
 
       let spreadMultiplier = 1;
       let recoilMultiplier = 1;
@@ -9263,7 +9563,12 @@
         for (const enemy of state.enemies) {
           if (!enemy.alive) continue;
           enemy.group.updateMatrixWorld(true);
-          const hit = enemyHitAlongRay(ray, enemy);
+          let hit = null;
+          if (enemy.trainingDummy) {
+            hit = humanoidHitAlongRay(ray, enemy.group);
+          } else {
+            hit = enemyHitAlongRay(ray, enemy);
+          }
           if (hit && hit.t < bestEnemyHitT) {
             bestEnemy = enemy;
             bestEnemyHitT = hit.t;
@@ -9274,7 +9579,7 @@
         let bestRpId = null;
         let bestRpHitT = Infinity;
         let bestRpZone = "body";
-        if (MULTIPLAYER && !ARENA_COOP) {
+        if (MULTIPLAYER && !ARENA_COOP && !isTrainingMap(CURRENT_MAP)) {
           for (const [rpId, rp] of remotePlayers) {
             if (!rp.group.visible) continue;
             rp.group.updateMatrixWorld(true);
@@ -9300,7 +9605,13 @@
           createBlood(bp);
           createBulletTrail(muzzleStart, bp, w.color);
           emitShootNetwork(muzzleStart, bp, w.color, "blood");
-          triggerHitFeedback(false);
+          triggerHitFeedback(false, bestEnemyZone === "head");
+
+          if (bestEnemy.trainingDummy) {
+            registerTrainingHit(bestEnemyZone);
+            updateHud();
+            continue;
+          }
 
           const coopArena = MULTIPLAYER && ARENA_COOP && CURRENT_MAP === "arena";
           if (coopArena && !ZOMBIE_AUTHORITY) {
@@ -10495,7 +10806,7 @@
             rp.leftLeg.position.y = dampScalar(rp.leftLeg.position.y, moving ? 0.62 + Math.max(0, wSin) * 0.06 : 0.62, dt, 12);
             rp.rightLeg.position.y = dampScalar(rp.rightLeg.position.y, moving ? 0.62 + Math.max(0, -wSin) * 0.06 : 0.62, dt, 12);
           }
-          const duelPvp = isPvpCrossfireMap(CURRENT_MAP);
+          const duelPvp = isBrightIndoorMap(CURRENT_MAP);
           const adsBlend = dampScalar(rp.adsBlend ?? 0, rp.ads ? 1 : 0, dt, 13);
           rp.adsBlend = adsBlend;
           const pitchBlend = (rp.remotePitch || 0) * (0.38 + 0.62 * adsBlend);
@@ -10624,6 +10935,10 @@
           camera.position.x += Math.sin(state.walkPhase * 2.08) * 0.027 * fx;
           camera.position.z += Math.cos(state.walkPhase * 1.65) * 0.014 * fx;
         }
+      }
+
+      if (isTrainingMap(CURRENT_MAP) && gameWorldReady) {
+        updateTrainingDummies(dt);
       }
 
       if (CURRENT_MAP === "arena") {
@@ -10771,7 +11086,7 @@
       await preloadWallTextureForBoot();
     }
 
-    async function bootGame(mapName, multiplayer, arenaCoop) {
+    async function bootGame(mapName, multiplayer, arenaCoop, trainingCoop) {
       gameWorldReady = false;
       gameBootOverlay.style.display = "flex";
       gameBootOverlay.setAttribute("aria-busy", "true");
@@ -10787,12 +11102,14 @@
       hitDirContainer.innerHTML = "";
       hitIndicators.length = 0;
       CURRENT_MAP = mapName;
-      if (CURRENT_MAP === "crossfire_grid") playerLightsPreference = false;
+      if (isBrightIndoorMap(CURRENT_MAP)) playerLightsPreference = false;
       if (multiplayer !== undefined) {
         MULTIPLAYER = multiplayer;
         if (!multiplayer) ARENA_COOP = false;
       }
       if (arenaCoop !== undefined) ARENA_COOP = !!arenaCoop;
+      if (trainingCoop !== undefined) TRAINING_COOP = !!trainingCoop;
+      else if (!isTrainingMap(mapName)) TRAINING_COOP = false;
       if (MULTIPLAYER && ARENA_COOP) {
         ZOMBIE_HOST_KNOWN = false;
         ZOMBIE_AUTHORITY = false;
@@ -10817,6 +11134,10 @@
         player.position.set(0, 1.65, CURRENT_MAP === "crossfire_grid" ? 22 : 34);
         floor.visible = true;
         ceiling.visible = CURRENT_MAP !== "crossfire_grid";
+      } else if (isTrainingMap(CURRENT_MAP)) {
+        player.position.set(0, 1.65, 22);
+        floor.visible = true;
+        ceiling.visible = false;
       } else {
         floor.visible = false;
         ceiling.visible = false;
@@ -10837,7 +11158,9 @@
       }
       state.enemies.length = 0;
 
-      if (CURRENT_MAP === "arena") {
+      if (isTrainingMap(CURRENT_MAP)) {
+        rebuildTrainingDummies();
+      } else if (CURRENT_MAP === "arena") {
         rebuildEnemyRoster();
         for (const e of state.enemies) {
           e.group.visible = false;
@@ -10846,7 +11169,11 @@
 
       player.velocityY = 0;
       player.onGround = true;
-      player.yaw = 0;
+      if (isTrainingMap(CURRENT_MAP)) {
+        player.yaw = Math.PI;
+      } else {
+        player.yaw = 0;
+      }
       player.pitch = 0;
       camera.position.copy(player.position);
 
@@ -10897,14 +11224,20 @@
 
       weaponRoot.visible = true;
       gameWorldReady = true;
+      setTrainingScoreboardVisible(isTrainingMap(CURRENT_MAP));
+      if (isTrainingMap(CURRENT_MAP)) updateTrainingScoreboardUI();
       player.spawnProtectUntil = performance.now() + 3000;
       refreshLocalPlayerLightsForCurrentState();
       gameBootOverlay.style.display = "none";
       gameBootOverlay.setAttribute("aria-busy", "false");
     }
 
-    function startGame(mapName, multiplayer, arenaCoop) {
-      void bootGame(mapName, multiplayer, arenaCoop);
+    function startGame(mapName, multiplayer, arenaCoop, trainingCoop) {
+      void bootGame(mapName, multiplayer, arenaCoop, trainingCoop);
+    }
+
+    function restartCurrentMap() {
+      startGame(CURRENT_MAP, MULTIPLAYER, ARENA_COOP, TRAINING_COOP);
     }
 
     function goToMenu() {
@@ -10915,7 +11248,9 @@
       ROOM_CODE = "";
       activeRoomId = "";
       ARENA_COOP = false;
+      TRAINING_COOP = false;
       ZOMBIE_AUTHORITY = false;
+      setTrainingScoreboardVisible(false);
       ZOMBIE_HOST_KNOWN = true;
       _zombieSyncAcc = 0;
       gameWorldReady = false;
@@ -10948,7 +11283,7 @@
     }
 
     function showMenuPanel(id) {
-      for (const p of [menuMain, menuArenaMode, menuPvpMaps, menuLobby, menuJoinCode]) p.style.display = "none";
+      for (const p of [menuMain, menuArenaMode, menuTrainingMode, menuPvpMaps, menuLobby, menuJoinCode]) p.style.display = "none";
       clearLobbyErr();
       document.getElementById(id).style.display = "flex";
     }
@@ -10983,6 +11318,13 @@
     btnArenaCoop.addEventListener("click", () => showLobby("arena-coop", tr("lobbyArenaCoop", "ARENA CO-OP")));
     btnArenaBack.addEventListener("click", () => showMenuPanel("menuMain"));
 
+    btnTraining.addEventListener("click", () => showMenuPanel("menuTrainingMode"));
+    btnTrainingSingle.addEventListener("click", () => startGame("training", false, false, false));
+    btnTrainingCoop.addEventListener("click", () =>
+      showLobby("training-coop", tr("lobbyTrainingCoop", "TRAINING CAMP — CO-OP"))
+    );
+    btnTrainingBack.addEventListener("click", () => showMenuPanel("menuMain"));
+
     btnCrossfire.addEventListener("click", () => showMenuPanel("menuPvpMaps"));
 
     btnPvpMapClassic.addEventListener("click", () => {
@@ -11011,8 +11353,7 @@
           showLobbyErr(norm.error);
           return;
         }
-        const map = pendingLobbyMode === "crossfire" ? PENDING_PVP_MAP : "arena";
-        beginMultiplayerGame(map, { roomKey: norm.roomKey, roomCode: norm.roomCode });
+        beginMultiplayerGame(lobbyMapFromPending(), { roomKey: norm.roomKey, roomCode: norm.roomCode });
       });
     });
 
@@ -11032,8 +11373,7 @@
           showLobbyErr(norm.error);
           return;
         }
-        const map = pendingLobbyMode === "crossfire" ? PENDING_PVP_MAP : "arena";
-        beginMultiplayerGame(map, { roomKey: norm.roomKey, roomCode: norm.roomCode });
+        beginMultiplayerGame(lobbyMapFromPending(), { roomKey: norm.roomKey, roomCode: norm.roomCode });
       });
     });
 
@@ -11064,8 +11404,7 @@
           codeError.textContent = norm.error;
           return;
         }
-        const map = pendingLobbyMode === "crossfire" ? PENDING_PVP_MAP : "arena";
-        beginMultiplayerGame(map, { roomKey: norm.roomKey, roomCode: norm.roomCode || code });
+        beginMultiplayerGame(lobbyMapFromPending(), { roomKey: norm.roomKey, roomCode: norm.roomCode || code });
       });
     });
 
@@ -11076,6 +11415,7 @@
     btnCodeBack.addEventListener("click", () => showMenuPanel("menuLobby"));
     btnLobbyBack.addEventListener("click", () => {
       if (pendingLobbyMode === "crossfire") showMenuPanel("menuPvpMaps");
+      else if (pendingLobbyMode === "training-coop") showMenuPanel("menuTrainingMode");
       else showMenuPanel("menuArenaMode");
     });
 
@@ -11084,14 +11424,15 @@
       nameModal.style.display = "none";
       const map = nameModal._pendingMap || "crossfire";
       const coopArena = map === "arena" && pendingLobbyMode === "arena-coop";
-      startGame(map, true, coopArena);
+      const coopTraining = map === "training" && pendingLobbyMode === "training-coop";
+      startGame(map, true, coopArena, coopTraining);
     });
 
     nameInput.addEventListener("keydown", (e) => {
       if (e.key === "Enter") btnNameOk.click();
     });
 
-    btnDeathRestart.addEventListener("click", () => startGame(CURRENT_MAP));
+    btnDeathRestart.addEventListener("click", () => restartCurrentMap());
     btnDeathSettings.addEventListener("click", () => openSettingsModal());
     btnDeathQuit.addEventListener("click", goToMenu);
     btnResume.addEventListener("click", () => {
@@ -11099,7 +11440,7 @@
       renderer.domElement.requestPointerLock();
     });
     btnPauseSettings.addEventListener("click", () => openSettingsModal());
-    btnPauseRestart.addEventListener("click", () => startGame(CURRENT_MAP));
+    btnPauseRestart.addEventListener("click", () => restartCurrentMap());
     btnPauseQuit.addEventListener("click", goToMenu);
     btnMenuSettings.addEventListener("click", () => openSettingsModal());
 
