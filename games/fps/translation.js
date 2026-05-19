@@ -94,8 +94,8 @@ export function mergeKeys(base, extra) {
 export const GAME_I18N = {
   "en": {
     "gameTitle": "Zone No Light",
-    "creditsGame": "Game by Tintly555",
-    "creditsMusic": "Music by JimmyQrg",
+    "creditsGame": "Game and Music by Tintly555 and JimmyQrg",
+    "creditsMusic": "",
     "btnZombieArena": "Zombie Arena",
     "btnCrossfirePickMap": "Crossfire (PVP — select map)",
     "btnTrainingCamp": "Training Camp",
@@ -171,8 +171,8 @@ export const GAME_I18N = {
   },
   "zh": {
     "gameTitle": "无光之境",
-    "creditsGame": "游戏制作：Tintly555",
-    "creditsMusic": "音乐制作：JimmyQrg",
+    "creditsGame": "游戏和音乐由Tintly555和J有点死了制作",
+    "creditsMusic": "",
     "btnZombieArena": "丧尸竞技场",
     "btnCrossfirePickMap": "交叉火力（对战 — 选地图）",
     "btnTrainingCamp": "训练营",
@@ -248,8 +248,8 @@ export const GAME_I18N = {
   },
   "zh-Hant": {
     "gameTitle": "無光之境",
-    "creditsGame": "Game by Tintly555",
-    "creditsMusic": "Music by JimmyQrg",
+    "creditsGame": "Game and Music by Tintly555 and JimmyQrg",
+    "creditsMusic": "",
     "btnZombieArena": "殭屍競技場",
     "btnCrossfirePickMap": "Crossfire (PVP — select map)",
     "zombieArenaTitle": "ZOMBIE ARENA",
@@ -312,7 +312,7 @@ export const GAME_I18N = {
   "es": {
     "gameTitle": "Zone No Light",
     "creditsGame": "Juego de Tintly555",
-    "creditsMusic": "Música de JimmyQrg",
+    "creditsMusic": "",
     "btnZombieArena": "Arena zombie",
     "btnCrossfirePickMap": "Crossfire (JcJ — elegir mapa)",
     "zombieArenaTitle": "ARENA ZOMBIE",
@@ -362,7 +362,7 @@ export const GAME_I18N = {
   "hi": {
     "gameTitle": "Zone No Light",
     "creditsGame": "गेम: Tintly555",
-    "creditsMusic": "संगीत: JimmyQrg",
+    "creditsMusic": "",
     "btnZombieArena": "ज़ॉम्बी अखाड़ा",
     "btnCrossfirePickMap": "क्रॉसफ़ायर (PvP — मैप चुनें)",
     "zombieArenaTitle": "ज़ॉम्बी अखाड़ा",
@@ -412,7 +412,7 @@ export const GAME_I18N = {
   "ar": {
     "gameTitle": "Zone No Light",
     "creditsGame": "اللعبة: Tintly555",
-    "creditsMusic": "الموسيقى: JimmyQrg",
+    "creditsMusic": "",
     "btnZombieArena": "ساحة الزومبي",
     "btnCrossfirePickMap": "النيران المتقاطعة (لاعب ضد لاعب — اختر الخريطة)",
     "zombieArenaTitle": "ساحة الزومبي",
@@ -462,7 +462,7 @@ export const GAME_I18N = {
   "fr": {
     "gameTitle": "Zone No Light",
     "creditsGame": "Jeu par Tintly555",
-    "creditsMusic": "Musique par JimmyQrg",
+    "creditsMusic": "",
     "btnZombieArena": "Arène zombie",
     "btnCrossfirePickMap": "Crossfire (PvP — choix de carte)",
     "zombieArenaTitle": "ARÈNE ZOMBIE",
@@ -512,7 +512,7 @@ export const GAME_I18N = {
   "pt": {
     "gameTitle": "Zone No Light",
     "creditsGame": "Jogo por Tintly555",
-    "creditsMusic": "Música por JimmyQrg",
+    "creditsMusic": "",
     "btnZombieArena": "Arena zumbi",
     "btnCrossfirePickMap": "Crossfire (PvP — escolher mapa)",
     "zombieArenaTitle": "ARENA ZUMBI",
@@ -562,7 +562,7 @@ export const GAME_I18N = {
   "ru": {
     "gameTitle": "Zone No Light",
     "creditsGame": "Игра: Tintly555",
-    "creditsMusic": "Музыка: JimmyQrg",
+    "creditsMusic": "",
     "btnZombieArena": "Зомби-арена",
     "btnCrossfirePickMap": "Перекрёстный огонь (PvP — выбор карты)",
     "zombieArenaTitle": "ЗОМБИ-АРЕНА",
@@ -612,7 +612,7 @@ export const GAME_I18N = {
   "ja": {
     "gameTitle": "Zone No Light",
     "creditsGame": "ゲーム制作：Tintly555",
-    "creditsMusic": "音楽：JimmyQrg",
+    "creditsMusic": "",
     "btnZombieArena": "ゾンビアリーナ",
     "btnCrossfirePickMap": "クロスファイア（PvP・マップ選択）",
     "zombieArenaTitle": "ゾンビアリーナ",
@@ -662,7 +662,7 @@ export const GAME_I18N = {
   "de": {
     "gameTitle": "Zone No Light",
     "creditsGame": "Spiel von Tintly555",
-    "creditsMusic": "Musik von JimmyQrg",
+    "creditsMusic": "",
     "btnZombieArena": "Zombie-Arena",
     "btnCrossfirePickMap": "Crossfire (PvP — Karte wählen)",
     "zombieArenaTitle": "ZOMBIE-ARENA",
@@ -712,7 +712,7 @@ export const GAME_I18N = {
   "ko": {
     "gameTitle": "Zone No Light",
     "creditsGame": "게임: Tintly555",
-    "creditsMusic": "음악: JimmyQrg",
+    "creditsMusic": "",
     "btnZombieArena": "좀비 아레나",
     "btnCrossfirePickMap": "교차 사격 (PvP — 맵 선택)",
     "zombieArenaTitle": "좀비 아레나",
@@ -762,7 +762,7 @@ export const GAME_I18N = {
   "it": {
     "gameTitle": "Zone No Light",
     "creditsGame": "Gioco di Tintly555",
-    "creditsMusic": "Musica di JimmyQrg",
+    "creditsMusic": "",
     "btnZombieArena": "Arena zombie",
     "btnCrossfirePickMap": "Crossfire (PvP — scegli mappa)",
     "zombieArenaTitle": "ARENA ZOMBIE",
@@ -812,7 +812,7 @@ export const GAME_I18N = {
   "nl": {
     "gameTitle": "Zone No Light",
     "creditsGame": "Game door Tintly555",
-    "creditsMusic": "Muziek door JimmyQrg",
+    "creditsMusic": "",
     "btnZombieArena": "Zombie-arena",
     "btnCrossfirePickMap": "Crossfire (PvP — kies map)",
     "zombieArenaTitle": "ZOMBIE-ARENA",
@@ -862,7 +862,7 @@ export const GAME_I18N = {
   "pl": {
     "gameTitle": "Zone No Light",
     "creditsGame": "Gra: Tintly555",
-    "creditsMusic": "Muzyka: JimmyQrg",
+    "creditsMusic": "",
     "btnZombieArena": "Arena zombie",
     "btnCrossfirePickMap": "Crossfire (PvP — wybór mapy)",
     "zombieArenaTitle": "ARENA ZOMBIE",
@@ -912,7 +912,7 @@ export const GAME_I18N = {
   "tr": {
     "gameTitle": "Zone No Light",
     "creditsGame": "Oyun: Tintly555",
-    "creditsMusic": "Müzik: JimmyQrg",
+    "creditsMusic": "",
     "btnZombieArena": "Zombi arena",
     "btnCrossfirePickMap": "Çapraz ateş (PvP — harita seç)",
     "zombieArenaTitle": "ZOMBİ ARENA",
@@ -962,7 +962,7 @@ export const GAME_I18N = {
   "vi": {
     "gameTitle": "Zone No Light",
     "creditsGame": "Game: Tintly555",
-    "creditsMusic": "Nhạc: JimmyQrg",
+    "creditsMusic": "",
     "btnZombieArena": "Đấu trường zombie",
     "btnCrossfirePickMap": "Crossfire (PvP — chọn map)",
     "zombieArenaTitle": "ĐẤU TRƯỜNG ZOMBIE",
@@ -1012,7 +1012,7 @@ export const GAME_I18N = {
   "id": {
     "gameTitle": "Zone No Light",
     "creditsGame": "Game oleh Tintly555",
-    "creditsMusic": "Musik oleh JimmyQrg",
+    "creditsMusic": "",
     "btnZombieArena": "Arena zombie",
     "btnCrossfirePickMap": "Crossfire (PvP — pilih peta)",
     "zombieArenaTitle": "ARENA ZOMBI",

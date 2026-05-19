@@ -987,8 +987,7 @@
     <div class="menu-panels-wrap">
     <div id="menuMain" style="display:flex;flex-direction:column;align-items:center;gap:10px;">
       <h1 id="menuGameTitle" data-i18n="gameTitle">Zone No Light</h1>
-      <p id="menuCreditsGame" data-i18n="creditsGame">Game by Tintly555</p>
-      <p id="menuCreditsMusic" data-i18n="creditsMusic">Music by JimmyQrg</p>
+      <p id="menuCreditsGame" data-i18n="creditsGame">Game and Music by Tintly555 and J有点死了</p>
       <button type="button" id="btnArena" data-i18n="btnZombieArena">Zombie Arena</button>
       <button type="button" id="btnTraining" data-i18n="btnTrainingCamp">Training Camp</button>
       <button type="button" id="btnCrossfire" data-i18n="btnCrossfirePickMap">Crossfire (PVP — select map)</button>
@@ -4931,7 +4930,7 @@
     }
 
     /** First frames after load / tab focus: keep syncing until layout stabilizes (mitigates black GL canvas until manual resize). */
-    let _rendererSyncWarmupFrames = 0;
+    let _rendererSyncWarmupFrames = 240;
 
     applyGraphicsQuality();
     requestAnimationFrame(() => {
