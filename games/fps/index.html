@@ -512,6 +512,15 @@
       pointer-events: none;
     }
 
+    /* In-game: menu wall canvas must not cover the main WebGL view (was black until F12/resize). */
+    body.game-active #menuWallBackdrop {
+      display: none !important;
+      visibility: hidden !important;
+    }
+    body.game-active #app {
+      z-index: 99;
+    }
+
     .menu {
       position: fixed;
       inset: 0;
@@ -3587,6 +3596,8 @@
       "M133.333 13.0913C184.371 14.8246 229.131 41.3388 256 81C226.143 45.1073 179.905 22.0718 128 22.0718C76.096 22.0718 29.8567 45.107 0 81C26.8684 41.339 71.6293 14.8249 122.666 13.0913L128 0L133.333 13.0913Z";
     let deathAnimTime = 0;
     const DEATH_ANIM_DURATION = 2.0;
+    const lastPlayerHitWorld = new THREE.Vector3();
+    let localDeathGhostGroup = null;
     let deathCamYaw = 0;
     let deathCamPitch = 0;
     let deathBaseFov = 75;
@@ -3925,7 +3936,16 @@
     socket.on("playerDown", (data) => {
       if (!data || data.id == null) return;
       const rp = remotePlayers.get(data.id);
-      if (rp) rp.group.visible = false;
+      if (!rp || !rp.group) return;
+      const hx = rp.visX ?? rp.x ?? 0;
+      const hz = rp.visZ ?? rp.z ?? 0;
+      const hitPt = new THREE.Vector3(
+        data.x != null ? +data.x : hx,
+        data.y != null ? +data.y : 1.25,
+        data.z != null ? +data.z : hz
+      );
+      spawnHumanoidDissolve(rp.group, hitPt);
+      rp.group.visible = false;
     });
 
     socket.on("enemyLeft", (data) => {
@@ -4006,6 +4026,9 @@
       player.health = Math.max(0, player.health - (data.damage || 0));
       player.regenTimer = 0;
       state.flashTimer = 0.14;
+      if (data.x != null && data.z != null) {
+        lastPlayerHitWorld.set(+data.x, player.position.y + 1.05, +data.z);
+      }
       addHitIndicator(data.x || 0, data.z || 0);
       triggerCamShake(0.085);
       playReceivedDamageSound(data.hitKind === "melee" ? "melee" : "bullet");
@@ -5204,6 +5227,17 @@
       }
     }
 
+    function setMenuWallBackdropVisible(visible) {
+      if (!menuWallBackdropCanvas) return;
+      menuWallBackdropCanvas.style.display = visible ? "block" : "none";
+      menuWallBackdropCanvas.style.visibility = visible ? "visible" : "hidden";
+    }
+
+    function setGameActiveUi(active) {
+      document.body.classList.toggle("game-active", !!active);
+      setMenuWallBackdropVisible(!active);
+    }
+
     function initMenuWallBackdrop() {
       if (!menuWallBackdropCanvas || menuBackdropRenderer) return;
       menuBackdropScene = new THREE.Scene();
@@ -5486,7 +5520,8 @@
     const sparkGroup = new THREE.Group();
     const tracerGroup = new THREE.Group();
     const bloodGroup = new THREE.Group();
-    scene.add(decalGroup, sparkGroup, tracerGroup, bloodGroup);
+    const dissolveGroup = new THREE.Group();
+    scene.add(decalGroup, sparkGroup, tracerGroup, bloodGroup, dissolveGroup);
 
     const MAX_BLOOD_MESHES = 36;
     const MAX_SPARK_MESHES = 36;
@@ -6616,6 +6651,7 @@
         patrolDir: 1,
         patrolSpeed: lane.speed,
         walkPhase: Math.random() * Math.PI * 2,
+        dissolveTimer: 0,
       };
     }
 
@@ -6634,6 +6670,10 @@
       if (!isTrainingMap(CURRENT_MAP) || !gameWorldReady) return;
       for (const enemy of state.enemies) {
         if (!enemy.trainingDummy || !enemy.alive) continue;
+        if (enemy.dissolveTimer > 0) {
+          enemy.dissolveTimer = Math.max(0, enemy.dissolveTimer - dt);
+          continue;
+        }
         const lane = enemy.lane;
         let x = enemy.group.position.x + enemy.patrolDir * enemy.patrolSpeed * dt;
         if (x >= lane.xMax) {
@@ -8027,6 +8067,157 @@
         drop.userData.life = 0.26;
         bloodGroup.add(drop);
       }
+    }
+
+    const DISSOLVE_DURATION = 0.78;
+    const MAX_DISSOLVE_MESHES = 96;
+    const DISSOLVE_BOX_GEO = new THREE.BoxGeometry(0.055, 0.055, 0.055);
+    const dissolveBursts = [];
+    const _dissolveTmp = new THREE.Vector3();
+    const _dissolveDir = new THREE.Vector3();
+
+    function spawnHumanoidDissolve(rootGroup, hitWorld, opts = {}) {
+      if (!rootGroup) return;
+      trimEffectGroup(
+        dissolveGroup,
+        MAX_DISSOLVE_MESHES,
+        (o) => {
+          o.material.dispose();
+        },
+        10
+      );
+      const hit = hitWorld && hitWorld.isVector3
+        ? hitWorld
+        : new THREE.Vector3(
+            hitWorld?.x ?? 0,
+            hitWorld?.y ?? 1.2,
+            hitWorld?.z ?? 0
+          );
+      rootGroup.updateMatrixWorld(true);
+      const particles = [];
+      let spawned = 0;
+      rootGroup.traverse((o) => {
+        if (!o.isMesh || spawned >= 52) return;
+        o.getWorldPosition(_dissolveTmp);
+        let col = 0x9aa8bc;
+        if (o.material) {
+          if (Array.isArray(o.material) && o.material[0] && o.material[0].color) {
+            col = o.material[0].color.getHex();
+          } else if (o.material.color) {
+            col = o.material.color.getHex();
+          }
+        }
+        const shards = 2;
+        for (let si = 0; si < shards && spawned < 52; si++, spawned++) {
+          const mat = new THREE.MeshBasicMaterial({
+            color: col,
+            transparent: true,
+            opacity: 0.94,
+            depthWrite: false,
+          });
+          const shard = new THREE.Mesh(DISSOLVE_BOX_GEO, mat);
+          shard.position.copy(_dissolveTmp);
+          shard.position.x += (Math.random() - 0.5) * 0.1;
+          shard.position.y += (Math.random() - 0.5) * 0.12;
+          shard.position.z += (Math.random() - 0.5) * 0.1;
+          _dissolveDir.subVectors(shard.position, hit);
+          if (_dissolveDir.lengthSq() < 0.04) {
+            _dissolveDir.set(
+              (Math.random() - 0.5) * 2,
+              Math.random() * 0.85 + 0.25,
+              (Math.random() - 0.5) * 2
+            );
+          }
+          _dissolveDir.normalize();
+          const speed = 1.4 + Math.random() * 2.6;
+          dissolveGroup.add(shard);
+          particles.push({
+            mesh: shard,
+            vel: new THREE.Vector3(
+              _dissolveDir.x * speed,
+              _dissolveDir.y * speed + 0.35,
+              _dissolveDir.z * speed
+            ),
+            spin: (Math.random() - 0.5) * 14,
+            life: DISSOLVE_DURATION * (0.65 + Math.random() * 0.45),
+            maxLife: DISSOLVE_DURATION,
+          });
+        }
+      });
+      if (particles.length) {
+        dissolveBursts.push({ particles, onComplete: opts.onComplete || null });
+      } else if (opts.onComplete) {
+        opts.onComplete();
+      }
+    }
+
+    function updateDissolveEffects(dt) {
+      for (let bi = dissolveBursts.length - 1; bi >= 0; bi--) {
+        const burst = dissolveBursts[bi];
+        let alive = 0;
+        for (const p of burst.particles) {
+          p.life -= dt;
+          if (p.life <= 0) continue;
+          alive++;
+          p.mesh.position.addScaledVector(p.vel, dt);
+          p.vel.y -= 5.5 * dt;
+          p.mesh.rotation.x += p.spin * dt;
+          p.mesh.rotation.y += p.spin * 0.7 * dt;
+          const fade = Math.max(0, p.life / p.maxLife);
+          p.mesh.scale.setScalar(0.35 + fade * 0.85);
+          p.mesh.material.opacity = fade * 0.95;
+        }
+        if (alive <= 0) {
+          for (const p of burst.particles) {
+            dissolveGroup.remove(p.mesh);
+            p.mesh.material.dispose();
+          }
+          const done = burst.onComplete;
+          dissolveBursts.splice(bi, 1);
+          if (done) done();
+        }
+      }
+    }
+
+    function clearLocalDeathGhost() {
+      if (localDeathGhostGroup) {
+        scene.remove(localDeathGhostGroup);
+        localDeathGhostGroup = null;
+      }
+    }
+
+    function spawnLocalPlayerDeathDissolve(hitWorld) {
+      clearLocalDeathGhost();
+      const av = createRemotePlayer(playerName || "Player");
+      av.group.position.set(player.position.x, 0, player.position.z);
+      av.group.rotation.y = player.yaw + Math.PI;
+      if (av.nameSprite) av.nameSprite.visible = false;
+      av.group.visible = true;
+      scene.add(av.group);
+      localDeathGhostGroup = av.group;
+      const hp =
+        hitWorld && hitWorld.isVector3
+          ? hitWorld
+          : new THREE.Vector3(
+              player.position.x,
+              player.position.y + 1.1,
+              player.position.z
+            );
+      spawnHumanoidDissolve(av.group, hp, {
+        onComplete: clearLocalDeathGhost,
+      });
+    }
+
+    function playTrainingDummyHitDissolve(enemy, hitWorld) {
+      if (!enemy || !enemy.group || enemy.dissolveTimer > 0) return;
+      enemy.dissolveTimer = DISSOLVE_DURATION + 0.12;
+      enemy.group.visible = false;
+      spawnHumanoidDissolve(enemy.group, hitWorld, {
+        onComplete: () => {
+          if (enemy.group) enemy.group.visible = true;
+          enemy.dissolveTimer = 0;
+        },
+      });
     }
 
     function showCombatFeedback(text, color, dur = 0.18) {
@@ -9482,7 +9673,7 @@
       _ehHitWorld.copy(_ehLd).multiplyScalar(bestLocalT).add(_ehLo);
       _ehHitWorld.applyMatrix4(rootGroup.matrixWorld);
       const worldT = _ehHitWorld.distanceTo(raycaster.ray.origin);
-      return { t: worldT, zone };
+      return { t: worldT, zone, point: _ehHitWorld.clone() };
     }
 
     /** Hit volumes are fixed in zombie root space so torso sway does not move hitboxes. */
@@ -9636,6 +9827,7 @@
 
           if (bestEnemy.trainingDummy) {
             registerTrainingHit(bestEnemyZone);
+            playTrainingDummyHitDissolve(bestEnemy, bp);
             updateHud();
             continue;
           }
@@ -9653,6 +9845,7 @@
             if (bestEnemy.hp <= 0 && bestEnemy.alive) {
               bestEnemy.alive = false;
               bestEnemy.respawnTimer = 3.0;
+              spawnHumanoidDissolve(bestEnemy.group, bp);
               bestEnemy.group.visible = false;
               state.score += 1;
               triggerHitFeedback(true);
@@ -9985,6 +10178,7 @@
     function showDeathScreen(killer) {
       killerEnemy = killer || null;
       deathAnimTime = 0;
+      spawnLocalPlayerDeathDissolve(lastPlayerHitWorld);
       crosshairEl.classList.add("hidden");
       if (medKitReticleEl) medKitReticleEl.classList.add("hidden");
       state.mouseDown = false;
@@ -10064,6 +10258,7 @@
     }
 
     function hideDeathScreen() {
+      clearLocalDeathGhost();
       document.body.classList.remove("show-cursor");
       deathOverlay.style.display = "none";
       deathUI.style.display = "none";
@@ -10086,7 +10281,12 @@
       triggerCamShake(0.095);
       playReceivedDamageSound("melee");
       if (attacker && attacker.group) {
+        lastPlayerHitWorld.copy(attacker.group.position);
+        lastPlayerHitWorld.y = player.position.y + 1.1;
         addHitIndicator(attacker.group.position.x, attacker.group.position.z);
+      } else {
+        lastPlayerHitWorld.copy(player.position);
+        lastPlayerHitWorld.y += 1.1;
       }
       updateHud();
       if (player.health <= 0) {
@@ -10796,6 +10996,7 @@
 
     let _lastChatRefresh = 0;
     function updateEffects(dt) {
+      updateDissolveEffects(dt);
       updateBlood(dt);
       updateSparks(dt);
       updateTracers(dt);
@@ -11192,6 +11393,7 @@
       state.camShake = 0;
       ensureAmbientWindLoop();
       menuEl.style.display = "none";
+      setGameActiveUi(true);
       bumpRendererLayoutSync(280);
       stopMenuBackdropLoop();
       pauseMenuBgm();
@@ -11328,6 +11530,8 @@
       ZOMBIE_HOST_KNOWN = true;
       _zombieSyncAcc = 0;
       gameWorldReady = false;
+      setGameActiveUi(false);
+      clearLocalDeathGhost();
       gameBootOverlay.style.display = "none";
       gameBootOverlay.setAttribute("aria-busy", "false");
       menuEl.style.display = "flex";
