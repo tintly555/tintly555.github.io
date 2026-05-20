@@ -1222,13 +1222,13 @@
     </div>
   </div>
   <script>
-/* === gun-sfx v4 (inlined) === */
+/* === gun-sfx v5 GPT optimized (inlined) === */
 const GunSFX = (() => {
   let audioCtx = null;
   let boundDest = null;
   let limiter = null;
 
-  const EPS = 0.00008;
+  const EPS = 0.00006;
 
   function bindAudio(ctx, destNode) {
     audioCtx = ctx;
@@ -1250,18 +1250,18 @@ const GunSFX = (() => {
 
     if (!limiter) {
       limiter = c.createDynamicsCompressor();
-      limiter.threshold.value = -8;
-      limiter.knee.value = 6;
+      limiter.threshold.value = -7;
+      limiter.knee.value = 5;
       limiter.ratio.value = 18;
       limiter.attack.value = 0.001;
-      limiter.release.value = 0.09;
+      limiter.release.value = 0.11;
       limiter.connect(c.destination);
     }
 
     return limiter;
   }
 
-  function curve(amount = 6) {
+  function curve(amount = 4) {
     const c = ctx();
     const shaper = c.createWaveShaper();
     const n = 2048;
@@ -1277,23 +1277,20 @@ const GunSFX = (() => {
     return shaper;
   }
 
-  function noiseBuffer(duration) {
+  function noiseBuffer(dur) {
     const c = ctx();
-    const len = Math.floor(c.sampleRate * duration);
+    const len = Math.floor(c.sampleRate * dur);
     const buf = c.createBuffer(1, len, c.sampleRate);
     const d = buf.getChannelData(0);
 
-    let last = 0;
     for (let i = 0; i < len; i++) {
-      const white = Math.random() * 2 - 1;
-      last = last * 0.35 + white * 0.65;
-      d[i] = last;
+      d[i] = Math.random() * 2 - 1;
     }
 
     return buf;
   }
 
-  function master(now, vol = 1, dur = 0.5, drive = 0) {
+  function master(now, vol = 1, dur = 0.6, drive = 0) {
     const c = ctx();
     const g = c.createGain();
 
@@ -1311,28 +1308,34 @@ const GunSFX = (() => {
     return g;
   }
 
-  function delayBus(dest, time = 0.075, fb = 0.22, wet = 0.18) {
+  function delayBus(dest, delayTime = 0.08, feedback = 0.22, wet = 0.18) {
     const c = ctx();
 
     const input = c.createGain();
     const d = c.createDelay();
-    const f = c.createGain();
-    const w = c.createGain();
-    const hp = c.createBiquadFilter();
+    const fb = c.createGain();
+    const wetGain = c.createGain();
 
-    d.delayTime.value = time;
-    f.gain.value = fb;
-    w.gain.value = wet;
+    const hp = c.createBiquadFilter();
+    const lp = c.createBiquadFilter();
+
+    d.delayTime.value = delayTime;
+    fb.gain.value = feedback;
+    wetGain.gain.value = wet;
 
     hp.type = "highpass";
     hp.frequency.value = 260;
 
+    lp.type = "lowpass";
+    lp.frequency.value = 5200;
+
     input.connect(d);
-    d.connect(f);
-    f.connect(d);
+    d.connect(fb);
+    fb.connect(d);
     d.connect(hp);
-    hp.connect(w);
-    w.connect(dest);
+    hp.connect(lp);
+    lp.connect(wetGain);
+    wetGain.connect(dest);
 
     return input;
   }
@@ -1390,7 +1393,7 @@ const GunSFX = (() => {
     p.connect(dest);
 
     o.start(start);
-    o.stop(start + dur + 0.04);
+    o.stop(start + dur + 0.05);
   }
 
   function noise({
@@ -1432,7 +1435,7 @@ const GunSFX = (() => {
     s.stop(start + dur);
   }
 
-  function click(dest, now, freq = 5800, gain = 0.5) {
+  function click(dest, now, freq = 6000, gain = 0.45) {
     noise({
       start: now,
       dur: 0.018,
@@ -1440,11 +1443,11 @@ const GunSFX = (() => {
       dest,
       filter: "bandpass",
       filterFreq: freq,
-      q: 18
+      q: 16
     });
   }
 
-  function subPunch(dest, now, f0 = 110, f1 = 32, gain = 1, dur = 0.14) {
+  function sub(dest, now, f0 = 100, f1 = 35, gain = 0.9, dur = 0.13) {
     tone({
       start: now,
       dur,
@@ -1456,7 +1459,7 @@ const GunSFX = (() => {
     });
   }
 
-  function crack(dest, now, freq = 2500, gain = 0.8, dur = 0.045) {
+  function crack(dest, now, freq = 2500, gain = 0.75, dur = 0.045) {
     noise({
       start: now,
       dur,
@@ -1469,20 +1472,20 @@ const GunSFX = (() => {
 
     noise({
       start: now + 0.002,
-      dur: dur * 0.75,
+      dur: dur * 0.65,
       gain: gain * 0.38,
       dest,
       filter: "highpass",
       filterFreq: 5200,
-      q: 1.2
+      q: 1.1
     });
   }
 
-  function electricGuitar(dest, now, root = 146.83, gain = 0.32, dur = 0.34) {
+  function guitarPluck(dest, now, root = 146.83, gain = 0.35, dur = 0.62) {
     const c = ctx();
 
     const bus = c.createGain();
-    const shaper = curve(9);
+    const shaper = curve(7);
     const bp = c.createBiquadFilter();
     const lp = c.createBiquadFilter();
 
@@ -1490,26 +1493,26 @@ const GunSFX = (() => {
     bus.gain.exponentialRampToValueAtTime(EPS, now + dur);
 
     bp.type = "bandpass";
-    bp.frequency.setValueAtTime(1350, now);
-    bp.Q.setValueAtTime(4.2, now);
+    bp.frequency.setValueAtTime(1450, now);
+    bp.Q.setValueAtTime(3.2, now);
 
     lp.type = "lowpass";
-    lp.frequency.setValueAtTime(5200, now);
-    lp.Q.setValueAtTime(1.1, now);
+    lp.frequency.setValueAtTime(4800, now);
+    lp.Q.setValueAtTime(0.9, now);
 
     bus.connect(shaper);
     shaper.connect(bp);
     bp.connect(lp);
     lp.connect(dest);
 
-    const freqs = [root, root * 1.498, root * 2.0, root * 2.997];
+    const freqs = [root, root * 1.5, root * 2, root * 2.5, root * 3];
 
     for (let i = 0; i < freqs.length; i++) {
       tone({
         start: now + i * 0.002,
         dur,
         type: i % 2 === 0 ? "sawtooth" : "square",
-        gain: 0.19,
+        gain: 0.14,
         f0: freqs[i],
         f1: freqs[i] * 0.985,
         dest: bus,
@@ -1519,248 +1522,280 @@ const GunSFX = (() => {
 
     noise({
       start: now,
-      dur: Math.min(0.06, dur),
-      gain: 0.18,
+      dur: 0.045,
+      gain: 0.16,
       dest: bus,
       filter: "highpass",
-      filterFreq: 3300,
+      filterFreq: 3600,
+      q: 1.1
+    });
+  }
+
+  function longFeedback(dest, now, root = 146.83, power = 1, dur = 0.72) {
+    const echo1 = delayBus(dest, 0.07, 0.28, 0.24);
+    const echo2 = delayBus(dest, 0.13, 0.24, 0.18);
+
+    guitarPluck(dest, now, root, 0.36 * power, dur);
+    guitarPluck(echo1, now + 0.05, root * 1.5, 0.28 * power, dur * 0.95);
+    guitarPluck(echo2, now + 0.13, root * 2, 0.2 * power, dur * 0.85);
+
+    tone({
+      start: now + 0.015,
+      dur: dur * 0.85,
+      type: "triangle",
+      gain: 0.18 * power,
+      f0: root * 8,
+      f1: root * 4,
+      dest: echo1,
+      filter: "bandpass",
+      filterFreq: root * 6.5,
+      q: 7
+    });
+  }
+
+  function headFeedback(dest, now, root = 220) {
+    const echo = delayBus(dest, 0.075, 0.3, 0.25);
+
+    click(dest, now, 7200, 0.4);
+
+    tone({
+      start: now,
+      dur: 0.2,
+      type: "triangle",
+      gain: 0.48,
+      f0: root * 8,
+      f1: root * 13,
+      f2: root * 4.5,
+      dest,
+      filter: "bandpass",
+      filterFreq: root * 9,
+      q: 8
+    });
+
+    longFeedback(dest, now + 0.02, root, 1.15, 0.78);
+    longFeedback(echo, now + 0.12, root * 1.5, 0.65, 0.65);
+
+    noise({
+      start: now,
+      dur: 0.09,
+      gain: 0.32,
+      dest,
+      filter: "highpass",
+      filterFreq: 5000,
       q: 1.3
     });
   }
 
-  function guitarFeedback(dest, now, root = 164.81, power = 1) {
-    const echo = delayBus(dest, 0.045, 0.26, 0.22);
-
-    electricGuitar(dest, now, root, 0.34 * power, 0.26);
-    electricGuitar(echo, now + 0.035, root * 1.5, 0.22 * power, 0.28);
-
-    tone({
-      start: now + 0.015,
-      dur: 0.22,
-      type: "triangle",
-      gain: 0.22 * power,
-      f0: root * 8,
-      f1: root * 4.5,
-      dest: echo,
-      filter: "bandpass",
-      filterFreq: root * 7,
-      q: 8
-    });
-  }
-
-  function headFeedbackCore(dest, now, root = 220) {
-    const echo = delayBus(dest, 0.052, 0.24, 0.18);
-
-    electricGuitar(dest, now, root, 0.48, 0.34);
-    electricGuitar(echo, now + 0.045, root * 1.5, 0.32, 0.36);
+  function killFeedback(dest, now, root = 130.81) {
+    const echo = delayBus(dest, 0.11, 0.34, 0.28);
 
     tone({
       start: now,
-      dur: 0.16,
-      type: "triangle",
-      gain: 0.52,
-      f0: root * 9,
-      f1: root * 15,
-      f2: root * 5,
-      dest,
-      filter: "bandpass",
-      filterFreq: root * 10,
-      q: 9
-    });
-
-    noise({
-      start: now,
-      dur: 0.075,
-      gain: 0.36,
-      dest,
-      filter: "highpass",
-      filterFreq: 5200,
-      q: 1.5
-    });
-  }
-
-  function killFeedbackCore(dest, now, root = 130.81) {
-    const echo = delayBus(dest, 0.095, 0.3, 0.26);
-
-    electricGuitar(dest, now, root, 0.58, 0.46);
-    electricGuitar(echo, now + 0.055, root * 1.5, 0.42, 0.54);
-    electricGuitar(echo, now + 0.13, root * 2, 0.28, 0.55);
-
-    tone({
-      start: now,
-      dur: 0.42,
+      dur: 0.58,
       type: "sine",
-      gain: 0.42,
+      gain: 0.38,
       f0: root,
-      f1: root * 0.33,
+      f1: root * 0.28,
       dest
     });
+
+    longFeedback(dest, now, root, 1.25, 0.9);
+    longFeedback(echo, now + 0.16, root * 1.5, 0.78, 0.75);
   }
 
   function ancientPhantomShot() {
     const c = ctx();
     const now = c.currentTime;
-    const out = master(now, 1.0, 0.72, 5.5);
-    const echo = delayBus(out, 0.11, 0.32, 0.25);
 
-    subPunch(out, now, 118, 34, 0.9, 0.16);
-    crack(out, now, 1250, 0.72, 0.058);
-    click(out, now + 0.003, 4700, 0.42);
+    const out = master(now, 0.98, 0.72, 4.2);
+    const echo = delayBus(out, 0.105, 0.3, 0.23);
+
+    sub(out, now, 118, 36, 0.85, 0.15);
+    crack(out, now, 1250, 0.68, 0.052);
+    click(out, now + 0.003, 4700, 0.36);
 
     tone({
-      start: now + 0.006,
-      dur: 0.21,
+      start: now + 0.008,
+      dur: 0.23,
       type: "sawtooth",
-      gain: 0.24,
+      gain: 0.2,
       f0: 190,
-      f1: 1500,
-      f2: 270,
+      f1: 1300,
+      f2: 310,
       dest: echo,
       filter: "lowpass",
-      filterFreq: 2400,
-      q: 1.9,
-      pan: -0.12
+      filterFreq: 2300,
+      q: 1.6,
+      pan: -0.1
     });
 
     tone({
-      start: now + 0.055,
-      dur: 0.5,
+      start: now + 0.06,
+      dur: 0.52,
       type: "triangle",
-      gain: 0.2,
-      f0: 760,
-      f1: 170,
+      gain: 0.17,
+      f0: 720,
+      f1: 180,
       dest: echo,
       filter: "bandpass",
-      filterFreq: 620,
-      q: 5.5,
-      pan: 0.16
+      filterFreq: 640,
+      q: 4.8,
+      pan: 0.12
     });
 
     noise({
-      start: now + 0.07,
-      dur: 0.32,
-      gain: 0.16,
+      start: now + 0.08,
+      dur: 0.26,
+      gain: 0.11,
       dest: echo,
       filter: "bandpass",
-      filterFreq: 360,
-      q: 2.5
+      filterFreq: 440,
+      q: 1.8
     });
   }
 
   function chaosShortyShot() {
     const c = ctx();
     const now = c.currentTime;
-    const out = master(now, 1.16, 0.66, 7.2);
-    const echo = delayBus(out, 0.088, 0.34, 0.25);
 
-    subPunch(out, now, 105, 26, 1.2, 0.16);
-    subPunch(out, now + 0.017, 140, 39, 0.72, 0.12);
+    const out = master(now, 1.08, 0.48, 4.2);
+    const echo = delayBus(out, 0.078, 0.22, 0.17);
 
-    crack(out, now, 980, 1.2, 0.07);
+    sub(out, now, 112, 32, 1.02, 0.13);
+    sub(out, now + 0.016, 150, 48, 0.52, 0.09);
+
     noise({
-      start: now + 0.002,
-      dur: 0.052,
-      gain: 0.95,
+      start: now,
+      dur: 0.042,
+      gain: 0.9,
+      dest: out,
+      filter: "bandpass",
+      filterFreq: 1550,
+      q: 1.7
+    });
+
+    noise({
+      start: now + 0.003,
+      dur: 0.035,
+      gain: 0.62,
       dest: out,
       filter: "highpass",
-      filterFreq: 2500,
-      q: 0.95
+      filterFreq: 3200,
+      q: 0.9
     });
 
-    click(out, now + 0.004, 5400, 0.62);
+    click(out, now + 0.002, 5600, 0.44);
 
     tone({
-      start: now + 0.009,
-      dur: 0.18,
+      start: now + 0.012,
+      dur: 0.11,
       type: "sawtooth",
-      gain: 0.42,
-      f0: 120,
-      f1: 2600,
-      f2: 210,
+      gain: 0.16,
+      f0: 540,
+      f1: 1800,
+      f2: 420,
       dest: out,
-      filter: "lowpass",
-      filterFreq: 3800,
-      q: 2.5
+      filter: "bandpass",
+      filterFreq: 1450,
+      q: 2.2
     });
 
-    electricGuitar(echo, now + 0.045, 92.5, 0.34, 0.4);
-
     tone({
-      start: now + 0.06,
-      dur: 0.42,
+      start: now + 0.055,
+      dur: 0.32,
       type: "triangle",
-      gain: 0.22,
-      f0: 520,
-      f1: 80,
+      gain: 0.13,
+      f0: 620,
+      f1: 260,
       dest: echo,
       filter: "bandpass",
-      filterFreq: 380,
-      q: 5
+      filterFreq: 520,
+      q: 4
     });
 
     noise({
-      start: now + 0.06,
-      dur: 0.23,
-      gain: 0.3,
+      start: now + 0.045,
+      dur: 0.18,
+      gain: 0.18,
       dest: echo,
       filter: "highpass",
-      filterFreq: 2300,
-      q: 0.9
+      filterFreq: 2500,
+      q: 0.8
     });
   }
 
   function dragonOperatorShot() {
     const c = ctx();
     const now = c.currentTime;
-    const out = master(now, 1.22, 1.05, 5.9);
-    const echo = delayBus(out, 0.16, 0.36, 0.3);
 
-    subPunch(out, now, 72, 19, 1.28, 0.34);
+    const out = master(now, 1.25, 1.02, 4.8);
+    const echo = delayBus(out, 0.16, 0.34, 0.31);
 
-    crack(out, now, 850, 1.18, 0.075);
+    sub(out, now, 78, 20, 1.28, 0.34);
+
+    noise({
+      start: now,
+      dur: 0.065,
+      gain: 1.0,
+      dest: out,
+      filter: "bandpass",
+      filterFreq: 950,
+      q: 0.9
+    });
 
     noise({
       start: now + 0.004,
-      dur: 0.065,
-      gain: 0.86,
+      dur: 0.06,
+      gain: 0.72,
       dest: out,
       filter: "highpass",
-      filterFreq: 1800,
-      q: 1.05
+      filterFreq: 1900,
+      q: 0.9
     });
 
     tone({
-      start: now + 0.035,
+      start: now + 0.04,
       dur: 0.72,
       type: "sawtooth",
-      gain: 0.32,
-      f0: 155,
-      f1: 88,
+      gain: 0.34,
+      f0: 150,
+      f1: 78,
       dest: echo,
       filter: "bandpass",
       filterFreq: 210,
-      q: 3.6
+      q: 3.2
     });
 
     noise({
-      start: now + 0.05,
+      start: now + 0.055,
       dur: 0.62,
-      gain: 0.46,
+      gain: 0.42,
       dest: echo,
       filter: "bandpass",
       filterFreq: 170,
-      q: 2.5
+      q: 2.4
     });
 
-    electricGuitar(echo, now + 0.08, 73.42, 0.32, 0.72);
+    tone({
+      start: now + 0.09,
+      dur: 0.72,
+      type: "triangle",
+      gain: 0.22,
+      f0: 420,
+      f1: 180,
+      dest: echo,
+      filter: "bandpass",
+      filterFreq: 390,
+      q: 5
+    });
 
     noise({
-      start: now + 0.12,
-      dur: 0.58,
-      gain: 0.2,
+      start: now + 0.13,
+      dur: 0.5,
+      gain: 0.17,
       dest: echo,
       filter: "highpass",
-      filterFreq: 1500,
+      filterFreq: 1800,
       q: 0.8
     });
   }
@@ -1768,238 +1803,172 @@ const GunSFX = (() => {
   function revengeClassicShot() {
     const c = ctx();
     const now = c.currentTime;
-    const out = master(now, 0.92, 0.34, 4.2);
-    const echo = delayBus(out, 0.055, 0.18, 0.14);
 
-    subPunch(out, now, 205, 72, 0.65, 0.085);
-    crack(out, now, 3100, 0.82, 0.034);
-    click(out, now + 0.002, 6800, 0.36);
+    const out = master(now, 0.88, 0.28, 3.2);
+    const echo = delayBus(out, 0.045, 0.12, 0.08);
+
+    sub(out, now, 210, 82, 0.58, 0.07);
+
+    noise({
+      start: now,
+      dur: 0.028,
+      gain: 0.72,
+      dest: out,
+      filter: "bandpass",
+      filterFreq: 2800,
+      q: 3.6
+    });
+
+    click(out, now + 0.002, 6400, 0.26);
 
     tone({
       start: now + 0.012,
-      dur: 0.16,
-      type: "triangle",
-      gain: 0.24,
-      f0: 1050,
-      f1: 1900,
-      f2: 620,
-      dest: out,
+      dur: 0.11,
+      type: "sawtooth",
+      gain: 0.12,
+      f0: 760,
+      f1: 1150,
+      f2: 540,
+      dest: echo,
       filter: "bandpass",
-      filterFreq: 1500,
-      q: 7
+      filterFreq: 1050,
+      q: 3.6
     });
-
-    electricGuitar(echo, now + 0.025, 196, 0.18, 0.18);
   }
 
   function divineSpectreShot() {
-    const c = ctx();
-    const now = c.currentTime;
-    const out = master(now, 0.84, 0.29, 4.6);
-    const echo = delayBus(out, 0.043, 0.2, 0.16);
-
-    subPunch(out, now, 230, 82, 0.52, 0.06);
-    crack(out, now, 4300, 0.72, 0.031);
-
-    tone({
-      start: now + 0.004,
-      dur: 0.105,
-      type: "sawtooth",
-      gain: 0.24,
-      f0: 1050,
-      f1: 3900,
-      f2: 1200,
-      dest: out,
-      filter: "lowpass",
-      filterFreq: 5400,
-      q: 2.2
-    });
-
-    noise({
-      start: now + 0.008,
-      dur: 0.055,
-      gain: 0.26,
-      dest: out,
-      filter: "highpass",
-      filterFreq: 4700,
-      q: 1.4
-    });
-
-    electricGuitar(echo, now + 0.026, 246.94, 0.2, 0.18);
-
-    tone({
-      start: now + 0.035,
-      dur: 0.16,
-      type: "triangle",
-      gain: 0.12,
-      f0: 2500,
-      f1: 760,
-      dest: echo,
-      filter: "bandpass",
-      filterFreq: 1900,
-      q: 5.5
-    });
+    dragonOperatorShot();
   }
 
-  function hitBody(skin = "revengeClassic") {
+  function hitBody(skin = "chaosShorty") {
     const c = ctx();
     const now = c.currentTime;
-    const out = master(now, 0.72, 0.38, 4.8);
+
+    const out = master(now, 0.72, 0.72, 4.4);
 
     const roots = {
       ancientPhantom: 123.47,
+      zero: 110,
       chaosShorty: 110,
       dragonOperator: 82.41,
-      revengeClassic: 196,
-      divineSpectre: 246.94
+      revengeClassic: 174.61,
+      divineSpectre: 82.41
     };
 
     const root = roots[skin] || 146.83;
 
     click(out, now, 5200, 0.22);
-    guitarFeedback(out, now, root, 0.85);
+    longFeedback(out, now, root, 0.82, 0.72);
 
     noise({
       start: now,
-      dur: 0.05,
-      gain: 0.22,
+      dur: 0.055,
+      gain: 0.19,
       dest: out,
       filter: "highpass",
       filterFreq: 3600,
-      q: 1.2
+      q: 1.1
     });
   }
 
-  function hitHead(skin = "revengeClassic") {
+  function hitHead(skin = "chaosShorty") {
     const c = ctx();
     const now = c.currentTime;
-    const out = master(now, 0.92, 0.52, 5.6);
+
+    const out = master(now, 0.95, 0.92, 5.2);
 
     const roots = {
       ancientPhantom: 146.83,
+      zero: 130.81,
       chaosShorty: 130.81,
       dragonOperator: 98,
-      revengeClassic: 220,
-      divineSpectre: 261.63
+      revengeClassic: 196,
+      divineSpectre: 98
     };
 
     const root = roots[skin] || 220;
 
-    click(out, now, 6800, 0.42);
-    headFeedbackCore(out, now, root);
-
-    noise({
-      start: now,
-      dur: 0.07,
-      gain: 0.35,
-      dest: out,
-      filter: "highpass",
-      filterFreq: 5200,
-      q: 1.4
-    });
+    headFeedback(out, now, root);
   }
 
-  function hitKill(skin = "revengeClassic") {
+  function hitKill(skin = "chaosShorty") {
     const c = ctx();
     const now = c.currentTime;
-    const out = master(now, 1.0, 0.86, 6.0);
+
+    const out = master(now, 1.02, 1.08, 5.6);
 
     const roots = {
       ancientPhantom: 98,
+      zero: 110,
       chaosShorty: 110,
       dragonOperator: 73.42,
-      revengeClassic: 196,
-      divineSpectre: 246.94
+      revengeClassic: 174.61,
+      divineSpectre: 73.42
     };
 
     const root = roots[skin] || 130.81;
 
-    killFeedbackCore(out, now, root);
+    killFeedback(out, now, root);
 
     if (skin === "ancientPhantom") {
       tone({
         start: now + 0.04,
-        dur: 0.5,
+        dur: 0.54,
         type: "triangle",
-        gain: 0.28,
-        f0: 700,
-        f1: 135,
-        dest: out,
-        filter: "bandpass",
-        filterFreq: 520,
-        q: 5
-      });
-
-      noise({
-        start: now + 0.03,
-        dur: 0.38,
         gain: 0.24,
+        f0: 700,
+        f1: 150,
         dest: out,
         filter: "bandpass",
-        filterFreq: 340,
-        q: 2.4
+        filterFreq: 560,
+        q: 4.4
       });
     }
 
-    if (skin === "chaosShorty") {
+    if (skin === "zero" || skin === "chaosShorty") {
       tone({
         start: now + 0.04,
-        dur: 0.3,
+        dur: 0.36,
         type: "sawtooth",
-        gain: 0.32,
-        f0: 180,
-        f1: 2600,
-        f2: 180,
+        gain: 0.22,
+        f0: 260,
+        f1: 1700,
+        f2: 210,
         dest: out,
-        filter: "lowpass",
-        filterFreq: 3800,
-        q: 2.6
+        filter: "bandpass",
+        filterFreq: 1200,
+        q: 2.2
       });
 
       noise({
         start: now + 0.02,
-        dur: 0.12,
-        gain: 0.28,
+        dur: 0.11,
+        gain: 0.22,
         dest: out,
         filter: "highpass",
         filterFreq: 4300,
-        q: 1.2
+        q: 1.1
       });
     }
 
-    if (skin === "dragonOperator") {
+    if (skin === "dragonOperator" || skin === "divineSpectre") {
       noise({
-        start: now + 0.05,
+        start: now + 0.06,
         dur: 0.58,
-        gain: 0.46,
+        gain: 0.38,
         dest: out,
         filter: "bandpass",
         filterFreq: 165,
-        q: 2.8
-      });
-    }
-
-    if (skin === "divineSpectre") {
-      tone({
-        start: now + 0.02,
-        dur: 0.34,
-        type: "triangle",
-        gain: 0.34,
-        f0: 2300,
-        f1: 3600,
-        f2: 900,
-        dest: out,
-        filter: "bandpass",
-        filterFreq: 2500,
-        q: 7
+        q: 2.5
       });
     }
   }
 
   function divineSpectreBurst(count = 5, interval = 64) {
     let n = 0;
+
     const timer = setInterval(() => {
-      divineSpectreShot();
+      revengeClassicShot();
       n++;
       if (n >= count) clearInterval(timer);
     }, interval);
@@ -2008,37 +1977,32 @@ const GunSFX = (() => {
   function reload(skin = "revengeClassic") {
     const c = ctx();
     const now = c.currentTime;
-    const out = master(now, 0.7, 0.32, 4);
+    const out = master(now, 0.72, 0.38, 3.8);
 
     if (skin === "chaosShorty") {
       click(out, now, 1600, 0.42);
-      noise({ start: now + 0.04, dur: 0.14, gain: 0.5, dest: out, filter: "bandpass", filterFreq: 480, q: 2.2 });
+      noise({ start: now + 0.04, dur: 0.14, gain: 0.48, dest: out, filter: "bandpass", filterFreq: 480, q: 2.2 });
       click(out, now + 0.2, 2800, 0.24);
       return;
     }
     if (skin === "ancientPhantom") {
-      noise({ start: now, dur: 0.07, gain: 0.32, dest: out, filter: "bandpass", filterFreq: 520, q: 2.5 });
-      tone({ start: now + 0.1, dur: 0.14, type: "triangle", gain: 0.28, f0: 280, f1: 120, dest: out, filter: "lowpass", filterFreq: 900, q: 2 });
+      noise({ start: now, dur: 0.07, gain: 0.3, dest: out, filter: "bandpass", filterFreq: 520, q: 2.5 });
+      tone({ start: now + 0.1, dur: 0.14, type: "triangle", gain: 0.26, f0: 280, f1: 120, dest: out, filter: "lowpass", filterFreq: 900, q: 2 });
       return;
     }
-    if (skin === "divineSpectre") {
-      crack(out, now, 2400, 0.35, 0.08);
-      click(out, now + 0.1, 7100, 0.18);
+    if (skin === "divineSpectre" || skin === "dragonOperator") {
+      sub(out, now, 95, 38, 0.48, 0.12);
+      click(out, now + 0.14, 2400, 0.34);
       return;
     }
-    if (skin === "dragonOperator") {
-      subPunch(out, now, 95, 38, 0.5, 0.12);
-      click(out, now + 0.15, 2400, 0.35);
-      return;
-    }
-    click(out, now, 5200, 0.32);
-    click(out, now + 0.14, 6400, 0.2);
+    click(out, now, 5200, 0.3);
+    click(out, now + 0.12, 6400, 0.18);
   }
 
   function medKitComplete() {
     const c = ctx();
     const now = c.currentTime;
-    const out = master(now, 0.55, 0.5, 1.6);
+    const out = master(now, 0.55, 0.52, 1.6);
     tone({ start: now, dur: 0.28, type: "sine", gain: 0.32, f0: 480, f1: 920, dest: out });
     tone({ start: now + 0.06, dur: 0.22, type: "triangle", gain: 0.2, f0: 1180, f1: 1680, dest: out, filter: "bandpass", filterFreq: 1050, q: 5 });
     click(out, now + 0.16, 4100, 0.1);
@@ -2046,17 +2010,20 @@ const GunSFX = (() => {
 
   function shot(skin) {
     if (skin === "ancientPhantom") ancientPhantomShot();
+    else if (skin === "zero") chaosShortyShot();
     else if (skin === "chaosShorty") chaosShortyShot();
     else if (skin === "dragonOperator") dragonOperatorShot();
     else if (skin === "revengeClassic") revengeClassicShot();
-    else if (skin === "divineSpectre") divineSpectreShot();
-    else revengeClassicShot();
+    else if (skin === "divineSpectre") dragonOperatorShot();
+    else chaosShortyShot();
   }
 
   function hit(skin, type = "body") {
-    if (type === "head") hitHead(skin);
-    else if (type === "kill") hitKill(skin);
-    else hitBody(skin);
+    const mappedSkin = skin === "zero" ? "chaosShorty" : skin;
+
+    if (type === "head") hitHead(mappedSkin);
+    else if (type === "kill") hitKill(mappedSkin);
+    else hitBody(mappedSkin);
   }
 
   return {
@@ -2066,6 +2033,7 @@ const GunSFX = (() => {
     reload,
     medKitComplete,
     ancientPhantomShot,
+    zeroShot: chaosShortyShot,
     chaosShortyShot,
     dragonOperatorShot,
     revengeClassicShot,
@@ -8591,7 +8559,8 @@ if (typeof window !== "undefined") {
       void w;
       if (audioCtx.state === "suspended") void audioCtx.resume();
       if (state.weaponIndex === 4) return;
-      if (typeof GunSFX !== "undefined") GunSFX.shot(weaponSoundSkin());
+      if (typeof GunSFX === "undefined") return;
+      GunSFX.shot(weaponSoundSkin());
     }
 
     let flashlightAudioBuffer = null;
