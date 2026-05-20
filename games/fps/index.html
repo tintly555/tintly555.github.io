@@ -1222,6 +1222,8 @@
     </div>
   </div>
 
+  <script src="gun-sfx.js"></script>
+  <script src="chaos-shorty-sfx.js"></script>
   <script type="module">
     import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.182.0/build/three.module.js";
     import { GAME_I18N, LANGUAGE_OPTIONS as LANG_META, translate as translateGame } from "./translation.js";
@@ -6957,6 +6959,7 @@
         ammo: 12,
         reloadTime: 1550,
         soundBase: 520,
+        soundSkin: "revengeClassic",
         adsFov: 67,
         adsSpeed: 12,
       },
@@ -6978,6 +6981,7 @@
         ammo: 30,
         reloadTime: 1600,
         soundBase: 720,
+        soundSkin: "ancientPhantom",
         adsFov: 55,
         adsSpeed: 8,
       },
@@ -6999,6 +7003,7 @@
         ammo: 8,
         reloadTime: 3200,
         soundBase: 260,
+        soundSkin: "chaosShorty",
         adsFov: 63,
         adsSpeed: 6,
       },
@@ -7020,6 +7025,7 @@
         ammo: 36,
         reloadTime: 1450,
         soundBase: 900,
+        soundSkin: "divineSpectre",
         adsFov: 75,
         adsSpeed: 10,
       },
@@ -7062,10 +7068,17 @@
         ammo: 5,
         reloadTime: 3400,
         soundBase: 340,
+        soundSkin: "dragonOperator",
         adsFov: 26,
         adsSpeed: 5.2,
       },
     ];
+
+    function weaponSoundSkin() {
+      const w = weapons[state.weaponIndex];
+      return w && w.soundSkin ? w.soundSkin : "zero";
+    }
+
     function weapon() {
       return weapons[state.weaponIndex];
     }
@@ -7462,6 +7475,13 @@
     audioMusic.connect(audioMaster);
     audioMaster.connect(audioCtx.destination);
 
+    if (typeof GunSFX !== "undefined" && GunSFX.bindAudio) {
+      GunSFX.bindAudio(audioCtx, audioSfx);
+    }
+    if (typeof ChaosShortySFX !== "undefined" && ChaosShortySFX.bindAudio) {
+      ChaosShortySFX.bindAudio(audioCtx, audioSfx);
+    }
+
     let menuBgmAudio = null;
 
     function applyAudioVolumes() {
@@ -7712,208 +7732,19 @@
       return buf;
     }
 
-    /** AMR: loud front crack/boom + extended rolling tail (anti-materiel rifle). */
-    function playAmrGunSound() {
-      if (audioCtx.state === "suspended") void audioCtx.resume();
-      const now = audioCtx.currentTime;
-
-      const sub = audioCtx.createOscillator();
-      sub.type = "sine";
-      sub.frequency.setValueAtTime(52, now);
-      sub.frequency.exponentialRampToValueAtTime(18, now + 0.78);
-      const subG = audioCtx.createGain();
-      subG.gain.setValueAtTime(0.0001, now);
-      subG.gain.exponentialRampToValueAtTime(1.72, now + 0.018);
-      subG.gain.exponentialRampToValueAtTime(0.0001, now + 0.98);
-      sub.connect(subG);
-      subG.connect(audioSfx);
-      sub.start(now);
-      sub.stop(now + 1.02);
-
-      const boom = audioCtx.createBufferSource();
-      boom.buffer = getGunNoiseBuffer(0.62);
-      const boomLp = audioCtx.createBiquadFilter();
-      boomLp.type = "lowpass";
-      boomLp.frequency.setValueAtTime(380, now);
-      boomLp.frequency.exponentialRampToValueAtTime(72, now + 0.55);
-      const boomG = audioCtx.createGain();
-      boomG.gain.setValueAtTime(0.0001, now);
-      boomG.gain.exponentialRampToValueAtTime(1.42, now + 0.01);
-      boomG.gain.exponentialRampToValueAtTime(0.0001, now + 0.72);
-      boom.connect(boomLp);
-      boomLp.connect(boomG);
-      boomG.connect(audioSfx);
-      boom.start(now);
-      boom.stop(now + 0.76);
-
-      const crack = audioCtx.createBufferSource();
-      crack.buffer = getGunNoiseBuffer(0.18);
-      const crackBp = audioCtx.createBiquadFilter();
-      crackBp.type = "bandpass";
-      crackBp.frequency.setValueAtTime(2100, now);
-      crackBp.Q.setValueAtTime(0.52, now);
-      const crackG = audioCtx.createGain();
-      crackG.gain.setValueAtTime(0.0001, now);
-      crackG.gain.exponentialRampToValueAtTime(1.18, now + 0.003);
-      crackG.gain.exponentialRampToValueAtTime(0.0001, now + 0.16);
-      crack.connect(crackBp);
-      crackBp.connect(crackG);
-      crackG.connect(audioSfx);
-      crack.start(now);
-      crack.stop(now + 0.18);
-
-      const tail = audioCtx.createBufferSource();
-      tail.buffer = getGunNoiseBuffer(1.55);
-      const tailBp = audioCtx.createBiquadFilter();
-      tailBp.type = "bandpass";
-      tailBp.frequency.setValueAtTime(480, now + 0.06);
-      tailBp.frequency.exponentialRampToValueAtTime(180, now + 1.35);
-      tailBp.Q.setValueAtTime(0.32, now);
-      const tailG = audioCtx.createGain();
-      tailG.gain.setValueAtTime(0.0001, now + 0.03);
-      tailG.gain.exponentialRampToValueAtTime(0.95, now + 0.08);
-      tailG.gain.exponentialRampToValueAtTime(0.0001, now + 1.62);
-      tail.connect(tailBp);
-      tailBp.connect(tailG);
-      tailG.connect(audioSfx);
-      tail.start(now + 0.028);
-      tail.stop(now + 1.68);
-
-      const rumble = audioCtx.createBufferSource();
-      rumble.buffer = getGunNoiseBuffer(1.25);
-      const rumbleLp = audioCtx.createBiquadFilter();
-      rumbleLp.type = "lowpass";
-      rumbleLp.frequency.setValueAtTime(240, now + 0.12);
-      rumbleLp.frequency.exponentialRampToValueAtTime(55, now + 1.5);
-      const rumbleG = audioCtx.createGain();
-      rumbleG.gain.setValueAtTime(0.0001, now + 0.1);
-      rumbleG.gain.exponentialRampToValueAtTime(0.58, now + 0.22);
-      rumbleG.gain.exponentialRampToValueAtTime(0.0001, now + 1.55);
-      rumble.connect(rumbleLp);
-      rumbleLp.connect(rumbleG);
-      rumbleG.connect(audioSfx);
-      rumble.start(now + 0.08);
-      rumble.stop(now + 1.6);
-
-      const echoIn = audioCtx.createGain();
-      echoIn.gain.setValueAtTime(0.52, now);
-      const delay = audioCtx.createDelay(2.0);
-      delay.delayTime.setValueAtTime(0.19, now);
-      const fb = audioCtx.createGain();
-      fb.gain.setValueAtTime(0.52, now);
-      const echoLp = audioCtx.createBiquadFilter();
-      echoLp.type = "lowpass";
-      echoLp.frequency.setValueAtTime(480, now);
-      boomG.connect(echoIn);
-      tailG.connect(echoIn);
-      rumbleG.connect(echoIn);
-      echoIn.connect(delay);
-      delay.connect(echoLp);
-      echoLp.connect(audioSfx);
-      delay.connect(fb);
-      fb.connect(delay);
-      fb.gain.exponentialRampToValueAtTime(0.0001, now + 1.85);
-    }
-
-    /** Layered tactical gunshots: bright crack + body + mechanical tail + short room echo. */
+    /** Gun fire: GunSFX + ChaosShortySFX only (see gun-sfx.js / chaos-shorty-sfx.js). */
     function playGunSound(w) {
+      void w;
       if (audioCtx.state === "suspended") void audioCtx.resume();
-      const idx = state.weaponIndex;
-      if (idx === 5) {
-        playAmrGunSound();
+      if (state.weaponIndex === 4) return;
+      const skin = weaponSoundSkin();
+      if (skin === "chaosShorty" && typeof ChaosShortySFX !== "undefined") {
+        ChaosShortySFX.shot();
         return;
       }
-      void w;
-      const now = audioCtx.currentTime;
-      const presets = [
-        { crackMs: 64, crackFc: 4300, crackQ: 0.84, crackG: 0.52, bodyMs: 170, bodyFc: 980, bodyG: 0.2, mechHz: 980, mechG: 0.03, tailMs: 260, tailFc: 1200, tailG: 0.08, echoDelay: 0.072, echoFb: 0.26, echoG: 0.08 },
-        { crackMs: 88, crackFc: 3600, crackQ: 0.72, crackG: 0.68, bodyMs: 250, bodyFc: 740, bodyG: 0.28, mechHz: 760, mechG: 0.045, tailMs: 330, tailFc: 900, tailG: 0.12, echoDelay: 0.082, echoFb: 0.31, echoG: 0.11 },
-        { crackMs: 110, crackFc: 2500, crackQ: 0.56, crackG: 0.82, bodyMs: 330, bodyFc: 520, bodyG: 0.38, mechHz: 520, mechG: 0.02, tailMs: 420, tailFc: 760, tailG: 0.18, echoDelay: 0.094, echoFb: 0.36, echoG: 0.16 },
-        { crackMs: 56, crackFc: 5200, crackQ: 0.92, crackG: 0.45, bodyMs: 185, bodyFc: 1200, bodyG: 0.17, mechHz: 1080, mechG: 0.03, tailMs: 240, tailFc: 1600, tailG: 0.07, echoDelay: 0.064, echoFb: 0.22, echoG: 0.06 },
-        { crackMs: 132, crackFc: 2200, crackQ: 0.52, crackG: 0.88, bodyMs: 420, bodyFc: 420, bodyG: 0.44, mechHz: 340, mechG: 0.024, tailMs: 520, tailFc: 620, tailG: 0.19, echoDelay: 0.108, echoFb: 0.38, echoG: 0.14 },
-      ];
-      const p = presets[idx === 5 ? 4 : idx] || presets[1];
-
-      const crackSrc = audioCtx.createBufferSource();
-      crackSrc.buffer = getGunNoiseBuffer(p.crackMs / 1000);
-      const crackBp = audioCtx.createBiquadFilter();
-      crackBp.type = "bandpass";
-      crackBp.frequency.setValueAtTime(p.crackFc, now);
-      crackBp.Q.setValueAtTime(p.crackQ, now);
-      const crackGain = audioCtx.createGain();
-      crackGain.gain.setValueAtTime(0.0001, now);
-      crackGain.gain.exponentialRampToValueAtTime(p.crackG, now + 0.003);
-      crackGain.gain.exponentialRampToValueAtTime(0.0001, now + p.crackMs / 1000);
-      crackSrc.connect(crackBp);
-      crackBp.connect(crackGain);
-      crackGain.connect(audioSfx);
-      crackSrc.start(now);
-      crackSrc.stop(now + p.crackMs / 1000 + 0.03);
-
-      const bodySrc = audioCtx.createBufferSource();
-      bodySrc.buffer = getGunNoiseBuffer(p.bodyMs / 1000);
-      const bodyLp = audioCtx.createBiquadFilter();
-      bodyLp.type = "lowpass";
-      bodyLp.frequency.setValueAtTime(p.bodyFc, now);
-      const bodyGain = audioCtx.createGain();
-      bodyGain.gain.setValueAtTime(0.0001, now + 0.002);
-      bodyGain.gain.exponentialRampToValueAtTime(p.bodyG, now + 0.014);
-      bodyGain.gain.exponentialRampToValueAtTime(0.0001, now + p.bodyMs / 1000);
-      bodySrc.connect(bodyLp);
-      bodyLp.connect(bodyGain);
-      bodyGain.connect(audioSfx);
-      bodySrc.start(now + 0.0015);
-      bodySrc.stop(now + p.bodyMs / 1000 + 0.05);
-
-      const mech = audioCtx.createOscillator();
-      mech.type = idx === 2 ? "sawtooth" : idx === 5 ? "sawtooth" : "triangle";
-      mech.frequency.setValueAtTime(p.mechHz, now);
-      mech.frequency.exponentialRampToValueAtTime(Math.max(180, p.mechHz * 0.55), now + 0.08);
-      const mechHp = audioCtx.createBiquadFilter();
-      mechHp.type = "highpass";
-      mechHp.frequency.setValueAtTime(450, now);
-      const mechGain = audioCtx.createGain();
-      mechGain.gain.setValueAtTime(0.0001, now);
-      mechGain.gain.exponentialRampToValueAtTime(p.mechG, now + 0.005);
-      mechGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.1);
-      mech.connect(mechHp);
-      mechHp.connect(mechGain);
-      mechGain.connect(audioSfx);
-      mech.start(now + 0.001);
-      mech.stop(now + 0.105);
-
-      const tailSrc = audioCtx.createBufferSource();
-      tailSrc.buffer = getGunNoiseBuffer(p.tailMs / 1000);
-      const tailBp = audioCtx.createBiquadFilter();
-      tailBp.type = "bandpass";
-      tailBp.frequency.setValueAtTime(p.tailFc, now);
-      tailBp.Q.setValueAtTime(0.5, now);
-      const tailGain = audioCtx.createGain();
-      tailGain.gain.setValueAtTime(0.0001, now + 0.006);
-      tailGain.gain.exponentialRampToValueAtTime(p.tailG, now + 0.035);
-      tailGain.gain.exponentialRampToValueAtTime(0.0001, now + p.tailMs / 1000);
-      tailSrc.connect(tailBp);
-      tailBp.connect(tailGain);
-      tailGain.connect(audioSfx);
-      tailSrc.start(now + 0.006);
-      tailSrc.stop(now + p.tailMs / 1000 + 0.06);
-
-      const echoIn = audioCtx.createGain();
-      echoIn.gain.setValueAtTime(p.echoG, now);
-      const delay = audioCtx.createDelay(0.22);
-      delay.delayTime.setValueAtTime(p.echoDelay, now);
-      const feedback = audioCtx.createGain();
-      feedback.gain.setValueAtTime(p.echoFb, now);
-      const echoLp = audioCtx.createBiquadFilter();
-      echoLp.type = "lowpass";
-      echoLp.frequency.setValueAtTime(Math.max(700, p.tailFc * 1.1), now);
-      bodyGain.connect(echoIn);
-      echoIn.connect(delay);
-      delay.connect(echoLp);
-      echoLp.connect(audioSfx);
-      delay.connect(feedback);
-      feedback.connect(delay);
-      feedback.gain.exponentialRampToValueAtTime(0.0001, now + 0.5);
+      if (typeof GunSFX !== "undefined") {
+        GunSFX.shot(skin);
+      }
     }
 
     let flashlightAudioBuffer = null;
@@ -7968,112 +7799,6 @@
     }
 
     /** Local player hurt: bullet (PvP / default MP) vs melee (zombie). Uses Web Audio only. */
-    let _killSoundGate = 0;
-
-    /**
-     * Kill confirm: delayed heavy “DENG” impact + long muffled “~~~” tail.
-     * Cow-hoof chest thud — low, blunt, no bright chime; distinct from AMR crack/tail.
-     */
-    function playKillConfirmSound(headshot = false, training = false) {
-      const nowMs = performance.now();
-      if (nowMs - _killSoundGate < 90) return;
-      _killSoundGate = nowMs;
-      if (audioCtx.state === "suspended") {
-        audioCtx.resume().catch(() => {});
-      }
-      const delaySec = training ? 0.26 : headshot ? 0.32 : 0.38;
-      const t = audioCtx.currentTime + delaySec;
-      const dengPeak = training ? 1.12 : headshot ? 1.82 : 1.62;
-      const tailPeak = training ? 0.72 : headshot ? 1.05 : 0.92;
-      const tailLen = training ? 0.68 : headshot ? 0.78 : 0.88;
-      const tailT = t + 0.062;
-
-      const dengCore = audioCtx.createOscillator();
-      dengCore.type = "sine";
-      dengCore.frequency.setValueAtTime(headshot ? 74 : 68, t);
-      dengCore.frequency.exponentialRampToValueAtTime(48, t + 0.11);
-      const dengCoreG = audioCtx.createGain();
-      dengCoreG.gain.setValueAtTime(0.0001, t);
-      dengCoreG.gain.linearRampToValueAtTime(dengPeak, t + 0.007);
-      dengCoreG.gain.setValueAtTime(dengPeak * 0.92, t + 0.038);
-      dengCoreG.gain.exponentialRampToValueAtTime(0.0001, t + 0.11);
-      dengCore.connect(dengCoreG);
-      dengCoreG.connect(audioSfx);
-      dengCore.start(t);
-      dengCore.stop(t + 0.14);
-
-      const dengChest = audioCtx.createOscillator();
-      dengChest.type = "sine";
-      dengChest.frequency.setValueAtTime(headshot ? 81 : 76, t);
-      dengChest.frequency.exponentialRampToValueAtTime(52, t + 0.1);
-      const dengChestG = audioCtx.createGain();
-      dengChestG.gain.setValueAtTime(0.0001, t);
-      dengChestG.gain.linearRampToValueAtTime(dengPeak * 0.48, t + 0.009);
-      dengChestG.gain.exponentialRampToValueAtTime(0.0001, t + 0.1);
-      dengChest.connect(dengChestG);
-      dengChestG.connect(audioSfx);
-      dengChest.start(t);
-      dengChest.stop(t + 0.12);
-
-      const hoof = audioCtx.createBufferSource();
-      hoof.buffer = getGunNoiseBuffer(0.12);
-      const hoofLp = audioCtx.createBiquadFilter();
-      hoofLp.type = "lowpass";
-      hoofLp.frequency.setValueAtTime(92, t);
-      hoofLp.Q.setValueAtTime(0.9, t);
-      const hoofG = audioCtx.createGain();
-      hoofG.gain.setValueAtTime(0.0001, t);
-      hoofG.gain.linearRampToValueAtTime(dengPeak * 0.72, t + 0.005);
-      hoofG.gain.exponentialRampToValueAtTime(0.0001, t + 0.085);
-      hoof.connect(hoofLp);
-      hoofLp.connect(hoofG);
-      hoofG.connect(audioSfx);
-      hoof.start(t);
-      hoof.stop(t + 0.1);
-
-      const tailCore = audioCtx.createOscillator();
-      tailCore.type = "sine";
-      tailCore.frequency.setValueAtTime(56, tailT);
-      tailCore.frequency.exponentialRampToValueAtTime(28, tailT + tailLen);
-      const tailCoreG = audioCtx.createGain();
-      tailCoreG.gain.setValueAtTime(0.0001, tailT);
-      tailCoreG.gain.linearRampToValueAtTime(tailPeak, tailT + 0.045);
-      tailCoreG.gain.exponentialRampToValueAtTime(0.0001, tailT + tailLen);
-      tailCore.connect(tailCoreG);
-      tailCoreG.connect(audioSfx);
-      tailCore.start(tailT);
-      tailCore.stop(tailT + tailLen + 0.06);
-
-      const tailRumble = audioCtx.createBufferSource();
-      tailRumble.buffer = getGunNoiseBuffer(1.05);
-      const tailLp = audioCtx.createBiquadFilter();
-      tailLp.type = "lowpass";
-      tailLp.frequency.setValueAtTime(78, tailT);
-      tailLp.frequency.exponentialRampToValueAtTime(38, tailT + tailLen);
-      const tailRumbleG = audioCtx.createGain();
-      tailRumbleG.gain.setValueAtTime(0.0001, tailT);
-      tailRumbleG.gain.linearRampToValueAtTime(tailPeak * 0.58, tailT + 0.055);
-      tailRumbleG.gain.exponentialRampToValueAtTime(0.0001, tailT + tailLen + 0.08);
-      tailRumble.connect(tailLp);
-      tailLp.connect(tailRumbleG);
-      tailRumbleG.connect(audioSfx);
-      tailRumble.start(tailT);
-      tailRumble.stop(tailT + tailLen + 0.12);
-
-      const tailSub = audioCtx.createOscillator();
-      tailSub.type = "sine";
-      tailSub.frequency.setValueAtTime(38, tailT + 0.03);
-      tailSub.frequency.exponentialRampToValueAtTime(22, tailT + tailLen);
-      const tailSubG = audioCtx.createGain();
-      tailSubG.gain.setValueAtTime(0.0001, tailT + 0.03);
-      tailSubG.gain.linearRampToValueAtTime(tailPeak * 0.5, tailT + 0.08);
-      tailSubG.gain.exponentialRampToValueAtTime(0.0001, tailT + tailLen + 0.1);
-      tailSub.connect(tailSubG);
-      tailSubG.connect(audioSfx);
-      tailSub.start(tailT + 0.03);
-      tailSub.stop(tailT + tailLen + 0.14);
-    }
-
     function playReceivedDamageSound(kind) {
       if (audioCtx.state === "suspended") void audioCtx.resume();
       const melee = kind === "melee";
@@ -8368,11 +8093,25 @@
       state.combatFeedbackTimer = Math.max(state.combatFeedbackTimer, dur);
     }
 
+    function playWeaponHitSfx(isKill = false, headshot = false) {
+      const skin = weaponSoundSkin();
+      const hitType = isKill ? "kill" : headshot ? "head" : "body";
+      if (skin === "chaosShorty" && typeof ChaosShortySFX !== "undefined") {
+        ChaosShortySFX.hit(hitType);
+        return;
+      }
+      if (typeof GunSFX !== "undefined") {
+        GunSFX.hit(skin, hitType);
+        return;
+      }
+      if (isKill) playKillConfirmSound(!!headshot, false);
+    }
+
     function triggerHitFeedback(isKill = false, headshot = false) {
       state.hitmarkerTimer = isKill ? 0.16 : 0.09;
       hitmarkerEl.classList.add("show");
       hitmarkerEl.classList.toggle("critical", !!isKill || !!headshot);
-      if (isKill) playKillConfirmSound(!!headshot, false);
+      playWeaponHitSfx(isKill, headshot);
       showCombatFeedback(
         isKill ? tr("combatKill", "KILL!") : tr("combatHit", "HIT"),
         isKill ? "rgba(255,88,88,0.98)" : "rgba(255,255,255,0.95)",
@@ -9969,7 +9708,6 @@
           if (bestEnemy.trainingDummy) {
             registerTrainingHit(bestEnemyZone);
             playTrainingDummyHitDissolve(bestEnemy, bp);
-            playKillConfirmSound(bestEnemyZone === "head", true);
             updateHud();
             continue;
           }
