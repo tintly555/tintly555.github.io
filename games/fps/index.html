@@ -4486,6 +4486,9 @@ if (typeof window !== "undefined") {
     }
     let TRAINING_COOP = false;
     const TRAINING_POINTS = { head: 100, body: 50, leg: 25 };
+    /** Player spawn Z in training; dummies face this point (+Z). */
+    const TRAINING_SPAWN_Z = 22;
+    const TRAINING_DUMMY_FACE_YAW = 0;
     const TRAINING_LANES = [
       { xMin: -15, xMax: -11, z: -14, speed: 2.0 },
       { xMin: -4, xMax: 0, z: -14, speed: 2.35 },
@@ -5288,29 +5291,29 @@ if (typeof window !== "undefined") {
      * and stay visually welded while the primary arm drives recoil/reload.
      */
     /** Left support-hand anchor on third-person gun (foregrip / pump). */
+    /** Grip anchors (gun Y=π so muzzle faces +Z; X mirrored on mesh). */
     const REMOTE_SUPPORT_SOCKET_LOCAL = {
-      0: { x: -0.055, y: -0.11, z: 0.14 },
-      1: { x: -0.062, y: -0.115, z: 0.2 },
-      2: { x: -0.07, y: -0.12, z: 0.18 },
-      3: { x: -0.058, y: -0.112, z: 0.19 },
-      5: { x: -0.065, y: -0.118, z: 0.28 },
+      0: { x: 0.055, y: -0.11, z: 0.14 },
+      1: { x: 0.062, y: -0.115, z: 0.2 },
+      2: { x: 0.07, y: -0.12, z: 0.18 },
+      3: { x: 0.058, y: -0.112, z: 0.19 },
+      5: { x: 0.065, y: -0.118, z: 0.28 },
     };
-    /** Right trigger-hand anchor (pistol grip). */
     const REMOTE_PRIMARY_GRIP_LOCAL = {
-      0: { x: 0.05, y: -0.12, z: 0.1 },
-      1: { x: 0.055, y: -0.125, z: 0.17 },
-      2: { x: 0.058, y: -0.128, z: 0.15 },
-      3: { x: 0.052, y: -0.122, z: 0.16 },
-      5: { x: 0.056, y: -0.126, z: 0.24 },
+      0: { x: -0.05, y: -0.12, z: 0.1 },
+      1: { x: -0.055, y: -0.125, z: 0.17 },
+      2: { x: -0.058, y: -0.128, z: 0.15 },
+      3: { x: -0.052, y: -0.122, z: 0.16 },
+      5: { x: -0.056, y: -0.126, z: 0.24 },
     };
     /** Fixed two-hand pose (arms forward to belly hold — no IK to chin). */
     const REMOTE_TWO_HAND_STANCE = [
-      { holdY: 0.94, holdZ: 0.32, r: { x: -0.9, y: -0.2, z: -0.06 }, l: { x: -0.86, y: 0.22, z: 0.26 } },
-      { holdY: 0.93, holdZ: 0.34, r: { x: -0.94, y: -0.22, z: -0.08 }, l: { x: -0.88, y: 0.24, z: 0.28 } },
-      { holdY: 0.94, holdZ: 0.32, r: { x: -0.92, y: -0.21, z: -0.07 }, l: { x: -0.87, y: 0.23, z: 0.27 } },
-      { holdY: 0.93, holdZ: 0.33, r: { x: -0.93, y: -0.21, z: -0.07 }, l: { x: -0.89, y: 0.25, z: 0.29 } },
+      { holdY: 0.86, holdZ: 0.38, r: { x: -1.38, y: -0.14, z: -0.1 }, l: { x: -1.34, y: 0.16, z: 0.2 } },
+      { holdY: 0.85, holdZ: 0.4, r: { x: -1.4, y: -0.15, z: -0.1 }, l: { x: -1.36, y: 0.17, z: 0.21 } },
+      { holdY: 0.86, holdZ: 0.38, r: { x: -1.39, y: -0.14, z: -0.09 }, l: { x: -1.35, y: 0.16, z: 0.2 } },
+      { holdY: 0.85, holdZ: 0.39, r: { x: -1.39, y: -0.15, z: -0.1 }, l: { x: -1.36, y: 0.17, z: 0.21 } },
       null,
-      { holdY: 0.92, holdZ: 0.36, r: { x: -0.96, y: -0.24, z: -0.09 }, l: { x: -0.9, y: 0.26, z: 0.3 } },
+      { holdY: 0.84, holdZ: 0.42, r: { x: -1.41, y: -0.16, z: -0.11 }, l: { x: -1.37, y: 0.18, z: 0.22 } },
     ];
 
     function hashRemoteTint(seed) {
@@ -5416,7 +5419,7 @@ if (typeof window !== "undefined") {
     function applyThirdPersonGunToChestHold(gunModel, weaponType) {
       const t = weaponType | 0;
       gunModel.rotation.order = "YXZ";
-      gunModel.rotation.set(0.02, 0, 0);
+      gunModel.rotation.set(-0.1, Math.PI, 0);
       if (t === 0) {
         gunModel.position.set(0, -0.06, 0.14);
         gunModel.scale.set(1, 1, 1);
@@ -5440,7 +5443,7 @@ if (typeof window !== "undefined") {
       if (!hold) {
         hold = new THREE.Group();
         hold.name = "remoteWeaponHold";
-        hold.position.set(0, 0.94, 0.32);
+        hold.position.set(0, 0.86, 0.38);
         group.add(hold);
       }
       return hold;
@@ -5611,8 +5614,8 @@ if (typeof window !== "undefined") {
       leftArm.position.set(-0.22, 1.42, 0.06);
       rightArm.rotation.order = "YXZ";
       leftArm.rotation.order = "YXZ";
-      rightArm.rotation.set(-0.94, -0.22, -0.08);
-      leftArm.rotation.set(-0.88, 0.24, 0.28);
+      rightArm.rotation.set(-1.4, -0.15, -0.1);
+      leftArm.rotation.set(-1.36, 0.17, 0.21);
       group.add(rightArm, leftArm);
 
       const makePlayerLeg = (px) => {
@@ -7714,23 +7717,27 @@ if (typeof window !== "undefined") {
     function makeTrainingDummy(idx, lane) {
       const label = `${tr("trainingDummyName", "Target")} ${idx + 1}`;
       const avatar = createRemotePlayer(label);
-      avatar.group.rotation.y = Math.PI;
+      equipRemotePlayerWeapon(avatar, 3);
+      avatar.group.rotation.y = TRAINING_DUMMY_FACE_YAW;
       avatar.group.position.set((lane.xMin + lane.xMax) * 0.5, 0, lane.z);
       if (avatar.nameSprite) avatar.nameSprite.visible = false;
       avatar.group.visible = true;
       scene.add(avatar.group);
-      return {
+      avatar.idlePhase = Math.random() * Math.PI * 2;
+      return Object.assign(avatar, {
         trainingDummy: true,
         alive: true,
         hp: 9999,
         maxHp: 9999,
-        group: avatar.group,
         lane,
         patrolDir: 1,
         patrolSpeed: lane.speed,
         walkPhase: Math.random() * Math.PI * 2,
         dissolveTimer: 0,
-      };
+        isReloading: false,
+        ads: false,
+        adsBlend: 0,
+      });
     }
 
     function rebuildTrainingDummies() {
@@ -7764,7 +7771,13 @@ if (typeof window !== "undefined") {
         enemy.group.position.x = x;
         enemy.walkPhase += dt * (2.4 + enemy.patrolSpeed * 0.35);
         enemy.group.position.y = Math.sin(enemy.walkPhase) * 0.04;
-        enemy.group.rotation.y = Math.PI;
+        enemy.group.rotation.y = TRAINING_DUMMY_FACE_YAW;
+        enemy.idlePhase = (enemy.idlePhase || 0) + dt * 1.28;
+        const wSin = Math.sin(enemy.walkPhase) * 0.52;
+        const moving = true;
+        if (enemy.rightArm && enemy.leftArm && enemy.weaponHold) {
+          applyRemoteTwoHandStance(enemy, dt, moving, wSin, enemy.idlePhase, 0);
+        }
       }
     }
 
