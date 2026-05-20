@@ -5293,27 +5293,27 @@ if (typeof window !== "undefined") {
     /** Left support-hand anchor on third-person gun (foregrip / pump). */
     /** Grip anchors (gun Y=π so muzzle faces +Z; X mirrored on mesh). */
     const REMOTE_SUPPORT_SOCKET_LOCAL = {
-      0: { x: 0.055, y: -0.11, z: 0.14 },
-      1: { x: 0.062, y: -0.115, z: 0.2 },
-      2: { x: 0.07, y: -0.12, z: 0.18 },
-      3: { x: 0.058, y: -0.112, z: 0.19 },
-      5: { x: 0.065, y: -0.118, z: 0.28 },
+      0: { x: 0.05, y: -0.1, z: 0.06 },
+      1: { x: 0.055, y: -0.105, z: 0.08 },
+      2: { x: 0.058, y: -0.108, z: 0.07 },
+      3: { x: 0.052, y: -0.102, z: 0.075 },
+      5: { x: 0.056, y: -0.106, z: 0.1 },
     };
     const REMOTE_PRIMARY_GRIP_LOCAL = {
-      0: { x: -0.05, y: -0.12, z: 0.1 },
-      1: { x: -0.055, y: -0.125, z: 0.17 },
-      2: { x: -0.058, y: -0.128, z: 0.15 },
-      3: { x: -0.052, y: -0.122, z: 0.16 },
-      5: { x: -0.056, y: -0.126, z: 0.24 },
+      0: { x: -0.048, y: -0.11, z: 0.05 },
+      1: { x: -0.052, y: -0.112, z: 0.07 },
+      2: { x: -0.054, y: -0.115, z: 0.06 },
+      3: { x: -0.05, y: -0.108, z: 0.065 },
+      5: { x: -0.052, y: -0.112, z: 0.09 },
     };
     /** Fixed two-hand pose (arms forward to belly hold — no IK to chin). */
     const REMOTE_TWO_HAND_STANCE = [
-      { holdY: 0.86, holdZ: 0.38, r: { x: -1.38, y: -0.14, z: -0.1 }, l: { x: -1.34, y: 0.16, z: 0.2 } },
-      { holdY: 0.85, holdZ: 0.4, r: { x: -1.4, y: -0.15, z: -0.1 }, l: { x: -1.36, y: 0.17, z: 0.21 } },
-      { holdY: 0.86, holdZ: 0.38, r: { x: -1.39, y: -0.14, z: -0.09 }, l: { x: -1.35, y: 0.16, z: 0.2 } },
-      { holdY: 0.85, holdZ: 0.39, r: { x: -1.39, y: -0.15, z: -0.1 }, l: { x: -1.36, y: 0.17, z: 0.21 } },
+      { holdY: -0.05, holdZ: 0.2, r: { x: -1.38, y: -0.14, z: -0.1 }, l: { x: -1.34, y: 0.16, z: 0.2 } },
+      { holdY: -0.06, holdZ: 0.22, r: { x: -1.4, y: -0.15, z: -0.1 }, l: { x: -1.36, y: 0.17, z: 0.21 } },
+      { holdY: -0.05, holdZ: 0.2, r: { x: -1.39, y: -0.14, z: -0.09 }, l: { x: -1.35, y: 0.16, z: 0.2 } },
+      { holdY: -0.06, holdZ: 0.21, r: { x: -1.39, y: -0.15, z: -0.1 }, l: { x: -1.36, y: 0.17, z: 0.21 } },
       null,
-      { holdY: 0.84, holdZ: 0.42, r: { x: -1.41, y: -0.16, z: -0.11 }, l: { x: -1.37, y: 0.18, z: 0.22 } },
+      { holdY: -0.07, holdZ: 0.24, r: { x: -1.41, y: -0.16, z: -0.11 }, l: { x: -1.37, y: 0.18, z: 0.22 } },
     ];
 
     function hashRemoteTint(seed) {
@@ -5419,32 +5419,33 @@ if (typeof window !== "undefined") {
     function applyThirdPersonGunToChestHold(gunModel, weaponType) {
       const t = weaponType | 0;
       gunModel.rotation.order = "YXZ";
-      gunModel.rotation.set(-0.1, Math.PI, 0);
+      gunModel.rotation.set(-0.06, Math.PI, 0);
       if (t === 0) {
-        gunModel.position.set(0, -0.06, 0.14);
+        gunModel.position.set(0, -0.04, 0.02);
         gunModel.scale.set(1, 1, 1);
       } else if (t === 1) {
-        gunModel.position.set(0, -0.055, 0.2);
+        gunModel.position.set(0, -0.045, 0.04);
         gunModel.scale.set(1.06, 1.06, 1.06);
       } else if (t === 2) {
-        gunModel.position.set(0, -0.065, 0.2);
+        gunModel.position.set(0, -0.05, 0.03);
         gunModel.scale.set(1.03, 1.03, 1.03);
       } else if (t === 5) {
-        gunModel.position.set(0, -0.07, 0.3);
+        gunModel.position.set(0, -0.055, 0.06);
         gunModel.scale.set(1.14, 1.14, 1.14);
       } else {
-        gunModel.position.set(0, -0.058, 0.18);
+        gunModel.position.set(0, -0.042, 0.03);
         gunModel.scale.set(1, 1, 1);
       }
     }
 
-    function getOrCreateRemoteWeaponHold(group) {
-      let hold = group.getObjectByName("remoteWeaponHold");
+    function getOrCreateRemoteWeaponHold(torso) {
+      if (!torso) return null;
+      let hold = torso.getObjectByName("remoteWeaponHold");
       if (!hold) {
         hold = new THREE.Group();
         hold.name = "remoteWeaponHold";
-        hold.position.set(0, 0.86, 0.38);
-        group.add(hold);
+        hold.position.set(0, -0.05, 0.2);
+        torso.add(hold);
       }
       return hold;
     }
@@ -5455,7 +5456,9 @@ if (typeof window !== "undefined") {
         rp.gloveMat ||
         new THREE.MeshStandardMaterial({ color: 0x3a3528, roughness: 0.9 });
       if (!rp.gloveMat) rp.gloveMat = gloveMat;
-      const hold = getOrCreateRemoteWeaponHold(rp.group);
+      const staleHold = rp.group.getObjectByName("remoteWeaponHold");
+      if (staleHold) rp.group.remove(staleHold);
+      const hold = getOrCreateRemoteWeaponHold(rp.torsoMesh);
       rp.weaponHold = hold;
       if (rp.gunModel) {
         hold.remove(rp.gunModel);
@@ -5468,6 +5471,7 @@ if (typeof window !== "undefined") {
         rp.currentWeapon = wt;
         return;
       }
+      if (!hold) return;
       hold.visible = true;
       const gunModel = makeThirdPersonGun(wt);
       applyThirdPersonGunToChestHold(gunModel, wt);
@@ -5646,10 +5650,10 @@ if (typeof window !== "undefined") {
       rightHandGrip.rotation.y = -0.04;
       rightArm.add(rightHandGrip);
 
-      const weaponHold = getOrCreateRemoteWeaponHold(group);
+      const weaponHold = getOrCreateRemoteWeaponHold(chest);
       const gunModel = makeThirdPersonGun(1);
       applyThirdPersonGunToChestHold(gunModel, 1);
-      weaponHold.add(gunModel);
+      if (weaponHold) weaponHold.add(gunModel);
       const supportSocket = attachRemoteSupportHand(gunModel, 1, mGlove);
       const primarySocket = attachRemotePrimaryHand(gunModel, 1, mGlove);
 
