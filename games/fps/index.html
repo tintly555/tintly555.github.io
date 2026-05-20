@@ -4641,6 +4641,10 @@
         try {
           const appEl = document.getElementById("app");
           if (appEl) {
+            const ow = appEl.offsetWidth || 0;
+            const oh = appEl.offsetHeight || 0;
+            if (ow >= 2) w = Math.max(w, ow);
+            if (oh >= 2) h = Math.max(h, oh);
             const br = appEl.getBoundingClientRect();
             if (br.width >= 2 && br.height >= 2) {
               w = Math.max(w, br.width);
@@ -4926,15 +4930,33 @@
         camera.aspect = aspect;
         camera.updateProjectionMatrix();
         renderer.setPixelRatio(getPixelRatioForQuality());
-        renderer.setSize(w, h, true);
+        /** updateStyle=false: #app canvas uses 100% CSS; inline px from setSize(true) caused black/wrong size until DevTools resize. */
+        renderer.setSize(w, h, false);
         try {
           renderer.domElement.style.display = "block";
+          renderer.domElement.style.width = "100%";
+          renderer.domElement.style.height = "100%";
         } catch (_) {}
       } catch (_) {}
     }
 
     /** First frames after load / tab focus: keep syncing until layout stabilizes (mitigates black GL canvas until manual resize). */
     let _rendererSyncWarmupFrames = 0;
+
+    function bumpRendererLayoutSync(warmupFrames) {
+      _rendererSyncWarmupFrames = Math.max(
+        _rendererSyncWarmupFrames,
+        warmupFrames | 0
+      );
+      syncGameRendererSize();
+      requestAnimationFrame(() => {
+        syncGameRendererSize();
+        requestAnimationFrame(syncGameRendererSize);
+      });
+      [16, 64, 200, 420].forEach((ms) =>
+        setTimeout(syncGameRendererSize, ms)
+      );
+    }
 
     applyGraphicsQuality();
     requestAnimationFrame(() => {
@@ -7029,7 +7051,7 @@
         ${tr("hudGameTitleLine", "Zone No Light")}<br>
         WASD move | Space jump | R reload<br>
         Mouse aim | RMB zoom | L flashlight | Z beam small/med/wide<br>
-        Weapons: 1–4 | <b>5</b> Med Kit (hold <b>F</b> or <b>LMB</b> 10s, +50 HP) | <b>6</b> AMR<br>
+        Weapons: 1–4 | <b>5</b> AMR | <b>6</b> Med Kit (hold <b>F</b> or <b>LMB</b> 10s, +50 HP)<br>
         Map: ${mapLabel}${MULTIPLAYER ? " (MP)" : ""}<br>
         Weapon: ${w.name}<br>
         ${
@@ -9171,8 +9193,8 @@
       if (k === "2") setWeapon(1);
       if (k === "3") setWeapon(2);
       if (k === "4") setWeapon(3);
-      if (k === "5") setWeapon(4);
-      if (k === "6") setWeapon(5);
+      if (k === "5") setWeapon(5);
+      if (k === "6") setWeapon(4);
       if (k === "r") startReload();
     });
 
@@ -9247,6 +9269,7 @@
         }
       } else {
         hidePause();
+        bumpRendererLayoutSync(90);
       }
       hint.style.display = (state.locked || paused || player.health <= 0 || !gameWorldReady) ? "none" : "block";
     });
@@ -11169,6 +11192,7 @@
       state.camShake = 0;
       ensureAmbientWindLoop();
       menuEl.style.display = "none";
+      bumpRendererLayoutSync(280);
       stopMenuBackdropLoop();
       pauseMenuBgm();
 
@@ -11273,6 +11297,7 @@
 
       weaponRoot.visible = true;
       gameWorldReady = true;
+      bumpRendererLayoutSync(320);
       setTrainingScoreboardVisible(isTrainingMap(CURRENT_MAP));
       if (isTrainingMap(CURRENT_MAP)) updateTrainingScoreboardUI();
       player.spawnProtectUntil = performance.now() + 3000;
