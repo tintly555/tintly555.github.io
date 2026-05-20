@@ -7712,89 +7712,107 @@
       return buf;
     }
 
-    /** AMR: heavy sub boom + long thunder tail (anti-materiel rifle). */
+    /** AMR: loud front crack/boom + extended rolling tail (anti-materiel rifle). */
     function playAmrGunSound() {
       if (audioCtx.state === "suspended") void audioCtx.resume();
       const now = audioCtx.currentTime;
 
       const sub = audioCtx.createOscillator();
       sub.type = "sine";
-      sub.frequency.setValueAtTime(48, now);
-      sub.frequency.exponentialRampToValueAtTime(22, now + 0.62);
+      sub.frequency.setValueAtTime(52, now);
+      sub.frequency.exponentialRampToValueAtTime(18, now + 0.78);
       const subG = audioCtx.createGain();
       subG.gain.setValueAtTime(0.0001, now);
-      subG.gain.exponentialRampToValueAtTime(1.35, now + 0.02);
-      subG.gain.exponentialRampToValueAtTime(0.0001, now + 0.72);
+      subG.gain.exponentialRampToValueAtTime(1.72, now + 0.018);
+      subG.gain.exponentialRampToValueAtTime(0.0001, now + 0.98);
       sub.connect(subG);
       subG.connect(audioSfx);
       sub.start(now);
-      sub.stop(now + 0.75);
+      sub.stop(now + 1.02);
 
       const boom = audioCtx.createBufferSource();
-      boom.buffer = getGunNoiseBuffer(0.55);
+      boom.buffer = getGunNoiseBuffer(0.62);
       const boomLp = audioCtx.createBiquadFilter();
       boomLp.type = "lowpass";
-      boomLp.frequency.setValueAtTime(320, now);
-      boomLp.frequency.exponentialRampToValueAtTime(90, now + 0.4);
+      boomLp.frequency.setValueAtTime(380, now);
+      boomLp.frequency.exponentialRampToValueAtTime(72, now + 0.55);
       const boomG = audioCtx.createGain();
       boomG.gain.setValueAtTime(0.0001, now);
-      boomG.gain.exponentialRampToValueAtTime(1.05, now + 0.012);
-      boomG.gain.exponentialRampToValueAtTime(0.0001, now + 0.62);
+      boomG.gain.exponentialRampToValueAtTime(1.42, now + 0.01);
+      boomG.gain.exponentialRampToValueAtTime(0.0001, now + 0.72);
       boom.connect(boomLp);
       boomLp.connect(boomG);
       boomG.connect(audioSfx);
       boom.start(now);
-      boom.stop(now + 0.65);
+      boom.stop(now + 0.76);
 
       const crack = audioCtx.createBufferSource();
-      crack.buffer = getGunNoiseBuffer(0.14);
+      crack.buffer = getGunNoiseBuffer(0.18);
       const crackBp = audioCtx.createBiquadFilter();
       crackBp.type = "bandpass";
-      crackBp.frequency.setValueAtTime(1800, now);
-      crackBp.Q.setValueAtTime(0.45, now);
+      crackBp.frequency.setValueAtTime(2100, now);
+      crackBp.Q.setValueAtTime(0.52, now);
       const crackG = audioCtx.createGain();
       crackG.gain.setValueAtTime(0.0001, now);
-      crackG.gain.exponentialRampToValueAtTime(0.92, now + 0.004);
-      crackG.gain.exponentialRampToValueAtTime(0.0001, now + 0.12);
+      crackG.gain.exponentialRampToValueAtTime(1.18, now + 0.003);
+      crackG.gain.exponentialRampToValueAtTime(0.0001, now + 0.16);
       crack.connect(crackBp);
       crackBp.connect(crackG);
       crackG.connect(audioSfx);
       crack.start(now);
-      crack.stop(now + 0.14);
+      crack.stop(now + 0.18);
 
       const tail = audioCtx.createBufferSource();
-      tail.buffer = getGunNoiseBuffer(1.05);
+      tail.buffer = getGunNoiseBuffer(1.55);
       const tailBp = audioCtx.createBiquadFilter();
       tailBp.type = "bandpass";
-      tailBp.frequency.setValueAtTime(420, now + 0.05);
-      tailBp.Q.setValueAtTime(0.35, now);
+      tailBp.frequency.setValueAtTime(480, now + 0.06);
+      tailBp.frequency.exponentialRampToValueAtTime(180, now + 1.35);
+      tailBp.Q.setValueAtTime(0.32, now);
       const tailG = audioCtx.createGain();
-      tailG.gain.setValueAtTime(0.0001, now + 0.04);
-      tailG.gain.exponentialRampToValueAtTime(0.72, now + 0.09);
-      tailG.gain.exponentialRampToValueAtTime(0.0001, now + 1.05);
+      tailG.gain.setValueAtTime(0.0001, now + 0.03);
+      tailG.gain.exponentialRampToValueAtTime(0.95, now + 0.08);
+      tailG.gain.exponentialRampToValueAtTime(0.0001, now + 1.62);
       tail.connect(tailBp);
       tailBp.connect(tailG);
       tailG.connect(audioSfx);
-      tail.start(now + 0.035);
-      tail.stop(now + 1.08);
+      tail.start(now + 0.028);
+      tail.stop(now + 1.68);
+
+      const rumble = audioCtx.createBufferSource();
+      rumble.buffer = getGunNoiseBuffer(1.25);
+      const rumbleLp = audioCtx.createBiquadFilter();
+      rumbleLp.type = "lowpass";
+      rumbleLp.frequency.setValueAtTime(240, now + 0.12);
+      rumbleLp.frequency.exponentialRampToValueAtTime(55, now + 1.5);
+      const rumbleG = audioCtx.createGain();
+      rumbleG.gain.setValueAtTime(0.0001, now + 0.1);
+      rumbleG.gain.exponentialRampToValueAtTime(0.58, now + 0.22);
+      rumbleG.gain.exponentialRampToValueAtTime(0.0001, now + 1.55);
+      rumble.connect(rumbleLp);
+      rumbleLp.connect(rumbleG);
+      rumbleG.connect(audioSfx);
+      rumble.start(now + 0.08);
+      rumble.stop(now + 1.6);
 
       const echoIn = audioCtx.createGain();
-      echoIn.gain.setValueAtTime(0.38, now);
-      const delay = audioCtx.createDelay(1.2);
-      delay.delayTime.setValueAtTime(0.16, now);
+      echoIn.gain.setValueAtTime(0.52, now);
+      const delay = audioCtx.createDelay(2.0);
+      delay.delayTime.setValueAtTime(0.19, now);
       const fb = audioCtx.createGain();
-      fb.gain.setValueAtTime(0.48, now);
+      fb.gain.setValueAtTime(0.52, now);
       const echoLp = audioCtx.createBiquadFilter();
       echoLp.type = "lowpass";
-      echoLp.frequency.setValueAtTime(520, now);
+      echoLp.frequency.setValueAtTime(480, now);
       boomG.connect(echoIn);
       tailG.connect(echoIn);
+      rumbleG.connect(echoIn);
       echoIn.connect(delay);
       delay.connect(echoLp);
       echoLp.connect(audioSfx);
       delay.connect(fb);
       fb.connect(delay);
-      fb.gain.exponentialRampToValueAtTime(0.0001, now + 1.35);
+      fb.gain.exponentialRampToValueAtTime(0.0001, now + 1.85);
     }
 
     /** Layered tactical gunshots: bright crack + body + mechanical tail + short room echo. */
@@ -7952,49 +7970,66 @@
     /** Local player hurt: bullet (PvP / default MP) vs melee (zombie). Uses Web Audio only. */
     let _killSoundGate = 0;
 
-    /** Valorant-style kill confirm: short two-tone chime (+ sharper headshot). */
+    /** Valorant-style kill confirm: audible two-tone chime + punch (loud enough over gunfire). */
     function playKillConfirmSound(headshot = false, training = false) {
       const nowMs = performance.now();
-      if (nowMs - _killSoundGate < 65) return;
+      if (nowMs - _killSoundGate < 55) return;
       _killSoundGate = nowMs;
-      if (audioCtx.state === "suspended") void audioCtx.resume();
-      const t = audioCtx.currentTime;
-      const f1 = headshot ? 988 : training ? 740 : 820;
-      const f2 = headshot ? 1480 : training ? 1110 : 1235;
-      const peak = training ? 0.38 : headshot ? 0.82 : 0.72;
+      if (audioCtx.state === "suspended") {
+        audioCtx.resume().catch(() => {});
+      }
+      const t = audioCtx.currentTime + 0.01;
+      const f1 = headshot ? 1046 : training ? 784 : 880;
+      const f2 = headshot ? 1568 : training ? 1175 : 1318;
+      const f3 = headshot ? 2093 : training ? 1568 : 1760;
+      const peak = training ? 0.95 : headshot ? 1.35 : 1.15;
 
       const playTone = (freq, start, dur, type, gain) => {
         const o = audioCtx.createOscillator();
         o.type = type;
         o.frequency.setValueAtTime(freq, start);
         const g = audioCtx.createGain();
-        g.gain.setValueAtTime(0.0001, start);
-        g.gain.exponentialRampToValueAtTime(gain, start + 0.008);
-        g.gain.exponentialRampToValueAtTime(0.0001, start + dur);
+        g.gain.setValueAtTime(0.001, start);
+        g.gain.linearRampToValueAtTime(gain, start + 0.006);
+        g.gain.exponentialRampToValueAtTime(0.001, start + dur);
         o.connect(g);
         g.connect(audioSfx);
         o.start(start);
-        o.stop(start + dur + 0.02);
+        o.stop(start + dur + 0.03);
       };
 
-      playTone(f1, t, 0.11, "triangle", peak);
-      playTone(f2, t + 0.055, 0.14, "sine", peak * 0.92);
+      playTone(f1, t, 0.12, "triangle", peak);
+      playTone(f2, t + 0.048, 0.16, "sine", peak * 0.98);
+      playTone(f3, t + 0.1, 0.14, "sine", peak * (headshot ? 0.72 : 0.55));
+
+      const thump = audioCtx.createOscillator();
+      thump.type = "sine";
+      thump.frequency.setValueAtTime(headshot ? 220 : 165, t);
+      thump.frequency.exponentialRampToValueAtTime(90, t + 0.14);
+      const thumpG = audioCtx.createGain();
+      thumpG.gain.setValueAtTime(0.001, t);
+      thumpG.gain.linearRampToValueAtTime(peak * 0.55, t + 0.01);
+      thumpG.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+      thump.connect(thumpG);
+      thumpG.connect(audioSfx);
+      thump.start(t);
+      thump.stop(t + 0.2);
 
       const tick = audioCtx.createBufferSource();
-      tick.buffer = getGunNoiseBuffer(0.028);
+      tick.buffer = getGunNoiseBuffer(0.04);
       const tickBp = audioCtx.createBiquadFilter();
       tickBp.type = "bandpass";
-      tickBp.frequency.setValueAtTime(headshot ? 3200 : 2400, t);
-      tickBp.Q.setValueAtTime(1.2, t);
+      tickBp.frequency.setValueAtTime(headshot ? 3800 : 2800, t);
+      tickBp.Q.setValueAtTime(1.4, t);
       const tickG = audioCtx.createGain();
-      tickG.gain.setValueAtTime(0.0001, t);
-      tickG.gain.exponentialRampToValueAtTime(peak * 0.35, t + 0.003);
-      tickG.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
+      tickG.gain.setValueAtTime(0.001, t);
+      tickG.gain.linearRampToValueAtTime(peak * 0.65, t + 0.004);
+      tickG.gain.exponentialRampToValueAtTime(0.001, t + 0.07);
       tick.connect(tickBp);
       tickBp.connect(tickG);
       tickG.connect(audioSfx);
       tick.start(t);
-      tick.stop(t + 0.06);
+      tick.stop(t + 0.08);
     }
 
     function playReceivedDamageSound(kind) {
@@ -8114,9 +8149,10 @@
       }
     }
 
-    const DISSOLVE_DURATION = 0.78;
-    const MAX_DISSOLVE_MESHES = 96;
-    const DISSOLVE_BOX_GEO = new THREE.BoxGeometry(0.055, 0.055, 0.055);
+    const DISSOLVE_DURATION = 0.82;
+    const MAX_DISSOLVE_MESHES = 200;
+    const DISSOLVE_BOX_GEO = new THREE.BoxGeometry(0.05, 0.05, 0.05);
+    const DISSOLVE_BOX_GEO_SM = new THREE.BoxGeometry(0.035, 0.035, 0.035);
     const dissolveBursts = [];
     const _dissolveTmp = new THREE.Vector3();
     const _dissolveDir = new THREE.Vector3();
@@ -8141,8 +8177,46 @@
       rootGroup.updateMatrixWorld(true);
       const particles = [];
       let spawned = 0;
+      const maxShards = 118;
+      const pushShard = (pos, col, fromHit, small) => {
+        if (spawned >= maxShards) return;
+        const mat = new THREE.MeshBasicMaterial({
+          color: col,
+          transparent: true,
+          opacity: 0.96,
+          depthWrite: false,
+        });
+        const shard = new THREE.Mesh(small ? DISSOLVE_BOX_GEO_SM : DISSOLVE_BOX_GEO, mat);
+        shard.position.copy(pos);
+        shard.position.x += (Math.random() - 0.5) * 0.14;
+        shard.position.y += (Math.random() - 0.5) * 0.16;
+        shard.position.z += (Math.random() - 0.5) * 0.14;
+        _dissolveDir.subVectors(shard.position, fromHit ? hit : pos);
+        if (_dissolveDir.lengthSq() < 0.04) {
+          _dissolveDir.set(
+            (Math.random() - 0.5) * 2,
+            Math.random() * 0.9 + 0.3,
+            (Math.random() - 0.5) * 2
+          );
+        }
+        _dissolveDir.normalize();
+        const speed = (small ? 1.8 : 2.2) + Math.random() * 3.2;
+        dissolveGroup.add(shard);
+        particles.push({
+          mesh: shard,
+          vel: new THREE.Vector3(
+            _dissolveDir.x * speed,
+            _dissolveDir.y * speed + 0.4,
+            _dissolveDir.z * speed
+          ),
+          spin: (Math.random() - 0.5) * 16,
+          life: DISSOLVE_DURATION * (0.6 + Math.random() * 0.5),
+          maxLife: DISSOLVE_DURATION,
+        });
+        spawned++;
+      };
       rootGroup.traverse((o) => {
-        if (!o.isMesh || spawned >= 52) return;
+        if (!o.isMesh || spawned >= maxShards) return;
         o.getWorldPosition(_dissolveTmp);
         let col = 0x9aa8bc;
         if (o.material) {
@@ -8152,43 +8226,22 @@
             col = o.material.color.getHex();
           }
         }
-        const shards = 2;
-        for (let si = 0; si < shards && spawned < 52; si++, spawned++) {
-          const mat = new THREE.MeshBasicMaterial({
-            color: col,
-            transparent: true,
-            opacity: 0.94,
-            depthWrite: false,
-          });
-          const shard = new THREE.Mesh(DISSOLVE_BOX_GEO, mat);
-          shard.position.copy(_dissolveTmp);
-          shard.position.x += (Math.random() - 0.5) * 0.1;
-          shard.position.y += (Math.random() - 0.5) * 0.12;
-          shard.position.z += (Math.random() - 0.5) * 0.1;
-          _dissolveDir.subVectors(shard.position, hit);
-          if (_dissolveDir.lengthSq() < 0.04) {
-            _dissolveDir.set(
-              (Math.random() - 0.5) * 2,
-              Math.random() * 0.85 + 0.25,
-              (Math.random() - 0.5) * 2
-            );
-          }
-          _dissolveDir.normalize();
-          const speed = 1.4 + Math.random() * 2.6;
-          dissolveGroup.add(shard);
-          particles.push({
-            mesh: shard,
-            vel: new THREE.Vector3(
-              _dissolveDir.x * speed,
-              _dissolveDir.y * speed + 0.35,
-              _dissolveDir.z * speed
-            ),
-            spin: (Math.random() - 0.5) * 14,
-            life: DISSOLVE_DURATION * (0.65 + Math.random() * 0.45),
-            maxLife: DISSOLVE_DURATION,
-          });
+        for (let si = 0; si < 4 && spawned < maxShards; si++) {
+          pushShard(_dissolveTmp, col, true, si > 1);
         }
       });
+      for (let hi = 0; hi < 22 && spawned < maxShards; hi++) {
+        _dissolveTmp.copy(hit);
+        _dissolveTmp.x += (Math.random() - 0.5) * 0.55;
+        _dissolveTmp.y += (Math.random() - 0.5) * 0.65;
+        _dissolveTmp.z += (Math.random() - 0.5) * 0.55;
+        pushShard(
+          _dissolveTmp,
+          hi % 3 === 0 ? 0xff6a6a : 0xb8c4d8,
+          true,
+          true
+        );
+      }
       if (particles.length) {
         dissolveBursts.push({ particles, onComplete: opts.onComplete || null });
       } else if (opts.onComplete) {
@@ -8277,6 +8330,7 @@
       state.hitmarkerTimer = isKill ? 0.16 : 0.09;
       hitmarkerEl.classList.add("show");
       hitmarkerEl.classList.toggle("critical", !!isKill || !!headshot);
+      if (isKill) playKillConfirmSound(!!headshot, false);
       showCombatFeedback(
         isKill ? tr("combatKill", "KILL!") : tr("combatHit", "HIT"),
         isKill ? "rgba(255,88,88,0.98)" : "rgba(255,255,255,0.95)",
@@ -9873,6 +9927,7 @@
           if (bestEnemy.trainingDummy) {
             registerTrainingHit(bestEnemyZone);
             playTrainingDummyHitDissolve(bestEnemy, bp);
+            playKillConfirmSound(bestEnemyZone === "head", true);
             updateHud();
             continue;
           }
@@ -9893,8 +9948,9 @@
               spawnHumanoidDissolve(bestEnemy.group, bp);
               bestEnemy.group.visible = false;
               state.score += 1;
-              triggerHitFeedback(true);
+              triggerHitFeedback(true, bestEnemyZone === "head");
               createSparks(bp.clone(), 0xff5555);
+              createSparks(bp.clone(), 0xff8888);
             }
           }
         } else if (closestDist === rpDist && bestRpId != null && bestRpHitT < Infinity) {
@@ -10304,6 +10360,8 @@
 
     function hideDeathScreen() {
       clearLocalDeathGhost();
+      crosshairEl.classList.remove("hidden");
+      if (medKitReticleEl) medKitReticleEl.classList.add("hidden");
       document.body.classList.remove("show-cursor");
       deathOverlay.style.display = "none";
       deathUI.style.display = "none";
