@@ -7970,66 +7970,108 @@
     /** Local player hurt: bullet (PvP / default MP) vs melee (zombie). Uses Web Audio only. */
     let _killSoundGate = 0;
 
-    /** Valorant-style kill confirm: audible two-tone chime + punch (loud enough over gunfire). */
+    /**
+     * Kill confirm: delayed heavy “DENG” impact + long muffled “~~~” tail.
+     * Cow-hoof chest thud — low, blunt, no bright chime; distinct from AMR crack/tail.
+     */
     function playKillConfirmSound(headshot = false, training = false) {
       const nowMs = performance.now();
-      if (nowMs - _killSoundGate < 55) return;
+      if (nowMs - _killSoundGate < 90) return;
       _killSoundGate = nowMs;
       if (audioCtx.state === "suspended") {
         audioCtx.resume().catch(() => {});
       }
-      const t = audioCtx.currentTime + 0.01;
-      const f1 = headshot ? 1046 : training ? 784 : 880;
-      const f2 = headshot ? 1568 : training ? 1175 : 1318;
-      const f3 = headshot ? 2093 : training ? 1568 : 1760;
-      const peak = training ? 0.95 : headshot ? 1.35 : 1.15;
+      const delaySec = training ? 0.26 : headshot ? 0.32 : 0.38;
+      const t = audioCtx.currentTime + delaySec;
+      const dengPeak = training ? 1.12 : headshot ? 1.82 : 1.62;
+      const tailPeak = training ? 0.72 : headshot ? 1.05 : 0.92;
+      const tailLen = training ? 0.68 : headshot ? 0.78 : 0.88;
+      const tailT = t + 0.062;
 
-      const playTone = (freq, start, dur, type, gain) => {
-        const o = audioCtx.createOscillator();
-        o.type = type;
-        o.frequency.setValueAtTime(freq, start);
-        const g = audioCtx.createGain();
-        g.gain.setValueAtTime(0.001, start);
-        g.gain.linearRampToValueAtTime(gain, start + 0.006);
-        g.gain.exponentialRampToValueAtTime(0.001, start + dur);
-        o.connect(g);
-        g.connect(audioSfx);
-        o.start(start);
-        o.stop(start + dur + 0.03);
-      };
+      const dengCore = audioCtx.createOscillator();
+      dengCore.type = "sine";
+      dengCore.frequency.setValueAtTime(headshot ? 74 : 68, t);
+      dengCore.frequency.exponentialRampToValueAtTime(48, t + 0.11);
+      const dengCoreG = audioCtx.createGain();
+      dengCoreG.gain.setValueAtTime(0.0001, t);
+      dengCoreG.gain.linearRampToValueAtTime(dengPeak, t + 0.007);
+      dengCoreG.gain.setValueAtTime(dengPeak * 0.92, t + 0.038);
+      dengCoreG.gain.exponentialRampToValueAtTime(0.0001, t + 0.11);
+      dengCore.connect(dengCoreG);
+      dengCoreG.connect(audioSfx);
+      dengCore.start(t);
+      dengCore.stop(t + 0.14);
 
-      playTone(f1, t, 0.12, "triangle", peak);
-      playTone(f2, t + 0.048, 0.16, "sine", peak * 0.98);
-      playTone(f3, t + 0.1, 0.14, "sine", peak * (headshot ? 0.72 : 0.55));
+      const dengChest = audioCtx.createOscillator();
+      dengChest.type = "sine";
+      dengChest.frequency.setValueAtTime(headshot ? 81 : 76, t);
+      dengChest.frequency.exponentialRampToValueAtTime(52, t + 0.1);
+      const dengChestG = audioCtx.createGain();
+      dengChestG.gain.setValueAtTime(0.0001, t);
+      dengChestG.gain.linearRampToValueAtTime(dengPeak * 0.48, t + 0.009);
+      dengChestG.gain.exponentialRampToValueAtTime(0.0001, t + 0.1);
+      dengChest.connect(dengChestG);
+      dengChestG.connect(audioSfx);
+      dengChest.start(t);
+      dengChest.stop(t + 0.12);
 
-      const thump = audioCtx.createOscillator();
-      thump.type = "sine";
-      thump.frequency.setValueAtTime(headshot ? 220 : 165, t);
-      thump.frequency.exponentialRampToValueAtTime(90, t + 0.14);
-      const thumpG = audioCtx.createGain();
-      thumpG.gain.setValueAtTime(0.001, t);
-      thumpG.gain.linearRampToValueAtTime(peak * 0.55, t + 0.01);
-      thumpG.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
-      thump.connect(thumpG);
-      thumpG.connect(audioSfx);
-      thump.start(t);
-      thump.stop(t + 0.2);
+      const hoof = audioCtx.createBufferSource();
+      hoof.buffer = getGunNoiseBuffer(0.12);
+      const hoofLp = audioCtx.createBiquadFilter();
+      hoofLp.type = "lowpass";
+      hoofLp.frequency.setValueAtTime(92, t);
+      hoofLp.Q.setValueAtTime(0.9, t);
+      const hoofG = audioCtx.createGain();
+      hoofG.gain.setValueAtTime(0.0001, t);
+      hoofG.gain.linearRampToValueAtTime(dengPeak * 0.72, t + 0.005);
+      hoofG.gain.exponentialRampToValueAtTime(0.0001, t + 0.085);
+      hoof.connect(hoofLp);
+      hoofLp.connect(hoofG);
+      hoofG.connect(audioSfx);
+      hoof.start(t);
+      hoof.stop(t + 0.1);
 
-      const tick = audioCtx.createBufferSource();
-      tick.buffer = getGunNoiseBuffer(0.04);
-      const tickBp = audioCtx.createBiquadFilter();
-      tickBp.type = "bandpass";
-      tickBp.frequency.setValueAtTime(headshot ? 3800 : 2800, t);
-      tickBp.Q.setValueAtTime(1.4, t);
-      const tickG = audioCtx.createGain();
-      tickG.gain.setValueAtTime(0.001, t);
-      tickG.gain.linearRampToValueAtTime(peak * 0.65, t + 0.004);
-      tickG.gain.exponentialRampToValueAtTime(0.001, t + 0.07);
-      tick.connect(tickBp);
-      tickBp.connect(tickG);
-      tickG.connect(audioSfx);
-      tick.start(t);
-      tick.stop(t + 0.08);
+      const tailCore = audioCtx.createOscillator();
+      tailCore.type = "sine";
+      tailCore.frequency.setValueAtTime(56, tailT);
+      tailCore.frequency.exponentialRampToValueAtTime(28, tailT + tailLen);
+      const tailCoreG = audioCtx.createGain();
+      tailCoreG.gain.setValueAtTime(0.0001, tailT);
+      tailCoreG.gain.linearRampToValueAtTime(tailPeak, tailT + 0.045);
+      tailCoreG.gain.exponentialRampToValueAtTime(0.0001, tailT + tailLen);
+      tailCore.connect(tailCoreG);
+      tailCoreG.connect(audioSfx);
+      tailCore.start(tailT);
+      tailCore.stop(tailT + tailLen + 0.06);
+
+      const tailRumble = audioCtx.createBufferSource();
+      tailRumble.buffer = getGunNoiseBuffer(1.05);
+      const tailLp = audioCtx.createBiquadFilter();
+      tailLp.type = "lowpass";
+      tailLp.frequency.setValueAtTime(78, tailT);
+      tailLp.frequency.exponentialRampToValueAtTime(38, tailT + tailLen);
+      const tailRumbleG = audioCtx.createGain();
+      tailRumbleG.gain.setValueAtTime(0.0001, tailT);
+      tailRumbleG.gain.linearRampToValueAtTime(tailPeak * 0.58, tailT + 0.055);
+      tailRumbleG.gain.exponentialRampToValueAtTime(0.0001, tailT + tailLen + 0.08);
+      tailRumble.connect(tailLp);
+      tailLp.connect(tailRumbleG);
+      tailRumbleG.connect(audioSfx);
+      tailRumble.start(tailT);
+      tailRumble.stop(tailT + tailLen + 0.12);
+
+      const tailSub = audioCtx.createOscillator();
+      tailSub.type = "sine";
+      tailSub.frequency.setValueAtTime(38, tailT + 0.03);
+      tailSub.frequency.exponentialRampToValueAtTime(22, tailT + tailLen);
+      const tailSubG = audioCtx.createGain();
+      tailSubG.gain.setValueAtTime(0.0001, tailT + 0.03);
+      tailSubG.gain.linearRampToValueAtTime(tailPeak * 0.5, tailT + 0.08);
+      tailSubG.gain.exponentialRampToValueAtTime(0.0001, tailT + tailLen + 0.1);
+      tailSub.connect(tailSubG);
+      tailSubG.connect(audioSfx);
+      tailSub.start(tailT + 0.03);
+      tailSub.stop(tailT + tailLen + 0.14);
     }
 
     function playReceivedDamageSound(kind) {
