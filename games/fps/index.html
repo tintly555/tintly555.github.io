@@ -512,13 +512,11 @@
       pointer-events: none;
     }
 
-    /* In-game: menu wall canvas must not cover the main WebGL view (was black until F12/resize). */
+    /* In-game: hide menu wall only — do NOT raise #app z-index (it covered HUD/crosshair/scope). */
     body.game-active #menuWallBackdrop {
       display: none !important;
       visibility: hidden !important;
-    }
-    body.game-active #app {
-      z-index: 99;
+      pointer-events: none !important;
     }
 
     .menu {
@@ -7952,6 +7950,53 @@
     }
 
     /** Local player hurt: bullet (PvP / default MP) vs melee (zombie). Uses Web Audio only. */
+    let _killSoundGate = 0;
+
+    /** Valorant-style kill confirm: short two-tone chime (+ sharper headshot). */
+    function playKillConfirmSound(headshot = false, training = false) {
+      const nowMs = performance.now();
+      if (nowMs - _killSoundGate < 65) return;
+      _killSoundGate = nowMs;
+      if (audioCtx.state === "suspended") void audioCtx.resume();
+      const t = audioCtx.currentTime;
+      const f1 = headshot ? 988 : training ? 740 : 820;
+      const f2 = headshot ? 1480 : training ? 1110 : 1235;
+      const peak = training ? 0.38 : headshot ? 0.82 : 0.72;
+
+      const playTone = (freq, start, dur, type, gain) => {
+        const o = audioCtx.createOscillator();
+        o.type = type;
+        o.frequency.setValueAtTime(freq, start);
+        const g = audioCtx.createGain();
+        g.gain.setValueAtTime(0.0001, start);
+        g.gain.exponentialRampToValueAtTime(gain, start + 0.008);
+        g.gain.exponentialRampToValueAtTime(0.0001, start + dur);
+        o.connect(g);
+        g.connect(audioSfx);
+        o.start(start);
+        o.stop(start + dur + 0.02);
+      };
+
+      playTone(f1, t, 0.11, "triangle", peak);
+      playTone(f2, t + 0.055, 0.14, "sine", peak * 0.92);
+
+      const tick = audioCtx.createBufferSource();
+      tick.buffer = getGunNoiseBuffer(0.028);
+      const tickBp = audioCtx.createBiquadFilter();
+      tickBp.type = "bandpass";
+      tickBp.frequency.setValueAtTime(headshot ? 3200 : 2400, t);
+      tickBp.Q.setValueAtTime(1.2, t);
+      const tickG = audioCtx.createGain();
+      tickG.gain.setValueAtTime(0.0001, t);
+      tickG.gain.exponentialRampToValueAtTime(peak * 0.35, t + 0.003);
+      tickG.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
+      tick.connect(tickBp);
+      tickBp.connect(tickG);
+      tickG.connect(audioSfx);
+      tick.start(t);
+      tick.stop(t + 0.06);
+    }
+
     function playReceivedDamageSound(kind) {
       if (audioCtx.state === "suspended") void audioCtx.resume();
       const melee = kind === "melee";
