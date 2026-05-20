@@ -1521,24 +1521,24 @@ const GunSFX = (() => {
     const c = ctx();
     const now = c.currentTime;
     const out = master(now, 1.18, 1.08, 3.1);
-    const echo = delayBus(out, 0.14, 0.27, 0.22);
-    tone({ start: now, duration: 0.34, type: "sine", gain: 1.05, f0: 82, f1: 24, dest: out });
-    noise({ start: now, duration: 0.07, gain: 0.9, dest: out, filter: "highpass", filterFreq: 1550, q: 0.75 });
-    noise({ start: now + 0.035, duration: 0.42, gain: 0.52, dest: echo, filter: "bandpass", filterFreq: 205, q: 3 });
+    const echo = delayBus(out, 0.17, 0.3, 0.26);
+    tone({ start: now, duration: 0.3, type: "sine", gain: 1.2, f0: 64, f1: 20, dest: out });
+    noise({ start: now, duration: 0.06, gain: 1.05, dest: out, filter: "bandpass", filterFreq: 1100, q: 0.9 });
+    noise({ start: now + 0.006, duration: 0.04, gain: 0.82, dest: out, filter: "highpass", filterFreq: 2200, q: 1.1 });
+    noise({ start: now + 0.045, duration: 0.58, gain: 0.48, dest: echo, filter: "bandpass", filterFreq: 165, q: 2.6 });
     tone({
       start: now + 0.07,
-      duration: 0.62,
+      duration: 0.78,
       type: "triangle",
-      gain: 0.28,
-      f0: 480,
-      f1: 235,
+      gain: 0.34,
+      f0: 390,
+      f1: 155,
       dest: echo,
-      filter: "bandpass",
-      filterFreq: 500,
-      q: 7,
+      filter: "lowpass",
+      filterFreq: 480,
+      q: 3.5,
     });
-    noise({ start: now + 0.105, duration: 0.5, gain: 0.18, dest: echo, filter: "highpass", filterFreq: 2450, q: 1.1 });
-    hardClick(echo, now + 0.115, 3900, 0.18);
+    noise({ start: now + 0.14, duration: 0.62, gain: 0.16, dest: echo, filter: "highpass", filterFreq: 1600, q: 0.85 });
   }
 
   function revengeClassicShot() {
@@ -1606,6 +1606,121 @@ const GunSFX = (() => {
     }, interval);
   }
 
+
+  function hitBodyAncientPhantom() {
+    const c = ctx();
+    const now = c.currentTime;
+    const out = master(now, 0.52, 0.22, 2.0);
+    const echo = delayBus(out, 0.08, 0.2, 0.14);
+    tone({
+      start: now,
+      duration: 0.14,
+      type: "triangle",
+      gain: 0.32,
+      f0: 420,
+      f1: 180,
+      dest: echo,
+      filter: "bandpass",
+      filterFreq: 380,
+      q: 5,
+    });
+    noise({ start: now, duration: 0.05, gain: 0.2, dest: out, filter: "lowpass", filterFreq: 520, q: 1.5 });
+  }
+
+  function hitBodyRevengeClassic() {
+    const c = ctx();
+    const now = c.currentTime;
+    const out = master(now, 0.62, 0.24, 2.2);
+    brightPing(out, now, 1520, 0.48);
+    hardClick(out, now + 0.02, 6400, 0.15);
+  }
+
+  function hitBodyDivineSpectre() {
+    const c = ctx();
+    const now = c.currentTime;
+    const out = master(now, 0.58, 0.26, 2.4);
+    brightPing(out, now, 2280, 0.52);
+    ionWhip(out, now + 0.008, 0.14);
+  }
+
+  function hitBodyDragonOperator() {
+    const c = ctx();
+    const now = c.currentTime;
+    const out = master(now, 0.72, 0.32, 2.0);
+    tone({ start: now, duration: 0.16, type: "sine", gain: 0.48, f0: 95, f1: 42, dest: out });
+    noise({ start: now, duration: 0.06, gain: 0.32, dest: out, filter: "lowpass", filterFreq: 420, q: 1.2 });
+  }
+
+  function hitBody(skin = "revengeClassic") {
+    if (skin === "ancientPhantom") hitBodyAncientPhantom();
+    else if (skin === "dragonOperator") hitBodyDragonOperator();
+    else if (skin === "divineSpectre") hitBodyDivineSpectre();
+    else hitBodyRevengeClassic();
+  }
+
+  function hitHeadAncientPhantom() {
+    const c = ctx();
+    const now = c.currentTime;
+    const out = master(now, 0.78, 0.32, 2.4);
+    const echo = delayBus(out, 0.09, 0.22, 0.16);
+    tone({
+      start: now,
+      duration: 0.2,
+      type: "triangle",
+      gain: 0.45,
+      f0: 720,
+      f1: 280,
+      dest: echo,
+      filter: "bandpass",
+      filterFreq: 580,
+      q: 6,
+    });
+    noise({ start: now, duration: 0.07, gain: 0.22, dest: out, filter: "bandpass", filterFreq: 900, q: 3 });
+  }
+
+  function hitHeadRevengeClassic() {
+    const c = ctx();
+    const now = c.currentTime;
+    const out = master(now, 0.78, 0.3, 2.6);
+    brightPing(out, now, 2050, 0.58);
+    hardClick(out, now, 7200, 0.22);
+  }
+
+  function hitHeadDivineSpectre() {
+    const c = ctx();
+    const now = c.currentTime;
+    const out = master(now, 0.8, 0.32, 2.8);
+    const echo = delayBus(out, 0.05, 0.18, 0.14);
+    brightPing(out, now, 2650, 0.55);
+    tone({
+      start: now + 0.03,
+      duration: 0.12,
+      type: "sine",
+      gain: 0.22,
+      f0: 4200,
+      f1: 2100,
+      dest: echo,
+      filter: "bandpass",
+      filterFreq: 3000,
+      q: 9,
+    });
+  }
+
+  function hitHeadDragonOperator() {
+    const c = ctx();
+    const now = c.currentTime;
+    const out = master(now, 0.85, 0.38, 2.2);
+    tone({ start: now, duration: 0.18, type: "sine", gain: 0.62, f0: 140, f1: 55, dest: out });
+    noise({ start: now, duration: 0.09, gain: 0.38, dest: out, filter: "bandpass", filterFreq: 320, q: 4 });
+    hardClick(out, now + 0.03, 2800, 0.2);
+  }
+
+  function hitHead(skin = "revengeClassic") {
+    if (skin === "ancientPhantom") hitHeadAncientPhantom();
+    else if (skin === "dragonOperator") hitHeadDragonOperator();
+    else if (skin === "divineSpectre") hitHeadDivineSpectre();
+    else hitHeadRevengeClassic();
+  }
 
 
   function hitKill(skin = "revengeClassic") {
