@@ -9509,14 +9509,13 @@ if (typeof window !== "undefined") {
       root.userData.ejectNode = node;
     }
 
-    /** Side-mounted grip stubs (±X). Thin in Z so blocks never sit on the bore axis. */
-    /** R = grip (hold). L = mag / charge / shells / bolt. */
+    /** Two-hand triangle hold: R = pistol grip, L = foregrip; arms angle inward to gun apex. */
     const VIEW_HAND_GRIPS = {
-      0: { r: [0.12, -0.15, 0.1], rRot: [0, 0, 0], l: [-0.11, -0.13, 0.02], lRot: [0, 0, 0] },
-      1: { r: [0.13, -0.13, 0.02], rRot: [0, 0, 0], l: [-0.12, -0.12, 0.06], lRot: [0, 0, 0] },
-      2: { r: [0.14, -0.1, -0.04], rRot: [0, 0, 0], l: [-0.12, -0.04, 0.12], lRot: [0, 0, 0] },
-      3: { r: [0.13, -0.13, 0.02], rRot: [0, 0, 0], l: [-0.12, -0.12, 0.05], lRot: [0, 0, 0] },
-      5: { r: [0.13, -0.12, 0.04], rRot: [0, 0, 0], l: [-0.12, -0.1, 0.08], lRot: [0, 0, 0] },
+      0: { r: [0.04, -0.14, 0.07], rRot: [0.18, -0.14, 0.05], l: [-0.04, -0.12, -0.02], lRot: [0.22, 0.16, -0.04] },
+      1: { r: [0.05, -0.12, 0.03], rRot: [0.15, -0.11, 0.05], l: [-0.05, -0.1, -0.06], lRot: [0.18, 0.14, -0.04] },
+      2: { r: [0.05, -0.1, -0.03], rRot: [0.12, -0.09, 0.04], l: [-0.04, -0.05, 0.07], lRot: [0.16, 0.12, 0.02] },
+      3: { r: [0.05, -0.12, 0.02], rRot: [0.16, -0.1, 0.04], l: [-0.05, -0.1, -0.05], lRot: [0.2, 0.14, -0.03] },
+      5: { r: [0.05, -0.11, 0.05], rRot: [0.14, -0.09, 0.03], l: [-0.05, -0.09, -0.04], lRot: [0.16, 0.12, -0.02] },
     };
 
     function attachViewHandGrips(gunGroup, root, spec) {
@@ -9538,19 +9537,38 @@ if (typeof window !== "undefined") {
       root.userData.gripL = lGrip;
     }
 
-    /** One flat glove block per side — animation only, not a full hand mesh. */
+    /** Forearm + wrist + palm blocks; angled so both arms form a triangle meeting at the gun. */
     function makeViewHandMesh(side) {
-      const mat = new THREE.MeshStandardMaterial({
-        color: 0x3a3528,
-        roughness: 0.9,
+      const isR = side === "R";
+      const outward = isR ? 1 : -1;
+      const sleeveMat = new THREE.MeshStandardMaterial({
+        color: 0x4a5c52,
+        roughness: 0.88,
+        metalness: 0.05,
+        depthWrite: false,
+      });
+      const gloveMat = new THREE.MeshStandardMaterial({
+        color: 0x3d3830,
+        roughness: 0.92,
         depthWrite: false,
       });
       const g = new THREE.Group();
-      g.name = side === "L" ? "viewHandL" : "viewHandR";
-      const block = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.13, 0.034), mat);
-      block.position.set(0, -0.03, 0);
-      block.renderOrder = 26;
-      g.add(block);
+      g.name = isR ? "viewHandR" : "viewHandL";
+      const forearm = new THREE.Mesh(new THREE.BoxGeometry(0.052, 0.26, 0.044), sleeveMat);
+      forearm.position.set(outward * 0.07, -0.17, 0.11);
+      forearm.rotation.order = "YXZ";
+      forearm.rotation.set(0.48, outward * -0.62, outward * 0.42);
+      forearm.renderOrder = 24;
+      const wrist = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.085, 0.038), gloveMat);
+      wrist.position.set(outward * 0.015, 0.05, -0.025);
+      wrist.rotation.set(0.1, outward * -0.14, outward * 0.06);
+      wrist.renderOrder = 26;
+      const palm = new THREE.Mesh(new THREE.BoxGeometry(0.072, 0.105, 0.034), gloveMat);
+      palm.position.set(0, 0.02, 0.015);
+      palm.renderOrder = 27;
+      g.add(forearm);
+      g.add(wrist);
+      g.add(palm);
       g.renderOrder = 25;
       return g;
     }
@@ -9637,6 +9655,12 @@ if (typeof window !== "undefined") {
     function applyViewArmIdlePose(ud, wi) {
       if (wi === 4) return;
       resetViewArms(ud);
+      if (ud.viewArmR && ud.armRBasePos && ud.armRBaseRot) {
+        setViewHandPose(ud.viewArmR, ud.armRBasePos, ud.armRBaseRot, 0, 0, 0, 0.03, -0.05, 0.02);
+      }
+      if (ud.viewArmL && ud.armLBasePos && ud.armLBaseRot) {
+        setViewHandPose(ud.viewArmL, ud.armLBasePos, ud.armLBaseRot, 0, 0, 0, 0.03, 0.05, -0.02);
+      }
     }
 
     /** R holds the gun; L does mag / rack / charge / shells / bolt. */
@@ -9744,10 +9768,10 @@ if (typeof window !== "undefined") {
         gunGroup.add(slideGrp);
         root.userData.animSlide = slideGrp;
         attachWeaponMag(gunGroup, root, 0, -0.1, 0.04, 0.05, 0.12, 0.08);
-        gunGroup.position.set(0.26, -0.22, -0.72);
+        gunGroup.position.set(0.13, -0.21, -0.72);
         attachViewHandGrips(gunGroup, root, VIEW_HAND_GRIPS[0]);
         attachViewArmsOnGrips(root);
-        adsOffset.set(-0.26, 0.135, 0.26);
+        adsOffset.set(-0.14, 0.13, 0.26);
 
         const muzzleNode = new THREE.Object3D();
         muzzleNode.position.set(0, 0.058, -0.21);
@@ -9770,10 +9794,10 @@ if (typeof window !== "undefined") {
         addMeshPart(gunGroup, new THREE.BoxGeometry(0.038, 0.024, 0.055), mDark, 0.04, 0.085, 0.1);
         attachEjectPort(gunGroup, root, 0.055, 0.09, 0.08);
         attachWeaponMag(gunGroup, root, 0, -0.12, 0.06, 0.055, 0.16, 0.1);
-        gunGroup.position.set(0.25, -0.22, -0.80);
+        gunGroup.position.set(0.12, -0.21, -0.80);
         attachViewHandGrips(gunGroup, root, VIEW_HAND_GRIPS[1]);
         attachViewArmsOnGrips(root);
-        adsOffset.set(-0.25, 0.10, 0.28);
+        adsOffset.set(-0.12, 0.10, 0.28);
 
         const muzzleNode = new THREE.Object3D();
         muzzleNode.position.set(0, 0.078, -0.52);
@@ -9816,8 +9840,8 @@ if (typeof window !== "undefined") {
         breakGrp.add(shellIns);
         root.userData.animReloadShell = shellIns;
 
-        gunGroup.position.set(0.23, -0.2, -0.82);
-        adsOffset.set(-0.175, 0.105, 0.24);
+        gunGroup.position.set(0.10, -0.19, -0.82);
+        adsOffset.set(-0.05, 0.10, 0.24);
 
         const muzzleNode = new THREE.Object3D();
         muzzleNode.position.set(0, 0.05, -0.46);
@@ -9836,10 +9860,10 @@ if (typeof window !== "undefined") {
         addMeshPart(gunGroup, new THREE.BoxGeometry(0.04, 0.016, 0.016), mSight, 0, 0.07, 0.12);
         attachEjectPort(gunGroup, root, 0.048, 0.085, 0.04);
         attachWeaponMag(gunGroup, root, 0, -0.12, 0.04, 0.048, 0.14, 0.09);
-        gunGroup.position.set(0.24, -0.22, -0.76);
+        gunGroup.position.set(0.11, -0.21, -0.76);
         attachViewHandGrips(gunGroup, root, VIEW_HAND_GRIPS[3]);
         attachViewArmsOnGrips(root);
-        adsOffset.set(-0.22, 0.085, 0.24);
+        adsOffset.set(-0.09, 0.085, 0.24);
 
         const muzzleNode = new THREE.Object3D();
         muzzleNode.position.set(0, 0.072, -0.38);
@@ -9872,10 +9896,10 @@ if (typeof window !== "undefined") {
         root.userData.animBolt = boltGrp;
         attachWeaponMag(gunGroup, root, 0, -0.14, 0.1, 0.06, 0.12, 0.11);
         attachEjectPort(gunGroup, root, 0.06, 0.1, 0.2);
-        gunGroup.position.set(0.2, -0.2, -0.96);
+        gunGroup.position.set(0.07, -0.19, -0.96);
         attachViewHandGrips(gunGroup, root, VIEW_HAND_GRIPS[5]);
         attachViewArmsOnGrips(root);
-        adsOffset.set(-0.18, 0.12, 0.38);
+        adsOffset.set(-0.06, 0.12, 0.38);
 
         const muzzleNode = new THREE.Object3D();
         muzzleNode.position.set(0, 0.1, -0.88);
