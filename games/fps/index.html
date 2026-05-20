@@ -5232,6 +5232,7 @@ if (typeof window !== "undefined") {
       const mLight = new THREE.MeshStandardMaterial({ color: 0x5a6575, roughness: 0.4, metalness: 0.6 });
       const mWood = new THREE.MeshStandardMaterial({ color: 0x6e4a2a, roughness: 0.8 });
       const mBlack = new THREE.MeshStandardMaterial({ color: 0x111111, roughness: 0.7, metalness: 0.3 });
+      const mSight = new THREE.MeshStandardMaterial({ color: 0xd1d5db, roughness: 0.35, metalness: 0.65 });
 
       const bz = Math.PI / 2;
       if (type === 0) {
@@ -5273,21 +5274,21 @@ if (typeof window !== "undefined") {
     function applyThirdPersonGunToGrip(gunModel, weaponType) {
       const t = weaponType | 0;
       gunModel.rotation.order = "YXZ";
-      gunModel.rotation.set(0.11, -0.07, 0.05);
+      gunModel.rotation.set(0.1, -0.05, 0.04);
       if (t === 0) {
-        gunModel.position.set(0.05, 0, 0.11);
+        gunModel.position.set(0.04, -0.01, 0.12);
         gunModel.scale.set(1, 1, 1);
       } else if (t === 1) {
-        gunModel.position.set(0.035, -0.025, 0.19);
+        gunModel.position.set(0.03, -0.02, 0.2);
         gunModel.scale.set(1.06, 1.06, 1.06);
       } else if (t === 2) {
-        gunModel.position.set(0.03, -0.035, 0.2);
+        gunModel.position.set(0.028, -0.03, 0.21);
         gunModel.scale.set(1.03, 1.03, 1.03);
       } else if (t === 5) {
-        gunModel.position.set(0.026, -0.034, 0.3);
+        gunModel.position.set(0.022, -0.03, 0.32);
         gunModel.scale.set(1.14, 1.14, 1.14);
       } else {
-        gunModel.position.set(0.04, -0.02, 0.17);
+        gunModel.position.set(0.032, -0.015, 0.18);
         gunModel.scale.set(1, 1, 1);
       }
     }
@@ -5296,12 +5297,14 @@ if (typeof window !== "undefined") {
      * Fore-grip anchor on the third-person weapon mesh so the support-hand glove can be parented
      * and stay visually welded while the primary arm drives recoil/reload.
      */
-    const REMOTE_SUPPORT_SOCKET_LOCAL = [
-      { x: 0.052, y: -0.018, z: 0.085 },
-      { x: 0.048, y: -0.032, z: 0.112 },
-      { x: 0.062, y: -0.04, z: 0.098 },
-      { x: 0.042, y: -0.028, z: 0.104 },
-    ];
+    /** Left support-hand anchor on third-person gun (foregrip / pump). */
+    const REMOTE_SUPPORT_SOCKET_LOCAL = {
+      0: { x: 0.036, y: -0.015, z: 0.095 },
+      1: { x: 0.054, y: -0.02, z: 0.145 },
+      2: { x: 0.068, y: -0.038, z: 0.125 },
+      3: { x: 0.046, y: -0.025, z: 0.132 },
+      5: { x: 0.072, y: -0.028, z: 0.24 },
+    };
 
     function hashRemoteTint(seed) {
       let h = 2166136261;
@@ -5357,22 +5360,27 @@ if (typeof window !== "undefined") {
 
     function attachRemoteSupportHand(gunModel, weaponType, gloveMat) {
       const wt = weaponType | 0;
-      const wi = wt === 5 ? 1 : THREE.MathUtils.clamp(wt, 0, 3);
-      const sockPos = REMOTE_SUPPORT_SOCKET_LOCAL[wi] || REMOTE_SUPPORT_SOCKET_LOCAL[1];
+      if (wt === 4) return null;
+      const sockPos = REMOTE_SUPPORT_SOCKET_LOCAL[wt] || REMOTE_SUPPORT_SOCKET_LOCAL[1];
       const socket = new THREE.Group();
       socket.name = "remoteSupportSocket";
       socket.position.set(sockPos.x, sockPos.y, sockPos.z);
       socket.rotation.order = "YXZ";
-      socket.rotation.x = wi === 2 ? 0.26 : 0.18;
-      socket.rotation.y = -0.05;
-      const pad = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.11, 0.12), gloveMat);
-      pad.castShadow = true;
-      pad.receiveShadow = true;
-      socket.add(pad);
-      const thumb = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.04, 0.06), gloveMat);
-      thumb.position.set(-0.05, -0.03, 0.05);
+      socket.rotation.x = wt === 2 ? 0.32 : wt === 5 ? 0.22 : 0.2;
+      socket.rotation.y = wt === 2 ? -0.08 : -0.04;
+      socket.rotation.z = 0.02;
+      const palm = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.1, 0.11), gloveMat);
+      palm.castShadow = true;
+      palm.receiveShadow = true;
+      socket.add(palm);
+      const thumb = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.045, 0.055), gloveMat);
+      thumb.position.set(-0.055, -0.025, 0.045);
       thumb.castShadow = true;
       socket.add(thumb);
+      const wrap = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.07, 0.13), gloveMat);
+      wrap.position.set(0, 0.02, -0.02);
+      wrap.castShadow = true;
+      socket.add(wrap);
       gunModel.add(socket);
       return socket;
     }
@@ -5483,8 +5491,8 @@ if (typeof window !== "undefined") {
         fng.position.set(0, -0.78, 0.12); ag.add(fng);
       };
       makePlayerArm(rightArm); makePlayerArm(leftArm);
-      rightArm.position.set(0.42, 1.46, 0); rightArm.rotation.x = -1.0;
-      leftArm.position.set(-0.42, 1.46, 0); leftArm.rotation.x = -0.8;
+      rightArm.position.set(0.30, 1.46, 0.06); rightArm.rotation.x = -1.1;
+      leftArm.position.set(-0.30, 1.46, 0.06); leftArm.rotation.x = -1.04;
       group.add(rightArm, leftArm);
 
       const makePlayerLeg = (px) => {
@@ -5509,9 +5517,10 @@ if (typeof window !== "undefined") {
       group.add(legR, legL);
 
       const rightHandGrip = new THREE.Group();
-      rightHandGrip.position.set(0, -0.72, 0.125);
+      rightHandGrip.position.set(0, -0.72, 0.12);
       rightHandGrip.rotation.order = "YXZ";
-      rightHandGrip.rotation.x = 0.12;
+      rightHandGrip.rotation.x = 0.14;
+      rightHandGrip.rotation.y = -0.04;
       rightArm.add(rightHandGrip);
 
       const gunModel = makeThirdPersonGun(1);
@@ -9509,13 +9518,14 @@ if (typeof window !== "undefined") {
       root.userData.ejectNode = node;
     }
 
-    /** Two-hand triangle hold: R = pistol grip, L = foregrip; arms angle inward to gun apex. */
+    /** Side-mounted grip stubs (±X). Thin in Z so blocks never sit on the bore axis. */
+    /** R = grip (hold). L = mag / charge / shells / bolt. */
     const VIEW_HAND_GRIPS = {
-      0: { r: [0.04, -0.14, 0.07], rRot: [0.18, -0.14, 0.05], l: [-0.04, -0.12, -0.02], lRot: [0.22, 0.16, -0.04] },
-      1: { r: [0.05, -0.12, 0.03], rRot: [0.15, -0.11, 0.05], l: [-0.05, -0.1, -0.06], lRot: [0.18, 0.14, -0.04] },
-      2: { r: [0.05, -0.1, -0.03], rRot: [0.12, -0.09, 0.04], l: [-0.04, -0.05, 0.07], lRot: [0.16, 0.12, 0.02] },
-      3: { r: [0.05, -0.12, 0.02], rRot: [0.16, -0.1, 0.04], l: [-0.05, -0.1, -0.05], lRot: [0.2, 0.14, -0.03] },
-      5: { r: [0.05, -0.11, 0.05], rRot: [0.14, -0.09, 0.03], l: [-0.05, -0.09, -0.04], lRot: [0.16, 0.12, -0.02] },
+      0: { r: [0.12, -0.15, 0.1], rRot: [0, 0, 0], l: [-0.11, -0.13, 0.02], lRot: [0, 0, 0] },
+      1: { r: [0.13, -0.13, 0.02], rRot: [0, 0, 0], l: [-0.12, -0.12, 0.06], lRot: [0, 0, 0] },
+      2: { r: [0.14, -0.1, -0.04], rRot: [0, 0, 0], l: [-0.12, -0.04, 0.12], lRot: [0, 0, 0] },
+      3: { r: [0.13, -0.13, 0.02], rRot: [0, 0, 0], l: [-0.12, -0.12, 0.05], lRot: [0, 0, 0] },
+      5: { r: [0.13, -0.12, 0.04], rRot: [0, 0, 0], l: [-0.12, -0.1, 0.08], lRot: [0, 0, 0] },
     };
 
     function attachViewHandGrips(gunGroup, root, spec) {
@@ -9537,38 +9547,19 @@ if (typeof window !== "undefined") {
       root.userData.gripL = lGrip;
     }
 
-    /** Forearm + wrist + palm blocks; angled so both arms form a triangle meeting at the gun. */
+    /** One flat glove block per side — animation only, not a full hand mesh. */
     function makeViewHandMesh(side) {
-      const isR = side === "R";
-      const outward = isR ? 1 : -1;
-      const sleeveMat = new THREE.MeshStandardMaterial({
-        color: 0x4a5c52,
-        roughness: 0.88,
-        metalness: 0.05,
-        depthWrite: false,
-      });
-      const gloveMat = new THREE.MeshStandardMaterial({
-        color: 0x3d3830,
-        roughness: 0.92,
+      const mat = new THREE.MeshStandardMaterial({
+        color: 0x3a3528,
+        roughness: 0.9,
         depthWrite: false,
       });
       const g = new THREE.Group();
-      g.name = isR ? "viewHandR" : "viewHandL";
-      const forearm = new THREE.Mesh(new THREE.BoxGeometry(0.052, 0.26, 0.044), sleeveMat);
-      forearm.position.set(outward * 0.07, -0.17, 0.11);
-      forearm.rotation.order = "YXZ";
-      forearm.rotation.set(0.48, outward * -0.62, outward * 0.42);
-      forearm.renderOrder = 24;
-      const wrist = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.085, 0.038), gloveMat);
-      wrist.position.set(outward * 0.015, 0.05, -0.025);
-      wrist.rotation.set(0.1, outward * -0.14, outward * 0.06);
-      wrist.renderOrder = 26;
-      const palm = new THREE.Mesh(new THREE.BoxGeometry(0.072, 0.105, 0.034), gloveMat);
-      palm.position.set(0, 0.02, 0.015);
-      palm.renderOrder = 27;
-      g.add(forearm);
-      g.add(wrist);
-      g.add(palm);
+      g.name = side === "L" ? "viewHandL" : "viewHandR";
+      const block = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.13, 0.034), mat);
+      block.position.set(0, -0.03, 0);
+      block.renderOrder = 26;
+      g.add(block);
       g.renderOrder = 25;
       return g;
     }
@@ -9655,12 +9646,6 @@ if (typeof window !== "undefined") {
     function applyViewArmIdlePose(ud, wi) {
       if (wi === 4) return;
       resetViewArms(ud);
-      if (ud.viewArmR && ud.armRBasePos && ud.armRBaseRot) {
-        setViewHandPose(ud.viewArmR, ud.armRBasePos, ud.armRBaseRot, 0, 0, 0, 0.03, -0.05, 0.02);
-      }
-      if (ud.viewArmL && ud.armLBasePos && ud.armLBaseRot) {
-        setViewHandPose(ud.viewArmL, ud.armLBasePos, ud.armLBaseRot, 0, 0, 0, 0.03, 0.05, -0.02);
-      }
     }
 
     /** R holds the gun; L does mag / rack / charge / shells / bolt. */
@@ -9768,10 +9753,10 @@ if (typeof window !== "undefined") {
         gunGroup.add(slideGrp);
         root.userData.animSlide = slideGrp;
         attachWeaponMag(gunGroup, root, 0, -0.1, 0.04, 0.05, 0.12, 0.08);
-        gunGroup.position.set(0.13, -0.21, -0.72);
+        gunGroup.position.set(0.26, -0.22, -0.72);
         attachViewHandGrips(gunGroup, root, VIEW_HAND_GRIPS[0]);
         attachViewArmsOnGrips(root);
-        adsOffset.set(-0.14, 0.13, 0.26);
+        adsOffset.set(-0.26, 0.135, 0.26);
 
         const muzzleNode = new THREE.Object3D();
         muzzleNode.position.set(0, 0.058, -0.21);
@@ -9794,10 +9779,10 @@ if (typeof window !== "undefined") {
         addMeshPart(gunGroup, new THREE.BoxGeometry(0.038, 0.024, 0.055), mDark, 0.04, 0.085, 0.1);
         attachEjectPort(gunGroup, root, 0.055, 0.09, 0.08);
         attachWeaponMag(gunGroup, root, 0, -0.12, 0.06, 0.055, 0.16, 0.1);
-        gunGroup.position.set(0.12, -0.21, -0.80);
+        gunGroup.position.set(0.25, -0.22, -0.80);
         attachViewHandGrips(gunGroup, root, VIEW_HAND_GRIPS[1]);
         attachViewArmsOnGrips(root);
-        adsOffset.set(-0.12, 0.10, 0.28);
+        adsOffset.set(-0.25, 0.10, 0.28);
 
         const muzzleNode = new THREE.Object3D();
         muzzleNode.position.set(0, 0.078, -0.52);
@@ -9840,8 +9825,8 @@ if (typeof window !== "undefined") {
         breakGrp.add(shellIns);
         root.userData.animReloadShell = shellIns;
 
-        gunGroup.position.set(0.10, -0.19, -0.82);
-        adsOffset.set(-0.05, 0.10, 0.24);
+        gunGroup.position.set(0.23, -0.2, -0.82);
+        adsOffset.set(-0.175, 0.105, 0.24);
 
         const muzzleNode = new THREE.Object3D();
         muzzleNode.position.set(0, 0.05, -0.46);
@@ -9860,10 +9845,10 @@ if (typeof window !== "undefined") {
         addMeshPart(gunGroup, new THREE.BoxGeometry(0.04, 0.016, 0.016), mSight, 0, 0.07, 0.12);
         attachEjectPort(gunGroup, root, 0.048, 0.085, 0.04);
         attachWeaponMag(gunGroup, root, 0, -0.12, 0.04, 0.048, 0.14, 0.09);
-        gunGroup.position.set(0.11, -0.21, -0.76);
+        gunGroup.position.set(0.24, -0.22, -0.76);
         attachViewHandGrips(gunGroup, root, VIEW_HAND_GRIPS[3]);
         attachViewArmsOnGrips(root);
-        adsOffset.set(-0.09, 0.085, 0.24);
+        adsOffset.set(-0.22, 0.085, 0.24);
 
         const muzzleNode = new THREE.Object3D();
         muzzleNode.position.set(0, 0.072, -0.38);
@@ -9896,10 +9881,10 @@ if (typeof window !== "undefined") {
         root.userData.animBolt = boltGrp;
         attachWeaponMag(gunGroup, root, 0, -0.14, 0.1, 0.06, 0.12, 0.11);
         attachEjectPort(gunGroup, root, 0.06, 0.1, 0.2);
-        gunGroup.position.set(0.07, -0.19, -0.96);
+        gunGroup.position.set(0.2, -0.2, -0.96);
         attachViewHandGrips(gunGroup, root, VIEW_HAND_GRIPS[5]);
         attachViewArmsOnGrips(root);
-        adsOffset.set(-0.06, 0.12, 0.38);
+        adsOffset.set(-0.18, 0.12, 0.38);
 
         const muzzleNode = new THREE.Object3D();
         muzzleNode.position.set(0, 0.1, -0.88);
@@ -12193,17 +12178,20 @@ if (typeof window !== "undefined") {
           const adsLiftR = adsBlend * (duelPvp ? 0.50 : 0.42);
 
           const weaponStance = [
-            { l: -0.76, r: -1.02 },
-            { l: -0.82, r: -1.08 },
-            { l: -0.88, r: -1.14 },
-            { l: -0.78, r: -1.04 },
-            { l: -0.68, r: -0.94 },
-          ][rp.currentWeapon | 0] || { l: -0.82, r: -1.06 };
+            { l: -1.06, r: -1.12, ly: 0.2, ry: -0.16, lz: 0.24, rz: -0.2 },
+            { l: -1.04, r: -1.14, ly: 0.18, ry: -0.14, lz: 0.26, rz: -0.22 },
+            { l: -1.02, r: -1.1, ly: 0.16, ry: -0.12, lz: 0.22, rz: -0.18 },
+            { l: -1.04, r: -1.12, ly: 0.18, ry: -0.14, lz: 0.24, rz: -0.2 },
+            { l: -0.7, r: -0.75, ly: 0, ry: 0, lz: 0, rz: 0 },
+            { l: -1.08, r: -1.18, ly: 0.17, ry: -0.13, lz: 0.23, rz: -0.19 },
+          ][rp.currentWeapon | 0] || { l: -1.04, r: -1.12, ly: 0.18, ry: -0.14, lz: 0.24, rz: -0.2 };
           const breathe = Math.sin(rp.idlePhase) * (moving ? 0.022 : 0.032);
           let targetLX = weaponStance.l + (moving ? wSin * 0.17 : 0) + breathe * 0.55 - adsLiftL;
           let targetRX = weaponStance.r - (moving ? wSin * 0.15 : 0) - breathe * 0.5 - adsLiftR;
-          let targetLY = Math.sin(rp.idlePhase * 1.15 + 1.05) * (moving ? 0.042 : 0.055);
-          let targetRY = Math.sin(rp.idlePhase * 1.2) * (moving ? 0.048 : 0.062);
+          let targetLY = weaponStance.ly + Math.sin(rp.idlePhase * 1.15 + 1.05) * (moving ? 0.042 : 0.055);
+          let targetRY = weaponStance.ry + Math.sin(rp.idlePhase * 1.2) * (moving ? 0.048 : 0.062);
+          let targetLZ = weaponStance.lz;
+          let targetRZ = weaponStance.rz;
           if (!rp.isReloading && adsBlend > 0.04) {
             const wType = rp.currentWeapon | 0;
             const aimSide = wType === 3 ? 0.085 : wType === 2 ? 0.065 : 0.055;
@@ -12248,8 +12236,7 @@ if (typeof window !== "undefined") {
           }
           if (rp.supportSocket) {
             const wTy = rp.currentWeapon | 0;
-            rp.supportSocket.visible =
-              !rp.isReloading && (wTy === 1 || wTy === 2 || wTy === 3);
+            rp.supportSocket.visible = !rp.isReloading && wTy !== 4;
           }
           if (rp.flashMount) {
             rp.flashMount.visible = !rp.duelBright;
@@ -12265,15 +12252,17 @@ if (typeof window !== "undefined") {
           const lutShoulder = lut ? lut.shoulder : 0;
           rp.leftArm.rotation.z = dampScalar(
             rp.leftArm.rotation.z,
-            (moving ? Math.cos(rp.walkPhase * 0.92) * 0.09 : Math.sin(rp.idlePhase) * 0.02) +
-              lutShoulder * 0.14,
+            targetLZ +
+              (moving ? Math.cos(rp.walkPhase * 0.92) * 0.07 : Math.sin(rp.idlePhase) * 0.02) +
+              lutShoulder * 0.1,
             dt,
             11
           );
           rp.rightArm.rotation.z = dampScalar(
             rp.rightArm.rotation.z,
-            (moving ? -Math.cos(rp.walkPhase * 0.92) * 0.09 : -Math.sin(rp.idlePhase * 1.1) * 0.022) -
-              lutShoulder * 0.14,
+            targetRZ +
+              (moving ? -Math.cos(rp.walkPhase * 0.92) * 0.07 : -Math.sin(rp.idlePhase * 1.1) * 0.02) -
+              lutShoulder * 0.1,
             dt,
             11
           );
