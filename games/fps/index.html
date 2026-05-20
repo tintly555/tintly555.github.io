@@ -4856,7 +4856,7 @@ if (typeof window !== "undefined") {
         typeof data.pitch === "number"
           ? THREE.MathUtils.clamp(data.pitch, -1.15, 1.15)
           : 0;
-      rp.group.visible = true;
+      if (!rp.isDown) rp.group.visible = true;
     });
 
     /** PvP: optional relay event — remote body hidden immediately on death; `enemyMove` shows again on respawn. */
@@ -4872,6 +4872,7 @@ if (typeof window !== "undefined") {
         data.z != null ? +data.z : hz
       );
       spawnHumanoidDissolve(rp.group, hitPt);
+      rp.isDown = true;
       rp.group.visible = false;
     });
 
@@ -4880,6 +4881,15 @@ if (typeof window !== "undefined") {
       if (rp) {
         scene.remove(rp.group);
         remotePlayers.delete(data.id);
+      }
+    });
+
+    socket.on("playerRespawn", (data) => {
+      if (!data || data.id == null) return;
+      const rp = remotePlayers.get(data.id);
+      if (rp) {
+        rp.isDown = false;
+        rp.group.visible = true;
       }
     });
 
@@ -4991,6 +5001,13 @@ if (typeof window !== "undefined") {
       if (enemy.hp <= 0 && enemy.alive) {
         enemy.alive = false;
         enemy.respawnTimer = 3.0;
+        enemy.dissolveTimer = DISSOLVE_DURATION + 0.12;
+        const hitPt = new THREE.Vector3(
+          enemy.group.position.x,
+          1.2,
+          enemy.group.position.z
+        );
+        spawnHumanoidDissolve(enemy.group, hitPt);
         enemy.group.visible = false;
         state.score += 1;
       }
@@ -5541,6 +5558,7 @@ if (typeof window !== "undefined") {
       group.visible = false;
       return {
         group,
+        isDown: false,
         x: 0,
         y: 1.65,
         z: 0,
@@ -8659,19 +8677,118 @@ if (typeof window !== "undefined") {
       return buf;
     }
 
-    /** 1–4 号枪：backup 原版分层枪声；AMR(5) 走 dragonOperatorShot 轰鸣+尾音。 */
+    /** AMR: loud front crack/boom + extended rolling tail (anti-materiel rifle). */
+    function playAmrGunSound() {
+      if (audioCtx.state === "suspended") void audioCtx.resume();
+      const now = audioCtx.currentTime;
+
+      const sub = audioCtx.createOscillator();
+      sub.type = "sine";
+      sub.frequency.setValueAtTime(52, now);
+      sub.frequency.exponentialRampToValueAtTime(18, now + 0.78);
+      const subG = audioCtx.createGain();
+      subG.gain.setValueAtTime(0.0001, now);
+      subG.gain.exponentialRampToValueAtTime(1.72, now + 0.018);
+      subG.gain.exponentialRampToValueAtTime(0.0001, now + 0.98);
+      sub.connect(subG);
+      subG.connect(audioSfx);
+      sub.start(now);
+      sub.stop(now + 1.02);
+
+      const boom = audioCtx.createBufferSource();
+      boom.buffer = getGunNoiseBuffer(0.62);
+      const boomLp = audioCtx.createBiquadFilter();
+      boomLp.type = "lowpass";
+      boomLp.frequency.setValueAtTime(380, now);
+      boomLp.frequency.exponentialRampToValueAtTime(72, now + 0.55);
+      const boomG = audioCtx.createGain();
+      boomG.gain.setValueAtTime(0.0001, now);
+      boomG.gain.exponentialRampToValueAtTime(1.42, now + 0.01);
+      boomG.gain.exponentialRampToValueAtTime(0.0001, now + 0.72);
+      boom.connect(boomLp);
+      boomLp.connect(boomG);
+      boomG.connect(audioSfx);
+      boom.start(now);
+      boom.stop(now + 0.76);
+
+      const crack = audioCtx.createBufferSource();
+      crack.buffer = getGunNoiseBuffer(0.18);
+      const crackBp = audioCtx.createBiquadFilter();
+      crackBp.type = "bandpass";
+      crackBp.frequency.setValueAtTime(2100, now);
+      crackBp.Q.setValueAtTime(0.52, now);
+      const crackG = audioCtx.createGain();
+      crackG.gain.setValueAtTime(0.0001, now);
+      crackG.gain.exponentialRampToValueAtTime(1.18, now + 0.003);
+      crackG.gain.exponentialRampToValueAtTime(0.0001, now + 0.16);
+      crack.connect(crackBp);
+      crackBp.connect(crackG);
+      crackG.connect(audioSfx);
+      crack.start(now);
+      crack.stop(now + 0.18);
+
+      const tail = audioCtx.createBufferSource();
+      tail.buffer = getGunNoiseBuffer(1.55);
+      const tailBp = audioCtx.createBiquadFilter();
+      tailBp.type = "bandpass";
+      tailBp.frequency.setValueAtTime(480, now + 0.06);
+      tailBp.frequency.exponentialRampToValueAtTime(180, now + 1.35);
+      tailBp.Q.setValueAtTime(0.32, now);
+      const tailG = audioCtx.createGain();
+      tailG.gain.setValueAtTime(0.0001, now + 0.03);
+      tailG.gain.exponentialRampToValueAtTime(0.95, now + 0.08);
+      tailG.gain.exponentialRampToValueAtTime(0.0001, now + 1.62);
+      tail.connect(tailBp);
+      tailBp.connect(tailG);
+      tailG.connect(audioSfx);
+      tail.start(now + 0.028);
+      tail.stop(now + 1.68);
+
+      const rumble = audioCtx.createBufferSource();
+      rumble.buffer = getGunNoiseBuffer(1.25);
+      const rumbleLp = audioCtx.createBiquadFilter();
+      rumbleLp.type = "lowpass";
+      rumbleLp.frequency.setValueAtTime(240, now + 0.12);
+      rumbleLp.frequency.exponentialRampToValueAtTime(55, now + 1.5);
+      const rumbleG = audioCtx.createGain();
+      rumbleG.gain.setValueAtTime(0.0001, now + 0.1);
+      rumbleG.gain.exponentialRampToValueAtTime(0.58, now + 0.22);
+      rumbleG.gain.exponentialRampToValueAtTime(0.0001, now + 1.55);
+      rumble.connect(rumbleLp);
+      rumbleLp.connect(rumbleG);
+      rumbleG.connect(audioSfx);
+      rumble.start(now + 0.08);
+      rumble.stop(now + 1.6);
+
+      const echoIn = audioCtx.createGain();
+      echoIn.gain.setValueAtTime(0.52, now);
+      const delay = audioCtx.createDelay(2.0);
+      delay.delayTime.setValueAtTime(0.19, now);
+      const fb = audioCtx.createGain();
+      fb.gain.setValueAtTime(0.52, now);
+      const echoLp = audioCtx.createBiquadFilter();
+      echoLp.type = "lowpass";
+      echoLp.frequency.setValueAtTime(480, now);
+      boomG.connect(echoIn);
+      tailG.connect(echoIn);
+      rumbleG.connect(echoIn);
+      echoIn.connect(delay);
+      delay.connect(echoLp);
+      echoLp.connect(audioSfx);
+      delay.connect(fb);
+      fb.connect(delay);
+      fb.gain.exponentialRampToValueAtTime(0.0001, now + 1.85);
+    }
+
+    /** 1–4 号枪：backup 分层枪声；AMR(5) 走 playAmrGunSound（轰鸣+滚动尾音）。 */
     function playGunSound(w) {
       if (audioCtx.state === "suspended") void audioCtx.resume();
-      void w;
       if (state.weaponIndex === 4) return;
-      if (
-        state.weaponIndex === 5 &&
-        typeof GunSFX !== "undefined" &&
-        GunSFX.dragonOperatorShot
-      ) {
-        GunSFX.dragonOperatorShot();
+      if (state.weaponIndex === 5) {
+        playAmrGunSound();
         return;
       }
+      void w;
       const now = audioCtx.currentTime;
       const idx = state.weaponIndex;
       const presets = [
@@ -10587,6 +10704,13 @@ if (typeof window !== "undefined") {
       return best;
     }
 
+    function enemyBlockingHits(enemy) {
+      if (!enemy) return false;
+      if (!enemy.alive) return false;
+      if ((enemy.dissolveTimer || 0) > 0) return false;
+      return true;
+    }
+
     /** Head / torso / leg spheres in humanoid root space (zombies + remote PvP avatars). */
     function humanoidHitAlongRay(raycaster, rootGroup) {
       rootGroup.updateMatrixWorld(true);
@@ -10718,7 +10842,7 @@ if (typeof window !== "undefined") {
         let bestEnemyZone = "body";
 
         for (const enemy of state.enemies) {
-          if (!enemy.alive) continue;
+          if (!enemyBlockingHits(enemy)) continue;
           enemy.group.updateMatrixWorld(true);
           let hit = null;
           if (enemy.trainingDummy) {
@@ -10738,7 +10862,7 @@ if (typeof window !== "undefined") {
         let bestRpZone = "body";
         if (MULTIPLAYER && !ARENA_COOP && !isTrainingMap(CURRENT_MAP)) {
           for (const [rpId, rp] of remotePlayers) {
-            if (!rp.group.visible) continue;
+            if (rp.isDown || !rp.group.visible) continue;
             rp.group.updateMatrixWorld(true);
             const rh = humanoidHitAlongRay(ray, rp.group);
             if (rh && rh.t < bestRpHitT) {
@@ -10774,6 +10898,19 @@ if (typeof window !== "undefined") {
           const coopArena = MULTIPLAYER && ARENA_COOP && CURRENT_MAP === "arena";
           if (coopArena && !ZOMBIE_AUTHORITY) {
             const ei = bestEnemy.netIndex ?? state.enemies.indexOf(bestEnemy);
+            applyDamage(bestEnemy, bestEnemyZone, w);
+            drawEnemyHp(bestEnemy);
+            if (bestEnemy.hp <= 0 && bestEnemy.alive) {
+              bestEnemy.alive = false;
+              bestEnemy.respawnTimer = 3.0;
+              bestEnemy.dissolveTimer = DISSOLVE_DURATION + 0.12;
+              spawnHumanoidDissolve(bestEnemy.group, bp);
+              bestEnemy.group.visible = false;
+              state.score += 1;
+              triggerHitFeedback(true, bestEnemyZone === "head");
+              createSparks(bp.clone(), 0xff5555);
+              createSparks(bp.clone(), 0xff8888);
+            }
             socket.emit("zombieDamage", {
               ei,
               zone: bestEnemyZone,
@@ -10784,6 +10921,7 @@ if (typeof window !== "undefined") {
             if (bestEnemy.hp <= 0 && bestEnemy.alive) {
               bestEnemy.alive = false;
               bestEnemy.respawnTimer = 3.0;
+              bestEnemy.dissolveTimer = DISSOLVE_DURATION + 0.12;
               spawnHumanoidDissolve(bestEnemy.group, bp);
               bestEnemy.group.visible = false;
               state.score += 1;
@@ -11614,6 +11752,7 @@ if (typeof window !== "undefined") {
         if (typeof z.hp === "number") e.hp = z.hp;
         if (typeof z.a === "number") e.alive = z.a !== 0;
         if (typeof z.rt === "number") e.respawnTimer = z.rt;
+        if (e.alive) e.dissolveTimer = 0;
         e.group.visible = e.alive;
         drawEnemyHp(e);
       }
@@ -11687,6 +11826,7 @@ if (typeof window !== "undefined") {
           enemy.respawnTimer -= dt;
           if (enemy.respawnTimer <= 0) {
             enemy.alive = true;
+            enemy.dissolveTimer = 0;
             enemy.hp = enemy.maxHp;
             enemy._hpBarRatio = -1;
             enemy.group.visible = true;
@@ -12397,6 +12537,11 @@ if (typeof window !== "undefined") {
 
       state.score = 0;
       player.health = player.maxHealth;
+      if (MULTIPLAYER && isPvpCrossfireMap(CURRENT_MAP)) {
+        try {
+          socket.emit("playerRespawn", { id: socket.id });
+        } catch (_) {}
+      }
       player.regenTimer = 0;
       state.ads = false;
       state.adsProgress = 0;
