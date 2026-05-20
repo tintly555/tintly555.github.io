@@ -8659,11 +8659,19 @@ if (typeof window !== "undefined") {
       return buf;
     }
 
-    /** 原版分层枪声（GunSFX 之前）；击杀/命中仍走 GunSFX.hit。 */
+    /** 1–4 号枪：backup 原版分层枪声；AMR(5) 走 dragonOperatorShot 轰鸣+尾音。 */
     function playGunSound(w) {
       if (audioCtx.state === "suspended") void audioCtx.resume();
       void w;
       if (state.weaponIndex === 4) return;
+      if (
+        state.weaponIndex === 5 &&
+        typeof GunSFX !== "undefined" &&
+        GunSFX.dragonOperatorShot
+      ) {
+        GunSFX.dragonOperatorShot();
+        return;
+      }
       const now = audioCtx.currentTime;
       const idx = state.weaponIndex;
       const presets = [
@@ -8671,7 +8679,6 @@ if (typeof window !== "undefined") {
         { crackMs: 88, crackFc: 3600, crackQ: 0.72, crackG: 0.68, bodyMs: 250, bodyFc: 740, bodyG: 0.28, mechHz: 760, mechG: 0.045, tailMs: 330, tailFc: 900, tailG: 0.12, echoDelay: 0.082, echoFb: 0.31, echoG: 0.11 },
         { crackMs: 110, crackFc: 2500, crackQ: 0.56, crackG: 0.82, bodyMs: 330, bodyFc: 520, bodyG: 0.38, mechHz: 520, mechG: 0.02, tailMs: 420, tailFc: 760, tailG: 0.18, echoDelay: 0.094, echoFb: 0.36, echoG: 0.16 },
         { crackMs: 56, crackFc: 5200, crackQ: 0.92, crackG: 0.45, bodyMs: 185, bodyFc: 1200, bodyG: 0.17, mechHz: 1080, mechG: 0.03, tailMs: 240, tailFc: 1600, tailG: 0.07, echoDelay: 0.064, echoFb: 0.22, echoG: 0.06 },
-        { crackMs: 130, crackFc: 2200, crackQ: 0.5, crackG: 0.95, bodyMs: 480, bodyFc: 380, bodyG: 0.55, mechHz: 380, mechG: 0.06, tailMs: 580, tailFc: 620, tailG: 0.26, echoDelay: 0.108, echoFb: 0.44, echoG: 0.22 },
       ];
       const p = presets[idx] || presets[1];
 
@@ -8926,6 +8933,38 @@ if (typeof window !== "undefined") {
       }
     }
 
+    function playDissolveBurstSound() {
+      if (audioCtx.state === "suspended") void audioCtx.resume();
+      const now = audioCtx.currentTime;
+      const pop = audioCtx.createBufferSource();
+      pop.buffer = getGunNoiseBuffer(0.055);
+      const popBp = audioCtx.createBiquadFilter();
+      popBp.type = "bandpass";
+      popBp.frequency.setValueAtTime(3200, now);
+      popBp.Q.setValueAtTime(1.4, now);
+      const popG = audioCtx.createGain();
+      popG.gain.setValueAtTime(0.0001, now);
+      popG.gain.exponentialRampToValueAtTime(0.42, now + 0.004);
+      popG.gain.exponentialRampToValueAtTime(0.0001, now + 0.065);
+      pop.connect(popBp);
+      popBp.connect(popG);
+      popG.connect(audioSfx);
+      pop.start(now);
+      pop.stop(now + 0.075);
+      const thump = audioCtx.createOscillator();
+      thump.type = "sine";
+      thump.frequency.setValueAtTime(155, now);
+      thump.frequency.exponentialRampToValueAtTime(48, now + 0.11);
+      const thumpG = audioCtx.createGain();
+      thumpG.gain.setValueAtTime(0.0001, now);
+      thumpG.gain.exponentialRampToValueAtTime(0.24, now + 0.005);
+      thumpG.gain.exponentialRampToValueAtTime(0.0001, now + 0.13);
+      thump.connect(thumpG);
+      thumpG.connect(audioSfx);
+      thump.start(now);
+      thump.stop(now + 0.14);
+    }
+
     const DISSOLVE_DURATION = 0.82;
     const MAX_DISSOLVE_MESHES = 200;
     const DISSOLVE_BOX_GEO = new THREE.BoxGeometry(0.05, 0.05, 0.05);
@@ -9020,6 +9059,7 @@ if (typeof window !== "undefined") {
         );
       }
       if (particles.length) {
+        playDissolveBurstSound();
         dissolveBursts.push({ particles, onComplete: opts.onComplete || null });
       } else if (opts.onComplete) {
         opts.onComplete();
@@ -9135,12 +9175,6 @@ if (typeof window !== "undefined") {
       state.hitmarkerTimer = isKill ? 0.16 : 0.09;
       hitmarkerEl.classList.add("show");
       hitmarkerEl.classList.toggle("critical", !!isKill || !!headshot);
-      playWeaponHitSfx(isKill, headshot);
-      showCombatFeedback(
-        isKill ? tr("combatKill", "KILL!") : tr("combatHit", "HIT"),
-        isKill ? "rgba(255,88,88,0.98)" : "rgba(255,255,255,0.95)",
-        isKill ? 0.34 : 0.12
-      );
     }
 
     function updateBlood(dt) {
