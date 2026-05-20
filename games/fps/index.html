@@ -4836,18 +4836,8 @@ if (typeof window !== "undefined") {
           ? (((Number(rawWeapon) | 0) % 6) + 6) % 6
           : rp.currentWeapon;
       if (rawWeapon !== undefined && rawWeapon !== null && wNorm !== rp.currentWeapon) {
-        if (rp.rightHandGrip && rp.gunModel) rp.rightHandGrip.remove(rp.gunModel);
-        else if (rp.gunModel) rp.rightArm.remove(rp.gunModel);
-        rp.gunModel = makeThirdPersonGun(wNorm);
-        applyThirdPersonGunToGrip(rp.gunModel, wNorm);
-        (rp.rightHandGrip || rp.rightArm).add(rp.gunModel);
-        rp.currentWeapon = wNorm;
         try {
-          const gloveMat =
-            rp.gloveMat ||
-            rp.gunModel.children[0]?.material ||
-            new THREE.MeshStandardMaterial({ color: 0x3a3528, roughness: 0.9 });
-          rp.supportSocket = attachRemoteSupportHand(rp.gunModel, wNorm, gloveMat);
+          equipRemotePlayerWeapon(rp, wNorm);
         } catch (_) {}
       }
       rp.isReloading = !!data.reloading;
@@ -5299,11 +5289,19 @@ if (typeof window !== "undefined") {
      */
     /** Left support-hand anchor on third-person gun (foregrip / pump). */
     const REMOTE_SUPPORT_SOCKET_LOCAL = {
-      0: { x: 0.036, y: -0.015, z: 0.095 },
-      1: { x: 0.054, y: -0.02, z: 0.145 },
-      2: { x: 0.068, y: -0.038, z: 0.125 },
-      3: { x: 0.046, y: -0.025, z: 0.132 },
-      5: { x: 0.072, y: -0.028, z: 0.24 },
+      0: { x: -0.032, y: -0.072, z: 0.088 },
+      1: { x: -0.042, y: -0.078, z: 0.138 },
+      2: { x: -0.058, y: -0.092, z: 0.118 },
+      3: { x: -0.04, y: -0.082, z: 0.128 },
+      5: { x: -0.052, y: -0.086, z: 0.218 },
+    };
+    /** Right trigger-hand anchor (pistol grip). */
+    const REMOTE_PRIMARY_GRIP_LOCAL = {
+      0: { x: 0.028, y: -0.088, z: 0.058 },
+      1: { x: 0.038, y: -0.096, z: 0.132 },
+      2: { x: 0.048, y: -0.108, z: 0.102 },
+      3: { x: 0.034, y: -0.092, z: 0.118 },
+      5: { x: 0.042, y: -0.1, z: 0.198 },
     };
 
     function hashRemoteTint(seed) {
@@ -5369,6 +5367,12 @@ if (typeof window !== "undefined") {
       socket.rotation.x = wt === 2 ? 0.32 : wt === 5 ? 0.22 : 0.2;
       socket.rotation.y = wt === 2 ? -0.08 : -0.04;
       socket.rotation.z = 0.02;
+      addRemoteGripGlove(socket, gloveMat);
+      gunModel.add(socket);
+      return socket;
+    }
+
+    function addRemoteGripGlove(socket, gloveMat) {
       const palm = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.1, 0.11), gloveMat);
       palm.castShadow = true;
       palm.receiveShadow = true;
@@ -5381,8 +5385,133 @@ if (typeof window !== "undefined") {
       wrap.position.set(0, 0.02, -0.02);
       wrap.castShadow = true;
       socket.add(wrap);
+    }
+
+    function attachRemotePrimaryHand(gunModel, weaponType, gloveMat) {
+      const wt = weaponType | 0;
+      if (wt === 4) return null;
+      const sockPos = REMOTE_PRIMARY_GRIP_LOCAL[wt] || REMOTE_PRIMARY_GRIP_LOCAL[1];
+      const socket = new THREE.Group();
+      socket.name = "remotePrimarySocket";
+      socket.position.set(sockPos.x, sockPos.y, sockPos.z);
+      socket.rotation.order = "YXZ";
+      socket.rotation.x = 0.16;
+      socket.rotation.y = 0.05;
+      socket.rotation.z = -0.04;
+      addRemoteGripGlove(socket, gloveMat);
       gunModel.add(socket);
       return socket;
+    }
+
+    /** Chest-centered third-person hold: gun forward (+Z) in front of torso. */
+    function applyThirdPersonGunToChestHold(gunModel, weaponType) {
+      const t = weaponType | 0;
+      gunModel.rotation.order = "YXZ";
+      gunModel.rotation.set(0.05, 0, 0.01);
+      if (t === 0) {
+        gunModel.position.set(0, -0.035, 0.11);
+        gunModel.scale.set(1, 1, 1);
+      } else if (t === 1) {
+        gunModel.position.set(0, -0.03, 0.16);
+        gunModel.scale.set(1.06, 1.06, 1.06);
+      } else if (t === 2) {
+        gunModel.position.set(0, -0.04, 0.17);
+        gunModel.scale.set(1.03, 1.03, 1.03);
+      } else if (t === 5) {
+        gunModel.position.set(0, -0.038, 0.28);
+        gunModel.scale.set(1.14, 1.14, 1.14);
+      } else {
+        gunModel.position.set(0, -0.028, 0.15);
+        gunModel.scale.set(1, 1, 1);
+      }
+    }
+
+    function getOrCreateRemoteWeaponHold(group) {
+      let hold = group.getObjectByName("remoteWeaponHold");
+      if (!hold) {
+        hold = new THREE.Group();
+        hold.name = "remoteWeaponHold";
+        hold.position.set(0, 1.12, 0.2);
+        group.add(hold);
+      }
+      return hold;
+    }
+
+    function equipRemotePlayerWeapon(rp, weaponType) {
+      const wt = (((weaponType | 0) % 6) + 6) % 6;
+      const gloveMat =
+        rp.gloveMat ||
+        new THREE.MeshStandardMaterial({ color: 0x3a3528, roughness: 0.9 });
+      if (!rp.gloveMat) rp.gloveMat = gloveMat;
+      const hold = getOrCreateRemoteWeaponHold(rp.group);
+      rp.weaponHold = hold;
+      if (rp.gunModel) {
+        hold.remove(rp.gunModel);
+        rp.gunModel = null;
+        rp.supportSocket = null;
+        rp.primarySocket = null;
+      }
+      if (wt === 4) {
+        hold.visible = false;
+        rp.currentWeapon = wt;
+        return;
+      }
+      hold.visible = true;
+      const gunModel = makeThirdPersonGun(wt);
+      applyThirdPersonGunToChestHold(gunModel, wt);
+      hold.add(gunModel);
+      rp.gunModel = gunModel;
+      rp.supportSocket = attachRemoteSupportHand(gunModel, wt, gloveMat);
+      rp.primarySocket = attachRemotePrimaryHand(gunModel, wt, gloveMat);
+      rp.currentWeapon = wt;
+    }
+
+    const _remoteAimLocalT = new THREE.Vector3();
+    const _remoteAimLocalS = new THREE.Vector3();
+    const _remoteAimDir = new THREE.Vector3();
+    const _remoteAimWorld = new THREE.Vector3();
+
+    function solveRemoteArmRotation(arm, targetWorld, side) {
+      const parent = arm.parent;
+      if (!parent) return null;
+      parent.updateMatrixWorld(true);
+      _remoteAimLocalT.copy(targetWorld);
+      parent.worldToLocal(_remoteAimLocalT);
+      _remoteAimLocalS.copy(arm.position);
+      _remoteAimDir.subVectors(_remoteAimLocalT, _remoteAimLocalS);
+      const dist = _remoteAimDir.length();
+      if (dist < 0.07) return null;
+      const dx = _remoteAimDir.x;
+      const dy = _remoteAimDir.y;
+      const dz = _remoteAimDir.z;
+      const horiz = Math.hypot(dx, dz) || 1e-4;
+      const reach = Math.min(dist, 0.92);
+      const handLen = 0.74;
+      const pitch = -Math.atan2(dy, horiz) - 0.58 - (reach - handLen) * 0.12;
+      const yaw = Math.atan2(dx, dz) + (side === "L" ? 0.44 : -0.36);
+      const roll = side === "L" ? 0.42 + dx * 0.28 : -0.12 - dx * 0.22;
+      return { x: pitch, y: yaw, z: roll };
+    }
+
+    function updateRemoteArmAim(rp, dt, moving, wSin, idlePhase) {
+      if (!rp.gunModel || !rp.primarySocket || !rp.supportSocket) return;
+      rp.group.updateMatrixWorld(true);
+      rp.primarySocket.getWorldPosition(_remoteAimWorld);
+      const rightSol = solveRemoteArmRotation(rp.rightArm, _remoteAimWorld, "R");
+      if (rightSol) {
+        const sway = moving ? wSin * 0.07 : Math.sin(idlePhase) * 0.022;
+        rp.rightArm.rotation.x = dampScalar(rp.rightArm.rotation.x, rightSol.x + sway * 0.35, dt, 14);
+        rp.rightArm.rotation.y = dampScalar(rp.rightArm.rotation.y, rightSol.y + sway * 0.18, dt, 13);
+        rp.rightArm.rotation.z = dampScalar(rp.rightArm.rotation.z, rightSol.z - sway * 0.12, dt, 13);
+      }
+      rp.supportSocket.getWorldPosition(_remoteAimWorld);
+      const leftSol = solveRemoteArmRotation(rp.leftArm, _remoteAimWorld, "L");
+      if (leftSol) {
+        const sway = moving ? wSin * 0.065 : Math.sin(idlePhase * 1.08) * 0.024;
+        rp.leftArm.rotation.x = dampScalar(rp.leftArm.rotation.x, leftSol.x + sway * 0.32, dt, 14);
+        rp.leftArm.rotation.y = dampScalar(rp.leftArm.rotation.y, leftSol.y - sway * 0.16, dt, 13);
+        rp.leftArm.rotation.z = dampScalar(rp.leftArm.rotation.z, leftSol.z + sway * 0.1, dt, 13);
+      }
     }
 
     function createRemotePlayer(name) {
@@ -5474,7 +5603,7 @@ if (typeof window !== "undefined") {
 
       const rightArm = new THREE.Group();
       const leftArm = new THREE.Group();
-      const makePlayerArm = (ag) => {
+      const makePlayerArm = (ag, showHand) => {
         const sh = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.10, 0.18), mCamo2);
         sh.position.set(0, -0.02, 0); ag.add(sh);
         const pad = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.10, 0.20), mKnee);
@@ -5485,14 +5614,20 @@ if (typeof window !== "undefined") {
         elbPad.position.set(0, -0.38, 0.06); ag.add(elbPad);
         const fa = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.30, 0.15), mCamo2);
         fa.position.set(0, -0.50, 0.06); ag.add(fa);
-        const glv = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.13, 0.16), mGlove);
-        glv.position.set(0, -0.70, 0.10); ag.add(glv);
-        const fng = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.04, 0.08), mGlove);
-        fng.position.set(0, -0.78, 0.12); ag.add(fng);
+        if (showHand) {
+          const glv = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.13, 0.16), mGlove);
+          glv.position.set(0, -0.70, 0.10); ag.add(glv);
+          const fng = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.04, 0.08), mGlove);
+          fng.position.set(0, -0.78, 0.12); ag.add(fng);
+        }
       };
-      makePlayerArm(rightArm); makePlayerArm(leftArm);
-      rightArm.position.set(0.30, 1.46, 0.06); rightArm.rotation.x = -1.1;
-      leftArm.position.set(-0.30, 1.46, 0.06); leftArm.rotation.x = -1.04;
+      makePlayerArm(rightArm, false); makePlayerArm(leftArm, false);
+      rightArm.position.set(0.14, 1.46, 0.08);
+      leftArm.position.set(-0.14, 1.46, 0.08);
+      rightArm.rotation.order = "YXZ";
+      leftArm.rotation.order = "YXZ";
+      rightArm.rotation.set(-1.28, -0.34, -0.14);
+      leftArm.rotation.set(-1.26, 0.38, 0.42);
       group.add(rightArm, leftArm);
 
       const makePlayerLeg = (px) => {
@@ -5523,10 +5658,12 @@ if (typeof window !== "undefined") {
       rightHandGrip.rotation.y = -0.04;
       rightArm.add(rightHandGrip);
 
+      const weaponHold = getOrCreateRemoteWeaponHold(group);
       const gunModel = makeThirdPersonGun(1);
-      applyThirdPersonGunToGrip(gunModel, 1);
-      rightHandGrip.add(gunModel);
+      applyThirdPersonGunToChestHold(gunModel, 1);
+      weaponHold.add(gunModel);
       const supportSocket = attachRemoteSupportHand(gunModel, 1, mGlove);
+      const primarySocket = attachRemotePrimaryHand(gunModel, 1, mGlove);
 
       const ns = makeNameSprite(name || "Player");
       ns.sprite.position.set(0, 2.55, 0);
@@ -5583,8 +5720,10 @@ if (typeof window !== "undefined") {
         rightLeg: legR,
         leftLeg: legL,
         walkPhase: 0,
+        weaponHold,
         gunModel,
         supportSocket,
+        primarySocket,
         currentWeapon: 1,
         isReloading: false,
         reloadPhase: 0,
@@ -12238,34 +12377,49 @@ if (typeof window !== "undefined") {
             const wTy = rp.currentWeapon | 0;
             rp.supportSocket.visible = !rp.isReloading && wTy !== 4;
           }
+          if (rp.primarySocket) {
+            const wTyP = rp.currentWeapon | 0;
+            rp.primarySocket.visible = !rp.isReloading && wTyP !== 4;
+          }
+          if (rp.weaponHold && !rp.isReloading && (rp.currentWeapon | 0) !== 4) {
+            const adsZ = 0.2 + adsBlend * 0.07;
+            rp.weaponHold.position.z = dampScalar(rp.weaponHold.position.z, adsZ, dt, 11);
+            rp.weaponHold.position.y = dampScalar(rp.weaponHold.position.y, 1.12 - adsBlend * 0.04, dt, 11);
+          }
           if (rp.flashMount) {
             rp.flashMount.visible = !rp.duelBright;
           }
-          rp.leftArm.rotation.x = dampScalar(rp.leftArm.rotation.x, targetLX, dt, 11);
-          rp.rightArm.rotation.x = dampScalar(rp.rightArm.rotation.x, targetRX, dt, 11);
-          rp.leftArm.rotation.y = dampScalar(rp.leftArm.rotation.y, targetLY, dt, 10);
-          rp.rightArm.rotation.y = dampScalar(rp.rightArm.rotation.y, targetRY, dt, 10);
-          const lut =
-            REMOTE_WALK_PHASE_LUT[
-              Math.abs(((rp.walkPhase * 15.25) | 0) % REMOTE_WALK_PHASE_LUT.length)
-            ];
-          const lutShoulder = lut ? lut.shoulder : 0;
-          rp.leftArm.rotation.z = dampScalar(
-            rp.leftArm.rotation.z,
-            targetLZ +
-              (moving ? Math.cos(rp.walkPhase * 0.92) * 0.07 : Math.sin(rp.idlePhase) * 0.02) +
-              lutShoulder * 0.1,
-            dt,
-            11
-          );
-          rp.rightArm.rotation.z = dampScalar(
-            rp.rightArm.rotation.z,
-            targetRZ +
-              (moving ? -Math.cos(rp.walkPhase * 0.92) * 0.07 : -Math.sin(rp.idlePhase * 1.1) * 0.02) -
-              lutShoulder * 0.1,
-            dt,
-            11
-          );
+          const wTyHold = rp.currentWeapon | 0;
+          const twoHandHold = !rp.isReloading && wTyHold !== 4 && rp.primarySocket && rp.supportSocket;
+          if (twoHandHold) {
+            updateRemoteArmAim(rp, dt, moving, wSin, rp.idlePhase);
+          } else {
+            rp.leftArm.rotation.x = dampScalar(rp.leftArm.rotation.x, targetLX, dt, 11);
+            rp.rightArm.rotation.x = dampScalar(rp.rightArm.rotation.x, targetRX, dt, 11);
+            rp.leftArm.rotation.y = dampScalar(rp.leftArm.rotation.y, targetLY, dt, 10);
+            rp.rightArm.rotation.y = dampScalar(rp.rightArm.rotation.y, targetRY, dt, 10);
+            const lut =
+              REMOTE_WALK_PHASE_LUT[
+                Math.abs(((rp.walkPhase * 15.25) | 0) % REMOTE_WALK_PHASE_LUT.length)
+              ];
+            const lutShoulder = lut ? lut.shoulder : 0;
+            rp.leftArm.rotation.z = dampScalar(
+              rp.leftArm.rotation.z,
+              targetLZ +
+                (moving ? Math.cos(rp.walkPhase * 0.92) * 0.07 : Math.sin(rp.idlePhase) * 0.02) +
+                lutShoulder * 0.1,
+              dt,
+              11
+            );
+            rp.rightArm.rotation.z = dampScalar(
+              rp.rightArm.rotation.z,
+              targetRZ +
+                (moving ? -Math.cos(rp.walkPhase * 0.92) * 0.07 : -Math.sin(rp.idlePhase * 1.1) * 0.02) -
+                lutShoulder * 0.1,
+              dt,
+              11
+            );
+          }
         }
       }
 
