@@ -5287,30 +5287,30 @@ if (typeof window !== "undefined") {
      * Fore-grip anchor on the third-person weapon mesh so the support-hand glove can be parented
      * and stay visually welded while the primary arm drives recoil/reload.
      */
-    /** Left (support) hand glove — placed so AFTER the gun's Y=PI flip it lands at the LEFT wrist. */
+    /** Left (support) glove — sits on foregrip after the gun's Y=PI flip, lining up with the crossed-over left wrist. */
     const REMOTE_SUPPORT_SOCKET_LOCAL = {
-      0: { x: 0.055, y: -0.11, z: -0.07 },
-      1: { x: 0.062, y: -0.115, z: -0.10 },
-      2: { x: 0.07, y: -0.12, z: -0.09 },
-      3: { x: 0.058, y: -0.112, z: -0.10 },
-      5: { x: 0.065, y: -0.118, z: -0.14 },
+      0: { x: 0.075, y: -0.10, z: -0.04 },
+      1: { x: 0.080, y: -0.105, z: -0.06 },
+      2: { x: 0.082, y: -0.108, z: -0.05 },
+      3: { x: 0.076, y: -0.102, z: -0.05 },
+      5: { x: 0.082, y: -0.108, z: -0.08 },
     };
-    /** Right (primary) hand glove — placed so AFTER the gun's Y=PI flip it lands at the RIGHT wrist. */
+    /** Right (primary) glove — sits on pistol grip after Y=PI flip, lining up with the right wrist in the shoulder pocket. */
     const REMOTE_PRIMARY_GRIP_LOCAL = {
-      0: { x: -0.05, y: -0.12, z: -0.04 },
-      1: { x: -0.055, y: -0.125, z: -0.08 },
-      2: { x: -0.058, y: -0.128, z: -0.06 },
-      3: { x: -0.052, y: -0.122, z: -0.07 },
-      5: { x: -0.056, y: -0.126, z: -0.12 },
+      0: { x: -0.045, y: -0.10, z: -0.02 },
+      1: { x: -0.050, y: -0.105, z: -0.04 },
+      2: { x: -0.052, y: -0.108, z: -0.03 },
+      3: { x: -0.048, y: -0.102, z: -0.03 },
+      5: { x: -0.052, y: -0.110, z: -0.06 },
     };
-    /** Chest two-hand pose: arms forward + crossed inward so wrists meet at gun centerline. */
+    /** Right-shoulder rifle pose: hold offset to the right (+X), forward (+Z); right arm reaches straight, left crosses to support. */
     const REMOTE_TWO_HAND_STANCE = [
-      { holdY: 1.35, holdZ: 0.55, r: { x: -1.10, y: -0.50, z: 0.20 }, l: { x: -1.10, y: 0.50, z: -0.20 } },
-      { holdY: 1.35, holdZ: 0.55, r: { x: -1.10, y: -0.50, z: 0.20 }, l: { x: -1.10, y: 0.50, z: -0.20 } },
-      { holdY: 1.35, holdZ: 0.55, r: { x: -1.10, y: -0.50, z: 0.20 }, l: { x: -1.10, y: 0.50, z: -0.20 } },
-      { holdY: 1.35, holdZ: 0.55, r: { x: -1.10, y: -0.50, z: 0.20 }, l: { x: -1.10, y: 0.50, z: -0.20 } },
+      { holdX: 0.10, holdY: 1.30, holdZ: 0.70, r: { x: -1.20, y: -0.30, z: 0.15 }, l: { x: -1.20, y: 0.55, z: -0.20 } },
+      { holdX: 0.10, holdY: 1.30, holdZ: 0.70, r: { x: -1.20, y: -0.30, z: 0.15 }, l: { x: -1.20, y: 0.55, z: -0.20 } },
+      { holdX: 0.10, holdY: 1.30, holdZ: 0.70, r: { x: -1.20, y: -0.30, z: 0.15 }, l: { x: -1.20, y: 0.55, z: -0.20 } },
+      { holdX: 0.10, holdY: 1.30, holdZ: 0.70, r: { x: -1.20, y: -0.30, z: 0.15 }, l: { x: -1.20, y: 0.55, z: -0.20 } },
       null,
-      { holdY: 1.35, holdZ: 0.55, r: { x: -1.08, y: -0.50, z: 0.20 }, l: { x: -1.08, y: 0.50, z: -0.20 } },
+      { holdX: 0.10, holdY: 1.30, holdZ: 0.72, r: { x: -1.18, y: -0.30, z: 0.15 }, l: { x: -1.18, y: 0.55, z: -0.20 } },
     ];
 
     function hashRemoteTint(seed) {
@@ -5440,7 +5440,7 @@ if (typeof window !== "undefined") {
       if (!hold) {
         hold = new THREE.Group();
         hold.name = "remoteWeaponHold";
-        hold.position.set(0, 1.35, 0.55);
+        hold.position.set(0.10, 1.30, 0.70);
         group.add(hold);
       }
       return hold;
@@ -5482,10 +5482,11 @@ if (typeof window !== "undefined") {
       const breathe = Math.sin(idlePhase) * (moving ? 0.018 : 0.028);
       const holdY = stance.holdY - adsBlend * 0.04 + breathe * 0.15;
       const holdZ = stance.holdZ + adsBlend * 0.05;
+      const holdX = typeof stance.holdX === "number" ? stance.holdX : 0;
       if (rp.weaponHold) {
         rp.weaponHold.position.y = dampScalar(rp.weaponHold.position.y, holdY, dt, 11);
         rp.weaponHold.position.z = dampScalar(rp.weaponHold.position.z, holdZ, dt, 11);
-        rp.weaponHold.position.x = dampScalar(rp.weaponHold.position.x, 0, dt, 11);
+        rp.weaponHold.position.x = dampScalar(rp.weaponHold.position.x, holdX, dt, 11);
       }
       const rs = stance.r;
       const ls = stance.l;
@@ -5611,8 +5612,8 @@ if (typeof window !== "undefined") {
       leftArm.position.set(-0.22, 1.42, 0.06);
       rightArm.rotation.order = "YXZ";
       leftArm.rotation.order = "YXZ";
-      rightArm.rotation.set(-1.10, -0.50, 0.20);
-      leftArm.rotation.set(-1.10, 0.50, -0.20);
+      rightArm.rotation.set(-1.20, -0.30, 0.15);
+      leftArm.rotation.set(-1.20, 0.55, -0.20);
       group.add(rightArm, leftArm);
 
       const makePlayerLeg = (px) => {
