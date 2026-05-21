@@ -315,6 +315,33 @@
       z-index: 10;
     }
 
+    .blind-overlay {
+      position: fixed;
+      inset: 0;
+      background: #000;
+      pointer-events: none;
+      z-index: 90;
+      opacity: 0;
+      transition: opacity 0.18s linear;
+    }
+    .blind-overlay.show { opacity: 1; }
+    .blind-text {
+      position: fixed;
+      left: 50%;
+      top: 56%;
+      transform: translate(-50%, -50%);
+      color: #5ab3ff;
+      font-family: monospace;
+      font-size: 22px;
+      letter-spacing: 2px;
+      text-shadow: 0 0 6px rgba(90, 179, 255, 0.5);
+      pointer-events: none;
+      z-index: 91;
+      opacity: 0;
+      transition: opacity 0.18s linear;
+    }
+    .blind-text.show { opacity: 0.85; }
+
     .crosshair {
       position: fixed;
       left: 50%;
@@ -1068,6 +1095,8 @@
   </div>
   <div class="hint" id="hint" data-i18n="hintClick">Click anywhere</div>
   <div class="flash" id="flash"></div>
+  <div class="blind-overlay" id="blindOverlay" aria-hidden="true"></div>
+  <div class="blind-text" id="blindText" aria-hidden="true">BLINDED</div>
   <div class="crosshair" id="crosshair"></div>
   <div id="amrScopeOverlay" class="amr-scope-overlay" aria-hidden="true"></div>
   <div id="medkitReticle" class="medkit-reticle hidden" aria-hidden="true">
@@ -4950,6 +4979,11 @@ if (typeof window !== "undefined") {
       if (!gameWorldReady) return;
       if (player.health <= 0) return;
       if (performance.now() < player.spawnProtectUntil) return;
+      if (data && data.hitKind === "blind") {
+        const dur = (typeof data.blindDuration === "number" && isFinite(data.blindDuration)) ? data.blindDuration : 5;
+        startBlindEffect(dur);
+        return;
+      }
       player.health = Math.max(0, player.health - (data.damage || 0));
       player.regenTimer = 0;
       state.flashTimer = 0.14;
@@ -5254,6 +5288,12 @@ if (typeof window !== "undefined") {
         addMeshPart(g, new THREE.BoxGeometry(0.05, 0.07, 0.22), mSight, 0, 0.09, 0.02);
         addMeshPart(g, new THREE.CylinderGeometry(0.038, 0.042, 0.08, 10), mDark, 0, 0.065, -0.58, bz, 0, 0);
         addMeshPart(g, new THREE.BoxGeometry(0.055, 0.12, 0.09), mBlack, 0, -0.1, 0.1);
+      } else if (type === 6) {
+        addMeshPart(g, new THREE.BoxGeometry(0.06, 0.08, 0.28), mDark, 0, 0.01, 0.06);
+        addMeshPart(g, new THREE.CylinderGeometry(0.018, 0.02, 0.34, 10), mLight, 0, 0.04, -0.08, bz, 0, 0);
+        addMeshPart(g, new THREE.ConeGeometry(0.015, 0.05, 8), mLight, 0, 0.04, -0.27, bz, 0, 0);
+        addMeshPart(g, new THREE.BoxGeometry(0.05, 0.14, 0.07), mDark, 0, -0.10, 0.10);
+        addMeshPart(g, new THREE.BoxGeometry(0.04, 0.08, 0.06), mBlack, 0, -0.07, 0.04);
       }
       return g;
     }
@@ -5294,6 +5334,7 @@ if (typeof window !== "undefined") {
       2: { x: 0.082, y: -0.108, z: -0.05 },
       3: { x: 0.076, y: -0.102, z: -0.05 },
       5: { x: 0.082, y: -0.108, z: -0.08 },
+      6: { x: 0.076, y: -0.102, z: -0.04 },
     };
     /** Right (primary) glove — sits on pistol grip after Y=PI flip, lining up with the right wrist in the shoulder pocket. */
     const REMOTE_PRIMARY_GRIP_LOCAL = {
@@ -5302,15 +5343,17 @@ if (typeof window !== "undefined") {
       2: { x: -0.052, y: -0.108, z: -0.03 },
       3: { x: -0.048, y: -0.102, z: -0.03 },
       5: { x: -0.052, y: -0.110, z: -0.06 },
+      6: { x: -0.046, y: -0.105, z: -0.02 },
     };
-    /** Right-shoulder rifle pose with bent elbows: shoulder rotates upper arm forward, fixed -0.5 elbow folds forearm up to gun. */
+    /** Right-shoulder rifle pose with bent elbows: shoulders wider (±0.30); arms cross to reach the gun on the right while staying outside the body. */
     const REMOTE_TWO_HAND_STANCE = [
-      { holdX: 0.10, holdY: 1.30, holdZ: 0.60, r: { x: -0.80, y: -0.10, z: 0.00 }, l: { x: -0.80, y: 0.45, z: 0.00 } },
-      { holdX: 0.10, holdY: 1.30, holdZ: 0.60, r: { x: -0.80, y: -0.10, z: 0.00 }, l: { x: -0.80, y: 0.45, z: 0.00 } },
-      { holdX: 0.10, holdY: 1.30, holdZ: 0.60, r: { x: -0.80, y: -0.10, z: 0.00 }, l: { x: -0.80, y: 0.45, z: 0.00 } },
-      { holdX: 0.10, holdY: 1.30, holdZ: 0.60, r: { x: -0.80, y: -0.10, z: 0.00 }, l: { x: -0.80, y: 0.45, z: 0.00 } },
+      { holdX: 0.18, holdY: 1.30, holdZ: 0.60, r: { x: -0.85, y: -0.10, z: 0.00 }, l: { x: -0.85, y: 0.55, z: 0.00 } },
+      { holdX: 0.18, holdY: 1.30, holdZ: 0.60, r: { x: -0.85, y: -0.10, z: 0.00 }, l: { x: -0.85, y: 0.55, z: 0.00 } },
+      { holdX: 0.18, holdY: 1.30, holdZ: 0.60, r: { x: -0.85, y: -0.10, z: 0.00 }, l: { x: -0.85, y: 0.55, z: 0.00 } },
+      { holdX: 0.18, holdY: 1.30, holdZ: 0.60, r: { x: -0.85, y: -0.10, z: 0.00 }, l: { x: -0.85, y: 0.55, z: 0.00 } },
       null,
-      { holdX: 0.10, holdY: 1.30, holdZ: 0.62, r: { x: -0.78, y: -0.10, z: 0.00 }, l: { x: -0.78, y: 0.45, z: 0.00 } },
+      { holdX: 0.18, holdY: 1.30, holdZ: 0.62, r: { x: -0.83, y: -0.10, z: 0.00 }, l: { x: -0.83, y: 0.55, z: 0.00 } },
+      { holdX: 0.18, holdY: 1.30, holdZ: 0.60, r: { x: -0.85, y: -0.10, z: 0.00 }, l: { x: -0.85, y: 0.55, z: 0.00 } },
     ];
 
     function hashRemoteTint(seed) {
@@ -5440,14 +5483,14 @@ if (typeof window !== "undefined") {
       if (!hold) {
         hold = new THREE.Group();
         hold.name = "remoteWeaponHold";
-        hold.position.set(0.10, 1.30, 0.60);
+        hold.position.set(0.18, 1.30, 0.60);
         group.add(hold);
       }
       return hold;
     }
 
     function equipRemotePlayerWeapon(rp, weaponType) {
-      const wt = (((weaponType | 0) % 6) + 6) % 6;
+      const wt = (((weaponType | 0) % 7) + 7) % 7;
       const gloveMat =
         rp.gloveMat ||
         new THREE.MeshStandardMaterial({ color: 0x3a3528, roughness: 0.9 });
@@ -5526,31 +5569,31 @@ if (typeof window !== "undefined") {
       const mGlove = new THREE.MeshStandardMaterial({ color: 0x3a3528, roughness: 0.9 });
       const mKnee = new THREE.MeshStandardMaterial({ color: 0x505548, roughness: 0.8 });
 
-      const chest = new THREE.Mesh(new THREE.BoxGeometry(0.60, 0.48, 0.30), mCamo1);
+      const chest = new THREE.Mesh(new THREE.BoxGeometry(0.50, 0.48, 0.30), mCamo1);
       chest.position.y = 1.24; group.add(chest);
-      const belly = new THREE.Mesh(new THREE.BoxGeometry(0.54, 0.24, 0.28), mCamo2);
+      const belly = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.24, 0.28), mCamo2);
       belly.position.y = 0.90; group.add(belly);
-      const vestF = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.44, 0.06), mVest);
+      const vestF = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.44, 0.06), mVest);
       vestF.position.set(0, 1.20, 0.17); group.add(vestF);
-      const vestB = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.44, 0.05), mVest);
+      const vestB = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.44, 0.05), mVest);
       vestB.position.set(0, 1.20, -0.16); group.add(vestB);
       const vestS1 = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.36, 0.24), mVest);
-      vestS1.position.set(0.30, 1.20, 0); group.add(vestS1);
-      const vestS2 = vestS1.clone(); vestS2.position.x = -0.30; group.add(vestS2);
+      vestS1.position.set(0.25, 1.20, 0); group.add(vestS1);
+      const vestS2 = vestS1.clone(); vestS2.position.x = -0.25; group.add(vestS2);
       for (let px of [-0.16, 0, 0.16]) {
         const p = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.10, 0.05), mGear);
         p.position.set(px, 1.04, 0.21); group.add(p);
       }
-      const collar = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.07, 0.26), mCamo2);
+      const collar = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.07, 0.26), mCamo2);
       collar.position.set(0, 1.50, 0); group.add(collar);
-      const belt = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.06, 0.32), mGear);
+      const belt = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.06, 0.32), mGear);
       belt.position.y = 0.76; group.add(belt);
       const buckle = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.05, 0.03), mMetal);
       buckle.position.set(0, 0.76, 0.17); group.add(buckle);
-      const pelvis = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.16, 0.27), mPants);
+      const pelvis = new THREE.Mesh(new THREE.BoxGeometry(0.40, 0.16, 0.27), mPants);
       pelvis.position.set(0, 0.68, 0); group.add(pelvis);
       const holster = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.14, 0.08), mGear);
-      holster.position.set(0.28, 0.68, 0.06); group.add(holster);
+      holster.position.set(0.23, 0.68, 0.06); group.add(holster);
 
       const headGroup = new THREE.Group();
       const skull = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.38, 0.36), mSkin);
@@ -5616,12 +5659,12 @@ if (typeof window !== "undefined") {
         }
       };
       makePlayerArm(rightArm, false); makePlayerArm(leftArm, false);
-      rightArm.position.set(0.22, 1.42, 0.06);
-      leftArm.position.set(-0.22, 1.42, 0.06);
+      rightArm.position.set(0.30, 1.42, 0.06);
+      leftArm.position.set(-0.30, 1.42, 0.06);
       rightArm.rotation.order = "YXZ";
       leftArm.rotation.order = "YXZ";
-      rightArm.rotation.set(-0.80, -0.10, 0.00);
-      leftArm.rotation.set(-0.80, 0.45, 0.00);
+      rightArm.rotation.set(-0.85, -0.10, 0.00);
+      leftArm.rotation.set(-0.85, 0.55, 0.00);
       group.add(rightArm, leftArm);
 
       const makePlayerLeg = (px) => {
@@ -7723,7 +7766,7 @@ if (typeof window !== "undefined") {
     function makeTrainingDummy(idx, lane) {
       const label = `${tr("trainingDummyName", "Target")} ${idx + 1}`;
       const avatar = createRemotePlayer(label);
-      avatar.group.rotation.y = Math.PI;
+      avatar.group.rotation.y = 0;
       avatar.group.position.set((lane.xMin + lane.xMax) * 0.5, 0, lane.z);
       if (avatar.nameSprite) avatar.nameSprite.visible = false;
       avatar.group.visible = true;
@@ -7773,7 +7816,7 @@ if (typeof window !== "undefined") {
         enemy.group.position.x = x;
         enemy.walkPhase += dt * (2.4 + enemy.patrolSpeed * 0.35);
         enemy.group.position.y = Math.sin(enemy.walkPhase) * 0.04;
-        enemy.group.rotation.y = Math.PI;
+        enemy.group.rotation.y = 0;
       }
     }
 
@@ -7977,6 +8020,8 @@ if (typeof window !== "undefined") {
       shellCasings: [],
       lastShellEject: 0,
       reloadStartAmmo: 0,
+      blindUntil: 0,
+      projectiles: [],
     };
 
 
@@ -8159,6 +8204,32 @@ if (typeof window !== "undefined") {
         adsFov: 26,
         adsSpeed: 5.2,
       },
+      {
+        name: "Blind Dart",
+        fireDelay: 650,
+        auto: false,
+        pellets: 1,
+        spreadBase: 0.004,
+        spreadBloomAdd: 0.002,
+        spreadBloomMax: 0.012,
+        recover: 0.04,
+        recoil: 0.06,
+        damageHead: 0,
+        damageBody: 0,
+        damageLegs: 0,
+        color: 0x6bd4ff,
+        magSize: 3,
+        ammo: 3,
+        reloadTime: 3650,
+        soundBase: 540,
+        soundSkin: "revengeClassic",
+        adsFov: 60,
+        adsSpeed: 8,
+        projectile: true,
+        projectileSpeed: 36,
+        projectileGravity: 9.8,
+        blindDuration: 5.0,
+      },
     ];
 
     function weaponSoundSkin() {
@@ -8189,7 +8260,7 @@ if (typeof window !== "undefined") {
         ${tr("hudGameTitleLine", "Zone No Light")}<br>
         WASD move | Space jump | R reload<br>
         Mouse aim | RMB zoom | L flashlight | Z beam small/med/wide<br>
-        Weapons: 1–4 | <b>5</b> AMR | <b>6</b> Med Kit (hold <b>F</b> or <b>LMB</b> 10s, +50 HP)<br>
+        Weapons: 1–4 | <b>5</b> AMR | <b>6</b> Blind Dart | <b>7</b> Med Kit (hold <b>F</b> or <b>LMB</b> 10s, +50 HP)<br>
         Map: ${mapLabel}${MULTIPLAYER ? " (MP)" : ""}<br>
         Weapon: ${w.name}<br>
         ${
@@ -10061,6 +10132,33 @@ if (typeof window !== "undefined") {
       return root;
     }
 
+    function makeBlindDartModel() {
+      const root = new THREE.Group();
+      const gun = new THREE.Group();
+      const mBody = new THREE.MeshStandardMaterial({ color: 0x4a5560, roughness: 0.45, metalness: 0.5 });
+      const mDark = new THREE.MeshStandardMaterial({ color: 0x1a1f28, roughness: 0.55, metalness: 0.45 });
+      const mTip = new THREE.MeshStandardMaterial({ color: 0xc8d2dc, roughness: 0.35, metalness: 0.7 });
+      const mNeon = new THREE.MeshBasicMaterial({ color: 0x6bd4ff });
+      addMeshPart(gun, new THREE.BoxGeometry(0.07, 0.09, 0.30), mBody, 0, 0.01, 0.02);
+      addMeshPart(gun, new THREE.CylinderGeometry(0.018, 0.02, 0.34, 10), mTip, 0, 0.05, -0.12, Math.PI / 2, 0, 0);
+      addMeshPart(gun, new THREE.ConeGeometry(0.015, 0.05, 8), mTip, 0, 0.05, -0.32, Math.PI / 2, 0, 0);
+      addMeshPart(gun, new THREE.BoxGeometry(0.05, 0.14, 0.07), mDark, 0, -0.10, 0.05);
+      addMeshPart(gun, new THREE.BoxGeometry(0.04, 0.08, 0.06), mDark, 0, -0.07, -0.02);
+      addMeshPart(gun, new THREE.BoxGeometry(0.018, 0.022, 0.05), mNeon, 0, 0.075, 0.04);
+      gun.position.set(0.24, -0.22, -0.74);
+      attachViewHandGrips(gun, root, VIEW_HAND_GRIPS[0]);
+      attachViewArmsOnGrips(root);
+      const muzzleNode = new THREE.Object3D();
+      muzzleNode.position.set(0, 0.05, -0.34);
+      gun.add(muzzleNode);
+      root.userData.muzzleNode = muzzleNode;
+      root.add(gun);
+      root.userData.gun = gun;
+      root.userData.basePos = gun.position.clone();
+      root.userData.adsOffset = new THREE.Vector3(-0.24, 0.10, 0.26);
+      return root;
+    }
+
     const weaponModels = [
       makeWeaponModel(0),
       makeWeaponModel(1),
@@ -10068,6 +10166,7 @@ if (typeof window !== "undefined") {
       makeWeaponModel(3),
       makeMedKitModel(),
       makeWeaponModel(5),
+      makeBlindDartModel(),
     ];
 
     weaponModels.forEach((w, i) => {
@@ -10586,7 +10685,8 @@ if (typeof window !== "undefined") {
       if (k === "3") setWeapon(2);
       if (k === "4") setWeapon(3);
       if (k === "5") setWeapon(5);
-      if (k === "6") setWeapon(4);
+      if (k === "6") setWeapon(6);
+      if (k === "7") setWeapon(4);
       if (k === "r") startReload();
     });
 
@@ -10896,6 +10996,162 @@ if (typeof window !== "undefined") {
       drawEnemyHp(enemy);
     }
 
+    const BLIND_TEXT_EL = document.getElementById("blindText");
+    const BLIND_OVERLAY_EL = document.getElementById("blindOverlay");
+    const _projWorkVecA = new THREE.Vector3();
+    const _projWorkVecB = new THREE.Vector3();
+    const _projWorkVecC = new THREE.Vector3();
+
+    function startBlindEffect(durationSec) {
+      const end = performance.now() + Math.max(0, durationSec) * 1000;
+      if (end > state.blindUntil) state.blindUntil = end;
+    }
+
+    function updateBlindOverlay() {
+      const blinded = performance.now() < state.blindUntil;
+      if (BLIND_OVERLAY_EL) BLIND_OVERLAY_EL.classList.toggle("show", blinded);
+      if (BLIND_TEXT_EL) BLIND_TEXT_EL.classList.toggle("show", blinded);
+    }
+
+    function spawnBlindDartProjectile(origin, direction, weaponCfg) {
+      const mat = new THREE.MeshStandardMaterial({ color: 0x6bd4ff, roughness: 0.4, metalness: 0.6, emissive: 0x224466, emissiveIntensity: 0.6 });
+      const matTip = new THREE.MeshStandardMaterial({ color: 0xeef2f6, roughness: 0.3, metalness: 0.8 });
+      const dart = new THREE.Group();
+      const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.016, 0.22, 8), mat);
+      shaft.rotation.x = Math.PI / 2;
+      dart.add(shaft);
+      const tip = new THREE.Mesh(new THREE.ConeGeometry(0.012, 0.06, 8), matTip);
+      tip.rotation.x = -Math.PI / 2;
+      tip.position.z = -0.14;
+      dart.add(tip);
+      const fin = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.006, 0.04), mat);
+      fin.position.z = 0.10;
+      dart.add(fin);
+      scene.add(dart);
+      const dir = direction.clone().normalize();
+      const speed = (weaponCfg && weaponCfg.projectileSpeed) || 36;
+      const proj = {
+        type: "blindDart",
+        pos: origin.clone(),
+        prev: origin.clone(),
+        vel: dir.clone().multiplyScalar(speed),
+        gravity: (weaponCfg && weaponCfg.projectileGravity) || 9.8,
+        blindDuration: (weaponCfg && weaponCfg.blindDuration) || 5,
+        mesh: dart,
+        age: 0,
+        maxAge: 6,
+      };
+      dart.position.copy(proj.pos);
+      const fwd = proj.vel.clone().normalize();
+      dart.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, -1), fwd);
+      state.projectiles.push(proj);
+      return proj;
+    }
+
+    function _disposeProjectile(p) {
+      if (!p.mesh) return;
+      scene.remove(p.mesh);
+      p.mesh.traverse(node => {
+        if (node.geometry) node.geometry.dispose();
+        if (node.material) {
+          if (Array.isArray(node.material)) node.material.forEach(m => m.dispose());
+          else node.material.dispose();
+        }
+      });
+      p.mesh = null;
+    }
+
+    function updateProjectiles(dt) {
+      if (!state.projectiles.length) return;
+      for (let i = state.projectiles.length - 1; i >= 0; i--) {
+        const p = state.projectiles[i];
+        p.age += dt;
+        p.prev.copy(p.pos);
+        p.pos.addScaledVector(p.vel, dt);
+        p.vel.y -= p.gravity * dt;
+        const fwd = _projWorkVecA.copy(p.vel);
+        if (fwd.lengthSq() > 1e-8) {
+          fwd.normalize();
+          if (p.mesh) {
+            p.mesh.position.copy(p.pos);
+            p.mesh.quaternion.setFromUnitVectors(_projWorkVecB.set(0, 0, -1), fwd);
+          }
+        }
+        const segDir = _projWorkVecC.copy(p.pos).sub(p.prev);
+        const segLen = segDir.length();
+        if (segLen <= 1e-5) continue;
+        segDir.multiplyScalar(1 / segLen);
+        const segRay = new THREE.Raycaster(p.prev, segDir, 0, segLen);
+        segRay.camera = camera;
+
+        let consumed = false;
+        const localImmune = p.age < 0.12;
+
+        if (!consumed && MULTIPLAYER && !ARENA_COOP && !isTrainingMap(CURRENT_MAP)) {
+          for (const [rpId, rp] of remotePlayers) {
+            if (rp.isDown || !rp.group.visible) continue;
+            rp.group.updateMatrixWorld(true);
+            const rh = humanoidHitAlongRay(segRay, rp.group);
+            if (rh) {
+              socket.emit("hit", {
+                target: rpId,
+                damage: 0,
+                x: p.pos.x,
+                z: p.pos.z,
+                hitKind: "blind",
+                blindDuration: p.blindDuration,
+              });
+              createSparks(p.pos.clone(), 0x6bd4ff);
+              consumed = true;
+              break;
+            }
+          }
+        }
+
+        if (!consumed && !localImmune) {
+          const headW = camera.position;
+          const dxc = p.pos.x - headW.x;
+          const dyc = p.pos.y - headW.y;
+          const dzc = p.pos.z - headW.z;
+          if (dxc * dxc + dyc * dyc + dzc * dzc < 0.45 * 0.45) {
+            startBlindEffect(p.blindDuration);
+            createSparks(p.pos.clone(), 0x6bd4ff);
+            consumed = true;
+          }
+        }
+
+        if (!consumed) {
+          for (const enemy of state.enemies) {
+            if (!enemyBlockingHits(enemy)) continue;
+            enemy.group.updateMatrixWorld(true);
+            const hit = enemy.trainingDummy
+              ? humanoidHitAlongRay(segRay, enemy.group)
+              : enemyHitAlongRay(segRay, enemy);
+            if (hit) {
+              createSparks(p.pos.clone(), 0x6bd4ff);
+              if (enemy.trainingDummy) registerTrainingHit(hit.zone || "body");
+              consumed = true;
+              break;
+            }
+          }
+        }
+
+        if (!consumed) {
+          const hits = segRay.intersectObjects(wallMeshes, false);
+          if (hits.length > 0) {
+            const wp = hits[0].point;
+            createSparks(wp.clone(), 0x6bd4ff);
+            consumed = true;
+          }
+        }
+
+        if (consumed || p.age > p.maxAge || p.pos.y < -10) {
+          _disposeProjectile(p);
+          state.projectiles.splice(i, 1);
+        }
+      }
+    }
+
     function tryShoot() {
       if (!gameWorldReady || paused || player.health <= 0) return;
       if (state.weaponIndex === 4) return;
@@ -10913,6 +11169,19 @@ if (typeof window !== "undefined") {
       state.lastShot = now;
       w.ammo -= 1;
       if (isTrainingMap(CURRENT_MAP)) registerTrainingShot();
+
+      if (state.weaponIndex === 6) {
+        playGunSound(w);
+        startWeaponFireAnim();
+        state.recoil += w.recoil;
+        state.spreadBloom = Math.min(w.spreadBloomMax, state.spreadBloom + w.spreadBloomAdd);
+        const dir = getWeaponDirection(w.spreadBase);
+        const muzzle = new THREE.Vector3();
+        getActiveMuzzleWorld(muzzle);
+        spawnBlindDartProjectile(muzzle, dir, w);
+        updateHud();
+        return;
+      }
 
       let spreadMultiplier = 1;
       let recoilMultiplier = 1;
@@ -12230,6 +12499,8 @@ if (typeof window !== "undefined") {
       updateTracers(dt);
       updateShellCasings(dt);
       updateHitIndicators(dt);
+      updateProjectiles(dt);
+      updateBlindOverlay();
       const now = performance.now();
       if (!chatOpen && now - _lastChatRefresh > 1000) {
         _lastChatRefresh = now;
