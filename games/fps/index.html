@@ -275,6 +275,60 @@
       color: #fff;
       font-weight: 600;
     }
+    #duelScoreboard {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 60;
+      display: none;
+      min-width: 360px;
+      max-width: 520px;
+      padding: 18px 22px 16px 22px;
+      border-radius: 14px;
+      background: rgba(8, 12, 22, 0.78);
+      border: 1px solid rgba(255, 200, 90, 0.35);
+      backdrop-filter: blur(8px);
+      font-family: var(--game-font-ui);
+      color: rgba(232, 238, 252, 0.95);
+      pointer-events: none;
+      user-select: none;
+      box-shadow: 0 18px 60px rgba(0, 0, 0, 0.55);
+    }
+    #duelScoreboard h3 {
+      margin: 0 0 10px 0;
+      font-size: 15px;
+      letter-spacing: 0.22em;
+      color: #ffd089;
+      text-align: center;
+    }
+    #duelScoreboard .duel-row {
+      display: grid;
+      grid-template-columns: minmax(120px, 1fr) 56px 56px 56px;
+      gap: 8px;
+      padding: 5px 6px;
+      align-items: center;
+      font-size: 13px;
+    }
+    #duelScoreboard .duel-row.head {
+      font-size: 11px;
+      letter-spacing: 0.16em;
+      color: rgba(200, 220, 255, 0.65);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+      margin-bottom: 4px;
+    }
+    #duelScoreboard .duel-row.self {
+      color: #ffe89a;
+    }
+    #duelScoreboard .duel-row .dn {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    #duelScoreboard .duel-row .dv {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
 
     .hud {
       position: fixed;
@@ -1060,7 +1114,12 @@
     <div class="train-row"><span id="trainingLblLeg">Legs</span><b id="trainYouLeg">0</b></div>
     <div class="train-row"><span id="trainingLblAcc">Accuracy</span><b id="trainYouAcc">—</b></div>
   </div>
-  <div id="fpsOverlay" style="position:fixed;top:10px;right:14px;z-index:45;pointer-events:none;text-align:right;font-family:var(--game-font-ui);font-size:13px;color:rgba(245,248,255,0.92);text-shadow:0 1px 5px rgba(0,0,0,0.85);line-height:1.4;">
+  <div id="duelScoreboard" aria-live="polite" aria-hidden="true">
+    <h3 id="duelScoreTitle">SCOREBOARD</h3>
+    <div class="duel-row head"><span class="dn">Player</span><span class="dv">K</span><span class="dv">D</span><span class="dv">K/D</span></div>
+    <div id="duelScoreList"></div>
+  </div>
+  <div id="fpsOverlay style="position:fixed;top:10px;right:14px;z-index:45;pointer-events:none;text-align:right;font-family:var(--game-font-ui);font-size:13px;color:rgba(245,248,255,0.92);text-shadow:0 1px 5px rgba(0,0,0,0.85);line-height:1.4;">
     <div id="fpsValue">— FPS</div>
     <div id="fpsChatHint" style="opacity:0.72;font-size:11px;margin-top:3px;letter-spacing:0.02em;" data-i18n="hudHelpChat">Press T to chat</div>
     <div id="fpsHintFlash" style="opacity:0.72;font-size:11px;margin-top:3px;letter-spacing:0.02em;" data-i18n="hudHelpLight">Press L to toggle light &amp; flashlight</div>
@@ -2199,6 +2258,69 @@ if (typeof window !== "undefined") {
     const btnTrainingCoop = document.getElementById("btnTrainingCoop");
     const btnTrainingBack = document.getElementById("btnTrainingBack");
     const trainingScoreboardEl = document.getElementById("trainingScoreboard");
+    const duelScoreboardEl = document.getElementById("duelScoreboard");
+    const duelScoreListEl = document.getElementById("duelScoreList");
+
+    function isDuelStatsMap() {
+      return MULTIPLAYER && isPvpCrossfireMap(CURRENT_MAP);
+    }
+
+    function setDuelScoreboardVisible(on) {
+      if (!duelScoreboardEl) return;
+      _duelScoreboardOpen = !!on;
+      duelScoreboardEl.style.display = on ? "block" : "none";
+      duelScoreboardEl.setAttribute("aria-hidden", on ? "false" : "true");
+      if (on) updateDuelScoreboardUI();
+    }
+
+    function _duelKdRatio(k, d) {
+      if (d <= 0) return k > 0 ? k.toFixed(1) : "0.0";
+      return (k / d).toFixed(2);
+    }
+
+    function updateDuelScoreboardUI() {
+      if (!duelScoreListEl || !_duelScoreboardOpen) return;
+      const rows = [];
+      rows.push({
+        self: true,
+        name: (playerName || "You") + " (You)",
+        k: duelStats.kills | 0,
+        d: duelStats.deaths | 0,
+      });
+      for (const rp of remotePlayers.values()) {
+        rows.push({
+          self: false,
+          name: rp.name || "Player",
+          k: rp.kills | 0,
+          d: rp.deaths | 0,
+        });
+      }
+      rows.sort((a, b) => (b.k - a.k) || (a.d - b.d));
+      duelScoreListEl.innerHTML = rows
+        .map((r) => {
+          const ratio = _duelKdRatio(r.k, r.d);
+          const cls = r.self ? "duel-row self" : "duel-row";
+          const safeName = String(r.name)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .slice(0, 18);
+          return `<div class="${cls}"><span class="dn">${safeName}</span><span class="dv">${r.k}</span><span class="dv">${r.d}</span><span class="dv">${ratio}</span></div>`;
+        })
+        .join("");
+    }
+
+    function killRemotePlayerLocally(rp, hitWorld) {
+      if (!rp || rp.isDown || !rp.group) return false;
+      try {
+        spawnHumanoidDissolve(rp.group, hitWorld);
+      } catch (_) {}
+      rp.isDown = true;
+      rp.group.visible = false;
+      rp.deaths = (rp.deaths | 0) + 1;
+      rp.predictedHp = 0;
+      return true;
+    }
     const trainYouPts = document.getElementById("trainYouPts");
     const trainTeamPts = document.getElementById("trainTeamPts");
     const trainYouHits = document.getElementById("trainYouHits");
@@ -4500,6 +4622,26 @@ if (typeof window !== "undefined") {
       return { points: 0, hits: 0, head: 0, body: 0, leg: 0, shots: 0 };
     }
     let trainingStats = { you: freshTrainingStats(), team: freshTrainingStats() };
+    const duelStats = { kills: 0, deaths: 0 };
+    let _duelScoreboardOpen = false;
+    let _lastDuelAttackerId = null;
+    function ensureRemoteDuelStats(rp) {
+      if (rp == null) return;
+      if (typeof rp.predictedHp !== "number") rp.predictedHp = 100;
+      if (typeof rp.kills !== "number") rp.kills = 0;
+      if (typeof rp.deaths !== "number") rp.deaths = 0;
+    }
+    function resetDuelStats() {
+      duelStats.kills = 0;
+      duelStats.deaths = 0;
+      _lastDuelAttackerId = null;
+      for (const rp of remotePlayers.values()) {
+        rp.kills = 0;
+        rp.deaths = 0;
+        rp.predictedHp = 100;
+      }
+      if (_duelScoreboardOpen) updateDuelScoreboardUI();
+    }
     let MULTIPLAYER = false;
     /** True only for Zombie Arena played via ARENA CO-OP lobby (no damage vs other players). */
     let ARENA_COOP = false;
@@ -4819,6 +4961,10 @@ if (typeof window !== "undefined") {
         rp = createRemotePlayer(data.name);
         remotePlayers.set(data.id, rp);
         scene.add(rp.group);
+        ensureRemoteDuelStats(rp);
+        if (_duelScoreboardOpen) updateDuelScoreboardUI();
+      } else {
+        ensureRemoteDuelStats(rp);
       }
       rp.x = data.x;
       rp.y = data.y;
@@ -4856,17 +5002,43 @@ if (typeof window !== "undefined") {
     socket.on("playerDown", (data) => {
       if (!data || data.id == null) return;
       const rp = remotePlayers.get(data.id);
-      if (!rp || !rp.group) return;
-      const hx = rp.visX ?? rp.x ?? 0;
-      const hz = rp.visZ ?? rp.z ?? 0;
-      const hitPt = new THREE.Vector3(
-        data.x != null ? +data.x : hx,
-        data.y != null ? +data.y : 1.25,
-        data.z != null ? +data.z : hz
-      );
-      spawnHumanoidDissolve(rp.group, hitPt);
-      rp.isDown = true;
-      rp.group.visible = false;
+      if (rp && rp.group && !rp.isDown) {
+        const hx = rp.visX ?? rp.x ?? 0;
+        const hz = rp.visZ ?? rp.z ?? 0;
+        const hitPt = new THREE.Vector3(
+          data.x != null ? +data.x : hx,
+          data.y != null ? +data.y : 1.25,
+          data.z != null ? +data.z : hz
+        );
+        spawnHumanoidDissolve(rp.group, hitPt);
+        rp.isDown = true;
+        rp.group.visible = false;
+      }
+      if (rp) {
+        ensureRemoteDuelStats(rp);
+        rp.deaths = (rp.deaths | 0) + 1;
+        rp.predictedHp = 0;
+      }
+      if (data.killerId != null && String(data.killerId) !== String(socket.id)) {
+        const killer = remotePlayers.get(data.killerId);
+        if (killer) {
+          ensureRemoteDuelStats(killer);
+          killer.kills = (killer.kills | 0) + 1;
+        }
+      }
+      if (_duelScoreboardOpen) updateDuelScoreboardUI();
+    });
+
+    socket.on("playerKill", (data) => {
+      if (!data) return;
+      if (data.killerId != null && String(data.killerId) !== String(socket.id)) {
+        const killer = remotePlayers.get(data.killerId);
+        if (killer) {
+          ensureRemoteDuelStats(killer);
+          killer.kills = (killer.kills | 0) + 1;
+        }
+      }
+      if (_duelScoreboardOpen) updateDuelScoreboardUI();
     });
 
     socket.on("enemyLeft", (data) => {
@@ -4883,6 +5055,8 @@ if (typeof window !== "undefined") {
       if (rp) {
         rp.isDown = false;
         rp.group.visible = true;
+        ensureRemoteDuelStats(rp);
+        rp.predictedHp = 100;
       }
     });
 
@@ -4958,6 +5132,9 @@ if (typeof window !== "undefined") {
       state.flashTimer = 0.14;
       if (data.x != null && data.z != null) {
         lastPlayerHitWorld.set(+data.x, player.position.y + 1.05, +data.z);
+      }
+      if (data.attackerId != null) {
+        _lastDuelAttackerId = data.attackerId;
       }
       addHitIndicator(data.x || 0, data.z || 0);
       triggerCamShake(0.085);
@@ -10596,10 +10773,18 @@ if (typeof window !== "undefined") {
       if (k === "5") setWeapon(5);
       if (k === "6") setWeapon(4);
       if (k === "r") startReload();
+      if ((e.code === "Tab" || k === "tab") && isDuelStatsMap()) {
+        e.preventDefault();
+        if (!_duelScoreboardOpen) setDuelScoreboardVisible(true);
+      }
     });
 
     document.addEventListener("keyup", (e) => {
       const k = e.key.toLowerCase();
+      if (e.code === "Tab" || k === "tab") {
+        e.preventDefault();
+        if (_duelScoreboardOpen) setDuelScoreboardVisible(false);
+      }
       if (k === "w") keys.w = false;
       if (k === "a") keys.a = false;
       if (k === "s") keys.s = false;
@@ -11098,7 +11283,28 @@ if (typeof window !== "undefined") {
             x: player.position.x,
             z: player.position.z,
             hitKind: "bullet",
+            attackerId: socket.id,
           });
+          if (MULTIPLAYER && isPvpCrossfireMap(CURRENT_MAP)) {
+            const victim = remotePlayers.get(bestRpId);
+            if (victim) {
+              ensureRemoteDuelStats(victim);
+              if (!victim.isDown) {
+                victim.predictedHp = Math.max(0, (victim.predictedHp ?? 100) - dmg);
+                if (victim.predictedHp <= 0) {
+                  if (killRemotePlayerLocally(victim, bp.clone())) {
+                    duelStats.kills += 1;
+                    triggerHitFeedback(true, bestRpZone === "head");
+                    try {
+                      socket.emit("playerKill", { killerId: socket.id, victimId: bestRpId });
+                      socket.emit("playerDown", { id: bestRpId, killerId: socket.id, x: bp.x, y: bp.y, z: bp.z });
+                    } catch (_) {}
+                    if (_duelScoreboardOpen) updateDuelScoreboardUI();
+                  }
+                }
+              }
+            }
+          }
         } else if (wallHit) {
           const wp = wallHit.point.clone();
           const normal = wallHit.face.normal.clone().transformDirection(wallHit.object.matrixWorld);
@@ -11440,9 +11646,19 @@ if (typeof window !== "undefined") {
       btnDeathSettings.style.display = "";
 
       if (MULTIPLAYER && isPvpCrossfireMap(CURRENT_MAP)) {
+        duelStats.deaths += 1;
+        const dx = lastPlayerHitWorld.x;
+        const dy = lastPlayerHitWorld.y;
+        const dz = lastPlayerHitWorld.z;
+        const killerId = _lastDuelAttackerId;
         try {
-          socket.emit("playerDown", { id: socket.id });
+          socket.emit("playerDown", { id: socket.id, killerId, x: dx, y: dy, z: dz });
+          if (killerId != null) {
+            socket.emit("playerKill", { killerId, victimId: socket.id });
+          }
         } catch (_) {}
+        _lastDuelAttackerId = null;
+        if (_duelScoreboardOpen) updateDuelScoreboardUI();
       }
 
       if (isPvpCrossfireMap(CURRENT_MAP)) {
@@ -11547,6 +11763,7 @@ if (typeof window !== "undefined") {
       if (player.health <= 0) return;
       if (paused) return;
       paused = true;
+      setDuelScoreboardVisible(false);
       keys.w = false;
       keys.a = false;
       keys.s = false;
@@ -12709,6 +12926,7 @@ if (typeof window !== "undefined") {
           socket.emit("playerRespawn", { id: socket.id });
         } catch (_) {}
       }
+      _lastDuelAttackerId = null;
       player.regenTimer = 0;
       state.ads = false;
       state.adsProgress = 0;
@@ -12757,6 +12975,8 @@ if (typeof window !== "undefined") {
       bumpRendererLayoutSync(320);
       setTrainingScoreboardVisible(isTrainingMap(CURRENT_MAP));
       if (isTrainingMap(CURRENT_MAP)) updateTrainingScoreboardUI();
+      if (isPvpCrossfireMap(CURRENT_MAP)) resetDuelStats();
+      setDuelScoreboardVisible(false);
       player.spawnProtectUntil = performance.now() + 3000;
       refreshLocalPlayerLightsForCurrentState();
       gameBootOverlay.style.display = "none";
