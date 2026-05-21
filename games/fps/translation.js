@@ -167,7 +167,9 @@ export const GAME_I18N = {
     "masterVol": "Master volume",
     "musicVol": "Music volume",
     "sfxVol": "Sound volume",
-    "languagePickLabel": "Language"
+    "languagePickLabel": "Language",
+    "hudBlinded": "BLINDED",
+    "weaponBlindDart": "Blind Dart"
   },
   "zh": {
     "gameTitle": "无光之境",
@@ -244,7 +246,9 @@ export const GAME_I18N = {
     "masterVol": "主音量",
     "musicVol": "音乐音量",
     "sfxVol": "音效音量",
-    "languagePickLabel": "语言"
+    "languagePickLabel": "语言",
+    "hudBlinded": "致盲中",
+    "weaponBlindDart": "致盲针"
   },
   "zh-Hant": {
     "gameTitle": "無光之境",
@@ -307,7 +311,9 @@ export const GAME_I18N = {
     "masterVol": "主音量",
     "musicVol": "音樂音量",
     "sfxVol": "音效音量",
-    "languagePickLabel": "語言"
+    "languagePickLabel": "語言",
+    "hudBlinded": "致盲中",
+    "weaponBlindDart": "致盲針"
   },
   "es": {
     "gameTitle": "Zone No Light",
@@ -357,7 +363,9 @@ export const GAME_I18N = {
     "lobbyPickModeFirst": "Choose CO-OP or a PVP map first.",
     "enterCodeError": "Enter a code",
     "joinNeedModeFirst": "Go back and pick a mode first.",
-    "settingsControlsH": "CONTROLES"
+    "settingsControlsH": "CONTROLES",
+    "hudBlinded": "CEGADO",
+    "weaponBlindDart": "Dardo cegador"
   },
   "hi": {
     "gameTitle": "Zone No Light",
@@ -407,7 +415,9 @@ export const GAME_I18N = {
     "lobbyPickModeFirst": "Choose CO-OP or a PVP map first.",
     "enterCodeError": "Enter a code",
     "joinNeedModeFirst": "Go back and pick a mode first.",
-    "settingsControlsH": "नियंत्रण"
+    "settingsControlsH": "नियंत्रण",
+    "hudBlinded": "अंधा",
+    "weaponBlindDart": "अंधा करने वाला डार्ट"
   },
   "ar": {
     "gameTitle": "Zone No Light",
@@ -457,7 +467,9 @@ export const GAME_I18N = {
     "lobbyPickModeFirst": "Choose CO-OP or a PVP map first.",
     "enterCodeError": "Enter a code",
     "joinNeedModeFirst": "Go back and pick a mode first.",
-    "settingsControlsH": "التحكم"
+    "settingsControlsH": "التحكم",
+    "hudBlinded": "أعمى",
+    "weaponBlindDart": "سهم العمى"
   },
   "fr": {
     "gameTitle": "Zone No Light",
@@ -507,7 +519,9 @@ export const GAME_I18N = {
     "lobbyPickModeFirst": "Choose CO-OP or a PVP map first.",
     "enterCodeError": "Enter a code",
     "joinNeedModeFirst": "Go back and pick a mode first.",
-    "settingsControlsH": "COMMANDES"
+    "settingsControlsH": "COMMANDES",
+    "hudBlinded": "AVEUGLÉ",
+    "weaponBlindDart": "Fléchette aveuglante"
   },
   "pt": {
     "gameTitle": "Zone No Light",
@@ -557,7 +571,9 @@ export const GAME_I18N = {
     "lobbyPickModeFirst": "Choose CO-OP or a PVP map first.",
     "enterCodeError": "Enter a code",
     "joinNeedModeFirst": "Go back and pick a mode first.",
-    "settingsControlsH": "CONTROLES"
+    "settingsControlsH": "CONTROLES",
+    "hudBlinded": "CEGO",
+    "weaponBlindDart": "Dardo cegante"
   },
   "ru": {
     "gameTitle": "Zone No Light",
@@ -607,7 +623,9 @@ export const GAME_I18N = {
     "lobbyPickModeFirst": "Choose CO-OP or a PVP map first.",
     "enterCodeError": "Enter a code",
     "joinNeedModeFirst": "Go back and pick a mode first.",
-    "settingsControlsH": "УПРАВЛЕНИЕ"
+    "settingsControlsH": "УПРАВЛЕНИЕ",
+    "hudBlinded": "ОСЛЕПЛЁН",
+    "weaponBlindDart": "Ослепляющий дротик"
   },
   "ja": {
     "gameTitle": "Zone No Light",
@@ -657,7 +675,9 @@ export const GAME_I18N = {
     "lobbyPickModeFirst": "Choose CO-OP or a PVP map first.",
     "enterCodeError": "Enter a code",
     "joinNeedModeFirst": "Go back and pick a mode first.",
-    "settingsControlsH": "操作"
+    "settingsControlsH": "操作",
+    "hudBlinded": "視界封じ",
+    "weaponBlindDart": "目潰しダート"
   },
   "de": {
     "gameTitle": "Zone No Light",
@@ -707,7 +727,9 @@ export const GAME_I18N = {
     "lobbyPickModeFirst": "Choose CO-OP or a PVP map first.",
     "enterCodeError": "Enter a code",
     "joinNeedModeFirst": "Go back and pick a mode first.",
-    "settingsControlsH": "STEUERUNG"
+    "settingsControlsH": "STEUERUNG",
+    "hudBlinded": "GEBLENDET",
+    "weaponBlindDart": "Blendpfeil"
   },
   "ko": {
     "gameTitle": "Zone No Light",
@@ -757,7 +779,9 @@ export const GAME_I18N = {
     "lobbyPickModeFirst": "Choose CO-OP or a PVP map first.",
     "enterCodeError": "Enter a code",
     "joinNeedModeFirst": "Go back and pick a mode first.",
-    "settingsControlsH": "조작"
+    "settingsControlsH": "조작",
+    "hudBlinded": "실명",
+    "weaponBlindDart": "실명 다트"
   },
   "it": {
     "gameTitle": "Zone No Light",
@@ -807,7 +831,9 @@ export const GAME_I18N = {
     "lobbyPickModeFirst": "Choose CO-OP or a PVP map first.",
     "enterCodeError": "Enter a code",
     "joinNeedModeFirst": "Go back and pick a mode first.",
-    "settingsControlsH": "COMANDI"
+    "settingsControlsH": "COMANDI",
+    "hudBlinded": "ACCECATO",
+    "weaponBlindDart": "Dardo accecante"
   },
   "nl": {
     "gameTitle": "Zone No Light",
@@ -857,7 +883,9 @@ export const GAME_I18N = {
     "lobbyPickModeFirst": "Choose CO-OP or a PVP map first.",
     "enterCodeError": "Enter a code",
     "joinNeedModeFirst": "Go back and pick a mode first.",
-    "settingsControlsH": "BESTURING"
+    "settingsControlsH": "BESTURING",
+    "hudBlinded": "VERBLIND",
+    "weaponBlindDart": "Verblindingspijl"
   },
   "pl": {
     "gameTitle": "Zone No Light",
@@ -907,7 +935,9 @@ export const GAME_I18N = {
     "lobbyPickModeFirst": "Choose CO-OP or a PVP map first.",
     "enterCodeError": "Enter a code",
     "joinNeedModeFirst": "Go back and pick a mode first.",
-    "settingsControlsH": "STEROWANIE"
+    "settingsControlsH": "STEROWANIE",
+    "hudBlinded": "OŚLEPIONY",
+    "weaponBlindDart": "Strzałka oślepiająca"
   },
   "tr": {
     "gameTitle": "Zone No Light",
@@ -957,7 +987,9 @@ export const GAME_I18N = {
     "lobbyPickModeFirst": "Choose CO-OP or a PVP map first.",
     "enterCodeError": "Enter a code",
     "joinNeedModeFirst": "Go back and pick a mode first.",
-    "settingsControlsH": "KONTROLLER"
+    "settingsControlsH": "KONTROLLER",
+    "hudBlinded": "KÖR",
+    "weaponBlindDart": "Köreltici Ok"
   },
   "vi": {
     "gameTitle": "Zone No Light",
@@ -1007,7 +1039,9 @@ export const GAME_I18N = {
     "lobbyPickModeFirst": "Choose CO-OP or a PVP map first.",
     "enterCodeError": "Enter a code",
     "joinNeedModeFirst": "Go back and pick a mode first.",
-    "settingsControlsH": "CONTROLS"
+    "settingsControlsH": "CONTROLS",
+    "hudBlinded": "MÙ",
+    "weaponBlindDart": "Phi tiêu mù"
   },
   "id": {
     "gameTitle": "Zone No Light",
@@ -1057,7 +1091,9 @@ export const GAME_I18N = {
     "lobbyPickModeFirst": "Choose CO-OP or a PVP map first.",
     "enterCodeError": "Enter a code",
     "joinNeedModeFirst": "Go back and pick a mode first.",
-    "settingsControlsH": "CONTROLS"
+    "settingsControlsH": "CONTROLS",
+    "hudBlinded": "BUTA",
+    "weaponBlindDart": "Panah Buta"
   }
 };
 
