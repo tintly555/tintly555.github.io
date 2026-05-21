@@ -5303,14 +5303,14 @@ if (typeof window !== "undefined") {
       3: { x: -0.048, y: -0.102, z: -0.03 },
       5: { x: -0.052, y: -0.110, z: -0.06 },
     };
-    /** Right-shoulder rifle pose: hold offset to the right (+X), forward (+Z); right arm reaches straight, left crosses to support. */
+    /** Right-shoulder rifle pose with bent elbows: shoulder rotates upper arm forward, fixed -0.5 elbow folds forearm up to gun. */
     const REMOTE_TWO_HAND_STANCE = [
-      { holdX: 0.10, holdY: 1.30, holdZ: 0.70, r: { x: -1.20, y: -0.30, z: 0.15 }, l: { x: -1.20, y: 0.55, z: -0.20 } },
-      { holdX: 0.10, holdY: 1.30, holdZ: 0.70, r: { x: -1.20, y: -0.30, z: 0.15 }, l: { x: -1.20, y: 0.55, z: -0.20 } },
-      { holdX: 0.10, holdY: 1.30, holdZ: 0.70, r: { x: -1.20, y: -0.30, z: 0.15 }, l: { x: -1.20, y: 0.55, z: -0.20 } },
-      { holdX: 0.10, holdY: 1.30, holdZ: 0.70, r: { x: -1.20, y: -0.30, z: 0.15 }, l: { x: -1.20, y: 0.55, z: -0.20 } },
+      { holdX: 0.10, holdY: 1.30, holdZ: 0.60, r: { x: -0.80, y: -0.10, z: 0.00 }, l: { x: -0.80, y: 0.45, z: 0.00 } },
+      { holdX: 0.10, holdY: 1.30, holdZ: 0.60, r: { x: -0.80, y: -0.10, z: 0.00 }, l: { x: -0.80, y: 0.45, z: 0.00 } },
+      { holdX: 0.10, holdY: 1.30, holdZ: 0.60, r: { x: -0.80, y: -0.10, z: 0.00 }, l: { x: -0.80, y: 0.45, z: 0.00 } },
+      { holdX: 0.10, holdY: 1.30, holdZ: 0.60, r: { x: -0.80, y: -0.10, z: 0.00 }, l: { x: -0.80, y: 0.45, z: 0.00 } },
       null,
-      { holdX: 0.10, holdY: 1.30, holdZ: 0.72, r: { x: -1.18, y: -0.30, z: 0.15 }, l: { x: -1.18, y: 0.55, z: -0.20 } },
+      { holdX: 0.10, holdY: 1.30, holdZ: 0.62, r: { x: -0.78, y: -0.10, z: 0.00 }, l: { x: -0.78, y: 0.45, z: 0.00 } },
     ];
 
     function hashRemoteTint(seed) {
@@ -5440,7 +5440,7 @@ if (typeof window !== "undefined") {
       if (!hold) {
         hold = new THREE.Group();
         hold.name = "remoteWeaponHold";
-        hold.position.set(0.10, 1.30, 0.70);
+        hold.position.set(0.10, 1.30, 0.60);
         group.add(hold);
       }
       return hold;
@@ -5547,6 +5547,8 @@ if (typeof window !== "undefined") {
       belt.position.y = 0.76; group.add(belt);
       const buckle = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.05, 0.03), mMetal);
       buckle.position.set(0, 0.76, 0.17); group.add(buckle);
+      const pelvis = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.16, 0.27), mPants);
+      pelvis.position.set(0, 0.68, 0); group.add(pelvis);
       const holster = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.14, 0.08), mGear);
       holster.position.set(0.28, 0.68, 0.06); group.add(holster);
 
@@ -5596,15 +5598,21 @@ if (typeof window !== "undefined") {
         pad.position.set(0, -0.02, 0); ag.add(pad);
         const up = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.32, 0.17), mCamo1);
         up.position.set(0, -0.22, 0); ag.add(up);
+        const elbow = new THREE.Group();
+        elbow.name = "elbow";
+        elbow.position.set(0, -0.38, 0.06);
+        elbow.rotation.order = "YXZ";
+        elbow.rotation.x = -0.5;
+        ag.add(elbow);
         const elbPad = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.08, 0.10), mKnee);
-        elbPad.position.set(0, -0.38, 0.06); ag.add(elbPad);
+        elbPad.position.set(0, 0, 0); elbow.add(elbPad);
         const fa = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.30, 0.15), mCamo2);
-        fa.position.set(0, -0.50, 0.06); ag.add(fa);
+        fa.position.set(0, -0.12, 0); elbow.add(fa);
         if (showHand) {
           const glv = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.13, 0.16), mGlove);
-          glv.position.set(0, -0.70, 0.10); ag.add(glv);
+          glv.position.set(0, -0.32, 0.04); elbow.add(glv);
           const fng = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.04, 0.08), mGlove);
-          fng.position.set(0, -0.78, 0.12); ag.add(fng);
+          fng.position.set(0, -0.40, 0.06); elbow.add(fng);
         }
       };
       makePlayerArm(rightArm, false); makePlayerArm(leftArm, false);
@@ -5612,8 +5620,8 @@ if (typeof window !== "undefined") {
       leftArm.position.set(-0.22, 1.42, 0.06);
       rightArm.rotation.order = "YXZ";
       leftArm.rotation.order = "YXZ";
-      rightArm.rotation.set(-1.20, -0.30, 0.15);
-      leftArm.rotation.set(-1.20, 0.55, -0.20);
+      rightArm.rotation.set(-0.80, -0.10, 0.00);
+      leftArm.rotation.set(-0.80, 0.45, 0.00);
       group.add(rightArm, leftArm);
 
       const makePlayerLeg = (px) => {
