@@ -8114,7 +8114,7 @@ if (typeof window !== "undefined") {
         soundBase: 520,
         soundSkin: "revengeClassic",
         adsFov: 67,
-        adsSpeed: 12,
+        adsSpeed: 9,
       },
       {
         name: "Assault Rifle",
@@ -8136,7 +8136,7 @@ if (typeof window !== "undefined") {
         soundBase: 720,
         soundSkin: "ancientPhantom",
         adsFov: 55,
-        adsSpeed: 8,
+        adsSpeed: 6,
       },
       {
         name: "Shotgun",
@@ -8158,7 +8158,7 @@ if (typeof window !== "undefined") {
         soundBase: 260,
         soundSkin: "chaosShorty",
         adsFov: 63,
-        adsSpeed: 6,
+        adsSpeed: 4.5,
       },
       {
         name: "SMG",
@@ -8180,7 +8180,7 @@ if (typeof window !== "undefined") {
         soundBase: 900,
         soundSkin: "divineSpectre",
         adsFov: 75,
-        adsSpeed: 10,
+        adsSpeed: 7.5,
       },
       {
         name: "Med Kit",
@@ -8201,11 +8201,11 @@ if (typeof window !== "undefined") {
         reloadTime: 1e9,
         soundBase: 440,
         adsFov: 75,
-        adsSpeed: 10,
+        adsSpeed: 7.5,
       },
       {
         name: "AMR",
-        fireDelay: 1380,
+        fireDelay: 1260,
         auto: false,
         pellets: 1,
         spreadBase: 0.092,
@@ -8223,7 +8223,7 @@ if (typeof window !== "undefined") {
         soundBase: 340,
         soundSkin: "dragonOperator",
         adsFov: 26,
-        adsSpeed: 9.2,
+        adsSpeed: 3.2,
       },
       {
         name: "Blind Dart",
@@ -8245,7 +8245,7 @@ if (typeof window !== "undefined") {
         soundBase: 540,
         soundSkin: "revengeClassic",
         adsFov: 60,
-        adsSpeed: 8,
+        adsSpeed: 6,
         projectile: true,
         projectileSpeed: 36,
         projectileGravity: 9.8,
@@ -11702,7 +11702,7 @@ if (typeof window !== "undefined") {
       if (amrScopeOverlayEl) {
         const scopeOn = state.weaponIndex === 5 && usingAds;
         const scopeOp = scopeOn
-          ? THREE.MathUtils.clamp((state.adsProgress - 0.18) / 0.42, 0, 1)
+          ? THREE.MathUtils.clamp((state.adsProgress - 0.32) / 0.58, 0, 1)
           : 0;
         amrScopeOverlayEl.style.opacity = String(scopeOp);
         amrScopeOverlayEl.setAttribute("aria-hidden", scopeOp < 0.04 ? "true" : "false");
