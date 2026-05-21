@@ -2311,9 +2311,14 @@ if (typeof window !== "undefined") {
     const trainingScoreboardEl = document.getElementById("trainingScoreboard");
     const duelScoreboardEl = document.getElementById("duelScoreboard");
     const duelScoreListEl = document.getElementById("duelScoreList");
+    function getDuelHudHint() {
+      return MULTIPLAYER && isPvpCrossfireMap(CURRENT_MAP)
+        ? " | Hold TAB for scoreboard"
+        : "";
+    }
 
     function isDuelStatsMap() {
-      return MULTIPLAYER && isPvpCrossfireMap(CURRENT_MAP);
+      return MULTIPLAYER && (isPvpCrossfireMap(CURRENT_MAP) || isTrainingMap(CURRENT_MAP));
     }
 
     function setDuelScoreboardVisible(on) {
@@ -2339,6 +2344,7 @@ if (typeof window !== "undefined") {
         d: duelStats.deaths | 0,
       });
       for (const rp of remotePlayers.values()) {
+        ensureRemoteDuelStats(rp);
         rows.push({
           self: false,
           name: rp.name || "Player",
@@ -5755,33 +5761,33 @@ if (typeof window !== "undefined") {
     function applyThirdPersonGunToChestHold(gunModel, weaponType) {
       const t = weaponType | 0;
       gunModel.rotation.order = "YXZ";
-      gunModel.rotation.set(-0.06, Math.PI, 0);
+      gunModel.rotation.set(-0.04, Math.PI, 0);
       if (t === 0) {
-        gunModel.position.set(0, -0.04, 0.02);
-        gunModel.scale.set(1, 1, 1);
+        gunModel.position.set(0, 0, 0.05);
+        gunModel.scale.set(1.2, 1.2, 1.2);
       } else if (t === 1) {
-        gunModel.position.set(0, -0.045, 0.04);
-        gunModel.scale.set(1.06, 1.06, 1.06);
+        gunModel.position.set(0, 0, 0.05);
+        gunModel.scale.set(1.25, 1.25, 1.25);
       } else if (t === 2) {
-        gunModel.position.set(0, -0.05, 0.03);
-        gunModel.scale.set(1.03, 1.03, 1.03);
+        gunModel.position.set(0, 0, 0.05);
+        gunModel.scale.set(1.2, 1.2, 1.2);
       } else if (t === 5) {
-        gunModel.position.set(0, -0.055, 0.06);
-        gunModel.scale.set(1.14, 1.14, 1.14);
+        gunModel.position.set(0, 0, 0.1);
+        gunModel.scale.set(1.3, 1.3, 1.3);
       } else {
-        gunModel.position.set(0, -0.042, 0.03);
-        gunModel.scale.set(1, 1, 1);
+        gunModel.position.set(0, 0, 0.05);
+        gunModel.scale.set(1.2, 1.2, 1.2);
       }
     }
 
-    function getOrCreateRemoteWeaponHold(torso) {
-      if (!torso) return null;
-      let hold = torso.getObjectByName("remoteWeaponHold");
+    function getOrCreateRemoteWeaponHold(rootGroup) {
+      if (!rootGroup) return null;
+      let hold = rootGroup.getObjectByName("remoteWeaponHold");
       if (!hold) {
         hold = new THREE.Group();
         hold.name = "remoteWeaponHold";
-        hold.position.set(0, -0.05, 0.2);
-        torso.add(hold);
+        hold.position.set(0.12, 1.18, 0.42);
+        rootGroup.add(hold);
       }
       return hold;
     }
@@ -5792,9 +5798,9 @@ if (typeof window !== "undefined") {
         rp.gloveMat ||
         new THREE.MeshStandardMaterial({ color: 0x3a3528, roughness: 0.9 });
       if (!rp.gloveMat) rp.gloveMat = gloveMat;
-      const staleHold = rp.group.getObjectByName("remoteWeaponHold");
-      if (staleHold) rp.group.remove(staleHold);
-      const hold = getOrCreateRemoteWeaponHold(rp.torsoMesh);
+      const staleHoldChest = rp.torsoMesh && rp.torsoMesh.getObjectByName("remoteWeaponHold");
+      if (staleHoldChest) rp.torsoMesh.remove(staleHoldChest);
+      const hold = getOrCreateRemoteWeaponHold(rp.group);
       rp.weaponHold = hold;
       if (rp.gunModel) {
         hold.remove(rp.gunModel);
@@ -5823,12 +5829,13 @@ if (typeof window !== "undefined") {
       const stance = REMOTE_TWO_HAND_STANCE[wt];
       if (!stance) return;
       const breathe = Math.sin(idlePhase) * (moving ? 0.018 : 0.028);
-      const holdY = stance.holdY - adsBlend * 0.04 + breathe * 0.15;
-      const holdZ = stance.holdZ + adsBlend * 0.05;
+      const holdY = 1.18 + breathe * 0.05 - adsBlend * 0.05;
+      const holdZ = 0.42 + adsBlend * 0.04;
+      const holdX = 0.1;
       if (rp.weaponHold) {
         rp.weaponHold.position.y = dampScalar(rp.weaponHold.position.y, holdY, dt, 11);
         rp.weaponHold.position.z = dampScalar(rp.weaponHold.position.z, holdZ, dt, 11);
-        rp.weaponHold.position.x = dampScalar(rp.weaponHold.position.x, 0, dt, 11);
+        rp.weaponHold.position.x = dampScalar(rp.weaponHold.position.x, holdX, dt, 11);
       }
       const rs = stance.r;
       const ls = stance.l;
@@ -5986,7 +5993,7 @@ if (typeof window !== "undefined") {
       rightHandGrip.rotation.y = -0.04;
       rightArm.add(rightHandGrip);
 
-      const weaponHold = getOrCreateRemoteWeaponHold(chest);
+      const weaponHold = getOrCreateRemoteWeaponHold(group);
       const gunModel = makeThirdPersonGun(1);
       applyThirdPersonGunToChestHold(gunModel, 1);
       if (weaponHold) weaponHold.add(gunModel);
@@ -10934,9 +10941,11 @@ if (typeof window !== "undefined") {
       if (k === "5") setWeapon(5);
       if (k === "6") setWeapon(4);
       if (k === "r") startReload();
-      if ((e.code === "Tab" || k === "tab") && isDuelStatsMap()) {
-        e.preventDefault();
-        if (!_duelScoreboardOpen) setDuelScoreboardVisible(true);
+      if (e.code === "Tab" || k === "tab") {
+        if (MULTIPLAYER) {
+          e.preventDefault();
+          if (!_duelScoreboardOpen) setDuelScoreboardVisible(true);
+        }
       }
     });
 
