@@ -329,6 +329,55 @@
       text-align: right;
       font-variant-numeric: tabular-nums;
     }
+    #killFeed {
+      position: fixed;
+      top: 90px;
+      right: 18px;
+      z-index: 55;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      pointer-events: none;
+      max-width: 360px;
+      font-family: var(--game-font-ui);
+      font-size: 13px;
+      color: rgba(245, 248, 255, 0.95);
+      text-shadow: 0 1px 4px rgba(0, 0, 0, 0.85);
+    }
+    #killFeed .kf-item {
+      padding: 6px 10px;
+      border-radius: 6px;
+      background: rgba(12, 14, 22, 0.65);
+      border-left: 3px solid rgba(255, 200, 90, 0.65);
+      animation: kfPop 0.18s ease-out;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    #killFeed .kf-item.self-kill { border-left-color: #4fd1ff; }
+    #killFeed .kf-item.self-death { border-left-color: #ff4f4f; }
+    #killFeed .kf-killer { color: #ffe89a; font-weight: 600; }
+    #killFeed .kf-victim { color: #ff9b9b; }
+    #killFeed .kf-self { color: #4fd1ff; font-weight: 700; }
+    @keyframes kfPop { from { opacity: 0; transform: translateX(8px); } to { opacity: 1; transform: translateX(0); } }
+    #killBanner {
+      position: fixed;
+      top: 18%;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 58;
+      display: none;
+      padding: 10px 22px;
+      border-radius: 10px;
+      background: rgba(8, 12, 22, 0.78);
+      border: 1px solid rgba(255, 90, 90, 0.55);
+      font-family: 'Audiowide', sans-serif;
+      font-size: 22px;
+      letter-spacing: 0.16em;
+      color: #ff8b8b;
+      text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
+      pointer-events: none;
+    }
 
     .hud {
       position: fixed;
@@ -1114,6 +1163,8 @@
     <div class="train-row"><span id="trainingLblLeg">Legs</span><b id="trainYouLeg">0</b></div>
     <div class="train-row"><span id="trainingLblAcc">Accuracy</span><b id="trainYouAcc">—</b></div>
   </div>
+  <div id="killFeed" aria-live="polite" aria-hidden="true"></div>
+  <div id="killBanner" aria-live="polite" aria-hidden="true"></div>
   <div id="duelScoreboard" aria-live="polite" aria-hidden="true">
     <h3 id="duelScoreTitle">SCOREBOARD</h3>
     <div class="duel-row head"><span class="dn">Player</span><span class="dv">K</span><span class="dv">D</span><span class="dv">K/D</span></div>
@@ -2310,6 +2361,102 @@ if (typeof window !== "undefined") {
         .join("");
     }
 
+    const killFeedEl = document.getElementById("killFeed");
+    const killBannerEl = document.getElementById("killBanner");
+    const _killFeedItems = [];
+    const KILL_FEED_TTL = 4200;
+    function _escapeKfName(n) {
+      return String(n || "Player").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").slice(0, 18);
+    }
+    function showKillBanner(text) {
+      if (!killBannerEl) return;
+      killBannerEl.textContent = text;
+      killBannerEl.style.display = "block";
+      clearTimeout(killBannerEl._timer);
+      killBannerEl._timer = setTimeout(() => { killBannerEl.style.display = "none"; }, 1600);
+    }
+    function _renderKillFeed() {
+      if (!killFeedEl) return;
+      killFeedEl.innerHTML = _killFeedItems
+        .slice(-5)
+        .map((it) => {
+          const kn = _escapeKfName(it.killerName);
+          const vn = _escapeKfName(it.victimName);
+          const kCls = it.killerSelf ? "kf-self" : "kf-killer";
+          const vCls = it.victimSelf ? "kf-self" : "kf-victim";
+          const itemCls = it.killerSelf
+            ? "kf-item self-kill"
+            : it.victimSelf
+              ? "kf-item self-death"
+              : "kf-item";
+          return `<div class="${itemCls}"><span class="${kCls}">${kn}</span> &rarr; <span class="${vCls}">${vn}</span></div>`;
+        })
+        .join("");
+    }
+    function pushKillFeed(killerName, victimName, killerSelf, victimSelf) {
+      if (!killFeedEl) return;
+      const entry = { killerName, victimName, killerSelf: !!killerSelf, victimSelf: !!victimSelf, ts: performance.now() };
+      _killFeedItems.push(entry);
+      _renderKillFeed();
+      setTimeout(() => {
+        const idx = _killFeedItems.indexOf(entry);
+        if (idx >= 0) _killFeedItems.splice(idx, 1);
+        _renderKillFeed();
+      }, KILL_FEED_TTL);
+    }
+
+    /** Dedup confirmed kill across `playerDown` / `playerKill` / `enemyMove dead` paths. */
+    const _confirmedKills = new Map();
+    function registerConfirmedKill(victimId, killerId, victimName, killerName, hitWorld) {
+      if (victimId == null) return false;
+      const last = _confirmedKills.get(victimId) || 0;
+      const now = performance.now();
+      if (now - last < 1500) return false;
+      _confirmedKills.set(victimId, now);
+
+      const selfId = socket && socket.id;
+      const killerSelf = killerId != null && String(killerId) === String(selfId);
+      const victimSelf = String(victimId) === String(selfId);
+
+      if (!victimSelf) {
+        const rp = remotePlayers.get(victimId);
+        if (rp && rp.group) {
+          ensureRemoteDuelStats(rp);
+          if (!rp.isDown) {
+            try {
+              const pt = hitWorld
+                || new THREE.Vector3(rp.visX ?? rp.x ?? 0, 1.25, rp.visZ ?? rp.z ?? 0);
+              spawnHumanoidDissolve(rp.group, pt);
+            } catch (_) {}
+            rp.isDown = true;
+            rp.group.visible = false;
+          }
+          rp.deaths = (rp.deaths | 0) + 1;
+          rp.predictedHp = 0;
+          if (rp._predictKillRevertTimer) {
+            clearTimeout(rp._predictKillRevertTimer);
+            rp._predictKillRevertTimer = null;
+          }
+        }
+      }
+      if (killerSelf) {
+        duelStats.kills += 1;
+      } else if (killerId != null) {
+        const killer = remotePlayers.get(killerId);
+        if (killer) {
+          ensureRemoteDuelStats(killer);
+          killer.kills = (killer.kills | 0) + 1;
+        }
+      }
+      const knm = killerSelf ? (playerName || "You") : (killerName || remotePlayers.get(killerId)?.name || "?");
+      const vnm = victimSelf ? (playerName || "You") : (victimName || remotePlayers.get(victimId)?.name || "?");
+      pushKillFeed(knm, vnm, killerSelf, victimSelf);
+      if (killerSelf) showKillBanner("KILL");
+      if (_duelScoreboardOpen) updateDuelScoreboardUI();
+      return true;
+    }
+
+    /** Preview-only dissolve on the killer; auto-revert if no confirmation arrives. */
     function killRemotePlayerLocally(rp, hitWorld) {
       if (!rp || rp.isDown || !rp.group) return false;
       try {
@@ -2317,8 +2464,18 @@ if (typeof window !== "undefined") {
       } catch (_) {}
       rp.isDown = true;
       rp.group.visible = false;
-      rp.deaths = (rp.deaths | 0) + 1;
       rp.predictedHp = 0;
+      rp._predictedKill = true;
+      if (rp._predictKillRevertTimer) clearTimeout(rp._predictKillRevertTimer);
+      rp._predictKillRevertTimer = setTimeout(() => {
+        if (rp && rp._predictedKill && rp.isDown) {
+          rp.isDown = false;
+          rp._predictedKill = false;
+          rp.predictedHp = 100;
+          if (rp.group) rp.group.visible = true;
+        }
+        rp._predictKillRevertTimer = null;
+      }, 2500);
       return true;
     }
     const trainYouPts = document.getElementById("trainYouPts");
@@ -4625,6 +4782,11 @@ if (typeof window !== "undefined") {
     const duelStats = { kills: 0, deaths: 0 };
     let _duelScoreboardOpen = false;
     let _lastDuelAttackerId = null;
+    let _pendingDuelKillVictim = null;
+    let _pendingDuelKillTs = 0;
+    let _localDuelDead = false;
+    let _localDuelKillerId = null;
+    let _localDuelDeathPos = null;
     function ensureRemoteDuelStats(rp) {
       if (rp == null) return;
       if (typeof rp.predictedHp !== "number") rp.predictedHp = 100;
@@ -4966,6 +5128,21 @@ if (typeof window !== "undefined") {
       } else {
         ensureRemoteDuelStats(rp);
       }
+      if (data.dead) {
+        const hitPt = new THREE.Vector3(
+          data.deathX != null ? +data.deathX : (rp.visX ?? rp.x ?? 0),
+          data.deathY != null ? +data.deathY : 1.25,
+          data.deathZ != null ? +data.deathZ : (rp.visZ ?? rp.z ?? 0)
+        );
+        registerConfirmedKill(data.id, data.killerId, rp.name, null, hitPt);
+        return;
+      } else if (rp._predictedKill) {
+        rp._predictedKill = false;
+        if (rp._predictKillRevertTimer) { clearTimeout(rp._predictKillRevertTimer); rp._predictKillRevertTimer = null; }
+        rp.isDown = false;
+        rp.predictedHp = 100;
+        if (rp.group) rp.group.visible = true;
+      }
       rp.x = data.x;
       rp.y = data.y;
       rp.z = data.z;
@@ -5002,43 +5179,18 @@ if (typeof window !== "undefined") {
     socket.on("playerDown", (data) => {
       if (!data || data.id == null) return;
       const rp = remotePlayers.get(data.id);
-      if (rp && rp.group && !rp.isDown) {
-        const hx = rp.visX ?? rp.x ?? 0;
-        const hz = rp.visZ ?? rp.z ?? 0;
-        const hitPt = new THREE.Vector3(
-          data.x != null ? +data.x : hx,
-          data.y != null ? +data.y : 1.25,
-          data.z != null ? +data.z : hz
-        );
-        spawnHumanoidDissolve(rp.group, hitPt);
-        rp.isDown = true;
-        rp.group.visible = false;
-      }
-      if (rp) {
-        ensureRemoteDuelStats(rp);
-        rp.deaths = (rp.deaths | 0) + 1;
-        rp.predictedHp = 0;
-      }
-      if (data.killerId != null && String(data.killerId) !== String(socket.id)) {
-        const killer = remotePlayers.get(data.killerId);
-        if (killer) {
-          ensureRemoteDuelStats(killer);
-          killer.kills = (killer.kills | 0) + 1;
-        }
-      }
-      if (_duelScoreboardOpen) updateDuelScoreboardUI();
+      const hitPt = new THREE.Vector3(
+        data.x != null ? +data.x : (rp ? (rp.visX ?? rp.x ?? 0) : 0),
+        data.y != null ? +data.y : 1.25,
+        data.z != null ? +data.z : (rp ? (rp.visZ ?? rp.z ?? 0) : 0)
+      );
+      registerConfirmedKill(data.id, data.killerId, rp ? rp.name : null, null, hitPt);
     });
 
     socket.on("playerKill", (data) => {
-      if (!data) return;
-      if (data.killerId != null && String(data.killerId) !== String(socket.id)) {
-        const killer = remotePlayers.get(data.killerId);
-        if (killer) {
-          ensureRemoteDuelStats(killer);
-          killer.kills = (killer.kills | 0) + 1;
-        }
-      }
-      if (_duelScoreboardOpen) updateDuelScoreboardUI();
+      if (!data || data.victimId == null) return;
+      const victim = remotePlayers.get(data.victimId);
+      registerConfirmedKill(data.victimId, data.killerId, victim ? victim.name : null, null, null);
     });
 
     socket.on("enemyLeft", (data) => {
@@ -5562,18 +5714,25 @@ if (typeof window !== "undefined") {
     }
 
     function addRemoteGripGlove(socket, gloveMat) {
-      const palm = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.1, 0.11), gloveMat);
+      const palm = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.13, 0.14), gloveMat);
       palm.castShadow = true;
       palm.receiveShadow = true;
       socket.add(palm);
-      const thumb = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.045, 0.055), gloveMat);
-      thumb.position.set(-0.055, -0.025, 0.045);
+      const thumb = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.055, 0.065), gloveMat);
+      thumb.position.set(-0.065, -0.03, 0.05);
       thumb.castShadow = true;
       socket.add(thumb);
-      const wrap = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.07, 0.13), gloveMat);
-      wrap.position.set(0, 0.02, -0.02);
+      const wrap = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.09, 0.16), gloveMat);
+      wrap.position.set(0, 0.02, -0.025);
       wrap.castShadow = true;
       socket.add(wrap);
+      // Forearm stub so the hand has a visible cuff (since real arm is hidden in 2-hand pose).
+      const cuffMat = new THREE.MeshStandardMaterial({ color: 0x3a4a3a, roughness: 0.85 });
+      const cuff = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.32, 0.15), cuffMat);
+      cuff.position.set(0, 0.06, -0.18);
+      cuff.castShadow = true;
+      cuff.receiveShadow = true;
+      socket.add(cuff);
     }
 
     function attachRemotePrimaryHand(gunModel, weaponType, gloveMat) {
@@ -7956,6 +8115,8 @@ if (typeof window !== "undefined") {
         enemy.idlePhase = (enemy.idlePhase || 0) + dt * 1.28;
         const wSin = Math.sin(enemy.walkPhase) * 0.52;
         const moving = true;
+        if (enemy.rightArm) enemy.rightArm.visible = false;
+        if (enemy.leftArm) enemy.leftArm.visible = false;
         if (enemy.rightArm && enemy.leftArm && enemy.weaponHold) {
           applyRemoteTwoHandStance(enemy, dt, moving, wSin, enemy.idlePhase, 0);
         }
@@ -11293,13 +11454,13 @@ if (typeof window !== "undefined") {
                 victim.predictedHp = Math.max(0, (victim.predictedHp ?? 100) - dmg);
                 if (victim.predictedHp <= 0) {
                   if (killRemotePlayerLocally(victim, bp.clone())) {
-                    duelStats.kills += 1;
+                    _pendingDuelKillVictim = bestRpId;
+                    _pendingDuelKillTs = performance.now();
                     triggerHitFeedback(true, bestRpZone === "head");
                     try {
                       socket.emit("playerKill", { killerId: socket.id, victimId: bestRpId });
                       socket.emit("playerDown", { id: bestRpId, killerId: socket.id, x: bp.x, y: bp.y, z: bp.z });
                     } catch (_) {}
-                    if (_duelScoreboardOpen) updateDuelScoreboardUI();
                   }
                 }
               }
@@ -11600,7 +11761,7 @@ if (typeof window !== "undefined") {
       camera.rotation.y = player.yaw;
       camera.rotation.x = player.pitch;
       if (MULTIPLAYER) {
-        socket.emit("move", {
+        const movePayload = {
           x: player.position.x,
           y: player.position.y,
           z: player.position.z,
@@ -11610,7 +11771,17 @@ if (typeof window !== "undefined") {
           reloading: state.reloading,
           ads: !!state.ads,
           pitch: player.pitch,
-        });
+        };
+        if (_localDuelDead && isPvpCrossfireMap(CURRENT_MAP)) {
+          movePayload.dead = true;
+          if (_localDuelKillerId != null) movePayload.killerId = _localDuelKillerId;
+          if (_localDuelDeathPos) {
+            movePayload.deathX = _localDuelDeathPos.x;
+            movePayload.deathY = _localDuelDeathPos.y;
+            movePayload.deathZ = _localDuelDeathPos.z;
+          }
+        }
+        socket.emit("move", movePayload);
       }
     }
     function showDeathScreen(killer) {
@@ -11651,13 +11822,17 @@ if (typeof window !== "undefined") {
         const dy = lastPlayerHitWorld.y;
         const dz = lastPlayerHitWorld.z;
         const killerId = _lastDuelAttackerId;
+        _localDuelDead = true;
+        _localDuelKillerId = killerId;
+        _localDuelDeathPos = { x: dx, y: dy, z: dz };
         try {
           socket.emit("playerDown", { id: socket.id, killerId, x: dx, y: dy, z: dz });
           if (killerId != null) {
             socket.emit("playerKill", { killerId, victimId: socket.id });
           }
         } catch (_) {}
-        _lastDuelAttackerId = null;
+        const killerName = killerId != null ? (remotePlayers.get(killerId)?.name || "?") : "?";
+        pushKillFeed(killerName, playerName || "You", false, true);
         if (_duelScoreboardOpen) updateDuelScoreboardUI();
       }
 
@@ -12608,6 +12783,8 @@ if (typeof window !== "undefined") {
           }
           const wTyHold = rp.currentWeapon | 0;
           const twoHandHold = !rp.isReloading && wTyHold !== 4 && rp.primarySocket && rp.supportSocket;
+          if (rp.rightArm) rp.rightArm.visible = !twoHandHold;
+          if (rp.leftArm) rp.leftArm.visible = !twoHandHold;
           if (twoHandHold) {
             applyRemoteTwoHandStance(rp, dt, moving, wSin, rp.idlePhase, adsBlend);
           } else {
@@ -12927,6 +13104,9 @@ if (typeof window !== "undefined") {
         } catch (_) {}
       }
       _lastDuelAttackerId = null;
+      _localDuelDead = false;
+      _localDuelKillerId = null;
+      _localDuelDeathPos = null;
       player.regenTimer = 0;
       state.ads = false;
       state.adsProgress = 0;
@@ -12976,6 +13156,11 @@ if (typeof window !== "undefined") {
       setTrainingScoreboardVisible(isTrainingMap(CURRENT_MAP));
       if (isTrainingMap(CURRENT_MAP)) updateTrainingScoreboardUI();
       if (isPvpCrossfireMap(CURRENT_MAP)) resetDuelStats();
+      _localDuelDead = false;
+      _localDuelKillerId = null;
+      _localDuelDeathPos = null;
+      _confirmedKills.clear();
+      _pendingDuelKillVictim = null;
       setDuelScoreboardVisible(false);
       player.spawnProtectUntil = performance.now() + 3000;
       refreshLocalPlayerLightsForCurrentState();
