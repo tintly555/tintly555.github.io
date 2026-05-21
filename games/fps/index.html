@@ -1096,7 +1096,7 @@
   <div class="hint" id="hint" data-i18n="hintClick">Click anywhere</div>
   <div class="flash" id="flash"></div>
   <div class="blind-overlay" id="blindOverlay" aria-hidden="true"></div>
-  <div class="blind-text" id="blindText" aria-hidden="true">BLINDED</div>
+  <div class="blind-text" id="blindText" data-i18n="hudBlinded" aria-hidden="true">BLINDED</div>
   <div class="crosshair" id="crosshair"></div>
   <div id="amrScopeOverlay" class="amr-scope-overlay" aria-hidden="true"></div>
   <div id="medkitReticle" class="medkit-reticle hidden" aria-hidden="true">
@@ -4468,6 +4468,8 @@ if (typeof window !== "undefined") {
       if (hintEl) hintEl.textContent = tr("hintClick", hintEl.textContent || "Click anywhere");
       const medkitHoldEl = document.querySelector(".medkit-hold-txt");
       if (medkitHoldEl) medkitHoldEl.textContent = tr("medkitHold", medkitHoldEl.textContent || "HOLD");
+      const blindTextEl = document.getElementById("blindText");
+      if (blindTextEl) blindTextEl.textContent = tr("hudBlinded", "BLINDED");
       const tabAudio = document.getElementById("settingsTabAudio");
       const tabGfx = document.getElementById("settingsTabGraphics");
       const tabLang = document.getElementById("settingsTabLanguage");
@@ -9917,6 +9919,36 @@ if (typeof window !== "undefined") {
           const pull = Math.sin(bolt * Math.PI);
           setViewHandPose(ud.viewArmL, lp, lr, 0, 0.03 * pull, 0.06 * pull, 0, 0, 0);
         }
+      } else if (wi === 6) {
+        // Left hand: dips off-screen, reaches up + forward to muzzle, pushes, retracts.
+        const fetch = reloadPhase(p, 0, 0.18);
+        const lift = reloadPhase(p, 0.18, 0.32);
+        const push = reloadPhase(p, 0.32, 0.80);
+        const seat = reloadPhase(p, 0.80, 0.95);
+        const retract = reloadPhase(p, 0.92, 1);
+        let dx = 0, dy = 0, dz = 0;
+        if (fetch > 0 && fetch < 1) {
+          dy = -0.10 * fetch;
+          dz = 0.02 * fetch;
+        } else if (lift > 0 && lift < 1) {
+          dy = -0.10 + 0.16 * lift;
+          dz = 0.02 - 0.10 * lift;
+          dx = 0.04 * lift;
+        } else if (push > 0 && push < 1) {
+          dy = 0.06;
+          dz = -0.08 - 0.06 * push;
+          dx = 0.04;
+        } else if (seat > 0 && seat < 1) {
+          dy = 0.06 - 0.04 * seat;
+          dz = -0.14 + 0.04 * seat;
+          dx = 0.04 - 0.02 * seat;
+        }
+        if (retract > 0) {
+          dx *= (1 - retract);
+          dy *= (1 - retract);
+          dz *= (1 - retract);
+        }
+        setViewHandPose(ud.viewArmL, lp, lr, dx, dy, dz, 0, 0, 0);
       }
 
       syncHandMagProxy(ud, magInHand, ud.animMag);
@@ -10139,12 +10171,30 @@ if (typeof window !== "undefined") {
       const mDark = new THREE.MeshStandardMaterial({ color: 0x1a1f28, roughness: 0.55, metalness: 0.45 });
       const mTip = new THREE.MeshStandardMaterial({ color: 0xc8d2dc, roughness: 0.35, metalness: 0.7 });
       const mNeon = new THREE.MeshBasicMaterial({ color: 0x6bd4ff });
+      const mLoaderShaft = new THREE.MeshStandardMaterial({ color: 0x7ee0ff, roughness: 0.35, metalness: 0.55, emissive: 0x224477, emissiveIntensity: 0.65 });
+      const mLoaderTip = new THREE.MeshStandardMaterial({ color: 0xe6f1ff, roughness: 0.25, metalness: 0.8 });
       addMeshPart(gun, new THREE.BoxGeometry(0.07, 0.09, 0.30), mBody, 0, 0.01, 0.02);
       addMeshPart(gun, new THREE.CylinderGeometry(0.018, 0.02, 0.34, 10), mTip, 0, 0.05, -0.12, Math.PI / 2, 0, 0);
       addMeshPart(gun, new THREE.ConeGeometry(0.015, 0.05, 8), mTip, 0, 0.05, -0.32, Math.PI / 2, 0, 0);
       addMeshPart(gun, new THREE.BoxGeometry(0.05, 0.14, 0.07), mDark, 0, -0.10, 0.05);
       addMeshPart(gun, new THREE.BoxGeometry(0.04, 0.08, 0.06), mDark, 0, -0.07, -0.02);
       addMeshPart(gun, new THREE.BoxGeometry(0.018, 0.022, 0.05), mNeon, 0, 0.075, 0.04);
+
+      // Reload dart: a loader needle pushed into the muzzle. Hidden outside reload.
+      const animDart = new THREE.Group();
+      const loaderShaft = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.014, 0.18, 8), mLoaderShaft);
+      loaderShaft.rotation.x = Math.PI / 2;
+      animDart.add(loaderShaft);
+      const loaderTip = new THREE.Mesh(new THREE.ConeGeometry(0.012, 0.04, 8), mLoaderTip);
+      loaderTip.rotation.x = -Math.PI / 2;
+      loaderTip.position.z = -0.11;
+      animDart.add(loaderTip);
+      const loaderFin = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.005, 0.03), mLoaderShaft);
+      loaderFin.position.z = 0.09;
+      animDart.add(loaderFin);
+      animDart.visible = false;
+      gun.add(animDart);
+
       gun.position.set(0.24, -0.22, -0.74);
       attachViewHandGrips(gun, root, VIEW_HAND_GRIPS[0]);
       attachViewArmsOnGrips(root);
@@ -10156,6 +10206,9 @@ if (typeof window !== "undefined") {
       root.userData.gun = gun;
       root.userData.basePos = gun.position.clone();
       root.userData.adsOffset = new THREE.Vector3(-0.24, 0.10, 0.26);
+      root.userData.animDart = animDart;
+      root.userData.dartFetchPos = new THREE.Vector3(0.14, 0.26, -0.50);
+      root.userData.dartInsertPos = new THREE.Vector3(0, 0.05, -0.26);
       return root;
     }
 
@@ -10520,6 +10573,31 @@ if (typeof window !== "undefined") {
             ud.animMag.visible = false;
           }
         }
+      } else if (wi === 6) {
+        // Blind dart: loader needle fetched off-screen, then pushed into muzzle.
+        const dart = ud.animDart;
+        const fetchPos = ud.dartFetchPos;
+        const insertPos = ud.dartInsertPos;
+        if (dart && fetchPos && insertPos) {
+          const appear = reloadPhase(p, 0.18, 0.32);
+          const push = reloadPhase(p, 0.32, 0.80);
+          const seat = reloadPhase(p, 0.80, 0.92);
+          if (p < 0.18 || p > 0.95) {
+            dart.visible = false;
+          } else {
+            dart.visible = true;
+            const sx = fetchPos.x + (insertPos.x - fetchPos.x) * push;
+            const sy = fetchPos.y + (insertPos.y - fetchPos.y) * push;
+            const sz = fetchPos.z + (insertPos.z - fetchPos.z) * push;
+            dart.position.set(sx, sy, sz);
+            // Rotation: hand brings dart in tilted, gradually aligns horizontal with barrel.
+            const tilt = 0.55 * (1 - push);
+            dart.rotation.set(tilt, 0, tilt * 0.4);
+            // Scale up while appearing, scale to 1 while pushed, shrink while seating in.
+            const scale = appear * (1 - seat * 0.6) || 0.01;
+            dart.scale.setScalar(Math.max(0.05, scale));
+          }
+        }
       }
       applyViewArmReload(ud, wi, rp);
     }
@@ -10542,6 +10620,7 @@ if (typeof window !== "undefined") {
       }
       if (ud.animBreak) ud.animBreak.rotation.set(0, 0, 0);
       if (ud.animReloadShell) ud.animReloadShell.visible = false;
+      if (ud.animDart) ud.animDart.visible = false;
 
       let offX = 0;
       let offY = 0;
@@ -11129,7 +11208,17 @@ if (typeof window !== "undefined") {
               : enemyHitAlongRay(segRay, enemy);
             if (hit) {
               createSparks(p.pos.clone(), 0x6bd4ff);
-              if (enemy.trainingDummy) registerTrainingHit(hit.zone || "body");
+              if (enemy.trainingDummy) {
+                registerTrainingHit(hit.zone || "body");
+              } else {
+                // Blinded zombie: cannot see/track/attack for blindDuration seconds.
+                enemy.blindUntil = performance.now() + (p.blindDuration || 5) * 1000;
+                enemy.aware = false;
+                enemy.targetId = null;
+                enemy.retargetTimer = 0;
+                enemy.rangedLosAcquireTimer = 0;
+                enemy.attackCooldownTimer = Math.max(enemy.attackCooldownTimer, 0.5);
+              }
               consumed = true;
               break;
             }
@@ -12251,6 +12340,7 @@ if (typeof window !== "undefined") {
             enemy.targetId = null;
             enemy.retargetTimer = 0;
             enemy.rangedLosAcquireTimer = 0;
+            enemy.blindUntil = 0;
             enemy.facingYaw = Math.random() * Math.PI * 2;
             enemy.visYaw = enemy.facingYaw;
             enemy.armLV = -0.2;
@@ -12278,6 +12368,14 @@ if (typeof window !== "undefined") {
         }
 
         enemy.attackCooldownTimer -= dt;
+
+        // Blind dart: while blinded, the zombie loses awareness and can't move or attack.
+        if (enemy.blindUntil && performance.now() < enemy.blindUntil) {
+          enemy.aware = false;
+          enemy.targetId = null;
+          enemy.rangedLosAcquireTimer = 0;
+          if (enemy.attackCooldownTimer < 0.3) enemy.attackCooldownTimer = 0.3;
+        }
 
         if (enemy.aware) {
           enemy.facingYaw = Math.atan2(dx, dz);
