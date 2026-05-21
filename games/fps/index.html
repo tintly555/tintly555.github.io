@@ -4877,7 +4877,17 @@ if (typeof window !== "undefined") {
         typeof data.pitch === "number"
           ? THREE.MathUtils.clamp(data.pitch, -1.15, 1.15)
           : 0;
-      if (!rp.isDown) rp.group.visible = true;
+      if (rp.isDown) {
+        // Body came back alive (server respawn or new round) — clear prediction.
+        const sinceDown = performance.now() - (rp.downAt || 0);
+        if (sinceDown > 1200) {
+          rp.isDown = false;
+          rp.hpEstimate = 100;
+          rp.group.visible = true;
+        }
+      } else {
+        rp.group.visible = true;
+      }
     });
 
     /** PvP: optional relay event — remote body hidden immediately on death; `enemyMove` shows again on respawn. */
@@ -4892,8 +4902,14 @@ if (typeof window !== "undefined") {
         data.y != null ? +data.y : 1.25,
         data.z != null ? +data.z : hz
       );
-      spawnHumanoidDissolve(rp.group, hitPt);
+      // If shooter already predicted the kill locally we still get the broadcast — skip duplicate dissolve.
+      const alreadyDown = rp.isDown && (performance.now() - (rp.downAt || 0) < 1500);
+      if (!alreadyDown) {
+        spawnHumanoidDissolve(rp.group, hitPt);
+      }
       rp.isDown = true;
+      rp.downAt = performance.now();
+      rp.hpEstimate = 0;
       rp.group.visible = false;
     });
 
@@ -4910,6 +4926,7 @@ if (typeof window !== "undefined") {
       const rp = remotePlayers.get(data.id);
       if (rp) {
         rp.isDown = false;
+        rp.hpEstimate = 100;
         rp.group.visible = true;
       }
     });
@@ -5776,6 +5793,7 @@ if (typeof window !== "undefined") {
         ads: false,
         adsBlend: 0,
         remotePitch: 0,
+        hpEstimate: 100,
       };
     }
 
@@ -7992,6 +8010,7 @@ if (typeof window !== "undefined") {
       mouseDown: false,
       ads: false,
       adsProgress: 0,
+      adsFiredWhileScoping: false,
       score: 0,
       flashTimer: 0,
       recoil: 0,
@@ -8204,7 +8223,7 @@ if (typeof window !== "undefined") {
         soundBase: 340,
         soundSkin: "dragonOperator",
         adsFov: 26,
-        adsSpeed: 5.2,
+        adsSpeed: 9.2,
       },
       {
         name: "Blind Dart",
@@ -8241,6 +8260,11 @@ if (typeof window !== "undefined") {
 
     function weapon() {
       return weapons[state.weaponIndex];
+    }
+
+    /** ADS fully ready threshold: AMR matches scope snap; other guns ~full animation. */
+    function adsReadyProgressForWeapon(wi) {
+      return wi === 5 ? 0.94 : 0.98;
     }
 
     function updateHud() {
@@ -10674,6 +10698,7 @@ if (typeof window !== "undefined") {
       state.weaponIndex = THREE.MathUtils.clamp(index | 0, 0, weaponModels.length - 1);
       state.ads = false;
       state.adsProgress = 0;
+      state.adsFiredWhileScoping = false;
       state.reloading = false;
       state.reloadEnd = 0;
       if (prev === 4 || index === 4) resetMedKitChargeState();
@@ -11274,26 +11299,33 @@ if (typeof window !== "undefined") {
 
       let spreadMultiplier = 1;
       let recoilMultiplier = 1;
-         
-      if (state.weaponIndex === 0) {
-        spreadMultiplier = shootingAds ? 0.4 : 3.1;
-        recoilMultiplier = shootingAds ? 0.75 : 1.0;
+      // Continuous ADS accuracy: 0 = hipfire, 1 = full ADS (tracks animation).
+      const adsReadyThr = adsReadyProgressForWeapon(state.weaponIndex);
+      let adsAccuracy = shootingAds ? state.adsProgress : 0;
+      if (shootingAds && state.adsProgress >= adsReadyThr) {
+        adsAccuracy = 1;
+      }
+      if (shootingAds && state.adsProgress < adsReadyThr) {
+        state.adsFiredWhileScoping = true;
+      }
 
+      if (state.weaponIndex === 0) {
+        spreadMultiplier = THREE.MathUtils.lerp(3.1, 0.4, adsAccuracy);
+        recoilMultiplier = THREE.MathUtils.lerp(1.0, 0.75, adsAccuracy);
       } else if (state.weaponIndex === 1) {
-        spreadMultiplier = shootingAds ? 0.5 : 2.95;
-        recoilMultiplier = shootingAds ? 0.70 : 1.0;
-        
+        spreadMultiplier = THREE.MathUtils.lerp(2.95, 0.5, adsAccuracy);
+        recoilMultiplier = THREE.MathUtils.lerp(1.0, 0.70, adsAccuracy);
       } else if (state.weaponIndex === 2) {
-        spreadMultiplier = shootingAds ? 1.5 : 2.7;
-        recoilMultiplier = shootingAds ? 0.90 : 1.0;
-          
+        spreadMultiplier = THREE.MathUtils.lerp(2.7, 1.5, adsAccuracy);
+        recoilMultiplier = THREE.MathUtils.lerp(1.0, 0.90, adsAccuracy);
       } else if (state.weaponIndex === 3) {
-        spreadMultiplier = shootingAds ? 0.5 : 1.0;
+        spreadMultiplier = THREE.MathUtils.lerp(1.0, 0.5, adsAccuracy);
         recoilMultiplier = 0.90;
       } else if (state.weaponIndex === 5) {
-        const adsReady = shootingAds && state.adsProgress >= 0.88;
-        spreadMultiplier = adsReady ? 0 : 4.35;
-        recoilMultiplier = adsReady ? 0.62 : 1.45;
+        // AMR: scope visually snaps in at adsReadyThr (weapon hides + scope overlay full).
+        const adsReady = shootingAds && state.adsProgress >= adsReadyThr;
+        spreadMultiplier = adsReady ? 0 : THREE.MathUtils.lerp(4.35, 0.62, adsAccuracy * 0.55);
+        recoilMultiplier = adsReady ? 0.62 : THREE.MathUtils.lerp(1.45, 0.85, adsAccuracy * 0.55);
       }
       state.recoil += w.recoil * recoilMultiplier;
       if (state.weaponIndex === 5) {
@@ -11317,18 +11349,22 @@ if (typeof window !== "undefined") {
         getActiveMuzzleWorld(muzzleStart);
 
         const movingPenalty = (keys.w || keys.a || keys.s || keys.d) ? 1.25 : 1;
-        const adsPenalty = shootingAds ? 1 : 1.8;
+        // ADS penalty blends with the same adsAccuracy so the steadying kicks in as the animation finishes.
+        const adsPenalty = THREE.MathUtils.lerp(1.8, 1.0, adsAccuracy);
         let totalSpread;
         if (state.weaponIndex === 5) {
-          const adsReady = shootingAds && state.adsProgress >= 0.88;
+          const adsReady = shootingAds && state.adsProgress >= adsReadyThr;
           if (adsReady) {
             totalSpread = 0;
           } else {
+            // While scoping in: keep some sway (2.35 when partial) gently easing toward steady (1.0).
+            const amrPenalty = THREE.MathUtils.lerp(2.35, 1.0, adsAccuracy);
+            const partialPenalty = shootingAds ? amrPenalty : adsPenalty;
             totalSpread =
               (w.spreadBase + state.spreadBloom) *
               spreadMultiplier *
               movingPenalty *
-              (shootingAds ? 2.35 : adsPenalty);
+              partialPenalty;
           }
         } else {
           totalSpread =
@@ -11441,7 +11477,26 @@ if (typeof window !== "undefined") {
           let dmg = w.damageBody;
           if (bestRpZone === "head") dmg = w.damageHead;
           else if (bestRpZone === "leg") dmg = w.damageLegs;
-          triggerHitFeedback(false, bestRpZone === "head");
+          const rpVictim = remotePlayers.get(bestRpId);
+          let predictedKill = false;
+          if (rpVictim && !rpVictim.isDown) {
+            const prev = typeof rpVictim.hpEstimate === "number" ? rpVictim.hpEstimate : 100;
+            const after = prev - dmg;
+            rpVictim.hpEstimate = after;
+            if (after <= 0) {
+              predictedKill = true;
+              rpVictim.isDown = true;
+              rpVictim.downAt = performance.now();
+              rpVictim.hpEstimate = 0;
+              spawnHumanoidDissolve(rpVictim.group, bp.clone());
+              rpVictim.group.visible = false;
+              state.score += 1;
+              showCombatFeedback(tr("combatKill", "KILL!"), "#ff5050", 0.34);
+              createSparks(bp.clone(), 0xff5555);
+              createSparks(bp.clone(), 0xff8888);
+            }
+          }
+          triggerHitFeedback(predictedKill, bestRpZone === "head");
           socket.emit("hit", {
             target: bestRpId,
             damage: dmg,
@@ -11606,6 +11661,15 @@ if (typeof window !== "undefined") {
 
       state.adsProgress += (targetAds - state.adsProgress) * Math.min(1, dt * adsSpeed);
 
+      if (state.weaponIndex !== 4) {
+        const adsReadyThrVis = adsReadyProgressForWeapon(state.weaponIndex);
+        if (usingAds && state.adsProgress >= adsReadyThrVis && state.adsFiredWhileScoping) {
+          state.spreadBloom = 0;
+          state.adsFiredWhileScoping = false;
+        }
+        if (!usingAds) state.adsFiredWhileScoping = false;
+      }
+
       const adsBlend = state.adsProgress;
 
       const targetScale =
@@ -11638,7 +11702,7 @@ if (typeof window !== "undefined") {
       if (amrScopeOverlayEl) {
         const scopeOn = state.weaponIndex === 5 && usingAds;
         const scopeOp = scopeOn
-          ? THREE.MathUtils.clamp((state.adsProgress - 0.32) / 0.58, 0, 1)
+          ? THREE.MathUtils.clamp((state.adsProgress - 0.18) / 0.42, 0, 1)
           : 0;
         amrScopeOverlayEl.style.opacity = String(scopeOp);
         amrScopeOverlayEl.setAttribute("aria-hidden", scopeOp < 0.04 ? "true" : "false");
@@ -13073,6 +13137,7 @@ if (typeof window !== "undefined") {
       player.regenTimer = 0;
       state.ads = false;
       state.adsProgress = 0;
+      state.adsFiredWhileScoping = false;
       state.mouseDown = false;
       state.reloading = false;
       state.recoil = 0;
