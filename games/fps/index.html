@@ -4563,6 +4563,38 @@ if (typeof window !== "undefined") {
     /** Set from PVP map picker; used when `pendingLobbyMode === "crossfire"`. */
     let PENDING_PVP_MAP = "crossfire";
 
+    const PVP_SPAWN_POINTS = {
+      crossfire: [
+        { x: 0, z: 34 }, { x: 0, z: -34 },
+        { x: 34, z: 0 }, { x: -34, z: 0 },
+        { x: 28, z: 28 }, { x: -28, z: -28 },
+        { x: 28, z: -28 }, { x: -28, z: 28 },
+        { x: 15, z: 34 }, { x: -15, z: -34 },
+        { x: 34, z: 15 }, { x: -34, z: -15 },
+        { x: 38, z: 38 }, { x: -38, z: -38 },
+        { x: -38, z: 38 }, { x: 38, z: -38 },
+      ],
+      crossfire_grid: [
+        { x: 0, z: 22 }, { x: 0, z: -22 },
+        { x: 22, z: 0 }, { x: -22, z: 0 },
+        { x: 18, z: 18 }, { x: -18, z: -18 },
+        { x: 18, z: -18 }, { x: -18, z: 18 },
+        { x: 10, z: 24 }, { x: -10, z: -24 },
+        { x: 24, z: 10 }, { x: -24, z: -10 },
+        { x: 26, z: 26 }, { x: -26, z: -26 },
+        { x: -26, z: 26 }, { x: 26, z: -26 },
+      ],
+    };
+    let _lastPvpSpawnIdx = -1;
+    function pickPvpSpawn(mapName) {
+      const pts = PVP_SPAWN_POINTS[mapName];
+      if (!pts || pts.length === 0) return { x: 0, z: 22 };
+      let idx;
+      do { idx = (Math.random() * pts.length) | 0; } while (idx === _lastPvpSpawnIdx && pts.length > 1);
+      _lastPvpSpawnIdx = idx;
+      return pts[idx];
+    }
+
     function drawPvpMapPreviews() {
       const classic = document.getElementById("pvpPreviewClassic");
       const grid = document.getElementById("pvpPreviewGrid");
@@ -11777,7 +11809,9 @@ if (typeof window !== "undefined") {
     function rebuildMapAndEnemies() {
       clearMap();
       if (isPvpCrossfireMap(CURRENT_MAP)) {
-        player.position.set(0, 1.65, CURRENT_MAP === "crossfire_grid" ? 22 : 34);
+        const sp = pickPvpSpawn(CURRENT_MAP);
+        player.position.set(sp.x, 1.65, sp.z);
+        player.yaw = Math.random() * Math.PI * 2;
         floor.visible = true;
         ceiling.visible = CURRENT_MAP !== "crossfire_grid";
       } else if (isTrainingMap(CURRENT_MAP)) {
@@ -12720,11 +12754,13 @@ if (typeof window !== "undefined") {
               rpVictim.group.visible = false;
               state.score += 1;
               showCombatFeedback(tr("combatKill", "KILL!"), "#ff5050", 0.34);
+              playWeaponHitSfx(true, bestRpZone === "head");
               createSparks(bp.clone(), 0xff5555);
               createSparks(bp.clone(), 0xff8888);
             }
           }
           triggerHitFeedback(predictedKill, bestRpZone === "head");
+          if (!predictedKill) playWeaponHitSfx(false, bestRpZone === "head");
           socket.emit("hit", {
             target: bestRpId,
             damage: dmg,
@@ -14317,7 +14353,9 @@ if (typeof window !== "undefined") {
       }
 
       if (isPvpCrossfireMap(CURRENT_MAP)) {
-        player.position.set(0, 1.65, CURRENT_MAP === "crossfire_grid" ? 22 : 34);
+        const sp = pickPvpSpawn(CURRENT_MAP);
+        player.position.set(sp.x, 1.65, sp.z);
+        player.yaw = Math.random() * Math.PI * 2;
         floor.visible = true;
         ceiling.visible = CURRENT_MAP !== "crossfire_grid";
       } else if (isTrainingMap(CURRENT_MAP)) {
