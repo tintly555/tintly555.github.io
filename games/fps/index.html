@@ -9660,6 +9660,62 @@ if (typeof window !== "undefined") {
       }
     }
 
+    function playKnifeSwingSound() {
+      if (audioCtx.state === "suspended") void audioCtx.resume();
+      const now = audioCtx.currentTime;
+      const whoosh = audioCtx.createBufferSource();
+      whoosh.buffer = getGunNoiseBuffer(0.22);
+      const bp = audioCtx.createBiquadFilter();
+      bp.type = "bandpass";
+      bp.frequency.setValueAtTime(1800, now);
+      bp.frequency.exponentialRampToValueAtTime(900, now + 0.18);
+      bp.Q.setValueAtTime(0.6, now);
+      const g = audioCtx.createGain();
+      g.gain.setValueAtTime(0.0001, now);
+      g.gain.linearRampToValueAtTime(0.28, now + 0.04);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + 0.20);
+      whoosh.connect(bp);
+      bp.connect(g);
+      g.connect(audioSfx);
+      whoosh.start(now);
+      whoosh.stop(now + 0.25);
+    }
+
+    function playKnifeHitSound() {
+      if (audioCtx.state === "suspended") void audioCtx.resume();
+      const now = audioCtx.currentTime;
+      const thud = audioCtx.createBufferSource();
+      thud.buffer = getGunNoiseBuffer(0.12);
+      const lp = audioCtx.createBiquadFilter();
+      lp.type = "lowpass";
+      lp.frequency.setValueAtTime(600, now);
+      const thudG = audioCtx.createGain();
+      thudG.gain.setValueAtTime(0.0001, now);
+      thudG.gain.exponentialRampToValueAtTime(0.45, now + 0.008);
+      thudG.gain.exponentialRampToValueAtTime(0.0001, now + 0.13);
+      thud.connect(lp);
+      lp.connect(thudG);
+      thudG.connect(audioSfx);
+      thud.start(now);
+      thud.stop(now + 0.16);
+      const clang = audioCtx.createOscillator();
+      clang.type = "triangle";
+      clang.frequency.setValueAtTime(2400, now);
+      clang.frequency.exponentialRampToValueAtTime(800, now + 0.06);
+      const clangG = audioCtx.createGain();
+      clangG.gain.setValueAtTime(0.0001, now);
+      clangG.gain.exponentialRampToValueAtTime(0.12, now + 0.004);
+      clangG.gain.exponentialRampToValueAtTime(0.0001, now + 0.08);
+      const hp = audioCtx.createBiquadFilter();
+      hp.type = "highpass";
+      hp.frequency.value = 500;
+      clang.connect(hp);
+      hp.connect(clangG);
+      clangG.connect(audioSfx);
+      clang.start(now);
+      clang.stop(now + 0.10);
+    }
+
     function playDissolveBurstSound() {
       if (audioCtx.state === "suspended") void audioCtx.resume();
       const now = audioCtx.currentTime;
@@ -11293,13 +11349,13 @@ if (typeof window !== "undefined") {
           if (t < 0.18) {
             const u = t / 0.18;
             const e = u * u * (3 - 2 * u);
-            px = 0.22 * e;   py = 0.14 * e;   pz = 0.06 * e;
+            px = 0.22 * e;   py = 0.24 * e;   pz = 0.06 * e;
             rx = -0.06 * e;  ry = 0;           rz = 0.08 * e;
           } else if (t < 0.35) {
             const u = (t - 0.18) / 0.17;
             const e = 1 - Math.pow(1 - u, 4);
             px = THREE.MathUtils.lerp(0.22, -0.49, e);
-            py = THREE.MathUtils.lerp(0.14, -0.08, e);
+            py = THREE.MathUtils.lerp(0.24, 0.02, e);
             pz = THREE.MathUtils.lerp(0.06, -0.14, e);
             rx = THREE.MathUtils.lerp(-0.06, 0.04, e);
             ry = 0;
@@ -11308,7 +11364,7 @@ if (typeof window !== "undefined") {
             const u = (t - 0.35) / 0.65;
             const e = 1 - Math.pow(1 - u, 2);
             px = THREE.MathUtils.lerp(-0.49, 0, e);
-            py = THREE.MathUtils.lerp(-0.08, 0, e);
+            py = THREE.MathUtils.lerp(0.02, 0, e);
             pz = THREE.MathUtils.lerp(-0.14, 0, e);
             rx = THREE.MathUtils.lerp(0.04, 0, e);
             ry = 0;
@@ -11323,13 +11379,13 @@ if (typeof window !== "undefined") {
           if (t < 0.18) {
             const u = t / 0.18;
             const e = u * u * (3 - 2 * u);
-            px = -0.22 * e;  py = 0.14 * e;   pz = 0.06 * e;
+            px = -0.22 * e;  py = 0.24 * e;   pz = 0.06 * e;
             rx = -0.06 * e;  ry = 0;           rz = -0.08 * e;
           } else if (t < 0.35) {
             const u = (t - 0.18) / 0.17;
             const e = 1 - Math.pow(1 - u, 4);
             px = THREE.MathUtils.lerp(-0.22, 0.49, e);
-            py = THREE.MathUtils.lerp(0.14, -0.08, e);
+            py = THREE.MathUtils.lerp(0.24, 0.02, e);
             pz = THREE.MathUtils.lerp(0.06, -0.14, e);
             rx = THREE.MathUtils.lerp(-0.06, 0.04, e);
             ry = 0;
@@ -11338,7 +11394,7 @@ if (typeof window !== "undefined") {
             const u = (t - 0.35) / 0.65;
             const e = 1 - Math.pow(1 - u, 2);
             px = THREE.MathUtils.lerp(0.49, 0, e);
-            py = THREE.MathUtils.lerp(-0.08, 0, e);
+            py = THREE.MathUtils.lerp(0.02, 0, e);
             pz = THREE.MathUtils.lerp(-0.14, 0, e);
             rx = THREE.MathUtils.lerp(0.04, 0, e);
             ry = 0;
@@ -11348,9 +11404,7 @@ if (typeof window !== "undefined") {
           swingGrp.rotation.set(rx, ry, rz);
           offY = -0.03 * Math.sin(THREE.MathUtils.clamp((t - 0.12) * 2.2, 0, 1) * Math.PI);
         } else if (act === "knifeThrust" && swingGrp) {
-          // THRUST — almost pure Z translation. Arm pulls back, then punches straight
-          // forward, holds, slowly retracts. Rotation stays near zero so the blade
-          // keeps pointing at the target the whole time.
+          // THRUST — almost pure Z translation. Knife raised slightly above rest.
           //   wind-up (0.00..0.20): chamber back
           //   stab    (0.20..0.38): easeOutQuart forward punch
           //   hold    (0.38..0.50): freeze at extension
@@ -11359,22 +11413,22 @@ if (typeof window !== "undefined") {
           if (t < 0.20) {
             const u = t / 0.20;
             const e = u * u * (3 - 2 * u);
-            px = 0.03 * e;   py = 0.08 * e;   pz = 0.16 * e;
+            px = 0.03 * e;   py = 0.16 * e;   pz = 0.16 * e;
             rx = -0.08 * e;
           } else if (t < 0.38) {
             const u = (t - 0.20) / 0.18;
             const e = 1 - Math.pow(1 - u, 4);
             px = THREE.MathUtils.lerp(0.03, -0.03, e);
-            py = THREE.MathUtils.lerp(0.08, -0.04, e);
+            py = THREE.MathUtils.lerp(0.16, 0.06, e);
             pz = THREE.MathUtils.lerp(0.16, -0.52, e);
             rx = THREE.MathUtils.lerp(-0.08, 0.06, e);
           } else if (t < 0.50) {
-            px = -0.03;  py = -0.04;  pz = -0.52;  rx = 0.06;
+            px = -0.03;  py = 0.06;  pz = -0.52;  rx = 0.06;
           } else {
             const u = (t - 0.50) / 0.50;
             const e = 1 - Math.pow(1 - u, 2);
             px = THREE.MathUtils.lerp(-0.03, 0, e);
-            py = THREE.MathUtils.lerp(-0.04, 0, e);
+            py = THREE.MathUtils.lerp(0.06, 0, e);
             pz = THREE.MathUtils.lerp(-0.52, 0, e);
             rx = THREE.MathUtils.lerp(0.06, 0, e);
           }
@@ -12272,6 +12326,7 @@ if (typeof window !== "undefined") {
         const dmg = isBack ? (w.meleeBackstabDamage || 200) : w.damageBody;
         const bp = bestRpPoint || _ehHitWorld.copy(ray.ray.origin).addScaledVector(ray.ray.direction, bestRpT).clone();
         createBlood(bp);
+        playKnifeHitSound();
         triggerHitFeedback(isBack, false);
         if (MULTIPLAYER) {
           socket.emit("hit", {
@@ -12297,6 +12352,7 @@ if (typeof window !== "undefined") {
       if (bestEnemy) {
         const bp = bestEnemyPoint || _ehHitWorld.copy(ray.ray.origin).addScaledVector(ray.ray.direction, bestEnemyT).clone();
         createBlood(bp);
+        playKnifeHitSound();
         if (bestEnemy.trainingDummy) {
           registerTrainingHit(bestEnemyZone);
           playTrainingDummyHitDissolve(bestEnemy, bp);
@@ -12335,6 +12391,7 @@ if (typeof window !== "undefined") {
         state.weaponAction = combo === 0 ? "knifeSlashL" : combo === 1 ? "knifeSlashR" : "knifeThrust";
         state.weaponActionDur = combo === 2 ? 700 : 620;
         state.weaponActionStart = now;
+        playKnifeSwingSound();
         performKnifeAttack(w);
         updateHud();
         return;
