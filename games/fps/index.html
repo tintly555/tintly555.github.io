@@ -9322,21 +9322,29 @@ if (typeof window !== "undefined") {
       leftArmRoot.position.set(-0.76, 1.84, 0);
       rightArmRoot.position.set(0.76, 1.84, 0);
       const makeArm = (ar, forearmGrp, side) => {
-        const shoulder = new THREE.Mesh(new THREE.BoxGeometry(0.40, 0.22, 0.40), matShirt);
+        const shoulder = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.26, 0.48), matShirt);
         shoulder.position.set(0, -0.06, 0); ar.add(shoulder);
-        const bicep = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.50, 0.44), matSkin);
+        const shoulderCap = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.14, 0.42), matSkin);
+        shoulderCap.position.set(0, 0.06, 0); ar.add(shoulderCap);
+        const bicep = new THREE.Mesh(new THREE.BoxGeometry(0.50, 0.54, 0.50), matSkin);
         bicep.position.set(0, -0.34, 0); ar.add(bicep);
-        const bicepVein = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.28, 0.05), matVein);
-        bicepVein.position.set(side === "left" ? 0.16 : -0.16, -0.30, 0.18); ar.add(bicepVein);
+        const bicepPeak = new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.22, 0.18), matSkin);
+        bicepPeak.position.set(0, -0.24, side === "left" ? -0.22 : 0.22); ar.add(bicepPeak);
+        const bicepVein = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.32, 0.06), matVein);
+        bicepVein.position.set(side === "left" ? 0.18 : -0.18, -0.30, 0.20); ar.add(bicepVein);
+        const bicepVein2 = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.20, 0.05), matVein);
+        bicepVein2.position.set(side === "left" ? -0.14 : 0.14, -0.36, 0.16); ar.add(bicepVein2);
 
-        const elbow = new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.16, 0.30), matSkinD);
+        const elbow = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.18, 0.36), matSkinD);
         elbow.position.set(0, 0.02, 0); forearmGrp.add(elbow);
-        const forearm = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.46, 0.36), matSkin);
-        forearm.position.set(0, -0.24, 0.04); forearmGrp.add(forearm);
-        const foreVein = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.26, 0.05), matVein);
-        foreVein.position.set(side === "left" ? -0.10 : 0.10, -0.22, 0.18); forearmGrp.add(foreVein);
-        const hand = new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.26, 0.32), matSkinD);
-        hand.position.set(0, -0.54, 0.08); forearmGrp.add(hand);
+        const forearm = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.50, 0.42), matSkin);
+        forearm.position.set(0, -0.26, 0.04); forearmGrp.add(forearm);
+        const foreVein = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.30, 0.06), matVein);
+        foreVein.position.set(side === "left" ? -0.12 : 0.12, -0.24, 0.20); forearmGrp.add(foreVein);
+        const hand = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.30, 0.36), matSkinD);
+        hand.position.set(0, -0.56, 0.08); forearmGrp.add(hand);
+        const fist = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.18, 0.28), matSkinD);
+        fist.position.set(0, -0.68, 0.06); forearmGrp.add(fist);
         const f1 = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.12, 0.10), matSkinD);
         f1.position.set(-0.08, -0.70, 0.14); forearmGrp.add(f1);
         const f2 = f1.clone(); f2.position.x = 0; forearmGrp.add(f2);
@@ -9444,7 +9452,7 @@ if (typeof window !== "undefined") {
         walkTime: Math.random() * 10,
         moving: false,
         attackPhase: 0,
-        speed: isHell ? 7.5 : 5.5,
+        speed: isHell ? 6.175 : 5.85,
         aware: false,
         hiddenTimer: 0,
         facingYaw: 0,
@@ -14327,26 +14335,27 @@ if (typeof window !== "undefined") {
             playBossRoarSfx();
             enemy.bossAnimTimer = 0;
             const hpRatio = enemy.hp / enemy.maxHp;
+            const hell = !!enemy.isHellBoss;
             if (enemy.bossMode === "tank") {
               enemy.bossMode = "speed";
               enemy.maxHp = enemy.baseSpeedHp;
-              enemy.speed = 8.0;
-              enemy.attackDamage = 20;
+              enemy.speed = hell ? 9.6 : 8.0;
+              enemy.attackDamage = hell ? 100 : 20;
               enemy.attackCooldown = 0.35;
               enemy.ranged = false;
             } else if (enemy.bossMode === "speed") {
               enemy.bossMode = "gunner";
               enemy.maxHp = enemy.baseGunnerHp;
-              enemy.speed = 5.5;
-              enemy.attackDamage = 12;
+              enemy.speed = hell ? 6.175 : 5.85;
+              enemy.attackDamage = hell ? 60 : 12;
               enemy.attackCooldown = 1.2;
               enemy.ranged = true;
               enemy.rangeDistance = 20;
             } else {
               enemy.bossMode = "tank";
               enemy.maxHp = enemy.baseTankHp;
-              enemy.speed = 5.5;
-              enemy.attackDamage = 50;
+              enemy.speed = hell ? 6.175 : 5.85;
+              enemy.attackDamage = hell ? 250 : 50;
               enemy.attackCooldown = 1.2;
               enemy.ranged = false;
             }
@@ -14666,48 +14675,64 @@ if (typeof window !== "undefined") {
 
           if (!bossAnimOverride && enemy.bossAnimState === "attacking") {
             bossAnimOverride = true;
-            const dur = 1.1;
+            const dur = 1.4;
             const t = Math.min(enemy.bossAnimTimer / dur, 1);
-            if (t < 0.40) {
-              const smooth = t / 0.40; const s = smooth * smooth * (3 - 2 * smooth);
-              enemy.leftArmRoot.rotation.x = THREE.MathUtils.lerp(-0.10, -3.0, s);
-              enemy.rightArmRoot.rotation.x = THREE.MathUtils.lerp(-0.10, -3.0, s);
-              enemy.leftArmRoot.rotation.z = THREE.MathUtils.lerp(-0.50, -0.10, s);
-              enemy.rightArmRoot.rotation.z = THREE.MathUtils.lerp(0.50, 0.10, s);
+            if (t < 0.35) {
+              // Wind-up: torso rears back, arms sweep wide then overhead
+              const smooth = t / 0.35; const s = smooth * smooth * (3 - 2 * smooth);
+              enemy.leftArmRoot.rotation.x = THREE.MathUtils.lerp(-0.10, -3.2, s);
+              enemy.rightArmRoot.rotation.x = THREE.MathUtils.lerp(-0.10, -3.2, s);
+              enemy.leftArmRoot.rotation.z = THREE.MathUtils.lerp(-0.50, -0.60, s * 0.5) + (s > 0.5 ? (s - 0.5) * 0.8 : 0);
+              enemy.rightArmRoot.rotation.z = THREE.MathUtils.lerp(0.50, 0.60, s * 0.5) - (s > 0.5 ? (s - 0.5) * 0.8 : 0);
               enemy.leftArmRoot.rotation.y = THREE.MathUtils.lerp(0.25, 0, s);
               enemy.rightArmRoot.rotation.y = THREE.MathUtils.lerp(-0.25, 0, s);
-              lfa.rotation.x = THREE.MathUtils.lerp(ELBOW_REST, -0.15, s);
-              rfa.rotation.x = THREE.MathUtils.lerp(ELBOW_REST, -0.15, s);
-              enemy.torsoRoot.rotation.x = THREE.MathUtils.lerp(HUNCH, HUNCH - 0.40, s);
-              enemy.group.position.y = THREE.MathUtils.lerp(BOSS_BASE_Y, BOSS_BASE_Y + 0.15, s);
-            } else if (t < 0.52) {
-              const pow = 1 - Math.pow(1 - (t - 0.40) / 0.12, 4);
-              enemy.leftArmRoot.rotation.x = THREE.MathUtils.lerp(-3.0, 0.6, pow);
-              enemy.rightArmRoot.rotation.x = THREE.MathUtils.lerp(-3.0, 0.6, pow);
-              enemy.leftArmRoot.rotation.z = -0.10 * (1 - pow);
-              enemy.rightArmRoot.rotation.z = 0.10 * (1 - pow);
+              lfa.rotation.x = THREE.MathUtils.lerp(ELBOW_REST, -0.10, s);
+              rfa.rotation.x = THREE.MathUtils.lerp(ELBOW_REST, -0.10, s);
+              enemy.torsoRoot.rotation.x = THREE.MathUtils.lerp(HUNCH, HUNCH - 0.55, s);
+              enemy.group.position.y = THREE.MathUtils.lerp(BOSS_BASE_Y, BOSS_BASE_Y + 0.25, s);
+            } else if (t < 0.46) {
+              // Slam down: explosive forward smash
+              const pow = 1 - Math.pow(1 - (t - 0.35) / 0.11, 5);
+              enemy.leftArmRoot.rotation.x = THREE.MathUtils.lerp(-3.2, 0.8, pow);
+              enemy.rightArmRoot.rotation.x = THREE.MathUtils.lerp(-3.2, 0.8, pow);
+              enemy.leftArmRoot.rotation.z = THREE.MathUtils.lerp(-0.20, -0.05, pow);
+              enemy.rightArmRoot.rotation.z = THREE.MathUtils.lerp(0.20, 0.05, pow);
               enemy.leftArmRoot.rotation.y = 0;
               enemy.rightArmRoot.rotation.y = 0;
-              lfa.rotation.x = THREE.MathUtils.lerp(-0.15, -1.4, pow);
-              rfa.rotation.x = THREE.MathUtils.lerp(-0.15, -1.4, pow);
-              enemy.torsoRoot.rotation.x = THREE.MathUtils.lerp(HUNCH - 0.40, HUNCH + 0.50, pow);
-              enemy.group.position.y = THREE.MathUtils.lerp(BOSS_BASE_Y + 0.15, BOSS_BASE_Y, pow);
-              if (pow > 0.8 && !enemy._smashShook) {
+              lfa.rotation.x = THREE.MathUtils.lerp(-0.10, -1.6, pow);
+              rfa.rotation.x = THREE.MathUtils.lerp(-0.10, -1.6, pow);
+              enemy.torsoRoot.rotation.x = THREE.MathUtils.lerp(HUNCH - 0.55, HUNCH + 0.65, pow);
+              enemy.group.position.y = THREE.MathUtils.lerp(BOSS_BASE_Y + 0.25, BOSS_BASE_Y - 0.10, pow);
+              if (pow > 0.7 && !enemy._smashShook) {
                 enemy._smashShook = true;
-                state.camShake = Math.max(state.camShake || 0, 0.7);
+                state.camShake = Math.max(state.camShake || 0, 1.0);
               }
+            } else if (t < 0.56) {
+              // Ground impact hold with tremor
+              const hold = (t - 0.46) / 0.10;
+              const tremor = Math.sin(hold * 30) * 0.06 * (1 - hold);
+              enemy.leftArmRoot.rotation.x = 0.8 + tremor;
+              enemy.rightArmRoot.rotation.x = 0.8 + tremor;
+              enemy.leftArmRoot.rotation.z = -0.05;
+              enemy.rightArmRoot.rotation.z = 0.05;
+              lfa.rotation.x = -1.6;
+              rfa.rotation.x = -1.6;
+              enemy.torsoRoot.rotation.x = HUNCH + 0.65 + tremor * 2;
+              enemy.group.position.y = BOSS_BASE_Y - 0.10 + tremor;
+              state.camShake = Math.max(state.camShake || 0, 0.3 * (1 - hold));
             } else {
-              const s = 1 - Math.pow(1 - (t - 0.52) / 0.48, 2);
-              enemy.leftArmRoot.rotation.x = THREE.MathUtils.lerp(0.6, -0.10, s);
-              enemy.rightArmRoot.rotation.x = THREE.MathUtils.lerp(0.6, -0.10, s);
-              enemy.leftArmRoot.rotation.z = THREE.MathUtils.lerp(-0.10, -0.50, s);
-              enemy.rightArmRoot.rotation.z = THREE.MathUtils.lerp(0.10, 0.50, s);
+              // Recovery: slow rise back to stance
+              const s = 1 - Math.pow(1 - (t - 0.56) / 0.44, 2);
+              enemy.leftArmRoot.rotation.x = THREE.MathUtils.lerp(0.8, -0.10, s);
+              enemy.rightArmRoot.rotation.x = THREE.MathUtils.lerp(0.8, -0.10, s);
+              enemy.leftArmRoot.rotation.z = THREE.MathUtils.lerp(-0.05, -0.50, s);
+              enemy.rightArmRoot.rotation.z = THREE.MathUtils.lerp(0.05, 0.50, s);
               enemy.leftArmRoot.rotation.y = THREE.MathUtils.lerp(0, 0.25, s);
               enemy.rightArmRoot.rotation.y = THREE.MathUtils.lerp(0, -0.25, s);
-              lfa.rotation.x = THREE.MathUtils.lerp(-1.4, ELBOW_REST, s);
-              rfa.rotation.x = THREE.MathUtils.lerp(-1.4, ELBOW_REST, s);
-              enemy.torsoRoot.rotation.x = THREE.MathUtils.lerp(HUNCH + 0.50, HUNCH, s);
-              enemy.group.position.y = BOSS_BASE_Y;
+              lfa.rotation.x = THREE.MathUtils.lerp(-1.6, ELBOW_REST, s);
+              rfa.rotation.x = THREE.MathUtils.lerp(-1.6, ELBOW_REST, s);
+              enemy.torsoRoot.rotation.x = THREE.MathUtils.lerp(HUNCH + 0.65, HUNCH, s);
+              enemy.group.position.y = THREE.MathUtils.lerp(BOSS_BASE_Y - 0.10, BOSS_BASE_Y, s);
             }
             if (t >= 1) {
               enemy.bossAnimState = "idle";
