@@ -315,55 +315,23 @@
       z-index: 10;
     }
 
-    .blind-overlay {
-      position: fixed;
-      inset: 0;
-      background: #000;
-      pointer-events: none;
-      z-index: 250000;
-      opacity: 0;
-      transition: opacity 0.12s linear;
-    }
-    .blind-overlay.show { opacity: 1; }
-    .blind-overlay-inner {
-      position: absolute;
-      inset: 0;
-      background:
-        radial-gradient(ellipse 85% 70% at 50% 45%, rgba(8, 12, 18, 0.35) 0%, #000 72%),
-        repeating-linear-gradient(
-          0deg,
-          rgba(255, 255, 255, 0.02) 0px,
-          rgba(255, 255, 255, 0.02) 1px,
-          transparent 1px,
-          transparent 3px
-        );
-      opacity: 1;
-    }
-    body.player-blinded #app canvas {
-      visibility: hidden;
-    }
-    body.player-blinded #crosshair,
-    body.player-blinded #medKitReticle,
-    body.player-blinded #amrScopeOverlay {
-      opacity: 0 !important;
-      visibility: hidden !important;
-    }
+    .blind-overlay { display: none !important; }
     .blind-text {
       position: fixed;
       left: 50%;
-      top: 56%;
+      top: 18%;
       transform: translate(-50%, -50%);
-      color: #5ab3ff;
+      color: #6bd4ff;
       font-family: monospace;
-      font-size: 22px;
+      font-size: 18px;
       letter-spacing: 2px;
-      text-shadow: 0 0 6px rgba(90, 179, 255, 0.5);
+      text-shadow: 0 0 8px rgba(107, 212, 255, 0.55);
       pointer-events: none;
       z-index: 91;
       opacity: 0;
-      transition: opacity 0.18s linear;
+      transition: opacity 0.15s linear;
     }
-    .blind-text.show { opacity: 0.85; }
+    .blind-text.show { opacity: 0.92; }
 
     .crosshair {
       position: fixed;
@@ -1118,8 +1086,8 @@
   </div>
   <div class="hint" id="hint" data-i18n="hintClick">Click anywhere</div>
   <div class="flash" id="flash"></div>
-  <div class="blind-overlay" id="blindOverlay" aria-hidden="true"><div class="blind-overlay-inner"></div></div>
-  <div class="blind-text" id="blindText" data-i18n="hudBlinded" aria-hidden="true">BLINDED</div>
+  <div class="blind-overlay" id="blindOverlay" aria-hidden="true"></div>
+  <div class="blind-text" id="blindText" data-i18n="hudSlowed" aria-hidden="true">IMMOBILIZED</div>
   <div class="crosshair" id="crosshair"></div>
   <div id="amrScopeOverlay" class="amr-scope-overlay" aria-hidden="true"></div>
   <div id="medkitReticle" class="medkit-reticle hidden" aria-hidden="true">
@@ -4545,7 +4513,7 @@ if (typeof window !== "undefined") {
       const medkitHoldEl = document.querySelector(".medkit-hold-txt");
       if (medkitHoldEl) medkitHoldEl.textContent = tr("medkitHold", medkitHoldEl.textContent || "HOLD");
       const blindTextEl = document.getElementById("blindText");
-      if (blindTextEl) blindTextEl.textContent = tr("hudBlinded", "BLINDED");
+      if (blindTextEl) blindTextEl.textContent = tr("hudSlowed", "IMMOBILIZED");
       const tabAudio = document.getElementById("settingsTabAudio");
       const tabGfx = document.getElementById("settingsTabGraphics");
       const tabLang = document.getElementById("settingsTabLanguage");
@@ -5011,33 +4979,44 @@ if (typeof window !== "undefined") {
       }
     });
 
-    function handleIncomingBlindEvent(data) {
+    function handleIncomingDartSlowEvent(data) {
       if (!data) return;
       const tid =
         data.target != null
           ? String(data.target)
           : data.targetId != null
             ? String(data.targetId)
-            : data.blindTarget != null
-              ? String(data.blindTarget)
-              : "";
+            : data.slowTarget != null
+              ? String(data.slowTarget)
+              : data.blindTarget != null
+                ? String(data.blindTarget)
+                : "";
       if (!tid || tid !== String(socket.id)) return;
       const dur =
-        typeof data.duration === "number"
-          ? data.duration
-          : typeof data.blindDuration === "number"
-            ? data.blindDuration
-            : 5;
-      startBlindEffect(dur);
+        typeof data.slowDuration === "number"
+          ? data.slowDuration
+          : typeof data.duration === "number"
+            ? data.duration
+            : typeof data.blindDuration === "number"
+              ? data.blindDuration
+              : 5;
+      startSlowEffect(dur);
     }
 
-    socket.on("playerBlind", handleIncomingBlindEvent);
-    socket.on("blind", handleIncomingBlindEvent);
+    socket.on("playerSlow", handleIncomingDartSlowEvent);
+    socket.on("dartSlow", handleIncomingDartSlowEvent);
+    socket.on("playerBlind", handleIncomingDartSlowEvent);
+    socket.on("blind", handleIncomingDartSlowEvent);
 
     socket.on("shoot", (data) => {
       if (!data) return;
-      if (data.type === "blind" || data.blindTarget != null) {
-        handleIncomingBlindEvent(data);
+      if (
+        data.type === "dartSlow" ||
+        data.type === "blind" ||
+        data.slowTarget != null ||
+        data.blindTarget != null
+      ) {
+        handleIncomingDartSlowEvent(data);
       }
       if (data.sx != null && data.sy != null && data.sz != null
           && data.x != null && data.y != null && data.z != null) {
@@ -5055,7 +5034,7 @@ if (typeof window !== "undefined") {
         createSparks(pt, data.color || 0xffdd88);
         const n = new THREE.Vector3(data.nx, data.ny, data.nz);
         if (n.lengthSq() > 0) createBulletMark(pt, n);
-      } else if (data.type === "blind") {
+      } else if (data.type === "blind" || data.type === "dartSlow") {
         createSparks(pt, 0x6bd4ff);
       }
     });
@@ -5129,13 +5108,19 @@ if (typeof window !== "undefined") {
       if (performance.now() < player.spawnProtectUntil) return;
       if (
         data &&
-        (data.hitKind === "blind" ||
-          data.blind === true ||
-          data.blindDuration > 0 && (data.damage || 0) <= 1)
+        (data.hitKind === "dartSlow" ||
+          data.hitKind === "blind" ||
+          data.slow === true ||
+          data.blind === true)
       ) {
-        const dur = (typeof data.blindDuration === "number" && isFinite(data.blindDuration)) ? data.blindDuration : 5;
-        startBlindEffect(dur);
-        if (data.hitKind === "blind" || data.blind === true) return;
+        const dur =
+          typeof data.slowDuration === "number" && isFinite(data.slowDuration)
+            ? data.slowDuration
+            : typeof data.blindDuration === "number" && isFinite(data.blindDuration)
+              ? data.blindDuration
+              : 5;
+        startSlowEffect(dur);
+        return;
       }
       player.health = Math.max(0, player.health - (data.damage || 0));
       player.regenTimer = 0;
@@ -8175,7 +8160,7 @@ if (typeof window !== "undefined") {
       shellCasings: [],
       lastShellEject: 0,
       reloadStartAmmo: 0,
-      blindUntil: 0,
+      slowUntil: 0,
       projectiles: [],
     };
 
@@ -8360,7 +8345,7 @@ if (typeof window !== "undefined") {
         adsSpeed: 3.29,
       },
       {
-        name: "Blind Dart",
+        name: "Paralysis Dart",
         fireDelay: 650,
         auto: false,
         pellets: 1,
@@ -8383,7 +8368,7 @@ if (typeof window !== "undefined") {
         projectile: true,
         projectileSpeed: 36,
         projectileGravity: 9.8,
-        blindDuration: 5.0,
+        slowDuration: 5.0,
       },
     ];
 
@@ -8420,7 +8405,7 @@ if (typeof window !== "undefined") {
         ${tr("hudGameTitleLine", "Zone No Light")}<br>
         WASD move | Space jump | R reload<br>
         Mouse aim | RMB zoom | L flashlight | Z beam small/med/wide<br>
-        Weapons: 1–4 | <b>5</b> AMR | <b>6</b> Blind Dart | <b>7</b> Med Kit (hold <b>F</b> or <b>LMB</b> 10s, +50 HP)<br>
+        Weapons: 1–4 | <b>5</b> AMR | <b>6</b> Paralysis Dart | <b>7</b> Med Kit (hold <b>F</b> or <b>LMB</b> 10s, +50 HP)<br>
         Map: ${mapLabel}${MULTIPLAYER ? " (MP)" : ""}<br>
         Weapon: ${w.name}<br>
         ${
@@ -10857,7 +10842,7 @@ if (typeof window !== "undefined") {
       state.reloading = true;
       state.ads = false;
       state.reloadStartAmmo = w.ammo;
-      state.reloadEnd = performance.now() + w.reloadTime;
+      state.reloadEnd = performance.now() + w.reloadTime * getDartSlowReloadMult();
       playReloadSound();
       updateHud();
     }
@@ -11291,51 +11276,76 @@ if (typeof window !== "undefined") {
       drawEnemyHp(enemy);
     }
 
-    const BLIND_TEXT_EL = document.getElementById("blindText");
-    const BLIND_OVERLAY_EL = document.getElementById("blindOverlay");
+    const SLOW_TEXT_EL = document.getElementById("blindText");
     const _projWorkVecA = new THREE.Vector3();
     const _projWorkVecB = new THREE.Vector3();
     const _projWorkVecC = new THREE.Vector3();
+    const DART_SLOW_ADS_MULT = 0.045;
+    const DART_SLOW_RELOAD_MULT = 14.0;
 
-    function applyCameraBlindVisuals(blinded) {
-      if (BLIND_OVERLAY_EL) {
-        BLIND_OVERLAY_EL.classList.toggle("show", blinded);
-        BLIND_OVERLAY_EL.setAttribute("aria-hidden", blinded ? "false" : "true");
+    function isPlayerSlowed() {
+      return performance.now() < state.slowUntil;
+    }
+
+    function getDartSlowAdsMult() {
+      return isPlayerSlowed() ? DART_SLOW_ADS_MULT : 1;
+    }
+
+    function getDartSlowReloadMult() {
+      return isPlayerSlowed() ? DART_SLOW_RELOAD_MULT : 1;
+    }
+
+    function startSlowEffect(durationSec) {
+      const dur = Math.max(0.5, durationSec || 5.0);
+      const end = performance.now() + dur * 1000;
+      if (end > state.slowUntil) state.slowUntil = end;
+      if (state.reloading) {
+        const w = weapon();
+        const extra = w.reloadTime * (DART_SLOW_RELOAD_MULT - 1);
+        state.reloadEnd = Math.max(state.reloadEnd, performance.now() + extra);
       }
-      if (BLIND_TEXT_EL) BLIND_TEXT_EL.classList.toggle("show", blinded);
-      document.body.classList.toggle("player-blinded", blinded);
-      if (blinded) {
-        if (weaponRoot) weaponRoot.visible = false;
-        if (amrScopeOverlayEl) amrScopeOverlayEl.style.opacity = "0";
-        crosshairEl.classList.add("hidden");
-        if (medKitReticleEl) medKitReticleEl.classList.add("hidden");
+      showCombatFeedback(tr("combatSlowed", "SLOWED"), "#6bd4ff", 0.42);
+      if (SLOW_TEXT_EL) {
+        SLOW_TEXT_EL.textContent = tr("hudSlowed", "IMMOBILIZED");
+        SLOW_TEXT_EL.classList.add("show");
       }
     }
 
-    function startBlindEffect(durationSec) {
-      const end = performance.now() + Math.max(0, durationSec) * 1000;
-      if (end > state.blindUntil) state.blindUntil = end;
-      applyCameraBlindVisuals(true);
+    function updateSlowDebuffHud() {
+      const slowed = isPlayerSlowed();
+      if (SLOW_TEXT_EL) {
+        SLOW_TEXT_EL.classList.toggle("show", slowed);
+        if (slowed) SLOW_TEXT_EL.textContent = tr("hudSlowed", "IMMOBILIZED");
+      }
     }
 
-    function updateBlindOverlay() {
-      const blinded = performance.now() < state.blindUntil;
-      applyCameraBlindVisuals(blinded);
+    function applyEnemySlowDebuff(enemy, durationSec) {
+      if (!enemy) return;
+      const dur = Math.max(0.5, durationSec || 5.0);
+      enemy.slowUntil = performance.now() + dur * 1000;
+      enemy.aware = false;
+      enemy.targetId = null;
+      enemy.retargetTimer = 0;
+      enemy.rangedLosAcquireTimer = 0;
+      enemy.moving = false;
+      enemy.attackCooldownTimer = Math.max(enemy.attackCooldownTimer, dur);
     }
 
-    function emitBlindHitNetwork(targetId, durationSec, hitPoint) {
+    function emitDartSlowNetwork(targetId, durationSec, hitPoint) {
       if (!MULTIPLAYER || !socket || targetId == null) return;
-      const dur = Math.max(0.5, durationSec || 5);
+      const dur = Math.max(0.5, durationSec || 5.0);
       const hx = hitPoint && hitPoint.x != null ? hitPoint.x : player.position.x;
       const hz = hitPoint && hitPoint.z != null ? hitPoint.z : player.position.z;
       const payload = {
         target: targetId,
         targetId,
         duration: dur,
-        blindDuration: dur,
+        slowDuration: dur,
         x: hx,
         z: hz,
       };
+      socket.emit("playerSlow", payload);
+      socket.emit("dartSlow", payload);
       socket.emit("playerBlind", payload);
       socket.emit("blind", payload);
       socket.emit("hit", {
@@ -11343,18 +11353,18 @@ if (typeof window !== "undefined") {
         damage: 1,
         x: hx,
         z: hz,
-        hitKind: "blind",
-        blindDuration: dur,
+        hitKind: "dartSlow",
+        slowDuration: dur,
       });
       if (hitPoint && hitPoint.isVector3) {
-        emitShootNetwork(hitPoint, hitPoint, 0x6bd4ff, "blind", {
-          blindTarget: targetId,
-          blindDuration: dur,
+        emitShootNetwork(hitPoint, hitPoint, 0x6bd4ff, "dartSlow", {
+          slowTarget: targetId,
+          slowDuration: dur,
         });
       }
     }
 
-    function spawnBlindDartProjectile(origin, direction, weaponCfg) {
+    function spawnParalysisDartProjectile(origin, direction, weaponCfg) {
       const mat = new THREE.MeshStandardMaterial({ color: 0x6bd4ff, roughness: 0.4, metalness: 0.6, emissive: 0x224466, emissiveIntensity: 0.6 });
       const matTip = new THREE.MeshStandardMaterial({ color: 0xeef2f6, roughness: 0.3, metalness: 0.8 });
       const dart = new THREE.Group();
@@ -11372,12 +11382,12 @@ if (typeof window !== "undefined") {
       const dir = direction.clone().normalize();
       const speed = (weaponCfg && weaponCfg.projectileSpeed) || 36;
       const proj = {
-        type: "blindDart",
+        type: "paralysisDart",
         pos: origin.clone(),
         prev: origin.clone(),
         vel: dir.clone().multiplyScalar(speed),
         gravity: (weaponCfg && weaponCfg.projectileGravity) || 9.8,
-        blindDuration: (weaponCfg && weaponCfg.blindDuration) || 5,
+        slowDuration: (weaponCfg && weaponCfg.slowDuration) || 5,
         mesh: dart,
         age: 0,
         maxAge: 6,
@@ -11436,7 +11446,7 @@ if (typeof window !== "undefined") {
       return { t: worldT, zone, point: _ehHitWorld.clone() };
     }
 
-    function probeBlindDartProximityHit(worldPos, hitPad, blindDuration) {
+    function probeParalysisDartProximityHit(worldPos, hitPad, slowDuration) {
       if (MULTIPLAYER && !ARENA_COOP && !isTrainingMap(CURRENT_MAP)) {
         for (const [rpId, rp] of remotePlayers) {
           if (rp.isDown || !rp.group.visible) continue;
@@ -11446,7 +11456,7 @@ if (typeof window !== "undefined") {
           const dz = worldPos.z - _projWorkVecA.z;
           const r = 0.58 * hitPad;
           if (dx * dx + dy * dy + dz * dz <= r * r) {
-            emitBlindHitNetwork(rpId, blindDuration, worldPos);
+            emitDartSlowNetwork(rpId, slowDuration, worldPos);
             return true;
           }
         }
@@ -11462,14 +11472,9 @@ if (typeof window !== "undefined") {
         if (dx * dx + dy * dy + dz * dz <= r * r) {
           if (enemy.trainingDummy) {
             registerTrainingHit("body");
-            startBlindEffect(Math.min(blindDuration || 5, 3));
+            startSlowEffect(Math.min(slowDuration || 5, 3));
           } else {
-            enemy.blindUntil = performance.now() + (blindDuration || 5) * 1000;
-            enemy.aware = false;
-            enemy.targetId = null;
-            enemy.retargetTimer = 0;
-            enemy.rangedLosAcquireTimer = 0;
-            enemy.attackCooldownTimer = Math.max(enemy.attackCooldownTimer, 0.5);
+            applyEnemySlowDebuff(enemy, slowDuration);
           }
           return true;
         }
@@ -11513,14 +11518,14 @@ if (typeof window !== "undefined") {
               rp.group.updateMatrixWorld(true);
               const rh = humanoidHitAlongRayPadded(segRay, rp.group, hitPad);
               if (rh) {
-                emitBlindHitNetwork(rpId, p.blindDuration, rh.point || p.pos);
+                emitDartSlowNetwork(rpId, p.slowDuration, rh.point || p.pos);
                 createSparks(rh.point || p.pos.clone(), 0x6bd4ff);
                 consumed = true;
                 break;
               }
             }
             if (!consumed) {
-              consumed = probeBlindDartProximityHit(p.pos, hitPad, p.blindDuration);
+              consumed = probeParalysisDartProximityHit(p.pos, hitPad, p.slowDuration);
               if (consumed) createSparks(p.pos.clone(), 0x6bd4ff);
             }
           }
@@ -11531,7 +11536,7 @@ if (typeof window !== "undefined") {
             const dyc = p.pos.y - headW.y;
             const dzc = p.pos.z - headW.z;
             if (dxc * dxc + dyc * dyc + dzc * dzc < 0.45 * 0.45) {
-              startBlindEffect(p.blindDuration);
+              startSlowEffect(p.slowDuration);
               createSparks(p.pos.clone(), 0x6bd4ff);
               consumed = true;
             }
@@ -11546,21 +11551,16 @@ if (typeof window !== "undefined") {
                 createSparks(hit.point || p.pos.clone(), 0x6bd4ff);
                 if (enemy.trainingDummy) {
                   registerTrainingHit(hit.zone || "body");
-                  startBlindEffect(Math.min(p.blindDuration || 5, 3));
+                  startSlowEffect(Math.min(p.slowDuration || 5, 3));
                 } else {
-                  enemy.blindUntil = performance.now() + (p.blindDuration || 5) * 1000;
-                  enemy.aware = false;
-                  enemy.targetId = null;
-                  enemy.retargetTimer = 0;
-                  enemy.rangedLosAcquireTimer = 0;
-                  enemy.attackCooldownTimer = Math.max(enemy.attackCooldownTimer, 0.5);
+                  applyEnemySlowDebuff(enemy, p.slowDuration);
                 }
                 consumed = true;
                 break;
               }
             }
             if (!consumed) {
-              consumed = probeBlindDartProximityHit(p.pos, hitPad, p.blindDuration);
+              consumed = probeParalysisDartProximityHit(p.pos, hitPad, p.slowDuration);
               if (consumed) createSparks(p.pos.clone(), 0x6bd4ff);
             }
           }
@@ -11613,7 +11613,7 @@ if (typeof window !== "undefined") {
         const dir = getWeaponDirection(totalSpread);
         const muzzle = new THREE.Vector3();
         getActiveMuzzleWorld(muzzle);
-        spawnBlindDartProjectile(muzzle, dir, w);
+        spawnParalysisDartProjectile(muzzle, dir, w);
         updateHud();
         return;
       }
@@ -11978,7 +11978,7 @@ if (typeof window !== "undefined") {
       const adsOffset = activeWeapon.userData.adsOffset;
 
       const targetAds = usingAds ? 1 : 0;
-      const adsSpeed = weapon().adsSpeed ?? 8;
+      const adsSpeed = (weapon().adsSpeed ?? 8) * getDartSlowAdsMult();
 
       state.adsProgress += (targetAds - state.adsProgress) * Math.min(1, dt * adsSpeed);
 
@@ -12086,7 +12086,8 @@ if (typeof window !== "undefined") {
         .applyAxisAngle(new THREE.Vector3(0, 1, 0), player.yaw);
 
       const move = new THREE.Vector3();
-      if (!healLock) {
+      const moveLocked = isPlayerSlowed();
+      if (!healLock && !moveLocked) {
         if (keys.w) move.add(forward);
         if (keys.s) move.sub(forward);
         if (keys.d) move.add(right);
@@ -12101,7 +12102,7 @@ if (typeof window !== "undefined") {
         player.position.z = resolved.z;  
       }
 
-      if (!healLock && keys.space && player.onGround) {
+      if (!healLock && !moveLocked && keys.space && player.onGround) {
         player.velocityY = 5.8;
         player.onGround = false;
       }
@@ -12727,7 +12728,7 @@ if (typeof window !== "undefined") {
             enemy.targetId = null;
             enemy.retargetTimer = 0;
             enemy.rangedLosAcquireTimer = 0;
-            enemy.blindUntil = 0;
+            enemy.slowUntil = 0;
             enemy.facingYaw = Math.random() * Math.PI * 2;
             enemy.visYaw = enemy.facingYaw;
             enemy.armLV = -0.2;
@@ -12744,25 +12745,26 @@ if (typeof window !== "undefined") {
         const dz = target.z - enemy.group.position.z;
         const dist = Math.sqrt(dx * dx + dz * dz);
 
-        const isBlinded =
-          enemy.blindUntil && performance.now() < enemy.blindUntil;
+        const isSlowed =
+          enemy.slowUntil && performance.now() < enemy.slowUntil;
 
-        if (!isBlinded && (visFrameCounter + ei) % 8 === 0) {
+        if (!isSlowed && (visFrameCounter + ei) % 8 === 0) {
           updateAwareness(enemy, dt * 8);
         }
 
         enemy.retargetTimer += dt;
-        if (!isBlinded && enemy.aware && enemy.retargetTimer >= RETARGET_INTERVAL) {
+        if (!isSlowed && enemy.aware && enemy.retargetTimer >= RETARGET_INTERVAL) {
           enemy.retargetTimer = 0;
           retargetEnemy(enemy);
         }
 
         enemy.attackCooldownTimer -= dt;
 
-        if (isBlinded) {
+        if (isSlowed) {
           enemy.aware = false;
           enemy.targetId = null;
           enemy.rangedLosAcquireTimer = 0;
+          enemy.moving = false;
           if (enemy.attackCooldownTimer < 0.3) enemy.attackCooldownTimer = 0.3;
           continue;
         }
@@ -12988,7 +12990,7 @@ if (typeof window !== "undefined") {
       updateShellCasings(dt);
       updateHitIndicators(dt);
       updateProjectiles(dt);
-      updateBlindOverlay();
+      updateSlowDebuffHud();
       const now = performance.now();
       if (!chatOpen && now - _lastChatRefresh > 1000) {
         _lastChatRefresh = now;
@@ -13466,6 +13468,7 @@ if (typeof window !== "undefined") {
       state.adsFiredWhileScoping = false;
       state.mouseDown = false;
       state.reloading = false;
+      state.slowUntil = 0;
       state.recoil = 0;
       state.spreadBloom = 0;
       state.walkPhase = 0;
