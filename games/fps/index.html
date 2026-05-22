@@ -14417,10 +14417,14 @@ if (typeof window !== "undefined") {
           if (enemy.isBoss) {
             const SPRINT_ENTER_DIST = 18;
             const SPRINT_EXIT_DIST = 8;
-            if (!enemy._bossSprinting && dist > SPRINT_ENTER_DIST) {
+            const SPRINT_CD = 30;
+            if (enemy._sprintCd === undefined) enemy._sprintCd = 0;
+            if (enemy._sprintCd > 0) enemy._sprintCd -= dt;
+            if (!enemy._bossSprinting && dist > SPRINT_ENTER_DIST && enemy._sprintCd <= 0) {
               enemy._bossSprinting = true;
             } else if (enemy._bossSprinting && dist < SPRINT_EXIT_DIST) {
               enemy._bossSprinting = false;
+              enemy._sprintCd = SPRINT_CD;
             }
           }
 
@@ -14431,10 +14435,10 @@ if (typeof window !== "undefined") {
             if (enemy._bossSprinting) {
               moveSpeed = 6.5 * (enemy.isHellBoss ? 6 : 5.5);
             }
-            const step = moveSpeed * dt;
+            const totalStep = moveSpeed * dt;
             const dLen = Math.sqrt(dx * dx + dz * dz);
-            let sx = 0;
-            let sz = 0;
+
+            let dirX = 0, dirZ = 0;
             const flow = getFlowDirection(enemy.group.position.x, enemy.group.position.z);
             let losClear = enemy._lastLosClear;
             if (losClear === undefined || (visFrameCounter + ei) % 2 === 0) {
@@ -14449,50 +14453,42 @@ if (typeof window !== "undefined") {
             }
 
             if (losClear && dLen > 0.02) {
-              const inv = 1 / dLen;
-              const fx = dx * inv;
-              const fz = dz * inv;
-              let mx = fx;
-              let mz = fz;
-              const ml = Math.hypot(mx, mz);
-              if (ml > 1e-5) {
-                mx /= ml;
-                mz /= ml;
-              }
-              sx = mx * step;
-              sz = mz * step;
+              dirX = dx / dLen;
+              dirZ = dz / dLen;
             } else if (flow) {
               const fLen = Math.sqrt(flow.x * flow.x + flow.z * flow.z);
-              if (fLen > 0.015) {
-                sx = (flow.x / fLen) * step;
-                sz = (flow.z / fLen) * step;
-              }
+              if (fLen > 0.015) { dirX = flow.x / fLen; dirZ = flow.z / fLen; }
             }
 
-            let nx = enemy.group.position.x + sx;
-            let nz = enemy.group.position.z + sz;
+            const MAX_SUB_STEP = 0.25;
+            const subSteps = Math.ceil(totalStep / MAX_SUB_STEP);
+            const subLen = totalStep / subSteps;
+            for (let si = 0; si < subSteps; si++) {
+              const sx = dirX * subLen;
+              const sz = dirZ * subLen;
+              let nx = enemy.group.position.x + sx;
+              let nz = enemy.group.position.z + sz;
 
-            if (!enemyCollidesWall(nx, nz)) {
-              enemy.group.position.x = nx;
-              enemy.group.position.z = nz;
-            } else if (!enemyCollidesWall(nx, enemy.group.position.z)) {
-              enemy.group.position.x = nx;
-            } else if (!enemyCollidesWall(enemy.group.position.x, nz)) {
-              enemy.group.position.z = nz;
-            } else if (flow) {
-              const fLen = Math.sqrt(flow.x * flow.x + flow.z * flow.z);
-              if (fLen > 0.01) {
-                sx = (flow.x / fLen) * step;
-                sz = (flow.z / fLen) * step;
-                nx = enemy.group.position.x + sx;
-                nz = enemy.group.position.z + sz;
-                if (!enemyCollidesWall(nx, nz)) {
-                  enemy.group.position.x = nx;
-                  enemy.group.position.z = nz;
-                } else if (!enemyCollidesWall(nx, enemy.group.position.z)) {
-                  enemy.group.position.x = nx;
-                } else if (!enemyCollidesWall(enemy.group.position.x, nz)) {
-                  enemy.group.position.z = nz;
+              if (!enemyCollidesWall(nx, nz)) {
+                enemy.group.position.x = nx;
+                enemy.group.position.z = nz;
+              } else if (!enemyCollidesWall(nx, enemy.group.position.z)) {
+                enemy.group.position.x = nx;
+              } else if (!enemyCollidesWall(enemy.group.position.x, nz)) {
+                enemy.group.position.z = nz;
+              } else if (flow) {
+                const fLen = Math.sqrt(flow.x * flow.x + flow.z * flow.z);
+                if (fLen > 0.01) {
+                  nx = enemy.group.position.x + (flow.x / fLen) * subLen;
+                  nz = enemy.group.position.z + (flow.z / fLen) * subLen;
+                  if (!enemyCollidesWall(nx, nz)) {
+                    enemy.group.position.x = nx;
+                    enemy.group.position.z = nz;
+                  } else if (!enemyCollidesWall(nx, enemy.group.position.z)) {
+                    enemy.group.position.x = nx;
+                  } else if (!enemyCollidesWall(enemy.group.position.x, nz)) {
+                    enemy.group.position.z = nz;
+                  }
                 }
               }
             }
