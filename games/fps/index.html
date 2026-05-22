@@ -1020,7 +1020,7 @@
       <p id="menuCreditsMusic" data-i18n="creditsMusic">Music by JimmyQrg</p>
       <button type="button" id="btnArena" data-i18n="btnZombieArena">Zombie Arena</button>
       <button type="button" id="btnTraining" data-i18n="btnTrainingCamp">Training Camp</button>
-      <button type="button" id="btnCrossfire" data-i18n="btnCrossfirePickMap">Crossfire (PVP — select map)</button>
+      <button type="button" id="btnCrossfire" data-i18n="btnCrossfire">Crossfire (PVP)</button>
       <button type="button" id="btnMenuSettings" data-i18n="menuSettings">SETTINGS</button>
     </div>
     <div id="menuArenaMode" style="display:none;flex-direction:column;align-items:center;gap:10px;">
@@ -1036,12 +1036,19 @@
       <button type="button" id="btnTrainingCoop" data-i18n="btnCoopMode">CO-OP MODE</button>
       <button type="button" id="btnTrainingBack" data-i18n="btnBack">← BACK</button>
     </div>
-    <div id="menuPvpMaps" style="display:none;flex-direction:column;align-items:center;gap:10px;">
-      <h2 style="font-family:var(--game-font-ui);font-size:24px;margin:0 0 10px 0;letter-spacing:2px;" data-i18n="pvpMapTitle">CROSSFIRE — MAP</h2>
-      <p style="font-family:var(--game-font-ui);font-size:12px;opacity:0.78;margin:0 0 8px 0;max-width:300px;text-align:center;line-height:1.45;" data-i18n="pvpMapDesc">Choose the PVP layout, then use Quick Play / Create / Join.</p>
-      <button type="button" id="btnPvpMapClassic" data-i18n="pvpMapClassic">CLASSIC (ORIGINAL)</button>
-      <button type="button" id="btnPvpMapGrid" data-i18n="pvpMapGrid">GRID KILLHOUSE</button>
-      <button type="button" id="btnPvpMapBack" data-i18n="pvpMapBack">← BACK</button>
+    <div id="menuPvpMaps" style="display:none;flex-direction:column;align-items:center;gap:14px;">
+      <h2 style="font-family:var(--game-font-ui);font-size:24px;margin:0 0 4px 0;letter-spacing:2px;" data-i18n="pvpCreateMapTitle">CREATE ROOM — SELECT MAP</h2>
+      <div style="display:flex;gap:16px;justify-content:center;flex-wrap:wrap;">
+        <button type="button" id="btnPvpMapClassic" style="display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px 12px;background:rgba(20,28,44,0.88);border:2px solid #4fd1ff;border-radius:10px;cursor:pointer;transition:border-color .2s,transform .15s;" onmouseenter="this.style.borderColor='#fff';this.style.transform='scale(1.04)'" onmouseleave="this.style.borderColor='#4fd1ff';this.style.transform='scale(1)'">
+          <canvas id="pvpPreviewClassic" width="220" height="130" style="border-radius:6px;background:#1a2233;"></canvas>
+          <span style="font-family:var(--game-font-ui);font-size:13px;letter-spacing:1px;color:#e8ecf2;" data-i18n="pvpMapClassic">CLASSIC (ORIGINAL)</span>
+        </button>
+        <button type="button" id="btnPvpMapGrid" style="display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px 12px;background:rgba(20,28,44,0.88);border:2px solid #4fd1ff;border-radius:10px;cursor:pointer;transition:border-color .2s,transform .15s;" onmouseenter="this.style.borderColor='#fff';this.style.transform='scale(1.04)'" onmouseleave="this.style.borderColor='#4fd1ff';this.style.transform='scale(1)'">
+          <canvas id="pvpPreviewGrid" width="220" height="130" style="border-radius:6px;background:#1a2233;"></canvas>
+          <span style="font-family:var(--game-font-ui);font-size:13px;letter-spacing:1px;color:#e8ecf2;" data-i18n="pvpMapGrid">GRID KILLHOUSE</span>
+        </button>
+      </div>
+      <button type="button" id="btnPvpMapBack" data-i18n="btnBack" style="margin-top:4px;">← BACK</button>
     </div>
     <div id="menuLobby" style="display:none;flex-direction:column;align-items:center;gap:10px;">
       <h2 id="lobbyTitle" style="font-family:var(--game-font-ui);font-size:24px;margin:0 0 10px 0;letter-spacing:2px;">MULTIPLAYER</h2>
@@ -4481,7 +4488,7 @@ if (typeof window !== "undefined") {
         const el = document.getElementById(elId);
         if (el) el.textContent = tr(key, el.textContent);
       }
-      if (btnCrossfire) btnCrossfire.textContent = tr("btnCrossfirePickMap", btnCrossfire.textContent);
+      if (btnCrossfire) btnCrossfire.textContent = tr("btnCrossfire", btnCrossfire.textContent);
       const menuSettingsBtn = document.getElementById("btnMenuSettings");
       const pvpTitle = document.querySelector("#menuPvpMaps h2");
       const pvpDesc = document.querySelector("#menuPvpMaps p");
@@ -4555,6 +4562,76 @@ if (typeof window !== "undefined") {
     let CURRENT_MAP = "arena";
     /** Set from PVP map picker; used when `pendingLobbyMode === "crossfire"`. */
     let PENDING_PVP_MAP = "crossfire";
+
+    function drawPvpMapPreviews() {
+      const classic = document.getElementById("pvpPreviewClassic");
+      const grid = document.getElementById("pvpPreviewGrid");
+      if (classic && !classic._drawn) {
+        const c = classic.getContext("2d");
+        const w = classic.width, h = classic.height;
+        // Dark concrete arena with atmospheric fog.
+        const sky = c.createLinearGradient(0, 0, 0, h * 0.45);
+        sky.addColorStop(0, "#1a1e2a");
+        sky.addColorStop(1, "#2c3040");
+        c.fillStyle = sky;
+        c.fillRect(0, 0, w, h * 0.45);
+        c.fillStyle = "#22272e";
+        c.fillRect(0, h * 0.45, w, h * 0.55);
+        // Walls and pillars silhouettes.
+        c.fillStyle = "#181c24";
+        c.fillRect(20, h * 0.18, 28, h * 0.55);
+        c.fillRect(70, h * 0.12, 22, h * 0.6);
+        c.fillRect(140, h * 0.22, 26, h * 0.5);
+        c.fillRect(180, h * 0.15, 20, h * 0.58);
+        // Floor grid lines.
+        c.strokeStyle = "rgba(80,95,120,0.25)";
+        c.lineWidth = 1;
+        for (let y = h * 0.5; y < h; y += 12) {
+          c.beginPath(); c.moveTo(0, y); c.lineTo(w, y); c.stroke();
+        }
+        // Atmospheric glow.
+        const glow = c.createRadialGradient(w / 2, h * 0.35, 10, w / 2, h * 0.35, 90);
+        glow.addColorStop(0, "rgba(100,140,200,0.12)");
+        glow.addColorStop(1, "rgba(0,0,0,0)");
+        c.fillStyle = glow;
+        c.fillRect(0, 0, w, h);
+        classic._drawn = true;
+      }
+      if (grid && !grid._drawn) {
+        const c = grid.getContext("2d");
+        const w = grid.width, h = grid.height;
+        // Bright textile-toned killhouse.
+        const sky = c.createLinearGradient(0, 0, 0, h * 0.45);
+        sky.addColorStop(0, "#c8d0da");
+        sky.addColorStop(1, "#a0aab8");
+        c.fillStyle = sky;
+        c.fillRect(0, 0, w, h * 0.45);
+        c.fillStyle = "#8a94a4";
+        c.fillRect(0, h * 0.45, w, h * 0.55);
+        // Grid walls.
+        c.fillStyle = "#6a7488";
+        for (let x = 30; x < w; x += 44) {
+          const wh = 20 + Math.random() * 30;
+          c.fillRect(x, h * 0.25, 16, h * 0.48);
+        }
+        // Floor grid.
+        c.strokeStyle = "rgba(60,70,90,0.3)";
+        c.lineWidth = 1;
+        for (let y = h * 0.48; y < h; y += 10) {
+          c.beginPath(); c.moveTo(0, y); c.lineTo(w, y); c.stroke();
+        }
+        for (let x = 10; x < w; x += 22) {
+          c.beginPath(); c.moveTo(x, h * 0.48); c.lineTo(x, h); c.stroke();
+        }
+        // Daylight glow.
+        const glow = c.createRadialGradient(w / 2, h * 0.2, 20, w / 2, h * 0.2, 110);
+        glow.addColorStop(0, "rgba(255,255,240,0.18)");
+        glow.addColorStop(1, "rgba(0,0,0,0)");
+        c.fillStyle = glow;
+        c.fillRect(0, 0, w, h);
+        grid._drawn = true;
+      }
+    }
     function isPvpCrossfireMap(m) {
       return m === "crossfire" || m === "crossfire_grid";
     }
@@ -12287,7 +12364,7 @@ if (typeof window !== "undefined") {
         for (const [rpId, rp] of remotePlayers) {
           if (rp.isDown || !rp.group.visible) continue;
           rp.group.updateMatrixWorld(true);
-          const rh = humanoidHitAlongRayPadded(ray, rp.group, 0.18);
+          const rh = humanoidHitAlongRayPadded(ray, rp.group, 1.45);
           if (rh && rh.t < bestRpT) {
             bestRpId = rpId;
             bestRpT = rh.t;
@@ -12307,7 +12384,7 @@ if (typeof window !== "undefined") {
         if (!enemyBlockingHits(enemy)) continue;
         enemy.group.updateMatrixWorld(true);
         const eh = enemy.trainingDummy
-          ? humanoidHitAlongRay(ray, enemy.group)
+          ? humanoidHitAlongRayPadded(ray, enemy.group, 1.45)
           : enemyHitAlongRay(ray, enemy);
         if (eh && eh.t < bestEnemyT) {
           bestEnemy = enemy;
@@ -14453,23 +14530,46 @@ if (typeof window !== "undefined") {
     );
     btnTrainingBack.addEventListener("click", () => showMenuPanel("menuMain"));
 
-    btnCrossfire.addEventListener("click", () => showMenuPanel("menuPvpMaps"));
+    btnCrossfire.addEventListener("click", () => {
+      showLobby("crossfire", tr("lobbyCrossfire", "CROSSFIRE (PVP)"));
+    });
 
     btnPvpMapClassic.addEventListener("click", () => {
       PENDING_PVP_MAP = "crossfire";
-      showLobby("crossfire", tr("lobbyCrossfireClassic", "CROSSFIRE (PVP) — CLASSIC"));
+      _doPvpCreateRoom();
     });
     btnPvpMapGrid.addEventListener("click", () => {
       PENDING_PVP_MAP = "crossfire_grid";
-      showLobby("crossfire", tr("lobbyCrossfireGrid", "CROSSFIRE (PVP) — GRID"));
+      _doPvpCreateRoom();
     });
-    btnPvpMapBack.addEventListener("click", () => showMenuPanel("menuMain"));
+    btnPvpMapBack.addEventListener("click", () => showMenuPanel("menuLobby"));
+
+    function _doPvpCreateRoom() {
+      clearLobbyErr();
+      socket.emit("createRoom", pendingLobbyMode, (res) => {
+        if (res == null) {
+          showMenuPanel("menuLobby");
+          showLobbyErr(tr("mpNoServerAck", "No response from server."));
+          return;
+        }
+        const norm = normalizeMatchAck(res);
+        if (norm.error) {
+          showMenuPanel("menuLobby");
+          showLobbyErr(norm.error);
+          return;
+        }
+        beginMultiplayerGame(lobbyMapFromPending(), { roomKey: norm.roomKey, roomCode: norm.roomCode });
+      });
+    }
 
     btnQuickplay.addEventListener("click", () => {
       clearLobbyErr();
       if (!pendingLobbyMode) {
         showLobbyErr(tr("lobbyPickModeFirst", "Choose CO-OP or a PVP map first."));
         return;
+      }
+      if (pendingLobbyMode === "crossfire") {
+        PENDING_PVP_MAP = Math.random() < 0.5 ? "crossfire" : "crossfire_grid";
       }
       socket.emit("quickplay", pendingLobbyMode, (res) => {
         if (res == null) {
@@ -14489,6 +14589,11 @@ if (typeof window !== "undefined") {
       clearLobbyErr();
       if (!pendingLobbyMode) {
         showLobbyErr(tr("lobbyPickModeFirst", "Choose CO-OP or a PVP map first."));
+        return;
+      }
+      if (pendingLobbyMode === "crossfire") {
+        drawPvpMapPreviews();
+        showMenuPanel("menuPvpMaps");
         return;
       }
       socket.emit("createRoom", pendingLobbyMode, (res) => {
@@ -14542,7 +14647,7 @@ if (typeof window !== "undefined") {
 
     btnCodeBack.addEventListener("click", () => showMenuPanel("menuLobby"));
     btnLobbyBack.addEventListener("click", () => {
-      if (pendingLobbyMode === "crossfire") showMenuPanel("menuPvpMaps");
+      if (pendingLobbyMode === "crossfire") showMenuPanel("menuMain");
       else if (pendingLobbyMode === "training-coop") showMenuPanel("menuTrainingMode");
       else showMenuPanel("menuArenaMode");
     });
