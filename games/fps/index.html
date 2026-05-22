@@ -3,7 +3,7 @@
   Deploy / GitHub Pages: https://tintly555.github.io/games/fps/ — multiplayer relay + static prefix set below.
   Self-hosted same tree: open game-self-hosted.html (empty game-multiplayer-origin, empty game-static-prefix).
   Crossfire = PVP; Arena = PVE / co-op vs zombies.
-  Build: fps-paralysis-v29
+  Build: zone-no-light-v30 (paralysis dart fix + combat knife)
 -->
 <!--
   Swap Med Kit and AMR weapon positions (4↔5) and improve lighting 让AMR和Swap Med Kit没法使用，所以退回merge versions
@@ -5018,7 +5018,7 @@ if (typeof window !== "undefined") {
       const id = String(shooterId);
       const expireAt = performance.now() + RECENT_DART_WINDOW_MS;
       recentDartShooters.set(id, { expireAt, duration: dartSlowDurationFromData({ slowDuration: durationSec }) });
-      if (window.__fpsDartDebug) console.info("[fps-paralysis-v29] noted dart shooter", id, "for", RECENT_DART_WINDOW_MS, "ms");
+      if (window.__fpsDartDebug) console.info("[zone-no-light-v30] noted dart shooter", id, "for", RECENT_DART_WINDOW_MS, "ms");
     }
     function consumeRecentDartShooter(attackerId) {
       if (attackerId == null || attackerId === "") return null;
@@ -5124,7 +5124,7 @@ if (typeof window !== "undefined") {
 
     function handleIncomingDartSlowEvent(data) {
       if (window.__fpsDartDebug) {
-        try { console.info("[fps-paralysis-v29] custom slow/blind event recv", JSON.parse(JSON.stringify(data || {}))); } catch (_) {}
+        try { console.info("[zone-no-light-v30] custom slow/blind event recv", JSON.parse(JSON.stringify(data || {}))); } catch (_) {}
       }
       const sid = extractShooterId(data);
       if (sid && sid !== String(socket.id)) {
@@ -5145,7 +5145,7 @@ if (typeof window !== "undefined") {
         if (sid && sid !== String(socket.id)) {
           noteRecentDartShooter(sid, dartSlowDurationFromData(data));
         }
-        if (window.__fpsDartDebug) console.info("[fps-paralysis-v29] shoot(dart) recv", { id: sid, type: data.type, hitKind: data.hitKind, target: data.target, color: data.color });
+        if (window.__fpsDartDebug) console.info("[zone-no-light-v30] shoot(dart) recv", { id: sid, type: data.type, hitKind: data.hitKind, target: data.target, color: data.color });
       }
       if (tryApplyDartSlowFromShootProximity(data)) {
       } else if (
@@ -5245,11 +5245,11 @@ if (typeof window !== "undefined") {
       if (!data || !socket || !gameWorldReady) return;
       if (isTrainingMap(CURRENT_MAP)) return;
       if (window.__fpsDartDebug) {
-        try { console.info("[fps-paralysis-v29] hit raw", JSON.parse(JSON.stringify(data))); } catch (_) {}
+        try { console.info("[zone-no-light-v30] hit raw", JSON.parse(JSON.stringify(data))); } catch (_) {}
       }
       if (damagedEventFromLocalShooter(data)) return;
       if (tryApplyDartSlowFromNetwork(data)) {
-        console.info("[fps-paralysis-v29] paralysis applied via hit relay");
+        if (window.__fpsDartDebug) console.info("[zone-no-light-v30] paralysis applied via hit relay");
       }
     });
 
@@ -5300,11 +5300,16 @@ if (typeof window !== "undefined") {
       const attackerId = extractShooterId(data);
       const recentDart = consumeRecentDartShooter(attackerId);
       if (window.__fpsDartDebug) {
-        try { console.info("[fps-paralysis-v29] damaged raw", JSON.parse(JSON.stringify(data)), { isMyAttack, isForMe, isPvp, attackerId, recentDartHit: !!recentDart, currentMap: CURRENT_MAP }); } catch (_) {}
+        try { console.info("[zone-no-light-v30] damaged raw", JSON.parse(JSON.stringify(data)), { isMyAttack, isForMe, isPvp, attackerId, recentDartHit: !!recentDart, currentMap: CURRENT_MAP }); } catch (_) {}
       }
-      // v29: server rewrites hitKind -> 'bullet' for everything and stamps attacker as `by`.
-      // In PvP only the paralysis dart emits damage:1 (regular weapons all deal >=10), so
-      // damage===1 is a reliable dart marker regardless of hitKind.
+      // Dart detection (see emitDartSlowNetwork header for the full server-rewrite story):
+      //   - Server rewrites hitKind -> 'bullet' on every relayed hit, so we cannot trust it.
+      //   - Server stamps the attacker as `by` (handled by extractShooterId).
+      //   - The one field the server preserves verbatim is `damage`. In PvP, ONLY the paralysis
+      //     dart emits damage:1 (knife=50, bullets=10+, AMR=220). So damage===1 in a PvP map
+      //     is a reliable magic marker for a paralysis hit.
+      //   - The shooter-correlation fallback (recentDart) covers any future server change that
+      //     might break the magic-number assumption.
       const looksLikeDart =
         !!recentDart ||
         isParalysisDartNetworkData(data) ||
@@ -5313,7 +5318,9 @@ if (typeof window !== "undefined") {
         if (isMyAttack) return;
         if (!isForMe) return;
         const dur = recentDart ? recentDart.duration : dartSlowDurationFromData(data);
-        console.info("[fps-paralysis-v29] paralysis applied via damaged", { dmg: dmgRaw, hitKind: data.hitKind, attackerId, via: recentDart ? "shooter-correlation" : (isPvp && dmgRaw === 1 ? "pvp-dmg1-marker" : "payload-fields") });
+        if (window.__fpsDartDebug) {
+          console.info("[zone-no-light-v30] paralysis applied via damaged", { dmg: dmgRaw, hitKind: data.hitKind, attackerId, via: recentDart ? "shooter-correlation" : (isPvp && dmgRaw === 1 ? "pvp-dmg1-marker" : "payload-fields") });
+        }
         startSlowEffect(dur);
         return;
       }
@@ -8369,6 +8376,8 @@ if (typeof window !== "undefined") {
       reloadStartAmmo: 0,
       slowUntil: 0,
       projectiles: [],
+      knifeComboIdx: 0,
+      lastKnifeSwing: 0,
     };
 
 
@@ -8577,6 +8586,32 @@ if (typeof window !== "undefined") {
         projectileGravity: 9.8,
         slowDuration: 5.0,
       },
+      // Slot 7 (key "0"): melee knife. Front hit = 50 dmg (2 hits to kill 100 HP), backstab = 200 dmg (one-shot).
+      // Head/body damage are intentionally identical per design. fireDelay gates swing rate.
+      {
+        name: "Knife",
+        fireDelay: 360,
+        auto: false,
+        pellets: 0,
+        spreadBase: 0,
+        spreadBloomAdd: 0,
+        spreadBloomMax: 0,
+        recover: 0,
+        recoil: 0,
+        damageHead: 50,
+        damageBody: 50,
+        damageLegs: 50,
+        color: 0xc8d2dc,
+        magSize: 1,
+        ammo: 1,
+        reloadTime: 1e9,
+        soundBase: 320,
+        adsFov: 75,
+        adsSpeed: 7.5,
+        melee: true,
+        meleeRange: 2.1,
+        meleeBackstabDamage: 200,
+      },
     ];
 
     function weaponSoundSkin() {
@@ -8612,7 +8647,7 @@ if (typeof window !== "undefined") {
         ${tr("hudGameTitleLine", "Zone No Light")}<br>
         WASD move | Space jump | R reload<br>
         Mouse aim | RMB zoom | L flashlight | Z beam small/med/wide<br>
-        Weapons: 1–4 | <b>5</b> AMR | <b>6</b> Paralysis Dart | <b>7</b> Med Kit (hold <b>F</b> or <b>LMB</b> 10s, +50 HP)<br>
+        Weapons: <b>0</b> Knife | 1–4 | <b>5</b> AMR | <b>6</b> Paralysis Dart | <b>7</b> Med Kit (hold <b>F</b> or <b>LMB</b> 10s, +50 HP)<br>
         Map: ${mapLabel}${MULTIPLAYER ? " (MP)" : ""}<br>
         Weapon: ${w.name}<br>
         ${
@@ -8626,7 +8661,9 @@ if (typeof window !== "undefined") {
                       ? " (release key/mouse)"
                       : ""
               }<br>`
-            : `Bullets: ${w.ammo} / ${w.magSize}${state.reloading ? "（Refilling...）" : ""}<br>`
+            : state.weaponIndex === 7
+              ? `Melee: front 2-hit kill | <b>backstab 1-hit kill</b><br>`
+              : `Bullets: ${w.ammo} / ${w.magSize}${state.reloading ? "（Refilling...）" : ""}<br>`
         }
         Health: ${Math.max(0, Math.floor(player.health))} / ${player.maxHealth}<br>
         ${isTrainingMap(CURRENT_MAP) ? "" : `Score: ${state.score}`}
@@ -10567,6 +10604,78 @@ if (typeof window !== "undefined") {
       return root;
     }
 
+    /**
+     * Combat knife (slot 7, key "0"). Three-level group nesting so animation transforms
+     * compose cleanly with the bob/ADS system:
+     *   root -> gun (outer; bob/ADS/scale)
+     *         -> knifePose (base held pose; never animated)
+     *         -> knife (pivot at handle/blade junction; all attack/draw animations live here)
+     * Blade and handle are ~equal length so the toss-spin rotates around a visually centered point.
+     */
+    function makeKnifeModel() {
+      const root = new THREE.Group();
+      const gun = new THREE.Group();
+      const knifePose = new THREE.Group();
+      const knife = new THREE.Group();
+
+      const mBlade = new THREE.MeshStandardMaterial({ color: 0xd8dee6, roughness: 0.28, metalness: 0.85 });
+      const mEdge = new THREE.MeshStandardMaterial({ color: 0xeef2f6, roughness: 0.22, metalness: 0.9 });
+      const mGuard = new THREE.MeshStandardMaterial({ color: 0x3a4250, roughness: 0.45, metalness: 0.7 });
+      const mGrip = new THREE.MeshStandardMaterial({ color: 0x1b1f25, roughness: 0.75, metalness: 0.18 });
+      const mGripWrap = new THREE.MeshStandardMaterial({ color: 0x2a313c, roughness: 0.65, metalness: 0.25 });
+      const mPommel = new THREE.MeshStandardMaterial({ color: 0x4a5260, roughness: 0.35, metalness: 0.8 });
+
+      // Blade: thin tapered slab, ~0.22 long; extends along -Z from pivot.
+      const blade = new THREE.Mesh(new THREE.BoxGeometry(0.028, 0.006, 0.22), mBlade);
+      blade.position.set(0, 0, -0.11);
+      knife.add(blade);
+      const bladeEdge = new THREE.Mesh(new THREE.BoxGeometry(0.034, 0.003, 0.21), mEdge);
+      bladeEdge.position.set(0, -0.0025, -0.115);
+      knife.add(bladeEdge);
+      const bladeTip = new THREE.Mesh(new THREE.ConeGeometry(0.014, 0.05, 6), mBlade);
+      bladeTip.rotation.x = -Math.PI / 2;
+      bladeTip.position.set(0, 0, -0.245);
+      knife.add(bladeTip);
+
+      // Crossguard sits exactly at the junction (the visual + math pivot).
+      const guard = new THREE.Mesh(new THREE.BoxGeometry(0.062, 0.022, 0.018), mGuard);
+      guard.position.set(0, 0, 0);
+      knife.add(guard);
+
+      // Handle: ~0.20 long including pommel; extends along +Z from pivot.
+      const grip = new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.026, 0.18), mGrip);
+      grip.position.set(0, 0, 0.10);
+      knife.add(grip);
+      for (let i = 0; i < 4; i++) {
+        const wrap = new THREE.Mesh(new THREE.BoxGeometry(0.030, 0.030, 0.014), mGripWrap);
+        wrap.position.set(0, 0, 0.04 + i * 0.04);
+        knife.add(wrap);
+      }
+      const pommel = new THREE.Mesh(new THREE.BoxGeometry(0.034, 0.034, 0.022), mPommel);
+      pommel.position.set(0, 0, 0.198);
+      knife.add(pommel);
+
+      // Base pose tilt lives on knifePose so the per-frame gun.rotation override doesn't wipe it.
+      knifePose.rotation.set(-0.08, 0, 0);
+      knifePose.add(knife);
+      gun.add(knifePose);
+      gun.position.set(0.22, -0.20, -0.55);
+      gun.rotation.y = 0.18; // viewAnim only writes rotation.x / rotation.z, so Y survives.
+
+      const muzzleNode = new THREE.Object3D();
+      muzzleNode.position.set(0, 0, -0.25);
+      knife.add(muzzleNode);
+      root.userData.muzzleNode = muzzleNode;
+
+      root.add(gun);
+      root.userData.gun = gun;
+      root.userData.basePos = gun.position.clone();
+      root.userData.adsOffset = new THREE.Vector3(0, 0, 0);
+      root.userData.knifeGroup = knife;
+      root.userData.knifePose = knifePose;
+      return root;
+    }
+
     const weaponModels = [
       makeWeaponModel(0),
       makeWeaponModel(1),
@@ -10575,6 +10684,7 @@ if (typeof window !== "undefined") {
       makeMedKitModel(),
       makeWeaponModel(5),
       makeBlindDartModel(),
+      makeKnifeModel(),
     ];
 
     weaponModels.forEach((w, i) => {
@@ -11019,6 +11129,52 @@ if (typeof window !== "undefined") {
       } else if (wi === 4 && rp > 0) {
         offY = -0.05 * Math.sin(rp * Math.PI);
         rotZ = -0.25 * Math.sin(rp * Math.PI);
+      } else if (wi === 7) {
+        // Knife: drive the inner `knifeGroup` so the gun outer group still respects bob/etc.
+        const knife = ud.knifeGroup;
+        if (knife) {
+          knife.position.set(0, 0, 0);
+          knife.rotation.set(0, 0, 0);
+        }
+        if (act === "knifeDraw" && knife) {
+          // Toss up, spin 2 rotations around X (pivot at handle/blade junction = local origin), catch.
+          // Lift: parabolic sin envelope. Spin: linear 0 -> 4π over the active phase, then settle.
+          const lift = Math.sin(t * Math.PI) * 0.42;
+          knife.position.y = lift;
+          knife.position.z = -Math.sin(t * Math.PI) * 0.18;
+          const spinPhase = THREE.MathUtils.smoothstep(t, 0.05, 0.92);
+          knife.rotation.x = -spinPhase * Math.PI * 4;
+          // Hand recoils slightly while the knife is airborne.
+          offY = -0.04 * Math.sin(t * Math.PI);
+        } else if (act === "knifeSlashL" && knife) {
+          // Left slash: knife sweeps from upper-right to lower-left across the view.
+          // Phase shape: wind-up (0..0.25) -> swing peak (0.25..0.6) -> recover (0.6..1).
+          const swing = Math.sin(THREE.MathUtils.clamp(t, 0, 1) * Math.PI);
+          knife.rotation.z = THREE.MathUtils.lerp(-0.55, 1.05, t);
+          knife.rotation.x = -0.25 + 0.35 * swing;
+          knife.rotation.y = THREE.MathUtils.lerp(0.18, -0.55, t);
+          knife.position.x = THREE.MathUtils.lerp(0.06, -0.06, t);
+          knife.position.z = -0.14 * swing;
+          knife.position.y = 0.04 * swing;
+        } else if (act === "knifeSlashR" && knife) {
+          // Right slash: mirror of left.
+          const swing = Math.sin(THREE.MathUtils.clamp(t, 0, 1) * Math.PI);
+          knife.rotation.z = THREE.MathUtils.lerp(0.55, -1.05, t);
+          knife.rotation.x = -0.25 + 0.35 * swing;
+          knife.rotation.y = THREE.MathUtils.lerp(-0.18, 0.55, t);
+          knife.position.x = THREE.MathUtils.lerp(-0.06, 0.06, t);
+          knife.position.z = -0.14 * swing;
+          knife.position.y = 0.04 * swing;
+        } else if (act === "knifeThrust" && knife) {
+          // Straight stab: pull back briefly, then thrust forward, then settle.
+          let thrustZ = 0;
+          if (t < 0.22) thrustZ = 0.05 * (t / 0.22);
+          else if (t < 0.5) thrustZ = 0.05 - (t - 0.22) / 0.28 * 0.30;
+          else thrustZ = -0.25 + (t - 0.5) / 0.50 * 0.25;
+          knife.position.z = thrustZ;
+          knife.rotation.x = -0.05 - 0.10 * Math.sin(t * Math.PI);
+          knife.rotation.y = 0.04 * Math.sin(t * Math.PI);
+        }
       }
 
       return { offX, offY, offZ, rotX, rotZ };
@@ -11038,11 +11194,19 @@ if (typeof window !== "undefined") {
       weaponModels.forEach((w, i) => {
         w.visible = i === index;
       });
+      // Knife draw animation: toss into air, spin 2 full rotations around the handle/blade
+      // junction, catch back in hand. ~650ms total feels punchy without being fiddly.
+      if (state.weaponIndex === 7 && prev !== 7) {
+        state.weaponAction = "knifeDraw";
+        state.weaponActionDur = 650;
+        state.weaponActionStart = performance.now();
+        state.knifeComboIdx = 0;
+      }
       updateHud();
     }
 
     function startReload() {
-      if (state.weaponIndex === 4) return;
+      if (state.weaponIndex === 4 || state.weaponIndex === 7) return;
       const w = weapon();
       if (state.reloading) return;
       if (w.ammo >= w.magSize) return;
@@ -11122,6 +11286,7 @@ if (typeof window !== "undefined") {
       if (k === "5") setWeapon(5);
       if (k === "6") setWeapon(6);
       if (k === "7") setWeapon(4);
+      if (k === "0") setWeapon(7);
       if (k === "r") startReload();
       if (k === "v" || e.code === "KeyV") {
         keys.v = true;
@@ -11502,9 +11667,9 @@ if (typeof window !== "undefined") {
       return isPlayerSlowed() ? DART_SLOW_RELOAD_MULT : 1;
     }
 
-    console.info("[fps-paralysis-v29] loaded - PvP damage===1 marker (server rewrites hitKind to 'bullet', stamps attacker as 'by'). Set window.__fpsDartDebug=false to silence diagnostic logs.");
+    console.info("[zone-no-light-v30] loaded — paralysis dart networking (PvP damage===1 marker) + combat knife (slot 7, key '0'). Set window.__fpsDartDebug=true to re-enable dart diagnostic logs.");
     if (typeof window !== "undefined" && window.__fpsDartDebug === undefined) {
-      window.__fpsDartDebug = true;
+      window.__fpsDartDebug = false;
     }
     function startSlowEffect(durationSec) {
       const dur = Math.max(0.5, durationSec || 5.0);
@@ -11542,48 +11707,44 @@ if (typeof window !== "undefined") {
       enemy.attackCooldownTimer = Math.max(enemy.attackCooldownTimer, dur);
     }
 
+    /**
+     * Paralysis dart network emit.
+     *
+     * Server contract (discovered the hard way during v25-v29 debugging):
+     *  - The relay server normalizes every "hit" event into a fixed schema before forwarding:
+     *      { by: <attacker_socket_id>, damage: <num>, x, z, hitKind: 'bullet' }
+     *  - Custom fields (hitKind: "dartSlow", slowDuration, slow, weapon, weaponIndex, target,
+     *    attacker, shooter, from, ...) are ALL stripped.
+     *  - hitKind is rewritten to 'bullet' for any hit, regardless of what we sent.
+     *  - Damage value IS preserved (this is the one field we can rely on).
+     *  - Custom events like "playerSlow", "dartSlow", "playerBlind", "blind" are NOT relayed
+     *    at all (server only knows about hit/shoot/move/chat/etc.). We tried — they're silent.
+     *
+     * Magic damage convention:
+     *  - damage === 1 in a PvP map = paralysis dart (no other weapon emits 1 dmg).
+     *  - The victim's damaged handler keys off this and applies slow without HP loss.
+     *  - Knife and bullets all deal >= 50 so there's no collision.
+     *
+     * shoot event: we also emit a "shoot" with type:"dartSlow" so the visual tracer renders
+     * cyan on the victim's side. The server preserves enough of the shoot payload (color, type)
+     * for the proximity-based fallback in `tryApplyDartSlowFromShootProximity` to fire too.
+     */
     function emitDartSlowNetwork(targetId, durationSec, hitPoint, muzzleOpt) {
       if (!MULTIPLAYER || !socket || targetId == null) return;
       const dur = Math.max(0.5, durationSec || 5.0);
       const hx = hitPoint && hitPoint.x != null ? hitPoint.x : player.position.x;
       const hy = hitPoint && hitPoint.y != null ? hitPoint.y : player.position.y + 1.12;
       const hz = hitPoint && hitPoint.z != null ? hitPoint.z : player.position.z;
-      if (window.__fpsDartDebug !== false) {
-        console.info("[fps-paralysis-v29][SHOOTER] emitting dart hit/shoot", { target: String(targetId), dur, mySocketId: socket.id, currentMap: CURRENT_MAP, isPvp: isPvpCrossfireMap(CURRENT_MAP) });
+      if (window.__fpsDartDebug) {
+        console.info("[zone-no-light-v30][SHOOTER] emitting dart hit/shoot", { target: String(targetId), dur, mySocketId: socket.id, currentMap: CURRENT_MAP, isPvp: isPvpCrossfireMap(CURRENT_MAP) });
       }
-      const payload = {
-        target: targetId,
-        targetId,
-        slowTarget: targetId,
-        duration: dur,
-        slowDuration: dur,
-        hitKind: "dartSlow",
-        x: hx,
-        y: hy,
-        z: hz,
-        attacker: socket.id,
-        shooter: socket.id,
-      };
-      socket.emit("playerSlow", payload);
-      socket.emit("dartSlow", payload);
-      socket.emit("playerBlind", payload);
-      socket.emit("blind", payload);
-      // Relay via standard hit/damaged channel: 1 chip dmg in PvP = paralysis dart.
+      // Standard hit/damaged channel: damage:1 is our magic marker (see header comment).
       socket.emit("hit", {
         target: targetId,
-        targetId,
         damage: 1,
         x: hx,
-        y: hy,
         z: hz,
-        hitKind: "dartSlow",
-        slowDuration: dur,
-        slow: true,
-        weaponIndex: 6,
-        weapon: 6,
-        attacker: socket.id,
-        shooter: socket.id,
-        from: socket.id,
+        hitKind: "dartSlow", // server strips this; receiver detects via damage===1
       });
       const muzzle = muzzleOpt && muzzleOpt.isVector3
         ? muzzleOpt
@@ -11593,11 +11754,9 @@ if (typeof window !== "undefined") {
         : new THREE.Vector3(hx, hy, hz);
       emitShootNetwork(muzzle, end, 0x6bd4ff, "dartSlow", {
         target: targetId,
-        targetId,
         slowTarget: targetId,
         slowDuration: dur,
         hitKind: "dartSlow",
-        attacker: socket.id,
       });
     }
 
@@ -11832,12 +11991,152 @@ if (typeof window !== "undefined") {
       }
     }
 
+    /**
+     * Knife backstab detection. Returns true if the attacker (local player) is in the rear
+     * cone of `victimYaw`. Uses a 0.30 dot threshold (~72° behind cone) — generous enough
+     * that side-flanks count as backstab, strict enough that head-on charges don't.
+     */
+    function isBackstabOnYaw(victimX, victimZ, victimYaw) {
+      const fwdX = -Math.sin(victimYaw);
+      const fwdZ = -Math.cos(victimYaw);
+      const dx = victimX - player.position.x;
+      const dz = victimZ - player.position.z;
+      const len = Math.hypot(dx, dz) || 1;
+      const dot = (fwdX * dx + fwdZ * dz) / len;
+      return dot > 0.30;
+    }
+
+    /**
+     * Knife swing: short-range raycast from camera, pick closest remote player or enemy,
+     * apply damage (front: weapon body damage; backstab: weapon.meleeBackstabDamage = one-shot).
+     * Head/body damage are intentionally equal per design — zone is ignored for the dmg value.
+     */
+    function performKnifeAttack(w) {
+      const range = w.meleeRange || 2.0;
+      const dir = getWeaponDirection(0);
+      const ray = new THREE.Raycaster(camera.position, dir, 0.02, range);
+      ray.camera = camera;
+
+      let bestRpId = null;
+      let bestRpT = Infinity;
+      let bestRpPoint = null;
+      let bestRpYaw = 0;
+      let bestRpX = 0;
+      let bestRpZ = 0;
+      if (MULTIPLAYER && !ARENA_COOP && !isTrainingMap(CURRENT_MAP)) {
+        for (const [rpId, rp] of remotePlayers) {
+          if (rp.isDown || !rp.group.visible) continue;
+          rp.group.updateMatrixWorld(true);
+          const rh = humanoidHitAlongRayPadded(ray, rp.group, 0.18);
+          if (rh && rh.t < bestRpT) {
+            bestRpId = rpId;
+            bestRpT = rh.t;
+            bestRpPoint = rh.point || null;
+            bestRpYaw = rp.yaw || 0;
+            bestRpX = rp.x ?? rp.group.position.x;
+            bestRpZ = rp.z ?? rp.group.position.z;
+          }
+        }
+      }
+
+      let bestEnemy = null;
+      let bestEnemyT = Infinity;
+      let bestEnemyPoint = null;
+      let bestEnemyZone = "body";
+      for (const enemy of state.enemies) {
+        if (!enemyBlockingHits(enemy)) continue;
+        enemy.group.updateMatrixWorld(true);
+        const eh = enemy.trainingDummy
+          ? humanoidHitAlongRay(ray, enemy.group)
+          : enemyHitAlongRay(ray, enemy);
+        if (eh && eh.t < bestEnemyT) {
+          bestEnemy = enemy;
+          bestEnemyT = eh.t;
+          bestEnemyPoint = _ehHitWorld.copy(ray.ray.origin).addScaledVector(ray.ray.direction, eh.t).clone();
+          bestEnemyZone = eh.zone || "body";
+        }
+      }
+
+      const rpDist = bestRpId != null ? bestRpT : Infinity;
+      const enemyDist = bestEnemy ? bestEnemyT : Infinity;
+      if (rpDist === Infinity && enemyDist === Infinity) return;
+
+      if (rpDist <= enemyDist && bestRpId != null) {
+        const isBack = isBackstabOnYaw(bestRpX, bestRpZ, bestRpYaw);
+        const dmg = isBack ? (w.meleeBackstabDamage || 200) : w.damageBody;
+        const bp = bestRpPoint || _ehHitWorld.copy(ray.ray.origin).addScaledVector(ray.ray.direction, bestRpT).clone();
+        createBlood(bp);
+        triggerHitFeedback(isBack, false);
+        if (MULTIPLAYER) {
+          socket.emit("hit", {
+            target: bestRpId,
+            damage: dmg,
+            x: player.position.x,
+            z: player.position.z,
+            hitKind: "melee",
+          });
+        }
+        const rpVictim = remotePlayers.get(bestRpId);
+        if (rpVictim) {
+          rpVictim.hpEstimate = Math.max(0, (rpVictim.hpEstimate ?? 100) - dmg);
+          if (rpVictim.hpEstimate <= 0 && !rpVictim.isDown) {
+            rpVictim.isDown = true;
+            rpVictim.downAt = performance.now();
+            spawnHumanoidDissolve(rpVictim.group, bp.clone ? bp.clone() : bp);
+            rpVictim.group.visible = false;
+            state.score += 1;
+            showCombatFeedback(isBack ? tr("combatBackstab", "BACKSTAB!") : tr("combatKill", "KILL!"), "#ff5050", 0.34);
+            createSparks(bp.clone ? bp.clone() : bp, 0xff5555);
+          }
+        }
+        return;
+      }
+
+      if (bestEnemy) {
+        const bp = bestEnemyPoint || _ehHitWorld.copy(ray.ray.origin).addScaledVector(ray.ray.direction, bestEnemyT).clone();
+        createBlood(bp);
+        if (bestEnemy.trainingDummy) {
+          registerTrainingHit(bestEnemyZone);
+          playTrainingDummyHitDissolve(bestEnemy, bp);
+          updateHud();
+          return;
+        }
+        triggerHitFeedback(false, false);
+        applyDamage(bestEnemy, bestEnemyZone, w);
+        if (bestEnemy.hp <= 0 && bestEnemy.alive) {
+          bestEnemy.alive = false;
+          bestEnemy.respawnTimer = 3.0;
+          bestEnemy.dissolveTimer = DISSOLVE_DURATION + 0.12;
+          spawnHumanoidDissolve(bestEnemy.group, bp);
+          bestEnemy.group.visible = false;
+          state.score += 1;
+          triggerHitFeedback(true, false);
+          createSparks(bp.clone ? bp.clone() : bp, 0xff5555);
+        }
+      }
+    }
+
     function tryShoot() {
       if (!gameWorldReady || paused || player.health <= 0) return;
       if (state.weaponIndex === 4) return;
       const now = performance.now();
       const w = weapon();
       const shootingAds = (state.ads || keys.shift) && !state.reloading && player.health > 0;
+
+      // Knife: melee swing. Cycle left -> right -> thrust. Damage is applied at swing start
+      // (standard FPS feel); animation is purely cosmetic feedback.
+      if (state.weaponIndex === 7) {
+        if (now - state.lastKnifeSwing < w.fireDelay) return;
+        state.lastKnifeSwing = now;
+        const combo = state.knifeComboIdx % 3;
+        state.knifeComboIdx = (state.knifeComboIdx + 1) % 3;
+        state.weaponAction = combo === 0 ? "knifeSlashL" : combo === 1 ? "knifeSlashR" : "knifeThrust";
+        state.weaponActionDur = combo === 2 ? 320 : 280;
+        state.weaponActionStart = now;
+        performKnifeAttack(w);
+        updateHud();
+        return;
+      }
 
       if (state.reloading) return;
       if (w.ammo <= 0) {
@@ -12188,7 +12487,8 @@ if (typeof window !== "undefined") {
         !state.reloading &&
         player.health > 0 &&
         state.weaponIndex !== 3 &&
-        state.weaponIndex !== 4;
+        state.weaponIndex !== 4 &&
+        state.weaponIndex !== 7;
         
       let bobX = 0;
       let bobY = 0;
