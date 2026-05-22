@@ -8590,7 +8590,7 @@ if (typeof window !== "undefined") {
       // Head/body damage are intentionally identical per design. fireDelay gates swing rate.
       {
         name: "Knife",
-        fireDelay: 360,
+        fireDelay: 240,
         auto: false,
         pellets: 0,
         spreadBase: 0,
@@ -10658,6 +10658,44 @@ if (typeof window !== "undefined") {
       // Base pose tilt lives on knifePose so the per-frame gun.rotation override doesn't wipe it.
       knifePose.rotation.set(-0.08, 0, 0);
       knifePose.add(knife);
+
+      // First-person hand/forearm placed to the right of the knife handle. Attached to
+      // knifePose (NOT to knife) so the spinning toss-animation on `knife` doesn't drag the
+      // arm into anatomically broken rotations. We sync the arm's POSITION to the knife
+      // per frame in applyWeaponHandsAnim so the hand still "follows" the knife around.
+      const arm = new THREE.Group();
+      arm.name = "knifeArm";
+      const mSkin = new THREE.MeshStandardMaterial({ color: 0xe0b890, roughness: 0.72, metalness: 0.05 });
+      const mSleeve = new THREE.MeshStandardMaterial({ color: 0x2a313c, roughness: 0.78, metalness: 0.18 });
+      const mCuff = new THREE.MeshStandardMaterial({ color: 0x141821, roughness: 0.85, metalness: 0.1 });
+
+      // Fist: chunky block, oriented Z-forward so fingers wrap around the handle axis.
+      const fist = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.055, 0.08), mSkin);
+      fist.position.set(0, 0, 0);
+      arm.add(fist);
+      // Thumb wrap pokes left toward the knife handle so it reads as "gripping" the blade.
+      const thumb = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.028, 0.028), mSkin);
+      thumb.position.set(-0.026, 0.008, -0.012);
+      arm.add(thumb);
+      // Knuckle ridge for visual weight on the top of the fist.
+      const knuckles = new THREE.Mesh(new THREE.BoxGeometry(0.052, 0.012, 0.06), mSkin);
+      knuckles.position.set(0, 0.034, 0.006);
+      arm.add(knuckles);
+      // Cuff between fist and forearm.
+      const cuff = new THREE.Mesh(new THREE.BoxGeometry(0.062, 0.062, 0.022), mCuff);
+      cuff.position.set(0.008, -0.005, 0.052);
+      arm.add(cuff);
+      // Forearm extends back-right-down, off toward the off-screen shoulder.
+      const forearm = new THREE.Mesh(new THREE.CylinderGeometry(0.030, 0.026, 0.34, 10), mSleeve);
+      forearm.rotation.set(Math.PI / 2 - 0.18, 0.22, 0);
+      forearm.position.set(0.06, -0.045, 0.20);
+      arm.add(forearm);
+
+      // Place the arm just to the right of the knife handle (knife handle is around z = +0.10
+      // in `knife` local space, x = 0). Offset +X puts the fist on the right side of the blade.
+      arm.position.set(0.032, -0.004, 0.10);
+      knifePose.add(arm);
+
       gun.add(knifePose);
       gun.position.set(0.22, -0.20, -0.55);
       gun.rotation.y = 0.18; // viewAnim only writes rotation.x / rotation.z, so Y survives.
@@ -10673,6 +10711,8 @@ if (typeof window !== "undefined") {
       root.userData.adsOffset = new THREE.Vector3(0, 0, 0);
       root.userData.knifeGroup = knife;
       root.userData.knifePose = knifePose;
+      root.userData.knifeArm = arm;
+      root.userData.knifeArmBasePos = arm.position.clone();
       return root;
     }
 
@@ -11131,7 +11171,12 @@ if (typeof window !== "undefined") {
         rotZ = -0.25 * Math.sin(rp * Math.PI);
       } else if (wi === 7) {
         // Knife: drive the inner `knifeGroup` so the gun outer group still respects bob/etc.
+        // The hand/arm (knifeArm) lives one level up in knifePose and follows knife.position
+        // only (no rotation inheritance) so the fist tracks the blade through tosses and
+        // slashes without spinning anatomically-incorrectly during the draw animation.
         const knife = ud.knifeGroup;
+        const arm = ud.knifeArm;
+        const armBase = ud.knifeArmBasePos;
         if (knife) {
           knife.position.set(0, 0, 0);
           knife.rotation.set(0, 0, 0);
@@ -11174,6 +11219,15 @@ if (typeof window !== "undefined") {
           knife.position.z = thrustZ;
           knife.rotation.x = -0.05 - 0.10 * Math.sin(t * Math.PI);
           knife.rotation.y = 0.04 * Math.sin(t * Math.PI);
+        }
+        // Sync arm position to track the knife's translation (but leave arm rotation locked
+        // to its base — see the makeKnifeModel header for why).
+        if (arm && armBase && knife) {
+          arm.position.set(
+            armBase.x + knife.position.x,
+            armBase.y + knife.position.y,
+            armBase.z + knife.position.z
+          );
         }
       }
 
@@ -12076,18 +12130,14 @@ if (typeof window !== "undefined") {
             hitKind: "melee",
           });
         }
-        const rpVictim = remotePlayers.get(bestRpId);
-        if (rpVictim) {
-          rpVictim.hpEstimate = Math.max(0, (rpVictim.hpEstimate ?? 100) - dmg);
-          if (rpVictim.hpEstimate <= 0 && !rpVictim.isDown) {
-            rpVictim.isDown = true;
-            rpVictim.downAt = performance.now();
-            spawnHumanoidDissolve(rpVictim.group, bp.clone ? bp.clone() : bp);
-            rpVictim.group.visible = false;
-            state.score += 1;
-            showCombatFeedback(isBack ? tr("combatBackstab", "BACKSTAB!") : tr("combatKill", "KILL!"), "#ff5050", 0.34);
-            createSparks(bp.clone ? bp.clone() : bp, 0xff5555);
-          }
+        // Backstab is reliably one-shot (200 dmg >> 100 max HP), so show the local KILL feedback
+        // and credit the score immediately. For regular 50-dmg hits we let the server's `playerDown`
+        // event drive the dissolve/visibility — local kill prediction was hiding still-alive victims
+        // and breaking subsequent raycasts (the "只能打一下 + 特别卡" bug).
+        if (isBack) {
+          state.score += 1;
+          showCombatFeedback(tr("combatBackstab", "BACKSTAB!"), "#ff5050", 0.34);
+          createSparks(bp.clone ? bp.clone() : bp, 0xff5555);
         }
         return;
       }
