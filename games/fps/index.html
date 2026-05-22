@@ -8588,10 +8588,13 @@ if (typeof window !== "undefined") {
       },
       // Slot 7 (key "0"): melee knife. Front hit = 50 dmg (2 hits to kill 100 HP), backstab = 200 dmg (one-shot).
       // Head/body damage are intentionally identical per design. fireDelay gates swing rate.
+      // auto: true so holding LMB keeps cycling left/right/thrust — players don't have to
+      // re-click for each swing. fireDelay (380ms) is tuned to roughly match the strike phase
+      // of the animation so swings overlap cleanly with the recover phase.
       {
         name: "Knife",
-        fireDelay: 240,
-        auto: false,
+        fireDelay: 380,
+        auto: true,
         pellets: 0,
         spreadBase: 0,
         spreadBloomAdd: 0,
@@ -10730,53 +10733,48 @@ if (typeof window !== "undefined") {
       stud.position.set(0.022, 0.014, 0.058);
       arm.add(stud);
 
-      // FOREARM: comes UP from below-right into the wrist. The tilted sleeve group makes
-      // the elbow sit off-screen at bottom-right rather than straight back, which looks
-      // way more natural than a horizontal extension.
+      // FOREARM: drops almost straight DOWN from the wrist so the elbow exits the bottom of
+      // the screen, not the side. Tiny outward Y (0.08) and small bank Z (0.05) give the
+      // pose a natural, non-stiff feel without making it look like arm-wrestling.
       const forearmGroup = new THREE.Group();
-      forearmGroup.position.set(0.018, -0.012, 0.078);
-      forearmGroup.rotation.order = "YXZ";
-      // X = tilt forearm DOWN toward the lower-right (positive X tilts +Z down)
-      // Y = swing forearm outward to the right
-      // Z = small bank for natural look
-      forearmGroup.rotation.set(0.62, 0.42, 0.05);
+      forearmGroup.position.set(0.004, -0.010, 0.080);
+      forearmGroup.rotation.order = "XYZ";
+      forearmGroup.rotation.set(0.95, 0.08, 0.05);
       arm.add(forearmGroup);
 
-      const forearmMain = new THREE.Mesh(new THREE.BoxGeometry(0.078, 0.082, 0.36), mKnifeSleeve);
-      forearmMain.position.set(0, 0, 0.20);
+      // Shorter forearm (0.28 instead of 0.36) — the elbow exits the screen quickly, so a
+      // long sleeve just looks like a brick out of frame. Cuff + a stubby sleeve reads as
+      // a real arm without anatomically-wrong proportions in the small screen space we get.
+      const forearmMain = new THREE.Mesh(new THREE.BoxGeometry(0.078, 0.082, 0.28), mKnifeSleeve);
+      forearmMain.position.set(0, 0, 0.16);
       forearmGroup.add(forearmMain);
-      // Darker camo stripe along the top.
-      const camoStripe = new THREE.Mesh(new THREE.BoxGeometry(0.080, 0.022, 0.24), mKnifeSleeveD);
-      camoStripe.position.set(0, 0.032, 0.20);
+      const camoStripe = new THREE.Mesh(new THREE.BoxGeometry(0.080, 0.022, 0.20), mKnifeSleeveD);
+      camoStripe.position.set(0, 0.032, 0.16);
       forearmGroup.add(camoStripe);
-      // Two cargo straps wrapped around the forearm.
       const strap1 = new THREE.Mesh(new THREE.BoxGeometry(0.082, 0.086, 0.014), mKnifeStrap);
-      strap1.position.set(0, 0, 0.11);
+      strap1.position.set(0, 0, 0.09);
       forearmGroup.add(strap1);
       const strap2 = strap1.clone();
-      strap2.position.z = 0.29;
+      strap2.position.z = 0.23;
       forearmGroup.add(strap2);
-      // Elbow pad at the back end of the forearm.
-      const elbowPad = new THREE.Mesh(new THREE.BoxGeometry(0.086, 0.090, 0.062), mKnifePad);
-      elbowPad.position.set(0, 0, 0.40);
+      const elbowPad = new THREE.Mesh(new THREE.BoxGeometry(0.086, 0.090, 0.054), mKnifePad);
+      elbowPad.position.set(0, 0, 0.32);
       forearmGroup.add(elbowPad);
-      const elbowStitch = new THREE.Mesh(new THREE.BoxGeometry(0.090, 0.014, 0.064), mKnifeStrap);
-      elbowStitch.position.set(0, 0.040, 0.40);
-      forearmGroup.add(elbowStitch);
 
-      // Place arm so the fist wraps the knife handle (handle ~ z=+0.10 in knife local space).
-      arm.position.set(0.020, -0.004, 0.108);
+      // Place arm so the fist wraps the knife handle.
+      arm.position.set(0.014, -0.004, 0.108);
       swing.add(arm);
 
       knifePose.add(swing);
-      // Base held pose: slight downward tilt on the whole knife-and-arm unit so the held
-      // knife rests in a natural saber-grip ready stance rather than pointing dead-level.
-      knifePose.rotation.set(-0.18, -0.06, -0.05);
+      // Base held pose: slight downward tip + slight inward turn so the knife reads as
+      // "carried, ready", not "presented for inspection".
+      knifePose.rotation.set(-0.10, -0.04, -0.08);
 
       gun.add(knifePose);
-      // Held position: lower-right of view, blade pointing forward into the world.
-      gun.position.set(0.20, -0.18, -0.50);
-      gun.rotation.y = 0.14; // viewAnim only writes rotation.x / rotation.z, so Y survives.
+      // Held position: lower-right of view. gun.rotation.y kept very small so the arm
+      // doesn't fan out to the side (that was the "arm wrestling" look).
+      gun.position.set(0.18, -0.18, -0.50);
+      gun.rotation.y = 0.04;
 
       const muzzleNode = new THREE.Object3D();
       muzzleNode.position.set(0, 0, -0.25);
@@ -11285,117 +11283,115 @@ if (typeof window !== "undefined") {
             arm.position.set(armBase.x, armBase.y + knife.position.y, armBase.z + knife.position.z);
           }
         } else if (act === "knifeSlashL" && swingGrp) {
-          // LEFT CHOP: arm raises overhead-right (wind-up), then ARM swings across body
-          // from upper-right down to lower-left. The whole `swing` group rotates from the
-          // shoulder — big arcs, dramatic motion, no wrist flicks.
-          //   wind-up (0.00..0.22): rotate UP-RIGHT (-X = raise; +Z = lean right; +Y = face out)
-          //   strike  (0.22..0.55): easeOutQuart snap DOWN-LEFT (+X = chop; -Z = lean left)
-          //   recover (0.55..1.00): easeOutCubic settle back
+          // LEFT CHOP: arm raises overhead-RIGHT, then sweeps DOWN across body to lower-LEFT.
+          // Phase split is tuned so the recover phase is visibly LONG (58% of the animation)
+          // — players need to actually SEE the arm return to rest, not have it teleport back.
+          //   wind-up (0.00..0.20): rotate UP-RIGHT, big anticipation
+          //   strike  (0.20..0.42): easeOutQuart snap DOWN-LEFT (the chop)
+          //   recover (0.42..1.00): easeOutCubic settle back, visible follow-through
           let sxRot, syRot, szRot, sxPos, syPos, szPos;
-          if (t < 0.22) {
-            const u = t / 0.22;
+          if (t < 0.20) {
+            const u = t / 0.20;
             const e = u * u * (3 - 2 * u);
-            sxRot = -0.55 * e;  // raise (back-up)
-            syRot = 0.30 * e;   // turn out right
-            szRot = 0.45 * e;   // lean right
-            sxPos = 0.10 * e;   // arm moves right
-            syPos = 0.16 * e;   // arm raises up
-            szPos = 0;
-          } else if (t < 0.55) {
-            const u = (t - 0.22) / 0.33;
+            sxRot = -0.75 * e;   // raise overhead
+            syRot = 0.35 * e;    // turn out right
+            szRot = 0.55 * e;    // lean right
+            sxPos = 0.12 * e;    // arm moves right
+            syPos = 0.20 * e;    // arm raises high
+            szPos = 0.04 * e;    // slight pull back
+          } else if (t < 0.42) {
+            const u = (t - 0.20) / 0.22;
             const e = 1 - Math.pow(1 - u, 4);
-            sxRot = THREE.MathUtils.lerp(-0.55, 0.95, e);  // chop down
-            syRot = THREE.MathUtils.lerp(0.30, -0.55, e);  // sweep facing left
-            szRot = THREE.MathUtils.lerp(0.45, -1.05, e);  // bank hard left
-            sxPos = THREE.MathUtils.lerp(0.10, -0.22, e);  // arm sweeps to left
-            syPos = THREE.MathUtils.lerp(0.16, -0.14, e);  // arm drops below rest
-            szPos = -0.18 * Math.sin(u * Math.PI);          // forward extension at peak
+            sxRot = THREE.MathUtils.lerp(-0.75, 1.05, e);   // chop down
+            syRot = THREE.MathUtils.lerp(0.35, -0.65, e);   // sweep facing left
+            szRot = THREE.MathUtils.lerp(0.55, -1.25, e);   // bank hard left
+            sxPos = THREE.MathUtils.lerp(0.12, -0.28, e);   // arm sweeps to left
+            syPos = THREE.MathUtils.lerp(0.20, -0.18, e);   // arm drops below rest
+            szPos = THREE.MathUtils.lerp(0.04, -0.16, e);   // extends forward at apex
           } else {
-            const u = (t - 0.55) / 0.45;
+            const u = (t - 0.42) / 0.58;
             const e = 1 - Math.pow(1 - u, 3);
-            sxRot = THREE.MathUtils.lerp(0.95, 0, e);
-            syRot = THREE.MathUtils.lerp(-0.55, 0, e);
-            szRot = THREE.MathUtils.lerp(-1.05, 0, e);
-            sxPos = THREE.MathUtils.lerp(-0.22, 0, e);
-            syPos = THREE.MathUtils.lerp(-0.14, 0, e);
-            szPos = 0;
+            sxRot = THREE.MathUtils.lerp(1.05, 0, e);
+            syRot = THREE.MathUtils.lerp(-0.65, 0, e);
+            szRot = THREE.MathUtils.lerp(-1.25, 0, e);
+            sxPos = THREE.MathUtils.lerp(-0.28, 0, e);
+            syPos = THREE.MathUtils.lerp(-0.18, 0, e);
+            szPos = THREE.MathUtils.lerp(-0.16, 0, e);
           }
           swingGrp.rotation.set(sxRot, syRot, szRot);
           swingGrp.position.set(sxPos, syPos, szPos);
-          // Tiny camera-side kick: hand recoils up slightly at the strike apex.
-          offY = -0.025 * Math.sin(THREE.MathUtils.clamp((t - 0.18) * 3, 0, 1) * Math.PI);
+          offY = -0.03 * Math.sin(THREE.MathUtils.clamp((t - 0.15) * 2.6, 0, 1) * Math.PI);
         } else if (act === "knifeSlashR" && swingGrp) {
           // RIGHT CHOP: mirror of left. Wind up upper-LEFT, chop down to lower-RIGHT.
           let sxRot, syRot, szRot, sxPos, syPos, szPos;
-          if (t < 0.22) {
-            const u = t / 0.22;
+          if (t < 0.20) {
+            const u = t / 0.20;
             const e = u * u * (3 - 2 * u);
-            sxRot = -0.55 * e;
-            syRot = -0.30 * e;
-            szRot = -0.45 * e;
-            sxPos = -0.10 * e;
-            syPos = 0.16 * e;
-            szPos = 0;
-          } else if (t < 0.55) {
-            const u = (t - 0.22) / 0.33;
+            sxRot = -0.75 * e;
+            syRot = -0.35 * e;
+            szRot = -0.55 * e;
+            sxPos = -0.12 * e;
+            syPos = 0.20 * e;
+            szPos = 0.04 * e;
+          } else if (t < 0.42) {
+            const u = (t - 0.20) / 0.22;
             const e = 1 - Math.pow(1 - u, 4);
-            sxRot = THREE.MathUtils.lerp(-0.55, 0.95, e);
-            syRot = THREE.MathUtils.lerp(-0.30, 0.55, e);
-            szRot = THREE.MathUtils.lerp(-0.45, 1.05, e);
-            sxPos = THREE.MathUtils.lerp(-0.10, 0.22, e);
-            syPos = THREE.MathUtils.lerp(0.16, -0.14, e);
-            szPos = -0.18 * Math.sin(u * Math.PI);
+            sxRot = THREE.MathUtils.lerp(-0.75, 1.05, e);
+            syRot = THREE.MathUtils.lerp(-0.35, 0.65, e);
+            szRot = THREE.MathUtils.lerp(-0.55, 1.25, e);
+            sxPos = THREE.MathUtils.lerp(-0.12, 0.28, e);
+            syPos = THREE.MathUtils.lerp(0.20, -0.18, e);
+            szPos = THREE.MathUtils.lerp(0.04, -0.16, e);
           } else {
-            const u = (t - 0.55) / 0.45;
+            const u = (t - 0.42) / 0.58;
             const e = 1 - Math.pow(1 - u, 3);
-            sxRot = THREE.MathUtils.lerp(0.95, 0, e);
-            syRot = THREE.MathUtils.lerp(0.55, 0, e);
-            szRot = THREE.MathUtils.lerp(1.05, 0, e);
-            sxPos = THREE.MathUtils.lerp(0.22, 0, e);
-            syPos = THREE.MathUtils.lerp(-0.14, 0, e);
-            szPos = 0;
+            sxRot = THREE.MathUtils.lerp(1.05, 0, e);
+            syRot = THREE.MathUtils.lerp(0.65, 0, e);
+            szRot = THREE.MathUtils.lerp(1.25, 0, e);
+            sxPos = THREE.MathUtils.lerp(0.28, 0, e);
+            syPos = THREE.MathUtils.lerp(-0.18, 0, e);
+            szPos = THREE.MathUtils.lerp(-0.16, 0, e);
           }
           swingGrp.rotation.set(sxRot, syRot, szRot);
           swingGrp.position.set(sxPos, syPos, szPos);
-          offY = -0.025 * Math.sin(THREE.MathUtils.clamp((t - 0.18) * 3, 0, 1) * Math.PI);
+          offY = -0.03 * Math.sin(THREE.MathUtils.clamp((t - 0.15) * 2.6, 0, 1) * Math.PI);
         } else if (act === "knifeThrust" && swingGrp) {
-          // THRUST: arm pulls back (chambered with elbow flared up), then PUNCHES forward
-          // straight. The whole `swing` group translates and rotates as one.
-          //   wind-up (0.00..0.24): arm chambers back-up
-          //   stab    (0.24..0.50): easeOutQuart punch forward (-Z)
-          //   hold    (0.50..0.66): freeze at extension
-          //   recover (0.66..1.00): easeOutCubic settle back
+          // THRUST: chamber back, punch forward, hold at extension, settle back.
+          //   wind-up (0.00..0.22): chamber back-up
+          //   stab    (0.22..0.42): easeOutQuart fast forward extension
+          //   hold    (0.42..0.55): freeze (sells impact)
+          //   recover (0.55..1.00): easeOutCubic slow settle, visible recoil
           let sxRot, syRot, szRot, sxPos, syPos, szPos;
-          if (t < 0.24) {
-            const u = t / 0.24;
+          if (t < 0.22) {
+            const u = t / 0.22;
             const e = u * u * (3 - 2 * u);
-            sxRot = -0.35 * e;
-            syRot = 0.18 * e;
+            sxRot = -0.45 * e;   // pull back + tip up
+            syRot = 0.22 * e;    // chamber elbow outward
             szRot = 0;
-            sxPos = 0.04 * e;
-            syPos = 0.08 * e;
-            szPos = 0.10 * e;  // pull back
-          } else if (t < 0.50) {
-            const u = (t - 0.24) / 0.26;
+            sxPos = 0.05 * e;
+            syPos = 0.10 * e;    // pull up
+            szPos = 0.14 * e;    // pull back
+          } else if (t < 0.42) {
+            const u = (t - 0.22) / 0.20;
             const e = 1 - Math.pow(1 - u, 4);
-            sxRot = THREE.MathUtils.lerp(-0.35, 0.15, e);
-            syRot = THREE.MathUtils.lerp(0.18, -0.05, e);
+            sxRot = THREE.MathUtils.lerp(-0.45, 0.20, e);
+            syRot = THREE.MathUtils.lerp(0.22, -0.08, e);
             szRot = 0;
-            sxPos = THREE.MathUtils.lerp(0.04, -0.04, e);
-            syPos = THREE.MathUtils.lerp(0.08, -0.04, e);
-            szPos = THREE.MathUtils.lerp(0.10, -0.36, e);  // FAST forward stab
-          } else if (t < 0.66) {
-            sxRot = 0.15; syRot = -0.05; szRot = 0;
-            sxPos = -0.04; syPos = -0.04; szPos = -0.36;
+            sxPos = THREE.MathUtils.lerp(0.05, -0.05, e);
+            syPos = THREE.MathUtils.lerp(0.10, -0.06, e);
+            szPos = THREE.MathUtils.lerp(0.14, -0.42, e);   // FAST forward punch
+          } else if (t < 0.55) {
+            sxRot = 0.20; syRot = -0.08; szRot = 0;
+            sxPos = -0.05; syPos = -0.06; szPos = -0.42;
           } else {
-            const u = (t - 0.66) / 0.34;
+            const u = (t - 0.55) / 0.45;
             const e = 1 - Math.pow(1 - u, 3);
-            sxRot = THREE.MathUtils.lerp(0.15, 0, e);
-            syRot = THREE.MathUtils.lerp(-0.05, 0, e);
+            sxRot = THREE.MathUtils.lerp(0.20, 0, e);
+            syRot = THREE.MathUtils.lerp(-0.08, 0, e);
             szRot = 0;
-            sxPos = THREE.MathUtils.lerp(-0.04, 0, e);
-            syPos = THREE.MathUtils.lerp(-0.04, 0, e);
-            szPos = THREE.MathUtils.lerp(-0.36, 0, e);
+            sxPos = THREE.MathUtils.lerp(-0.05, 0, e);
+            syPos = THREE.MathUtils.lerp(-0.06, 0, e);
+            szPos = THREE.MathUtils.lerp(-0.42, 0, e);
           }
           swingGrp.rotation.set(sxRot, syRot, szRot);
           swingGrp.position.set(sxPos, syPos, szPos);
@@ -12352,7 +12348,7 @@ if (typeof window !== "undefined") {
         const combo = state.knifeComboIdx % 3;
         state.knifeComboIdx = (state.knifeComboIdx + 1) % 3;
         state.weaponAction = combo === 0 ? "knifeSlashL" : combo === 1 ? "knifeSlashR" : "knifeThrust";
-        state.weaponActionDur = combo === 2 ? 400 : 340;
+        state.weaponActionDur = combo === 2 ? 540 : 480;
         state.weaponActionStart = now;
         performKnifeAttack(w);
         updateHud();
