@@ -5507,7 +5507,7 @@ if (typeof window !== "undefined") {
         spawnHumanoidDissolve(enemy.group, hitPt);
         enemy.group.visible = false;
         state.score += 1;
-        if (enemy.isBoss) triggerBossVictory(enemy.group.position.clone());
+        if (enemy.isBoss) checkAllBossesDead(enemy.group.position.clone());
       }
       updateHud();
     });
@@ -8204,11 +8204,11 @@ if (typeof window !== "undefined") {
 
       floor.visible = true;
 
-      const amb = new THREE.AmbientLight(0x606878, 1.8);
+      const amb = new THREE.AmbientLight(0x708090, 2.2);
       scene.add(amb); pvpMapLights.push(amb);
-      const hemi = new THREE.HemisphereLight(0x506070, 0x181210, 2.2);
+      const hemi = new THREE.HemisphereLight(0x607080, 0x201818, 2.8);
       scene.add(hemi); pvpMapLights.push(hemi);
-      const dim = new THREE.DirectionalLight(0x90a0c0, 3.0);
+      const dim = new THREE.DirectionalLight(0xa0b0d0, 3.5);
       dim.position.set(20, 40, 30);
       dim.castShadow = false;
       scene.add(dim); pvpMapLights.push(dim);
@@ -9217,10 +9217,10 @@ if (typeof window !== "undefined") {
       const leftLegRoot = new THREE.Group();
       const rightLegRoot = new THREE.Group();
 
-      const skinColor = 0x6a5080;
-      const skinDark = 0x4a3060;
-      const shirtColor = 0x1a1520;
-      const pantsColor = 0x2a2a22;
+      const skinColor = 0x8a7098;
+      const skinDark = 0x6a5078;
+      const shirtColor = 0x2a6050;
+      const pantsColor = 0x3a3a32;
       const veinColor = 0x9a2255;
       const eyeColor = 0xff1111;
 
@@ -9355,7 +9355,8 @@ if (typeof window !== "undefined") {
       };
       makeLeg(leftLegRoot, "left"); makeLeg(rightLegRoot, "right");
 
-      root.add(torsoRoot, leftArmRoot, rightArmRoot, leftLegRoot, rightLegRoot);
+      torsoRoot.add(leftArmRoot, rightArmRoot);
+      root.add(torsoRoot, leftLegRoot, rightLegRoot);
       root.scale.set(2.0, 2.0, 2.0);
       root.position.set(x, 0.54, z);
       root.traverse((o) => {
@@ -10076,6 +10077,13 @@ if (typeof window !== "undefined") {
     let bossVictoryTimer = 0;
     let bossVictoryMsgShown = false;
     const bossGoldParticles = [];
+
+    function checkAllBossesDead(pos) {
+      if (bossVictoryActive) return;
+      const anyBossAlive = state.enemies.some(e => e.isBoss && e.alive);
+      if (anyBossAlive) return;
+      triggerBossVictory(pos);
+    }
 
     function triggerBossVictory(pos) {
       if (bossVictoryActive) return;
@@ -13003,7 +13011,7 @@ if (typeof window !== "undefined") {
           state.score += 1;
           triggerHitFeedback(true, false);
           createSparks(bp.clone ? bp.clone() : bp, 0xff5555);
-          if (bestEnemy.isBoss) triggerBossVictory(bestEnemy.group.position.clone());
+          if (bestEnemy.isBoss) checkAllBossesDead(bestEnemy.group.position.clone());
         }
       }
     }
@@ -13234,7 +13242,7 @@ if (typeof window !== "undefined") {
               triggerHitFeedback(true, bestEnemyZone === "head");
               createSparks(bp.clone(), 0xff5555);
               createSparks(bp.clone(), 0xff8888);
-              if (bestEnemy.isBoss) triggerBossVictory(bestEnemy.group.position.clone());
+              if (bestEnemy.isBoss) checkAllBossesDead(bestEnemy.group.position.clone());
             }
             socket.emit("zombieDamage", {
               ei,
@@ -13253,7 +13261,7 @@ if (typeof window !== "undefined") {
               triggerHitFeedback(true, bestEnemyZone === "head");
               createSparks(bp.clone(), 0xff5555);
               createSparks(bp.clone(), 0xff8888);
-              if (bestEnemy.isBoss) triggerBossVictory(bestEnemy.group.position.clone());
+              if (bestEnemy.isBoss) checkAllBossesDead(bestEnemy.group.position.clone());
             }
           }
         } else if (closestDist === rpDist && bestRpId != null && bestRpHitT < Infinity) {
