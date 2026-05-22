@@ -9363,10 +9363,10 @@ if (typeof window !== "undefined") {
       hipBridge.position.set(0, 0.50, 0.30);
       root.add(hipBridge);
 
-      leftLegRoot.position.set(-0.30, 0.48, 0.28);
-      rightLegRoot.position.set(0.30, 0.48, 0.28);
-      leftLegRoot.rotation.x = 0.20;
-      rightLegRoot.rotation.x = 0.20;
+      leftLegRoot.position.set(-0.30, 0.52, 0.28);
+      rightLegRoot.position.set(0.30, 0.52, 0.28);
+      leftLegRoot.rotation.x = 0.45;
+      rightLegRoot.rotation.x = 0.45;
       const leftShinRoot = new THREE.Group();
       const rightShinRoot = new THREE.Group();
       const makeLeg = (lr, shinGrp, side) => {
@@ -9374,7 +9374,7 @@ if (typeof window !== "undefined") {
         thigh.position.set(0, -0.22, 0); lr.add(thigh);
 
         shinGrp.position.set(0, -0.44, 0);
-        shinGrp.rotation.x = -0.40;
+        shinGrp.rotation.x = -0.70;
         const shin = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.40, 0.22), matPants);
         shin.position.set(0, -0.22, 0); shinGrp.add(shin);
         const knee = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.12, 0.22), matSkinD);
@@ -9393,7 +9393,7 @@ if (typeof window !== "undefined") {
       torsoRoot.add(leftArmRoot, rightArmRoot);
       root.add(torsoRoot, leftLegRoot, rightLegRoot);
       const bossScale = isHell ? 2.6 : 2.0;
-      const bossBaseY = isHell ? 0.83 : 0.64;
+      const bossBaseY = isHell ? 0.86 : 0.66;
       root.scale.set(bossScale, bossScale, bossScale);
       root.position.set(x, bossBaseY, z);
       root.traverse((o) => {
@@ -14414,10 +14414,24 @@ if (typeof window !== "undefined") {
         if (enemy.aware) {
           enemy.facingYaw = Math.atan2(dx, dz);
 
+          if (enemy.isBoss) {
+            const SPRINT_ENTER_DIST = 18;
+            const SPRINT_EXIT_DIST = 8;
+            if (!enemy._bossSprinting && dist > SPRINT_ENTER_DIST) {
+              enemy._bossSprinting = true;
+            } else if (enemy._bossSprinting && dist < SPRINT_EXIT_DIST) {
+              enemy._bossSprinting = false;
+            }
+          }
+
           const shouldStopForRanged = enemy.ranged && dist < enemy.rangeDistance && dist > 4.8;
 
           if (!shouldStopForRanged && dist > 1.8) {
-            const step = enemy.speed * dt;
+            let moveSpeed = enemy.speed;
+            if (enemy._bossSprinting) {
+              moveSpeed = 6.5 * (enemy.isHellBoss ? 6 : 5.5);
+            }
+            const step = moveSpeed * dt;
             const dLen = Math.sqrt(dx * dx + dz * dz);
             let sx = 0;
             let sz = 0;
@@ -14483,7 +14497,8 @@ if (typeof window !== "undefined") {
               }
             }
             enemy.moveYaw = Math.atan2(dx, dz);
-            enemy.walkTime += dt * (enemy.isBoss ? 14 : enemy.type === "fast" ? 12 : 8);
+            const bossWalkRate = enemy._bossSprinting ? 28 : 14;
+            enemy.walkTime += dt * (enemy.isBoss ? bossWalkRate : enemy.type === "fast" ? 12 : 8);
             enemy.moving = true;
           } else {
             enemy.moving = false;
@@ -14582,7 +14597,7 @@ if (typeof window !== "undefined") {
         let bossAnimOverride = false;
         const HUNCH = 0.75;
         const ELBOW_REST = -0.55;
-        const BOSS_BASE_Y = enemy.isHellBoss ? 0.83 : 0.64;
+        const BOSS_BASE_Y = enemy.isHellBoss ? 0.86 : 0.66;
         if (enemy.isBoss) {
           enemy.bossAnimTimer += dt;
           const lfa = enemy.leftForearmRoot;
@@ -14763,29 +14778,36 @@ if (typeof window !== "undefined") {
           } else {
             const w = enemy.walkTime;
             const stride = Math.sin(w);
-            enemy.leftArmRoot.rotation.x = 0.0 + stride * 0.40;
-            enemy.rightArmRoot.rotation.x = 0.0 - stride * 0.40;
-            enemy.leftArmRoot.rotation.z = -0.40;
-            enemy.rightArmRoot.rotation.z = 0.40;
+            const sprinting = !!enemy._bossSprinting;
+            const armSwing = sprinting ? 0.70 : 0.40;
+            const elbowPump = sprinting ? 0.30 : 0.15;
+            const torsoLean = sprinting ? HUNCH + 0.20 : HUNCH;
+            enemy.leftArmRoot.rotation.x = 0.0 + stride * armSwing;
+            enemy.rightArmRoot.rotation.x = 0.0 - stride * armSwing;
+            enemy.leftArmRoot.rotation.z = sprinting ? -0.30 : -0.40;
+            enemy.rightArmRoot.rotation.z = sprinting ? 0.30 : 0.40;
             enemy.leftArmRoot.rotation.y = 0.20;
             enemy.rightArmRoot.rotation.y = -0.20;
-            lfa.rotation.x = ELBOW_REST + stride * 0.15;
-            rfa.rotation.x = ELBOW_REST - stride * 0.15;
-            enemy.torsoRoot.rotation.x = HUNCH + Math.sin(w * 2) * 0.05;
-            enemy.torsoRoot.rotation.z = Math.sin(w) * 0.07;
+            lfa.rotation.x = ELBOW_REST + stride * elbowPump;
+            rfa.rotation.x = ELBOW_REST - stride * elbowPump;
+            enemy.torsoRoot.rotation.x = torsoLean + Math.sin(w * 2) * (sprinting ? 0.08 : 0.05);
+            enemy.torsoRoot.rotation.z = Math.sin(w) * (sprinting ? 0.10 : 0.07);
           }
-          const LEG_BASE_TILT = 0.20;
-          const SHIN_BASE_BEND = -0.40;
+          const LEG_BASE_TILT = 0.45;
+          const SHIN_BASE_BEND = -0.70;
+          const isSprinting = !!enemy._bossSprinting;
+          const legSwingAmp = isSprinting ? 0.75 : 0.50;
+          const shinKickAmp = isSprinting ? 0.65 : 0.45;
           if (enemy.moving) {
             const sw = Math.sin(enemy.walkTime);
-            const bLegL = LEG_BASE_TILT - sw * 0.50;
-            const bLegR = LEG_BASE_TILT + sw * 0.50;
-            enemy.legLV = dampScalar(enemy.legLV, bLegL, dt, 12);
-            enemy.legRV = dampScalar(enemy.legRV, bLegR, dt, 12);
-            const shinL = SHIN_BASE_BEND + Math.max(0, sw) * 0.45;
-            const shinR = SHIN_BASE_BEND + Math.max(0, -sw) * 0.45;
-            if (enemy.leftShinRoot) enemy.leftShinRoot.rotation.x = dampScalar(enemy.leftShinRoot.rotation.x, shinL, dt, 12);
-            if (enemy.rightShinRoot) enemy.rightShinRoot.rotation.x = dampScalar(enemy.rightShinRoot.rotation.x, shinR, dt, 12);
+            const bLegL = LEG_BASE_TILT - sw * legSwingAmp;
+            const bLegR = LEG_BASE_TILT + sw * legSwingAmp;
+            enemy.legLV = dampScalar(enemy.legLV, bLegL, dt, 14);
+            enemy.legRV = dampScalar(enemy.legRV, bLegR, dt, 14);
+            const shinL = SHIN_BASE_BEND + Math.max(0, sw) * shinKickAmp;
+            const shinR = SHIN_BASE_BEND + Math.max(0, -sw) * shinKickAmp;
+            if (enemy.leftShinRoot) enemy.leftShinRoot.rotation.x = dampScalar(enemy.leftShinRoot.rotation.x, shinL, dt, 14);
+            if (enemy.rightShinRoot) enemy.rightShinRoot.rotation.x = dampScalar(enemy.rightShinRoot.rotation.x, shinR, dt, 14);
           } else {
             enemy.legLV = dampScalar(enemy.legLV, LEG_BASE_TILT, dt, 12);
             enemy.legRV = dampScalar(enemy.legRV, LEG_BASE_TILT, dt, 12);
