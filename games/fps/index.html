@@ -3,6 +3,7 @@
   Deploy / GitHub Pages: https://tintly555.github.io/games/fps/ — multiplayer relay + static prefix set below.
   Self-hosted same tree: open game-self-hosted.html (empty game-multiplayer-origin, empty game-static-prefix).
   Crossfire = PVP; Arena = PVE / co-op vs zombies.
+  Build: fps-paralysis-v26
 -->
 <!--
   Swap Med Kit and AMR weapon positions (4↔5) and improve lighting 让AMR和Swap Med Kit没法使用，所以退回merge versions
@@ -5020,23 +5021,55 @@ if (typeof window !== "undefined") {
       if (typeof data.duration === "number" && data.duration > 0 && data.slowTarget != null) return true;
       const wIdx = data.weaponIndex != null ? Number(data.weaponIndex) : data.weapon != null ? Number(data.weapon) : NaN;
       if (wIdx === 6) return true;
-      if (!isPvpCrossfireMap(CURRENT_MAP)) return false;
+      if (!isPvpCrossfireMap(CURRENT_MAP) && !MULTIPLAYER) return false;
       if (data.hitKind === "melee" || data.hitKind === "bullet") return false;
       const dmg = Number(data.damage);
-      return dmg === 1;
+      if (dmg === 1 || dmg === 0) return true;
+      return false;
     }
 
     function tryApplyDartSlowFromNetwork(data) {
       if (!data || !socket || !gameWorldReady) return false;
-      const tid = dartSlowVictimSocketId(data);
-      if (!tid || tid !== String(socket.id)) return false;
       if (!isParalysisDartNetworkData(data)) return false;
-      if (data.slowTarget != null || data.blindTarget != null || data.target != null || data.targetId != null || data.victim != null) {
-        const tid = dartSlowVictimSocketId(data);
-        if (tid && tid !== String(socket.id)) return false;
+      const tid = dartSlowVictimSocketId(data);
+      if (tid) {
+        if (tid !== String(socket.id)) return false;
       } else if (damagedEventFromLocalShooter(data)) {
         return false;
       }
+      startSlowEffect(dartSlowDurationFromData(data));
+      return true;
+    }
+
+    function tryApplyDartSlowFromShootProximity(data) {
+      if (!data || !socket || !gameWorldReady) return false;
+      if (!isPvpCrossfireMap(CURRENT_MAP)) return false;
+      const shooterId =
+        data.id != null
+          ? String(data.id)
+          : data.shooter != null
+            ? String(data.shooter)
+            : data.attacker != null
+              ? String(data.attacker)
+              : "";
+      if (shooterId && shooterId === String(socket.id)) return false;
+      if (data.x == null || data.z == null) return false;
+      const col = Number(data.color);
+      const isDart =
+        data.type === "dartSlow" ||
+        data.type === "blind" ||
+        data.hitKind === "dartSlow" ||
+        col === 0x6bd4ff ||
+        col === 11398143;
+      if (!isDart) return false;
+      const hx = +data.x;
+      const hy = data.y != null ? +data.y : player.position.y + 1.1;
+      const hz = +data.z;
+      const dx = hx - player.position.x;
+      const dy = hy - (player.position.y + 1.05);
+      const dz = hz - player.position.z;
+      const r = 1.45;
+      if (dx * dx + dy * dy + dz * dz > r * r) return false;
       startSlowEffect(dartSlowDurationFromData(data));
       return true;
     }
@@ -5052,7 +5085,8 @@ if (typeof window !== "undefined") {
 
     socket.on("shoot", (data) => {
       if (!data) return;
-      if (
+      if (tryApplyDartSlowFromShootProximity(data)) {
+      } else if (
         data.type === "dartSlow" ||
         data.type === "blind" ||
         data.hitKind === "dartSlow" ||
@@ -5195,6 +5229,11 @@ if (typeof window !== "undefined") {
       }
       if (data && !damagedEventTargetsLocalPlayer(data)) return;
       if (data && damagedEventFromLocalShooter(data)) return;
+      const chipDmg = Number(data.damage) || 0;
+      if (chipDmg > 0 && chipDmg <= 1 && isPvpCrossfireMap(CURRENT_MAP) && data.hitKind !== "bullet" && data.hitKind !== "melee") {
+        startSlowEffect(dartSlowDurationFromData(data));
+        return;
+      }
       player.health = Math.max(0, player.health - (data.damage || 0));
       player.regenTimer = 0;
       state.flashTimer = 0.14;
@@ -11378,6 +11417,7 @@ if (typeof window !== "undefined") {
       return isPlayerSlowed() ? DART_SLOW_RELOAD_MULT : 1;
     }
 
+    console.info("[fps-paralysis-v26] loaded");
     function startSlowEffect(durationSec) {
       const dur = Math.max(0.5, durationSec || 5.0);
       const end = performance.now() + dur * 1000;
@@ -11437,21 +11477,6 @@ if (typeof window !== "undefined") {
       socket.emit("dartSlow", payload);
       socket.emit("playerBlind", payload);
       socket.emit("blind", payload);
-      socket.emit("hit", {
-        target: targetId,
-        targetId,
-        damage: 1,
-        x: hx,
-        y: hy,
-        z: hz,
-        hitKind: "dartSlow",
-        slowDuration: dur,
-        slow: true,
-        weaponIndex: 6,
-        weapon: 6,
-        attacker: socket.id,
-        shooter: socket.id,
-      });
       const muzzle = muzzleOpt && muzzleOpt.isVector3
         ? muzzleOpt
         : new THREE.Vector3(hx, hy, hz);
