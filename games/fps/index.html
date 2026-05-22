@@ -4685,7 +4685,10 @@ if (typeof window !== "undefined") {
       return m === "training";
     }
     function isArenaLikeMap(m) {
-      return m === "arena" || m === "boss_arena";
+      return m === "arena";
+    }
+    function isBossArenaMap(m) {
+      return m === "boss_arena";
     }
     function isBrightIndoorMap(m) {
       return m === "crossfire_grid" || m === "training";
@@ -5000,7 +5003,7 @@ if (typeof window !== "undefined") {
       socket.emit("joinRoom", activeRoomId, (ack) => {
         if (gen !== _joinRoomGeneration) return;
         if (!ack || !ack.ok) return;
-        if (MULTIPLAYER && ARENA_COOP && isArenaLikeMap(CURRENT_MAP)) {
+        if (MULTIPLAYER && ARENA_COOP && (isArenaLikeMap(CURRENT_MAP) || isBossArenaMap(CURRENT_MAP))) {
           ZOMBIE_HOST_KNOWN = true;
           if (ack.hostId != null) {
             ZOMBIE_AUTHORITY = String(ack.hostId) === String(socket.id);
@@ -5475,7 +5478,7 @@ if (typeof window !== "undefined") {
     });
 
     socket.on("zombieSync", (data) => {
-      if (!MULTIPLAYER || !ARENA_COOP || !isArenaLikeMap(CURRENT_MAP)) return;
+      if (!MULTIPLAYER || !ARENA_COOP || !(isArenaLikeMap(CURRENT_MAP) || isBossArenaMap(CURRENT_MAP))) return;
       if (ZOMBIE_AUTHORITY) return;
       applyZombieSyncPayload(data);
     });
@@ -6416,11 +6419,13 @@ if (typeof window !== "undefined") {
 
     function getCurrentMapFogColor() {
       if (isBrightIndoorMap(CURRENT_MAP)) return 0x8ea6c6;
+      if (isBossArenaMap(CURRENT_MAP)) return 0x7a9a6a;
       return 0x070504;
     }
 
     function getCurrentMapBackgroundColor() {
       if (isBrightIndoorMap(CURRENT_MAP)) return 0xa9c3e6;
+      if (isBossArenaMap(CURRENT_MAP)) return 0x8aaa7a;
       return 0x070504;
     }
 
@@ -6429,7 +6434,7 @@ if (typeof window !== "undefined") {
       if (!scene.fog || !scene.fog.isFog) return;
       let far;
       let near;
-      if (isBrightIndoorMap(CURRENT_MAP)) {
+      if (isBrightIndoorMap(CURRENT_MAP) || isBossArenaMap(CURRENT_MAP)) {
         const rdIdx = THREE.MathUtils.clamp(
           gameSettings.renderDistanceIndex | 0,
           0,
@@ -6438,8 +6443,8 @@ if (typeof window !== "undefined") {
         const scale = RENDER_DISTANCE_LEVELS[rdIdx].scale;
         far = Math.max(140, 210 * scale);
         near = THREE.MathUtils.clamp(28 * scale, 14, far - 28);
-        scene.fog.color.set(0xc9dbf5);
-        scene.background.set(0xe8f2ff);
+        scene.fog.color.set(getCurrentMapFogColor());
+        scene.background.set(getCurrentMapBackgroundColor());
       } else {
         const base = getQualityFogBase();
         const rdIdx = THREE.MathUtils.clamp(
@@ -8171,6 +8176,43 @@ if (typeof window !== "undefined") {
       ceiling.visible = false;
     }
 
+    function buildMapBossArena() {
+      clearPvpMapLights();
+      const H = 6;
+      const half = 50;
+
+      addWallBox(half * 2, H, 1.0, 0, H / 2, -half);
+      addWallBox(half * 2, H, 1.0, 0, H / 2, half);
+      addWallBox(1.0, H, half * 2, -half, H / 2, 0);
+      addWallBox(1.0, H, half * 2, half, H / 2, 0);
+
+      const coverH = 2.0;
+      const coverColor = 0x5a6a55;
+      addWallBox(3.0, coverH, 1.2, -20, coverH / 2, -18, coverColor);
+      addWallBox(1.2, coverH, 3.0, 22, coverH / 2, 15, coverColor);
+      addWallBox(2.5, coverH, 1.0, 10, coverH / 2, -30, coverColor);
+      addWallBox(1.0, coverH, 2.5, -30, coverH / 2, 8, coverColor);
+      addWallBox(4.0, coverH, 1.5, 0, coverH / 2, 35, coverColor);
+
+      const groundMat = new THREE.MeshStandardMaterial({ color: 0x5a7a4a, roughness: 0.95, metalness: 0 });
+      const ground = new THREE.Mesh(new THREE.PlaneGeometry(half * 2, half * 2), groundMat);
+      ground.rotation.x = -Math.PI / 2;
+      ground.position.y = 0.005;
+      ground.receiveShadow = true;
+      scene.add(ground);
+      wallMeshes.push(ground);
+
+      const amb = new THREE.AmbientLight(0xb8c8a8, 1.8);
+      scene.add(amb); pvpMapLights.push(amb);
+      const hemi = new THREE.HemisphereLight(0xd8e8c8, 0x3a3018, 3.0);
+      scene.add(hemi); pvpMapLights.push(hemi);
+      const sun = new THREE.DirectionalLight(0xfff0d0, 6.0);
+      sun.position.set(20, 50, 30);
+      sun.castShadow = false;
+      scene.add(sun); pvpMapLights.push(sun);
+      ceiling.visible = false;
+    }
+
     function resetTrainingSession() {
       trainingStats.you = freshTrainingStats();
       trainingStats.team = freshTrainingStats();
@@ -8348,7 +8390,7 @@ if (typeof window !== "undefined") {
 
     const MAP_BUILDERS = {
       arena: buildMapArena,
-      boss_arena: buildMapArena,
+      boss_arena: buildMapBossArena,
       crossfire: buildMapCrossfire,
       crossfire_grid: buildMapCrossfireGrid,
       training: buildMapTraining,
@@ -8391,6 +8433,18 @@ if (typeof window !== "undefined") {
     }
 
     function findSpawnPosition(minDist) {
+      if (isBossArenaMap(CURRENT_MAP)) {
+        const half = 45;
+        for (let attempt = 0; attempt < 40; attempt++) {
+          const x = (Math.random() - 0.5) * half * 2;
+          const z = (Math.random() - 0.5) * half * 2;
+          const dx = x - player.position.x;
+          const dz = z - player.position.z;
+          if (dx * dx + dz * dz < 10 * 10) continue;
+          return { x, z, usedDist: 10 };
+        }
+        return { x: 20, z: -20, usedDist: 0 };
+      }
       if (isArenaLikeMap(CURRENT_MAP)) {
         const players = getAllPlayerPositions();
         let dist = minDist;
@@ -12072,6 +12126,11 @@ if (typeof window !== "undefined") {
         player.yaw = Math.random() * Math.PI * 2;
         floor.visible = true;
         ceiling.visible = CURRENT_MAP !== "crossfire_grid";
+      } else if (isBossArenaMap(CURRENT_MAP)) {
+        player.position.set(0, 1.65, 40);
+        player.yaw = Math.PI;
+        floor.visible = false;
+        ceiling.visible = false;
       } else if (isTrainingMap(CURRENT_MAP)) {
         player.position.set(0, 1.65, 22);
         player.yaw = Math.PI;
@@ -12966,7 +13025,7 @@ if (typeof window !== "undefined") {
             continue;
           }
 
-          const coopArena = MULTIPLAYER && ARENA_COOP && isArenaLikeMap(CURRENT_MAP);
+          const coopArena = MULTIPLAYER && ARENA_COOP && (isArenaLikeMap(CURRENT_MAP) || isBossArenaMap(CURRENT_MAP));
           if (coopArena && !ZOMBIE_AUTHORITY) {
             const ei = bestEnemy.netIndex ?? state.enemies.indexOf(bestEnemy);
             applyDamage(bestEnemy, bestEnemyZone, w);
@@ -13478,7 +13537,7 @@ if (typeof window !== "undefined") {
 
     /** Host sim: hurt local player or send zombie hit to a remote co-op player (server `hit` → `damaged`). */
     function applyCoopZombieDamageToTarget(enemy) {
-      if (MULTIPLAYER && ARENA_COOP && isArenaLikeMap(CURRENT_MAP) && enemy.targetId != null) {
+      if (MULTIPLAYER && ARENA_COOP && (isArenaLikeMap(CURRENT_MAP) || isBossArenaMap(CURRENT_MAP)) && enemy.targetId != null) {
         socket.emit("hit", {
           target: enemy.targetId,
           damage: enemy.attackDamage,
@@ -13605,7 +13664,7 @@ if (typeof window !== "undefined") {
         );
         return;
       }
-      const S = isPvpCrossfireMap(CURRENT_MAP) ? 45 : 42;
+      const S = isBossArenaMap(CURRENT_MAP) ? 50 : isPvpCrossfireMap(CURRENT_MAP) ? 45 : 42;
       navMinX = -S;
       navMinZ = -S;
       navCols = Math.ceil((S * 2) / NAV_CELL);
@@ -13921,7 +13980,7 @@ if (typeof window !== "undefined") {
         }
       }
 
-      if (MULTIPLAYER && ARENA_COOP && isArenaLikeMap(CURRENT_MAP) && !ZOMBIE_AUTHORITY) {
+      if (MULTIPLAYER && ARENA_COOP && (isArenaLikeMap(CURRENT_MAP) || isBossArenaMap(CURRENT_MAP)) && !ZOMBIE_AUTHORITY) {
         return;
       }
 
@@ -14539,17 +14598,18 @@ if (typeof window !== "undefined") {
         updateTrainingDummies(dt);
       }
 
-      if (isArenaLikeMap(CURRENT_MAP)) {
+      if (isArenaLikeMap(CURRENT_MAP) || isBossArenaMap(CURRENT_MAP)) {
+        const isZombieMap = isArenaLikeMap(CURRENT_MAP) || isBossArenaMap(CURRENT_MAP);
         const runZombieAi =
           gameWorldReady &&
           (player.health > 0 ||
-            (MULTIPLAYER && ARENA_COOP && ZOMBIE_AUTHORITY && isArenaLikeMap(CURRENT_MAP)));
+            (MULTIPLAYER && ARENA_COOP && ZOMBIE_AUTHORITY && isZombieMap));
         if (runZombieAi) {
           updateEnemies(dt);
         }
         if (gameWorldReady) updateBossProjectiles(dt);
         if (gameWorldReady) updateDeathAnim(dt);
-        if (gameWorldReady && MULTIPLAYER && ARENA_COOP && ZOMBIE_AUTHORITY && isArenaLikeMap(CURRENT_MAP)) {
+        if (gameWorldReady && MULTIPLAYER && ARENA_COOP && ZOMBIE_AUTHORITY && isZombieMap) {
           _zombieSyncAcc += dt;
           if (_zombieSyncAcc >= 1 / 14) {
             _zombieSyncAcc = 0;
@@ -14742,6 +14802,11 @@ if (typeof window !== "undefined") {
         player.yaw = Math.random() * Math.PI * 2;
         floor.visible = true;
         ceiling.visible = CURRENT_MAP !== "crossfire_grid";
+      } else if (isBossArenaMap(CURRENT_MAP)) {
+        player.position.set(0, 1.65, 40);
+        player.yaw = Math.PI;
+        floor.visible = false;
+        ceiling.visible = false;
       } else if (isTrainingMap(CURRENT_MAP)) {
         player.position.set(0, 1.65, 22);
         floor.visible = true;
@@ -14770,10 +14835,12 @@ if (typeof window !== "undefined") {
 
       if (isTrainingMap(CURRENT_MAP)) {
         rebuildTrainingDummies();
-      } else if (isArenaLikeMap(CURRENT_MAP)) {
+      } else if (isArenaLikeMap(CURRENT_MAP) || isBossArenaMap(CURRENT_MAP)) {
         rebuildEnemyRoster();
-        for (const e of state.enemies) {
-          e.group.visible = false;
+        if (isArenaLikeMap(CURRENT_MAP)) {
+          for (const e of state.enemies) {
+            e.group.visible = false;
+          }
         }
       }
 
@@ -14831,7 +14898,7 @@ if (typeof window !== "undefined") {
         console.warn("[boot] asset preload", err);
       }
 
-      if (isArenaLikeMap(CURRENT_MAP)) {
+      if (isArenaLikeMap(CURRENT_MAP) || isBossArenaMap(CURRENT_MAP)) {
         for (const e of state.enemies) {
           if (e.alive) e.group.visible = true;
         }
