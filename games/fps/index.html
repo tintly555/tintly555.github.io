@@ -4979,28 +4979,50 @@ if (typeof window !== "undefined") {
       }
     });
 
+    function dartSlowVictimSocketId(data) {
+      if (!data) return "";
+      const candidates = [
+        data.target,
+        data.targetId,
+        data.slowTarget,
+        data.blindTarget,
+        data.victim,
+        data.to,
+      ];
+      for (let i = 0; i < candidates.length; i++) {
+        if (candidates[i] != null && candidates[i] !== "") return String(candidates[i]);
+      }
+      return "";
+    }
+
+    function dartSlowDurationFromData(data) {
+      if (!data) return 5;
+      if (typeof data.slowDuration === "number" && isFinite(data.slowDuration)) return data.slowDuration;
+      if (typeof data.duration === "number" && isFinite(data.duration)) return data.duration;
+      if (typeof data.blindDuration === "number" && isFinite(data.blindDuration)) return data.blindDuration;
+      return 5;
+    }
+
+    function tryApplyDartSlowFromNetwork(data) {
+      if (!data || !socket || !gameWorldReady) return false;
+      const tid = dartSlowVictimSocketId(data);
+      if (!tid || tid !== String(socket.id)) return false;
+      const isDart =
+        data.hitKind === "dartSlow" ||
+        data.hitKind === "blind" ||
+        data.type === "dartSlow" ||
+        data.type === "blind" ||
+        data.slow === true ||
+        data.blind === true ||
+        data.slowTarget != null ||
+        data.blindTarget != null;
+      if (!isDart) return false;
+      startSlowEffect(dartSlowDurationFromData(data));
+      return true;
+    }
+
     function handleIncomingDartSlowEvent(data) {
-      if (!data) return;
-      const tid =
-        data.target != null
-          ? String(data.target)
-          : data.targetId != null
-            ? String(data.targetId)
-            : data.slowTarget != null
-              ? String(data.slowTarget)
-              : data.blindTarget != null
-                ? String(data.blindTarget)
-                : "";
-      if (!tid || tid !== String(socket.id)) return;
-      const dur =
-        typeof data.slowDuration === "number"
-          ? data.slowDuration
-          : typeof data.duration === "number"
-            ? data.duration
-            : typeof data.blindDuration === "number"
-              ? data.blindDuration
-              : 5;
-      startSlowEffect(dur);
+      tryApplyDartSlowFromNetwork(data);
     }
 
     socket.on("playerSlow", handleIncomingDartSlowEvent);
@@ -5013,10 +5035,14 @@ if (typeof window !== "undefined") {
       if (
         data.type === "dartSlow" ||
         data.type === "blind" ||
+        data.hitKind === "dartSlow" ||
+        data.hitKind === "blind" ||
+        data.slow === true ||
         data.slowTarget != null ||
-        data.blindTarget != null
+        data.blindTarget != null ||
+        data.target != null
       ) {
-        handleIncomingDartSlowEvent(data);
+        tryApplyDartSlowFromNetwork(data);
       }
       if (data.sx != null && data.sy != null && data.sz != null
           && data.x != null && data.y != null && data.z != null) {
@@ -5097,6 +5123,12 @@ if (typeof window !== "undefined") {
       }
     });
 
+    socket.on("hit", (data) => {
+      if (!data || !socket || !gameWorldReady) return;
+      if (isTrainingMap(CURRENT_MAP)) return;
+      if (tryApplyDartSlowFromNetwork(data)) return;
+    });
+
     socket.on("trainingHit", (data) => {
       applyRemoteTrainingHit(data);
     });
@@ -5133,8 +5165,6 @@ if (typeof window !== "undefined") {
       if (!gameWorldReady) return;
       if (player.health <= 0) return;
       if (performance.now() < player.spawnProtectUntil) return;
-      if (data && !damagedEventTargetsLocalPlayer(data)) return;
-      if (data && damagedEventFromLocalShooter(data)) return;
       if (
         data &&
         (data.hitKind === "dartSlow" ||
@@ -5142,15 +5172,13 @@ if (typeof window !== "undefined") {
           data.slow === true ||
           data.blind === true)
       ) {
-        const dur =
-          typeof data.slowDuration === "number" && isFinite(data.slowDuration)
-            ? data.slowDuration
-            : typeof data.blindDuration === "number" && isFinite(data.blindDuration)
-              ? data.blindDuration
-              : 5;
-        startSlowEffect(dur);
+        if (!damagedEventTargetsLocalPlayer(data)) return;
+        if (data.target == null && data.victim == null && damagedEventFromLocalShooter(data)) return;
+        startSlowEffect(dartSlowDurationFromData(data));
         return;
       }
+      if (data && !damagedEventTargetsLocalPlayer(data)) return;
+      if (data && damagedEventFromLocalShooter(data)) return;
       player.health = Math.max(0, player.health - (data.damage || 0));
       player.regenTimer = 0;
       state.flashTimer = 0.14;
@@ -11370,19 +11398,24 @@ if (typeof window !== "undefined") {
       enemy.attackCooldownTimer = Math.max(enemy.attackCooldownTimer, dur);
     }
 
-    function emitDartSlowNetwork(targetId, durationSec, hitPoint) {
+    function emitDartSlowNetwork(targetId, durationSec, hitPoint, muzzleOpt) {
       if (!MULTIPLAYER || !socket || targetId == null) return;
       const dur = Math.max(0.5, durationSec || 5.0);
       const hx = hitPoint && hitPoint.x != null ? hitPoint.x : player.position.x;
+      const hy = hitPoint && hitPoint.y != null ? hitPoint.y : player.position.y + 1.12;
       const hz = hitPoint && hitPoint.z != null ? hitPoint.z : player.position.z;
       const payload = {
         target: targetId,
         targetId,
+        slowTarget: targetId,
         duration: dur,
         slowDuration: dur,
+        hitKind: "dartSlow",
         x: hx,
+        y: hy,
         z: hz,
         attacker: socket.id,
+        shooter: socket.id,
       };
       socket.emit("playerSlow", payload);
       socket.emit("dartSlow", payload);
@@ -11390,19 +11423,31 @@ if (typeof window !== "undefined") {
       socket.emit("blind", payload);
       socket.emit("hit", {
         target: targetId,
-        damage: 0,
+        targetId,
+        damage: 1,
         x: hx,
+        y: hy,
         z: hz,
         hitKind: "dartSlow",
         slowDuration: dur,
+        slow: true,
+        attacker: socket.id,
+        shooter: socket.id,
+      });
+      const muzzle = muzzleOpt && muzzleOpt.isVector3
+        ? muzzleOpt
+        : new THREE.Vector3(hx, hy, hz);
+      const end = hitPoint && hitPoint.isVector3
+        ? hitPoint
+        : new THREE.Vector3(hx, hy, hz);
+      emitShootNetwork(muzzle, end, 0x6bd4ff, "dartSlow", {
+        target: targetId,
+        targetId,
+        slowTarget: targetId,
+        slowDuration: dur,
+        hitKind: "dartSlow",
         attacker: socket.id,
       });
-      if (hitPoint && hitPoint.isVector3) {
-        emitShootNetwork(hitPoint, hitPoint, 0x6bd4ff, "dartSlow", {
-          slowTarget: targetId,
-          slowDuration: dur,
-        });
-      }
     }
 
     function spawnParalysisDartProjectile(origin, direction, weaponCfg) {
@@ -11425,6 +11470,7 @@ if (typeof window !== "undefined") {
       const proj = {
         type: "paralysisDart",
         fromShooter: true,
+        netHitSent: false,
         pos: origin.clone(),
         prev: origin.clone(),
         vel: dir.clone().multiplyScalar(speed),
@@ -11437,6 +11483,7 @@ if (typeof window !== "undefined") {
       dart.position.copy(proj.pos);
       const fwd = proj.vel.clone().normalize();
       dart.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, -1), fwd);
+      proj._dartMuzzle = origin.clone();
       state.projectiles.push(proj);
       return proj;
     }
@@ -11488,7 +11535,7 @@ if (typeof window !== "undefined") {
       return { t: worldT, zone, point: _ehHitWorld.clone() };
     }
 
-    function probeParalysisDartProximityHit(worldPos, hitPad, slowDuration) {
+    function probeParalysisDartProximityHit(worldPos, hitPad, slowDuration, muzzleOpt) {
       if (MULTIPLAYER && !ARENA_COOP && !isTrainingMap(CURRENT_MAP)) {
         for (const [rpId, rp] of remotePlayers) {
           if (rp.isDown || !rp.group.visible) continue;
@@ -11498,7 +11545,7 @@ if (typeof window !== "undefined") {
           const dz = worldPos.z - _projWorkVecA.z;
           const r = 0.58 * hitPad;
           if (dx * dx + dy * dy + dz * dz <= r * r) {
-            emitDartSlowNetwork(rpId, slowDuration, worldPos);
+            emitDartSlowNetwork(rpId, slowDuration, worldPos, muzzleOpt);
             return true;
           }
         }
@@ -11559,15 +11606,21 @@ if (typeof window !== "undefined") {
               rp.group.updateMatrixWorld(true);
               const rh = humanoidHitAlongRayPadded(segRay, rp.group, hitPad);
               if (rh) {
-                emitDartSlowNetwork(rpId, p.slowDuration, rh.point || p.pos);
+                if (!p.netHitSent) {
+                p.netHitSent = true;
+                emitDartSlowNetwork(rpId, p.slowDuration, rh.point || p.pos, p._dartMuzzle);
+              }
                 createSparks(rh.point || p.pos.clone(), 0x6bd4ff);
                 consumed = true;
                 break;
               }
             }
-            if (!consumed) {
-              consumed = probeParalysisDartProximityHit(p.pos, hitPad, p.slowDuration);
-              if (consumed) createSparks(p.pos.clone(), 0x6bd4ff);
+            if (!consumed && !p.netHitSent) {
+              consumed = probeParalysisDartProximityHit(p.pos, hitPad, p.slowDuration, p._dartMuzzle);
+              if (consumed) {
+                p.netHitSent = true;
+                createSparks(p.pos.clone(), 0x6bd4ff);
+              }
             }
           }
 
@@ -11599,9 +11652,12 @@ if (typeof window !== "undefined") {
                 break;
               }
             }
-            if (!consumed) {
-              consumed = probeParalysisDartProximityHit(p.pos, hitPad, p.slowDuration);
-              if (consumed) createSparks(p.pos.clone(), 0x6bd4ff);
+            if (!consumed && !p.netHitSent) {
+              consumed = probeParalysisDartProximityHit(p.pos, hitPad, p.slowDuration, p._dartMuzzle);
+              if (consumed) {
+                p.netHitSent = true;
+                createSparks(p.pos.clone(), 0x6bd4ff);
+              }
             }
           }
 
@@ -11653,7 +11709,32 @@ if (typeof window !== "undefined") {
         const dir = getWeaponDirection(totalSpread);
         const muzzle = new THREE.Vector3();
         getActiveMuzzleWorld(muzzle);
-        spawnParalysisDartProjectile(muzzle, dir, w);
+        const proj = spawnParalysisDartProjectile(muzzle, dir, w);
+        if (MULTIPLAYER && !ARENA_COOP && !isTrainingMap(CURRENT_MAP)) {
+          const dartRay = new THREE.Raycaster(muzzle, dir, 0.02, 120);
+          dartRay.camera = camera;
+          let bestRpId = null;
+          let bestRpT = Infinity;
+          let bestRpPoint = null;
+          for (const [rpId, rp] of remotePlayers) {
+            if (rp.isDown || !rp.group.visible) continue;
+            rp.group.updateMatrixWorld(true);
+            const rh = humanoidHitAlongRayPadded(dartRay, rp.group, 1.32);
+            if (rh && rh.t < bestRpT) {
+              bestRpId = rpId;
+              bestRpT = rh.t;
+              bestRpPoint = rh.point || null;
+            }
+          }
+          if (bestRpId != null) {
+            const bp =
+              bestRpPoint ||
+              _ehHitWorld.copy(dartRay.ray.origin).addScaledVector(dartRay.ray.direction, bestRpT);
+            if (proj) proj.netHitSent = true;
+            emitDartSlowNetwork(bestRpId, w.slowDuration || 5, bp, muzzle);
+            createSparks(bp.clone ? bp.clone() : bp, 0x6bd4ff);
+          }
+        }
         updateHud();
         return;
       }
