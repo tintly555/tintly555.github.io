@@ -9331,34 +9331,47 @@ if (typeof window !== "undefined") {
         thumb.position.set(side === "left" ? 0.16 : -0.16, -0.60, 0.16); forearmGrp.add(thumb);
 
         forearmGrp.position.set(0, -0.60, 0);
-        forearmGrp.rotation.x = -0.9;
+        forearmGrp.rotation.x = -0.55;
         ar.add(forearmGrp);
       };
       makeArm(leftArmRoot, leftForearmRoot, "left");
       makeArm(rightArmRoot, rightForearmRoot, "right");
 
-      leftLegRoot.position.set(-0.32, 0.68, 0);
-      rightLegRoot.position.set(0.32, 0.68, 0);
-      const makeLeg = (lr, side) => {
-        const thigh = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.44, 0.24), matPants);
+      const hipBridge = new THREE.Mesh(new THREE.BoxGeometry(0.70, 0.18, 0.40), matPants);
+      hipBridge.position.set(0, 0.50, 0.30);
+      root.add(hipBridge);
+
+      leftLegRoot.position.set(-0.30, 0.48, 0.28);
+      rightLegRoot.position.set(0.30, 0.48, 0.28);
+      leftLegRoot.rotation.x = 0.20;
+      rightLegRoot.rotation.x = 0.20;
+      const leftShinRoot = new THREE.Group();
+      const rightShinRoot = new THREE.Group();
+      const makeLeg = (lr, shinGrp, side) => {
+        const thigh = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.42, 0.24), matPants);
         thigh.position.set(0, -0.22, 0); lr.add(thigh);
+
+        shinGrp.position.set(0, -0.44, 0);
+        shinGrp.rotation.x = -0.40;
+        const shin = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.40, 0.22), matPants);
+        shin.position.set(0, -0.22, 0); shinGrp.add(shin);
         const knee = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.12, 0.22), matSkinD);
-        knee.position.set(0, -0.46, 0.02); lr.add(knee);
-        const shin = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.38, 0.22), matPants);
-        shin.position.set(0, -0.66, 0); lr.add(shin);
+        knee.position.set(0, 0.02, 0.02); shinGrp.add(knee);
         if (side === "right") {
           const tear = new THREE.Mesh(new THREE.BoxGeometry(0.23, 0.08, 0.06), matSkin);
-          tear.position.set(0, -0.72, 0.12); lr.add(tear);
+          tear.position.set(0, -0.30, 0.12); shinGrp.add(tear);
         }
         const foot = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.10, 0.32), matSkinD);
-        foot.position.set(0, -0.90, 0.04); lr.add(foot);
+        foot.position.set(0, -0.46, 0.04); shinGrp.add(foot);
+        lr.add(shinGrp);
       };
-      makeLeg(leftLegRoot, "left"); makeLeg(rightLegRoot, "right");
+      makeLeg(leftLegRoot, leftShinRoot, "left");
+      makeLeg(rightLegRoot, rightShinRoot, "right");
 
       torsoRoot.add(leftArmRoot, rightArmRoot);
       root.add(torsoRoot, leftLegRoot, rightLegRoot);
       root.scale.set(2.0, 2.0, 2.0);
-      root.position.set(x, 0.54, z);
+      root.position.set(x, 0.64, z);
       root.traverse((o) => {
         if (!o.isMesh) return;
         o.castShadow = true;
@@ -9396,6 +9409,8 @@ if (typeof window !== "undefined") {
         rightForearmRoot,
         leftLegRoot,
         rightLegRoot,
+        leftShinRoot,
+        rightShinRoot,
         hpCanvas,
         hpCtx,
         hpTexture,
@@ -14535,8 +14550,8 @@ if (typeof window !== "undefined") {
 
         let bossAnimOverride = false;
         const HUNCH = 0.75;
-        const ELBOW_REST = -0.9;
-        const BOSS_BASE_Y = 0.54;
+        const ELBOW_REST = -0.55;
+        const BOSS_BASE_Y = 0.64;
         if (enemy.isBoss) {
           enemy.bossAnimTimer += dt;
           const lfa = enemy.leftForearmRoot;
@@ -14548,18 +14563,18 @@ if (typeof window !== "undefined") {
             if (t < 0.25) {
               const s = (t / 0.25) ** 2;
               enemy.leftArmRoot.rotation.x = THREE.MathUtils.lerp(-0.10, -0.8, s);
-              enemy.leftArmRoot.rotation.z = THREE.MathUtils.lerp(0.55, 1.2, s);
+              enemy.leftArmRoot.rotation.z = THREE.MathUtils.lerp(-0.50, -1.2, s);
               enemy.rightArmRoot.rotation.x = THREE.MathUtils.lerp(-0.10, -0.8, s);
-              enemy.rightArmRoot.rotation.z = THREE.MathUtils.lerp(-0.55, -1.2, s);
+              enemy.rightArmRoot.rotation.z = THREE.MathUtils.lerp(0.50, 1.2, s);
               lfa.rotation.x = THREE.MathUtils.lerp(ELBOW_REST, -0.3, s);
               rfa.rotation.x = THREE.MathUtils.lerp(ELBOW_REST, -0.3, s);
               enemy.torsoRoot.rotation.x = THREE.MathUtils.lerp(HUNCH, HUNCH - 0.2, s);
             } else if (t < 0.5) {
               const s = ((t - 0.25) / 0.25) ** 2;
               enemy.leftArmRoot.rotation.x = THREE.MathUtils.lerp(-0.8, -2.8, s);
-              enemy.leftArmRoot.rotation.z = THREE.MathUtils.lerp(1.2, 0.3, s);
+              enemy.leftArmRoot.rotation.z = THREE.MathUtils.lerp(-1.2, -0.3, s);
               enemy.rightArmRoot.rotation.x = THREE.MathUtils.lerp(-0.8, -2.8, s);
-              enemy.rightArmRoot.rotation.z = THREE.MathUtils.lerp(-1.2, -0.3, s);
+              enemy.rightArmRoot.rotation.z = THREE.MathUtils.lerp(1.2, 0.3, s);
               lfa.rotation.x = THREE.MathUtils.lerp(-0.3, -0.15, s);
               rfa.rotation.x = THREE.MathUtils.lerp(-0.3, -0.15, s);
               enemy.torsoRoot.rotation.x = THREE.MathUtils.lerp(HUNCH - 0.2, HUNCH - 0.35, s);
@@ -14567,9 +14582,9 @@ if (typeof window !== "undefined") {
             } else {
               const pulse = Math.sin((t - 0.5) * 12) * 0.12;
               enemy.leftArmRoot.rotation.x = -2.8 + pulse;
-              enemy.leftArmRoot.rotation.z = 0.3;
+              enemy.leftArmRoot.rotation.z = -0.3;
               enemy.rightArmRoot.rotation.x = -2.8 + pulse;
-              enemy.rightArmRoot.rotation.z = -0.3;
+              enemy.rightArmRoot.rotation.z = 0.3;
               lfa.rotation.x = -0.15 + pulse * 0.3;
               rfa.rotation.x = -0.15 + pulse * 0.3;
               enemy.torsoRoot.rotation.x = HUNCH - 0.35 + Math.sin((t - 0.5) * 16) * 0.05;
@@ -14590,9 +14605,9 @@ if (typeof window !== "undefined") {
             if (t < 0.3) {
               const s = (t / 0.3) ** 2;
               enemy.leftArmRoot.rotation.x = THREE.MathUtils.lerp(-0.10, -1.6, s);
-              enemy.leftArmRoot.rotation.z = THREE.MathUtils.lerp(0.55, 1.0, s);
+              enemy.leftArmRoot.rotation.z = THREE.MathUtils.lerp(-0.50, -1.0, s);
               enemy.rightArmRoot.rotation.x = THREE.MathUtils.lerp(-0.10, -1.6, s);
-              enemy.rightArmRoot.rotation.z = THREE.MathUtils.lerp(-0.55, -1.0, s);
+              enemy.rightArmRoot.rotation.z = THREE.MathUtils.lerp(0.50, 1.0, s);
               lfa.rotation.x = THREE.MathUtils.lerp(ELBOW_REST, -0.2, s);
               rfa.rotation.x = THREE.MathUtils.lerp(ELBOW_REST, -0.2, s);
               enemy.torsoRoot.rotation.x = THREE.MathUtils.lerp(HUNCH, HUNCH - 0.25, s);
@@ -14600,9 +14615,9 @@ if (typeof window !== "undefined") {
             } else if (t < 0.6) {
               const pulse = Math.sin((t - 0.3) * 20) * 0.15;
               enemy.leftArmRoot.rotation.x = -1.6 + pulse;
-              enemy.leftArmRoot.rotation.z = 1.0;
+              enemy.leftArmRoot.rotation.z = -1.0;
               enemy.rightArmRoot.rotation.x = -1.6 + pulse;
-              enemy.rightArmRoot.rotation.z = -1.0;
+              enemy.rightArmRoot.rotation.z = 1.0;
               lfa.rotation.x = -0.2 + pulse * 0.3;
               rfa.rotation.x = -0.2 + pulse * 0.3;
               enemy.torsoRoot.rotation.x = HUNCH - 0.25 + Math.sin((t - 0.3) * 24) * 0.06;
@@ -14611,9 +14626,9 @@ if (typeof window !== "undefined") {
             } else {
               const s = 1 - Math.pow(1 - (t - 0.6) / 0.4, 2);
               enemy.leftArmRoot.rotation.x = THREE.MathUtils.lerp(-1.6, -0.10, s);
-              enemy.leftArmRoot.rotation.z = THREE.MathUtils.lerp(1.0, 0.55, s);
+              enemy.leftArmRoot.rotation.z = THREE.MathUtils.lerp(-1.0, -0.50, s);
               enemy.rightArmRoot.rotation.x = THREE.MathUtils.lerp(-1.6, -0.10, s);
-              enemy.rightArmRoot.rotation.z = THREE.MathUtils.lerp(-1.0, -0.55, s);
+              enemy.rightArmRoot.rotation.z = THREE.MathUtils.lerp(1.0, 0.50, s);
               lfa.rotation.x = THREE.MathUtils.lerp(-0.2, ELBOW_REST, s);
               rfa.rotation.x = THREE.MathUtils.lerp(-0.2, ELBOW_REST, s);
               enemy.torsoRoot.rotation.x = THREE.MathUtils.lerp(HUNCH - 0.25, HUNCH, s);
@@ -14635,8 +14650,10 @@ if (typeof window !== "undefined") {
               const smooth = t / 0.40; const s = smooth * smooth * (3 - 2 * smooth);
               enemy.leftArmRoot.rotation.x = THREE.MathUtils.lerp(-0.10, -3.0, s);
               enemy.rightArmRoot.rotation.x = THREE.MathUtils.lerp(-0.10, -3.0, s);
-              enemy.leftArmRoot.rotation.z = THREE.MathUtils.lerp(0.55, 0.15, s);
-              enemy.rightArmRoot.rotation.z = THREE.MathUtils.lerp(-0.55, -0.15, s);
+              enemy.leftArmRoot.rotation.z = THREE.MathUtils.lerp(-0.50, -0.10, s);
+              enemy.rightArmRoot.rotation.z = THREE.MathUtils.lerp(0.50, 0.10, s);
+              enemy.leftArmRoot.rotation.y = THREE.MathUtils.lerp(0.25, 0, s);
+              enemy.rightArmRoot.rotation.y = THREE.MathUtils.lerp(-0.25, 0, s);
               lfa.rotation.x = THREE.MathUtils.lerp(ELBOW_REST, -0.15, s);
               rfa.rotation.x = THREE.MathUtils.lerp(ELBOW_REST, -0.15, s);
               enemy.torsoRoot.rotation.x = THREE.MathUtils.lerp(HUNCH, HUNCH - 0.40, s);
@@ -14645,8 +14662,10 @@ if (typeof window !== "undefined") {
               const pow = 1 - Math.pow(1 - (t - 0.40) / 0.12, 4);
               enemy.leftArmRoot.rotation.x = THREE.MathUtils.lerp(-3.0, 0.6, pow);
               enemy.rightArmRoot.rotation.x = THREE.MathUtils.lerp(-3.0, 0.6, pow);
-              enemy.leftArmRoot.rotation.z = 0.20 * (1 - pow);
-              enemy.rightArmRoot.rotation.z = -0.20 * (1 - pow);
+              enemy.leftArmRoot.rotation.z = -0.10 * (1 - pow);
+              enemy.rightArmRoot.rotation.z = 0.10 * (1 - pow);
+              enemy.leftArmRoot.rotation.y = 0;
+              enemy.rightArmRoot.rotation.y = 0;
               lfa.rotation.x = THREE.MathUtils.lerp(-0.15, -1.4, pow);
               rfa.rotation.x = THREE.MathUtils.lerp(-0.15, -1.4, pow);
               enemy.torsoRoot.rotation.x = THREE.MathUtils.lerp(HUNCH - 0.40, HUNCH + 0.50, pow);
@@ -14659,8 +14678,10 @@ if (typeof window !== "undefined") {
               const s = 1 - Math.pow(1 - (t - 0.52) / 0.48, 2);
               enemy.leftArmRoot.rotation.x = THREE.MathUtils.lerp(0.6, -0.10, s);
               enemy.rightArmRoot.rotation.x = THREE.MathUtils.lerp(0.6, -0.10, s);
-              enemy.leftArmRoot.rotation.z = THREE.MathUtils.lerp(0.15, 0.55, s);
-              enemy.rightArmRoot.rotation.z = THREE.MathUtils.lerp(-0.15, -0.55, s);
+              enemy.leftArmRoot.rotation.z = THREE.MathUtils.lerp(-0.10, -0.50, s);
+              enemy.rightArmRoot.rotation.z = THREE.MathUtils.lerp(0.10, 0.50, s);
+              enemy.leftArmRoot.rotation.y = THREE.MathUtils.lerp(0, 0.25, s);
+              enemy.rightArmRoot.rotation.y = THREE.MathUtils.lerp(0, -0.25, s);
               lfa.rotation.x = THREE.MathUtils.lerp(-1.4, ELBOW_REST, s);
               rfa.rotation.x = THREE.MathUtils.lerp(-1.4, ELBOW_REST, s);
               enemy.torsoRoot.rotation.x = THREE.MathUtils.lerp(HUNCH + 0.50, HUNCH, s);
@@ -14684,8 +14705,10 @@ if (typeof window !== "undefined") {
           if (!enemy.moving) {
             enemy.leftArmRoot.rotation.x = -0.10 + breathe;
             enemy.rightArmRoot.rotation.x = -0.10 + breathe;
-            enemy.leftArmRoot.rotation.z = 0.55 + sway0;
-            enemy.rightArmRoot.rotation.z = -0.55 - sway0;
+            enemy.leftArmRoot.rotation.z = -0.50 + sway0;
+            enemy.rightArmRoot.rotation.z = 0.50 - sway0;
+            enemy.leftArmRoot.rotation.y = 0.25;
+            enemy.rightArmRoot.rotation.y = -0.25;
             lfa.rotation.x = ELBOW_REST + breathe * 0.5;
             rfa.rotation.x = ELBOW_REST + breathe * 0.5;
             enemy.torsoRoot.rotation.x = HUNCH + breathe * 0.5;
@@ -14693,19 +14716,35 @@ if (typeof window !== "undefined") {
           } else {
             const w = enemy.walkTime;
             const stride = Math.sin(w);
-            enemy.leftArmRoot.rotation.x = 0.0 + stride * 0.45;
-            enemy.rightArmRoot.rotation.x = 0.0 - stride * 0.45;
-            enemy.leftArmRoot.rotation.z = 0.45;
-            enemy.rightArmRoot.rotation.z = -0.45;
+            enemy.leftArmRoot.rotation.x = 0.0 + stride * 0.40;
+            enemy.rightArmRoot.rotation.x = 0.0 - stride * 0.40;
+            enemy.leftArmRoot.rotation.z = -0.40;
+            enemy.rightArmRoot.rotation.z = 0.40;
+            enemy.leftArmRoot.rotation.y = 0.20;
+            enemy.rightArmRoot.rotation.y = -0.20;
             lfa.rotation.x = ELBOW_REST + stride * 0.15;
             rfa.rotation.x = ELBOW_REST - stride * 0.15;
             enemy.torsoRoot.rotation.x = HUNCH + Math.sin(w * 2) * 0.05;
             enemy.torsoRoot.rotation.z = Math.sin(w) * 0.07;
           }
-          const bLegL = enemy.moving ? -Math.sin(enemy.walkTime) * 0.65 : 0;
-          const bLegR = enemy.moving ? Math.sin(enemy.walkTime) * 0.65 : 0;
-          enemy.legLV = dampScalar(enemy.legLV, bLegL, dt, 12);
-          enemy.legRV = dampScalar(enemy.legRV, bLegR, dt, 12);
+          const LEG_BASE_TILT = 0.20;
+          const SHIN_BASE_BEND = -0.40;
+          if (enemy.moving) {
+            const sw = Math.sin(enemy.walkTime);
+            const bLegL = LEG_BASE_TILT - sw * 0.50;
+            const bLegR = LEG_BASE_TILT + sw * 0.50;
+            enemy.legLV = dampScalar(enemy.legLV, bLegL, dt, 12);
+            enemy.legRV = dampScalar(enemy.legRV, bLegR, dt, 12);
+            const shinL = SHIN_BASE_BEND + Math.max(0, sw) * 0.45;
+            const shinR = SHIN_BASE_BEND + Math.max(0, -sw) * 0.45;
+            if (enemy.leftShinRoot) enemy.leftShinRoot.rotation.x = dampScalar(enemy.leftShinRoot.rotation.x, shinL, dt, 12);
+            if (enemy.rightShinRoot) enemy.rightShinRoot.rotation.x = dampScalar(enemy.rightShinRoot.rotation.x, shinR, dt, 12);
+          } else {
+            enemy.legLV = dampScalar(enemy.legLV, LEG_BASE_TILT, dt, 12);
+            enemy.legRV = dampScalar(enemy.legRV, LEG_BASE_TILT, dt, 12);
+            if (enemy.leftShinRoot) enemy.leftShinRoot.rotation.x = dampScalar(enemy.leftShinRoot.rotation.x, SHIN_BASE_BEND, dt, 12);
+            if (enemy.rightShinRoot) enemy.rightShinRoot.rotation.x = dampScalar(enemy.rightShinRoot.rotation.x, SHIN_BASE_BEND, dt, 12);
+          }
           enemy.leftLegRoot.rotation.x = enemy.legLV;
           enemy.rightLegRoot.rotation.x = enemy.legRV;
           enemy.torsoBobYV = dampScalar(enemy.torsoBobYV, enemy.moving ? Math.abs(Math.sin(enemy.walkTime * 2)) * 0.06 : 0, dt, 16);
