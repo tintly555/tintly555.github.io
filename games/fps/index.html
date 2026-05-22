@@ -5507,6 +5507,7 @@ if (typeof window !== "undefined") {
         spawnHumanoidDissolve(enemy.group, hitPt);
         enemy.group.visible = false;
         state.score += 1;
+        if (enemy.isBoss) triggerBossVictory(enemy.group.position.clone());
       }
       updateHud();
     });
@@ -8203,11 +8204,11 @@ if (typeof window !== "undefined") {
 
       floor.visible = true;
 
-      const amb = new THREE.AmbientLight(0x404858, 1.2);
+      const amb = new THREE.AmbientLight(0x606878, 1.8);
       scene.add(amb); pvpMapLights.push(amb);
-      const hemi = new THREE.HemisphereLight(0x384050, 0x0a0808, 1.6);
+      const hemi = new THREE.HemisphereLight(0x506070, 0x181210, 2.2);
       scene.add(hemi); pvpMapLights.push(hemi);
-      const dim = new THREE.DirectionalLight(0x8090b0, 2.0);
+      const dim = new THREE.DirectionalLight(0x90a0c0, 3.0);
       dim.position.set(20, 40, 30);
       dim.castShadow = false;
       scene.add(dim); pvpMapLights.push(dim);
@@ -9242,8 +9243,8 @@ if (typeof window !== "undefined") {
       const belly = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.35, 0.45), matSkin);
       belly.position.y = 0.85; torsoRoot.add(belly);
 
-      const hip = new THREE.Mesh(new THREE.BoxGeometry(0.60, 0.22, 0.38), matPants);
-      hip.position.y = 0.62; torsoRoot.add(hip);
+      const hip = new THREE.Mesh(new THREE.BoxGeometry(0.50, 0.12, 0.32), matPants);
+      hip.position.y = 0.68; torsoRoot.add(hip);
 
       const tearL = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.15, 0.06), matSkin);
       tearL.position.set(-0.35, 1.4, 0.28); torsoRoot.add(tearL);
@@ -9300,7 +9301,7 @@ if (typeof window !== "undefined") {
       const earL = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.10, 0.06), matSkinD);
       earL.position.set(-0.24, 0.02, 0); headGroup.add(earL);
       const earR = earL.clone(); earR.position.x = 0.24; headGroup.add(earR);
-      headGroup.position.y = 2.42; torsoRoot.add(headGroup);
+      headGroup.position.set(0, 2.18, 0.10); torsoRoot.add(headGroup);
 
       torsoRoot.rotation.x = 0.55;
 
@@ -9336,23 +9337,21 @@ if (typeof window !== "undefined") {
       makeArm(leftArmRoot, leftForearmRoot, "left");
       makeArm(rightArmRoot, rightForearmRoot, "right");
 
-      leftLegRoot.position.set(-0.22, 0.68, 0);
-      rightLegRoot.position.set(0.22, 0.68, 0);
+      leftLegRoot.position.set(-0.20, 0.72, 0);
+      rightLegRoot.position.set(0.20, 0.72, 0);
       const makeLeg = (lr, side) => {
-        const hipJoint = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.16, 0.24), matPants);
-        hipJoint.position.set(0, 0.0, 0); lr.add(hipJoint);
-        const thigh = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.62, 0.24), matPants);
-        thigh.position.set(0, -0.36, 0); lr.add(thigh);
+        const thigh = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.70, 0.24), matPants);
+        thigh.position.set(0, -0.35, 0); lr.add(thigh);
         const knee = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.14, 0.22), matSkinD);
-        knee.position.set(0, -0.68, 0.02); lr.add(knee);
-        const shin = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.56, 0.22), matPants);
-        shin.position.set(0, -0.94, 0); lr.add(shin);
+        knee.position.set(0, -0.72, 0.02); lr.add(knee);
+        const shin = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.64, 0.22), matPants);
+        shin.position.set(0, -1.06, 0); lr.add(shin);
         if (side === "right") {
           const tear = new THREE.Mesh(new THREE.BoxGeometry(0.23, 0.09, 0.06), matSkin);
-          tear.position.set(0, -1.00, 0.12); lr.add(tear);
+          tear.position.set(0, -1.14, 0.12); lr.add(tear);
         }
         const foot = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.10, 0.32), matSkinD);
-        foot.position.set(0, -1.26, 0.04); lr.add(foot);
+        foot.position.set(0, -1.42, 0.04); lr.add(foot);
       };
       makeLeg(leftLegRoot, "left"); makeLeg(rightLegRoot, "right");
 
@@ -10070,6 +10069,100 @@ if (typeof window !== "undefined") {
         );
         spark.userData.life = 0.18;
         sparkGroup.add(spark);
+      }
+    }
+
+    let bossVictoryActive = false;
+    let bossVictoryTimer = 0;
+    const bossGoldParticles = [];
+
+    function triggerBossVictory(pos) {
+      if (bossVictoryActive) return;
+      bossVictoryActive = true;
+      bossVictoryTimer = 0;
+      playBossRoarSfx();
+
+      for (let i = 0; i < 120; i++) {
+        const hue = 0.10 + Math.random() * 0.08;
+        const color = new THREE.Color().setHSL(hue, 1.0, 0.55 + Math.random() * 0.3);
+        const size = 0.08 + Math.random() * 0.18;
+        const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 1 });
+        const p = new THREE.Mesh(new THREE.BoxGeometry(size, size, size), mat);
+        p.position.set(
+          pos.x + (Math.random() - 0.5) * 3,
+          pos.y + Math.random() * 4,
+          pos.z + (Math.random() - 0.5) * 3
+        );
+        const speed = 2 + Math.random() * 5;
+        const angle = Math.random() * Math.PI * 2;
+        const upSpeed = 3 + Math.random() * 6;
+        p.userData.vel = new THREE.Vector3(
+          Math.cos(angle) * speed,
+          upSpeed,
+          Math.sin(angle) * speed
+        );
+        p.userData.life = 3.0 + Math.random() * 3.0;
+        p.userData.maxLife = p.userData.life;
+        p.userData.rotSpeed = (Math.random() - 0.5) * 8;
+        scene.add(p);
+        bossGoldParticles.push(p);
+      }
+    }
+
+    function updateBossVictory(dt) {
+      if (!bossVictoryActive) return;
+      bossVictoryTimer += dt;
+
+      for (let i = bossGoldParticles.length - 1; i >= 0; i--) {
+        const p = bossGoldParticles[i];
+        p.userData.life -= dt;
+        if (p.userData.life <= 0) {
+          scene.remove(p);
+          p.material.dispose();
+          p.geometry.dispose();
+          bossGoldParticles.splice(i, 1);
+          continue;
+        }
+        p.userData.vel.y -= dt * 2.0;
+        p.position.addScaledVector(p.userData.vel, dt);
+        p.rotation.x += p.userData.rotSpeed * dt;
+        p.rotation.y += p.userData.rotSpeed * dt * 0.7;
+        const fade = Math.min(1, p.userData.life / (p.userData.maxLife * 0.3));
+        p.material.opacity = fade;
+      }
+
+      if (bossVictoryTimer > 0.5 && bossVictoryTimer < 6.5) {
+        const fogProgress = Math.min(1, (bossVictoryTimer - 0.5) / 5.0);
+        const s = fogProgress * fogProgress * (3 - 2 * fogProgress);
+        const darkFog = new THREE.Color(0x1a1a22);
+        const clearFog = new THREE.Color(0x87ceeb);
+        scene.fog.color.copy(darkFog).lerp(clearFog, s);
+        scene.background.copy(darkFog).lerp(clearFog, s);
+        scene.fog.near = THREE.MathUtils.lerp(scene.fog.near, 60, s);
+        scene.fog.far = THREE.MathUtils.lerp(scene.fog.far, 250, s);
+      }
+
+      if (bossVictoryTimer >= 3.0 && !bossVictoryActive._msgShown) {
+        bossVictoryActive._msgShown = true;
+        const overlay = document.createElement("div");
+        overlay.id = "bossVictoryOverlay";
+        overlay.style.cssText = "position:fixed;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;flex-direction:column;z-index:9999;pointer-events:none;";
+        const title = document.createElement("div");
+        title.textContent = "BOSS DEFEATED";
+        title.style.cssText = "font-size:64px;font-weight:900;color:#ffd700;text-shadow:0 0 30px rgba(255,215,0,0.8),0 0 60px rgba(255,165,0,0.5),0 4px 12px rgba(0,0,0,0.7);letter-spacing:6px;opacity:0;animation:bossVicFadeIn 2s ease forwards;";
+        const sub = document.createElement("div");
+        sub.textContent = "YOU WIN";
+        sub.style.cssText = "font-size:28px;font-weight:700;color:#fff;text-shadow:0 0 20px rgba(255,255,255,0.5),0 2px 8px rgba(0,0,0,0.6);margin-top:16px;letter-spacing:4px;opacity:0;animation:bossVicFadeIn 2s ease 0.8s forwards;";
+        overlay.appendChild(title);
+        overlay.appendChild(sub);
+        document.body.appendChild(overlay);
+
+        if (!document.getElementById("bossVicStyle")) {
+          const st = document.createElement("style");
+          st.id = "bossVicStyle";
+          st.textContent = "@keyframes bossVicFadeIn{from{opacity:0;transform:translateY(20px) scale(0.9)}to{opacity:1;transform:translateY(0) scale(1)}}";
+          document.head.appendChild(st);
+        }
       }
     }
 
@@ -12903,6 +12996,7 @@ if (typeof window !== "undefined") {
           state.score += 1;
           triggerHitFeedback(true, false);
           createSparks(bp.clone ? bp.clone() : bp, 0xff5555);
+          if (bestEnemy.isBoss) triggerBossVictory(bestEnemy.group.position.clone());
         }
       }
     }
@@ -13133,6 +13227,7 @@ if (typeof window !== "undefined") {
               triggerHitFeedback(true, bestEnemyZone === "head");
               createSparks(bp.clone(), 0xff5555);
               createSparks(bp.clone(), 0xff8888);
+              if (bestEnemy.isBoss) triggerBossVictory(bestEnemy.group.position.clone());
             }
             socket.emit("zombieDamage", {
               ei,
@@ -13151,6 +13246,7 @@ if (typeof window !== "undefined") {
               triggerHitFeedback(true, bestEnemyZone === "head");
               createSparks(bp.clone(), 0xff5555);
               createSparks(bp.clone(), 0xff8888);
+              if (bestEnemy.isBoss) triggerBossVictory(bestEnemy.group.position.clone());
             }
           }
         } else if (closestDist === rpDist && bestRpId != null && bestRpHitT < Infinity) {
@@ -14905,6 +15001,7 @@ if (typeof window !== "undefined") {
           updateEnemies(dt);
         }
         if (gameWorldReady) updateBossProjectiles(dt);
+        if (gameWorldReady) updateBossVictory(dt);
         if (gameWorldReady) updateDeathAnim(dt);
         if (gameWorldReady && MULTIPLAYER && ARENA_COOP && ZOMBIE_AUTHORITY && isZombieMap) {
           _zombieSyncAcc += dt;
