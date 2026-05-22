@@ -320,11 +320,34 @@
       inset: 0;
       background: #000;
       pointer-events: none;
-      z-index: 90;
+      z-index: 250000;
       opacity: 0;
-      transition: opacity 0.18s linear;
+      transition: opacity 0.12s linear;
     }
     .blind-overlay.show { opacity: 1; }
+    .blind-overlay-inner {
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 85% 70% at 50% 45%, rgba(8, 12, 18, 0.35) 0%, #000 72%),
+        repeating-linear-gradient(
+          0deg,
+          rgba(255, 255, 255, 0.02) 0px,
+          rgba(255, 255, 255, 0.02) 1px,
+          transparent 1px,
+          transparent 3px
+        );
+      opacity: 1;
+    }
+    body.player-blinded #app canvas {
+      visibility: hidden;
+    }
+    body.player-blinded #crosshair,
+    body.player-blinded #medKitReticle,
+    body.player-blinded #amrScopeOverlay {
+      opacity: 0 !important;
+      visibility: hidden !important;
+    }
     .blind-text {
       position: fixed;
       left: 50%;
@@ -1095,7 +1118,7 @@
   </div>
   <div class="hint" id="hint" data-i18n="hintClick">Click anywhere</div>
   <div class="flash" id="flash"></div>
-  <div class="blind-overlay" id="blindOverlay" aria-hidden="true"></div>
+  <div class="blind-overlay" id="blindOverlay" aria-hidden="true"><div class="blind-overlay-inner"></div></div>
   <div class="blind-text" id="blindText" data-i18n="hudBlinded" aria-hidden="true">BLINDED</div>
   <div class="crosshair" id="crosshair"></div>
   <div id="amrScopeOverlay" class="amr-scope-overlay" aria-hidden="true"></div>
@@ -1196,6 +1219,17 @@
               <input type="range" id="rngAdsLookSens" min="0.1" max="200" step="0.1" value="100" />
               <p id="adsLookSensHint" style="font-size:11px;opacity:0.65;margin-top:10px;max-width:480px;line-height:1.45;">
                 Applies while aiming (right-click / Shift). 100% matches default ADS feel. Range 0.1%–200%.
+              </p>
+            </div>
+            <div class="settings-row">
+              <label id="skipClickToPlayLabel">Enter and play immediately</label>
+              <div class="settings-cycle">
+                <button type="button" class="cycle-arrow" id="btnSkipClickOff" aria-label="Require click">◀</button>
+                <div class="cycle-value" id="skipClickToPlayValue">OFF</div>
+                <button type="button" class="cycle-arrow" id="btnSkipClickOn" aria-label="Skip click">▶</button>
+              </div>
+              <p id="skipClickToPlayHint" style="font-size:11px;opacity:0.65;margin-top:10px;max-width:480px;line-height:1.45;">
+                When ON, you can move and look right after loading without clicking the game screen first.
               </p>
             </div>
           </section>
@@ -4354,6 +4388,7 @@ if (typeof window !== "undefined") {
       renderDistanceIndex: 2,
       lookSensPercent: LOOK_SENS_PERCENT_DEFAULT,
       adsLookSensPercent: LOOK_SENS_PERCENT_DEFAULT,
+      skipClickToPlay: false,
       language: "en",
     };
     let settingsModalOpen = false;
@@ -4384,6 +4419,9 @@ if (typeof window !== "undefined") {
         if (typeof o.adsLookSensPercent === "number") {
           gameSettings.adsLookSensPercent = clampLookSensPercent(o.adsLookSensPercent);
         }
+        if (typeof o.skipClickToPlay === "boolean") {
+          gameSettings.skipClickToPlay = o.skipClickToPlay;
+        }
       } catch (_) {}
     }
 
@@ -4394,6 +4432,36 @@ if (typeof window !== "undefined") {
     }
 
     loadGameSettings();
+
+    let _freeLookLastX = 0;
+    let _freeLookLastY = 0;
+    let _freeLookHasLast = false;
+
+    function controlsInputReady() {
+      return (
+        state.locked ||
+        (gameSettings.skipClickToPlay && gameWorldReady && player.health > 0)
+      );
+    }
+
+    function updateClickHintVisibility() {
+      if (!hint) return;
+      const hide =
+        state.locked ||
+        paused ||
+        player.health <= 0 ||
+        !gameWorldReady ||
+        !!gameSettings.skipClickToPlay;
+      hint.style.display = hide ? "none" : "block";
+    }
+
+    function tryAutoCapturePointer() {
+      if (!gameSettings.skipClickToPlay || !gameWorldReady || player.health <= 0) return;
+      if (paused || settingsModalOpen || chatOpen) return;
+      try {
+        renderer.domElement.requestPointerLock();
+      } catch (_) {}
+    }
 
     function tr(key, fallback = "") {
       const lang = LANGUAGE_OPTIONS.includes(gameSettings.language) ? gameSettings.language : "en";
@@ -4498,6 +4566,10 @@ if (typeof window !== "undefined") {
       const pAdsSens = document.getElementById("adsLookSensHint");
       if (lAdsSens) lAdsSens.textContent = tr("settingsAdsLookSensLabel", lAdsSens.textContent);
       if (pAdsSens) pAdsSens.textContent = tr("settingsAdsLookSensHint", pAdsSens.textContent);
+      const lSkip = document.getElementById("skipClickToPlayLabel");
+      const pSkip = document.getElementById("skipClickToPlayHint");
+      if (lSkip) lSkip.textContent = tr("settingsSkipClickLabel", lSkip.textContent);
+      if (pSkip) pSkip.textContent = tr("settingsSkipClickHint", pSkip.textContent);
       try {
         refreshFpsHelpForMap();
       } catch (_) {}
@@ -4931,6 +5003,55 @@ if (typeof window !== "undefined") {
       }
     });
 
+    function handleIncomingBlindEvent(data) {
+      if (!data) return;
+      const tid =
+        data.target != null
+          ? String(data.target)
+          : data.targetId != null
+            ? String(data.targetId)
+            : data.blindTarget != null
+              ? String(data.blindTarget)
+              : "";
+      if (!tid || tid !== String(socket.id)) return;
+      const dur =
+        typeof data.duration === "number"
+          ? data.duration
+          : typeof data.blindDuration === "number"
+            ? data.blindDuration
+            : 5;
+      startBlindEffect(dur);
+    }
+
+    socket.on("playerBlind", handleIncomingBlindEvent);
+    socket.on("blind", handleIncomingBlindEvent);
+
+    socket.on("shoot", (data) => {
+      if (!data) return;
+      if (data.type === "blind" || data.blindTarget != null) {
+        handleIncomingBlindEvent(data);
+      }
+      if (data.sx != null && data.sy != null && data.sz != null
+          && data.x != null && data.y != null && data.z != null) {
+        createBulletTrail(
+          new THREE.Vector3(data.sx, data.sy, data.sz),
+          new THREE.Vector3(data.x, data.y, data.z),
+          data.color ?? 0x6bd4ff
+        );
+      }
+      if (data.type === "miss") return;
+      const pt = new THREE.Vector3(data.x, data.y, data.z);
+      if (data.type === "blood") {
+        createBlood(pt);
+      } else if (data.type === "spark") {
+        createSparks(pt, data.color || 0xffdd88);
+        const n = new THREE.Vector3(data.nx, data.ny, data.nz);
+        if (n.lengthSq() > 0) createBulletMark(pt, n);
+      } else if (data.type === "blind") {
+        createSparks(pt, 0x6bd4ff);
+      }
+    });
+
     socket.on("enemyShoot", (data) => {
       if (data.sx != null && data.sy != null && data.sz != null
           && data.x != null && data.y != null && data.z != null) {
@@ -4998,10 +5119,15 @@ if (typeof window !== "undefined") {
       if (!gameWorldReady) return;
       if (player.health <= 0) return;
       if (performance.now() < player.spawnProtectUntil) return;
-      if (data && data.hitKind === "blind") {
+      if (
+        data &&
+        (data.hitKind === "blind" ||
+          data.blind === true ||
+          data.blindDuration > 0 && (data.damage || 0) <= 1)
+      ) {
         const dur = (typeof data.blindDuration === "number" && isFinite(data.blindDuration)) ? data.blindDuration : 5;
         startBlindEffect(dur);
-        return;
+        if (data.hitKind === "blind" || data.blind === true) return;
       }
       player.health = Math.max(0, player.health - (data.damage || 0));
       player.regenTimer = 0;
@@ -10816,6 +10942,12 @@ if (typeof window !== "undefined") {
     renderer.domElement.addEventListener("mousedown", (e) => {
       if (!state.locked) {
         if (paused || player.health <= 0) return;
+        if (gameSettings.skipClickToPlay && gameWorldReady && e.button === 0) {
+          state.mouseDown = true;
+          if (state.weaponIndex !== 4) tryShoot();
+          tryAutoCapturePointer();
+          return;
+        }
         renderer.domElement.requestPointerLock();
         return;
       }
@@ -10836,7 +10968,7 @@ if (typeof window !== "undefined") {
     });
 
     document.addEventListener("mousedown", (e) => {
-      if (!gameWorldReady || !state.locked || player.health <= 0) return;
+      if (!gameWorldReady || !controlsInputReady() || player.health <= 0) return;
       if (e.button === 2) {
         if (state.weaponIndex !== 4 && !state.reloading) state.ads = true;
       }
@@ -10856,23 +10988,26 @@ if (typeof window !== "undefined") {
     document.addEventListener("pointerlockchange", () => {
       state.locked = document.pointerLockElement === renderer.domElement;
       if (!state.locked) {
-        keys.w = false;
-        keys.a = false;
-        keys.s = false;
-        keys.d = false;
-        keys.space = false;
-        keys.shift = false;
-        keys.f = false;
-        state.mouseDown = false;
-        state.ads = false;
-        if (started && player.health > 0 && menuEl.style.display === "none" && !chatOpen && !settingsModalOpen && gameWorldReady) {
-          showPause();
+        _freeLookHasLast = false;
+        if (!gameSettings.skipClickToPlay) {
+          keys.w = false;
+          keys.a = false;
+          keys.s = false;
+          keys.d = false;
+          keys.space = false;
+          keys.shift = false;
+          keys.f = false;
+          state.mouseDown = false;
+          state.ads = false;
+          if (started && player.health > 0 && menuEl.style.display === "none" && !chatOpen && !settingsModalOpen && gameWorldReady) {
+            showPause();
+          }
         }
       } else {
         hidePause();
         bumpRendererLayoutSync(90);
       }
-      hint.style.display = (state.locked || paused || player.health <= 0 || !gameWorldReady) ? "none" : "block";
+      updateClickHintVisibility();
     });
 
     window.addEventListener("blur", () => {
@@ -10887,8 +11022,30 @@ if (typeof window !== "undefined") {
       state.ads = false;
     });
 
+    renderer.domElement.addEventListener("mousemove", (e) => {
+      if (!gameSettings.skipClickToPlay || state.locked || !gameWorldReady) return;
+      if (paused || player.health <= 0) return;
+      if (!_freeLookHasLast) {
+        _freeLookLastX = e.clientX;
+        _freeLookLastY = e.clientY;
+        _freeLookHasLast = true;
+        return;
+      }
+      const dx = e.clientX - _freeLookLastX;
+      const dy = e.clientY - _freeLookLastY;
+      _freeLookLastX = e.clientX;
+      _freeLookLastY = e.clientY;
+      if (dx === 0 && dy === 0) return;
+      const sens = getLookSensitivityMul(isAdsLookSensitivityActive());
+      player.yaw -= dx * LOOK_SENS_BASE_YAW * sens * 0.22;
+      player.pitch -= dy * LOOK_SENS_BASE_PITCH * sens * 0.22;
+      const limit = Math.PI / 2 - 0.01;
+      player.pitch = Math.max(-limit, Math.min(limit, player.pitch));
+    });
+
     document.addEventListener("mousemove", (e) => {
-      if (!state.locked || paused || player.health <= 0) return;
+      if (!controlsInputReady() || paused || player.health <= 0) return;
+      if (!state.locked) return;
 
       const sens = getLookSensitivityMul(isAdsLookSensitivityActive());
       player.yaw -= e.movementX * LOOK_SENS_BASE_YAW * sens;
@@ -11116,15 +11273,61 @@ if (typeof window !== "undefined") {
     const _projWorkVecB = new THREE.Vector3();
     const _projWorkVecC = new THREE.Vector3();
 
+    function applyCameraBlindVisuals(blinded) {
+      if (BLIND_OVERLAY_EL) {
+        BLIND_OVERLAY_EL.classList.toggle("show", blinded);
+        BLIND_OVERLAY_EL.setAttribute("aria-hidden", blinded ? "false" : "true");
+      }
+      if (BLIND_TEXT_EL) BLIND_TEXT_EL.classList.toggle("show", blinded);
+      document.body.classList.toggle("player-blinded", blinded);
+      if (blinded) {
+        if (weaponRoot) weaponRoot.visible = false;
+        if (amrScopeOverlayEl) amrScopeOverlayEl.style.opacity = "0";
+        crosshairEl.classList.add("hidden");
+        if (medKitReticleEl) medKitReticleEl.classList.add("hidden");
+      }
+    }
+
     function startBlindEffect(durationSec) {
       const end = performance.now() + Math.max(0, durationSec) * 1000;
       if (end > state.blindUntil) state.blindUntil = end;
+      applyCameraBlindVisuals(true);
     }
 
     function updateBlindOverlay() {
       const blinded = performance.now() < state.blindUntil;
-      if (BLIND_OVERLAY_EL) BLIND_OVERLAY_EL.classList.toggle("show", blinded);
-      if (BLIND_TEXT_EL) BLIND_TEXT_EL.classList.toggle("show", blinded);
+      applyCameraBlindVisuals(blinded);
+    }
+
+    function emitBlindHitNetwork(targetId, durationSec, hitPoint) {
+      if (!MULTIPLAYER || !socket || targetId == null) return;
+      const dur = Math.max(0.5, durationSec || 5);
+      const hx = hitPoint && hitPoint.x != null ? hitPoint.x : player.position.x;
+      const hz = hitPoint && hitPoint.z != null ? hitPoint.z : player.position.z;
+      const payload = {
+        target: targetId,
+        targetId,
+        duration: dur,
+        blindDuration: dur,
+        x: hx,
+        z: hz,
+      };
+      socket.emit("playerBlind", payload);
+      socket.emit("blind", payload);
+      socket.emit("hit", {
+        target: targetId,
+        damage: 1,
+        x: hx,
+        z: hz,
+        hitKind: "blind",
+        blindDuration: dur,
+      });
+      if (hitPoint && hitPoint.isVector3) {
+        emitShootNetwork(hitPoint, hitPoint, 0x6bd4ff, "blind", {
+          blindTarget: targetId,
+          blindDuration: dur,
+        });
+      }
     }
 
     function spawnBlindDartProjectile(origin, direction, weaponCfg) {
@@ -11209,11 +11412,51 @@ if (typeof window !== "undefined") {
       return { t: worldT, zone, point: _ehHitWorld.clone() };
     }
 
+    function probeBlindDartProximityHit(worldPos, hitPad, blindDuration) {
+      if (MULTIPLAYER && !ARENA_COOP && !isTrainingMap(CURRENT_MAP)) {
+        for (const [rpId, rp] of remotePlayers) {
+          if (rp.isDown || !rp.group.visible) continue;
+          _projWorkVecA.set(rp.visX ?? rp.x ?? 0, 1.12, rp.visZ ?? rp.z ?? 0);
+          const dx = worldPos.x - _projWorkVecA.x;
+          const dy = worldPos.y - _projWorkVecA.y;
+          const dz = worldPos.z - _projWorkVecA.z;
+          const r = 0.58 * hitPad;
+          if (dx * dx + dy * dy + dz * dz <= r * r) {
+            emitBlindHitNetwork(rpId, blindDuration, worldPos);
+            return true;
+          }
+        }
+      }
+      for (const enemy of state.enemies) {
+        if (!enemyBlockingHits(enemy)) continue;
+        const ex = enemy.group.position.x;
+        const ez = enemy.group.position.z;
+        const dx = worldPos.x - ex;
+        const dy = worldPos.y - 1.12;
+        const dz = worldPos.z - ez;
+        const r = 0.58 * hitPad;
+        if (dx * dx + dy * dy + dz * dz <= r * r) {
+          if (enemy.trainingDummy) {
+            registerTrainingHit("body");
+          } else {
+            enemy.blindUntil = performance.now() + (blindDuration || 5) * 1000;
+            enemy.aware = false;
+            enemy.targetId = null;
+            enemy.retargetTimer = 0;
+            enemy.rangedLosAcquireTimer = 0;
+            enemy.attackCooldownTimer = Math.max(enemy.attackCooldownTimer, 0.5);
+          }
+          return true;
+        }
+      }
+      return false;
+    }
+
     function updateProjectiles(dt) {
       if (!state.projectiles.length) return;
-      const projSteps = 3;
+      const projSteps = 5;
       const subDt = dt / projSteps;
-      const hitPad = 1.22;
+      const hitPad = 1.28;
       for (let i = state.projectiles.length - 1; i >= 0; i--) {
         const p = state.projectiles[i];
         let consumed = false;
@@ -11237,7 +11480,7 @@ if (typeof window !== "undefined") {
           const segRay = new THREE.Raycaster(p.prev, segDir, 0, segLen + 0.08);
           segRay.camera = camera;
 
-          const localImmune = p.age < 0.12;
+          const localImmune = p.age < 0.06;
 
           if (!consumed && MULTIPLAYER && !ARENA_COOP && !isTrainingMap(CURRENT_MAP)) {
             for (const [rpId, rp] of remotePlayers) {
@@ -11245,18 +11488,15 @@ if (typeof window !== "undefined") {
               rp.group.updateMatrixWorld(true);
               const rh = humanoidHitAlongRayPadded(segRay, rp.group, hitPad);
               if (rh) {
-                socket.emit("hit", {
-                  target: rpId,
-                  damage: 1,
-                  x: p.pos.x,
-                  z: p.pos.z,
-                  hitKind: "blind",
-                  blindDuration: p.blindDuration,
-                });
+                emitBlindHitNetwork(rpId, p.blindDuration, rh.point || p.pos);
                 createSparks(rh.point || p.pos.clone(), 0x6bd4ff);
                 consumed = true;
                 break;
               }
+            }
+            if (!consumed) {
+              consumed = probeBlindDartProximityHit(p.pos, hitPad, p.blindDuration);
+              if (consumed) createSparks(p.pos.clone(), 0x6bd4ff);
             }
           }
 
@@ -11292,6 +11532,10 @@ if (typeof window !== "undefined") {
                 consumed = true;
                 break;
               }
+            }
+            if (!consumed) {
+              consumed = probeBlindDartProximityHit(p.pos, hitPad, p.blindDuration);
+              if (consumed) createSparks(p.pos.clone(), 0x6bd4ff);
             }
           }
 
@@ -11342,8 +11586,7 @@ if (typeof window !== "undefined") {
           (w.spreadBase || 0) + state.spreadBloom * 0.5;
         const dir = getWeaponDirection(totalSpread);
         const muzzle = new THREE.Vector3();
-        camera.getWorldDirection(muzzle);
-        muzzle.multiplyScalar(0.42).add(camera.position);
+        getActiveMuzzleWorld(muzzle);
         spawnBlindDartProjectile(muzzle, dir, w);
         updateHud();
         return;
@@ -12084,6 +12327,8 @@ if (typeof window !== "undefined") {
       );
       renderDistanceLabel.textContent = RENDER_DISTANCE_LEVELS[rdi].label;
       languageValue.textContent = LANGUAGE_LABELS[gameSettings.language] || "ENGLISH";
+      const skipClickVal = document.getElementById("skipClickToPlayValue");
+      if (skipClickVal) skipClickVal.textContent = gameSettings.skipClickToPlay ? "ON" : "OFF";
       applyLanguageUI();
     }
 
@@ -13242,6 +13487,12 @@ if (typeof window !== "undefined") {
       refreshLocalPlayerLightsForCurrentState();
       gameBootOverlay.style.display = "none";
       gameBootOverlay.setAttribute("aria-busy", "false");
+      updateClickHintVisibility();
+      if (gameSettings.skipClickToPlay) {
+        tryAutoCapturePointer();
+        setTimeout(tryAutoCapturePointer, 120);
+        setTimeout(tryAutoCapturePointer, 420);
+      }
     }
 
     function startGame(mapName, multiplayer, arenaCoop, trainingCoop) {
