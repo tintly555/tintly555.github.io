@@ -9301,36 +9301,36 @@ if (typeof window !== "undefined") {
       const earL = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.10, 0.06), matSkinD);
       earL.position.set(-0.24, 0.02, 0); headGroup.add(earL);
       const earR = earL.clone(); earR.position.x = 0.24; headGroup.add(earR);
-      headGroup.position.set(0, 2.18, 0.10); torsoRoot.add(headGroup);
+      headGroup.position.set(0, 2.32, 0.08); torsoRoot.add(headGroup);
 
       torsoRoot.rotation.x = 0.55;
 
       leftArmRoot.position.set(-0.62, 1.82, 0);
       rightArmRoot.position.set(0.62, 1.82, 0);
       const makeArm = (ar, forearmGrp, side) => {
-        const shoulder = new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.18, 0.30), matShirt);
+        const shoulder = new THREE.Mesh(new THREE.BoxGeometry(0.40, 0.22, 0.40), matShirt);
         shoulder.position.set(0, -0.06, 0); ar.add(shoulder);
-        const bicep = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.48, 0.34), matSkin);
-        bicep.position.set(0, -0.32, 0); ar.add(bicep);
-        const bicepVein = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.26, 0.04), matVein);
-        bicepVein.position.set(side === "left" ? 0.12 : -0.12, -0.28, 0.14); ar.add(bicepVein);
+        const bicep = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.50, 0.44), matSkin);
+        bicep.position.set(0, -0.34, 0); ar.add(bicep);
+        const bicepVein = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.28, 0.05), matVein);
+        bicepVein.position.set(side === "left" ? 0.16 : -0.16, -0.30, 0.18); ar.add(bicepVein);
 
-        const elbow = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.14, 0.22), matSkinD);
+        const elbow = new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.16, 0.30), matSkinD);
         elbow.position.set(0, 0.02, 0); forearmGrp.add(elbow);
-        const forearm = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.44, 0.26), matSkin);
+        const forearm = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.46, 0.36), matSkin);
         forearm.position.set(0, -0.24, 0.04); forearmGrp.add(forearm);
-        const foreVein = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.24, 0.04), matVein);
-        foreVein.position.set(side === "left" ? -0.08 : 0.08, -0.22, 0.14); forearmGrp.add(foreVein);
-        const hand = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.22, 0.26), matSkinD);
+        const foreVein = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.26, 0.05), matVein);
+        foreVein.position.set(side === "left" ? -0.10 : 0.10, -0.22, 0.18); forearmGrp.add(foreVein);
+        const hand = new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.26, 0.32), matSkinD);
         hand.position.set(0, -0.54, 0.08); forearmGrp.add(hand);
-        const f1 = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.10, 0.08), matSkinD);
-        f1.position.set(-0.06, -0.68, 0.12); forearmGrp.add(f1);
+        const f1 = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.12, 0.10), matSkinD);
+        f1.position.set(-0.08, -0.70, 0.14); forearmGrp.add(f1);
         const f2 = f1.clone(); f2.position.x = 0; forearmGrp.add(f2);
-        const f3 = f1.clone(); f3.position.x = 0.06; forearmGrp.add(f3);
-        const thumb = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.08, 0.06), matSkinD);
-        thumb.position.set(side === "left" ? 0.13 : -0.13, -0.58, 0.14); forearmGrp.add(thumb);
+        const f3 = f1.clone(); f3.position.x = 0.08; forearmGrp.add(f3);
+        const thumb = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.10, 0.08), matSkinD);
+        thumb.position.set(side === "left" ? 0.16 : -0.16, -0.60, 0.16); forearmGrp.add(thumb);
 
-        forearmGrp.position.set(0, -0.58, 0);
+        forearmGrp.position.set(0, -0.60, 0);
         forearmGrp.rotation.x = -0.7;
         ar.add(forearmGrp);
       };
@@ -9357,7 +9357,7 @@ if (typeof window !== "undefined") {
 
       root.add(torsoRoot, leftArmRoot, rightArmRoot, leftLegRoot, rightLegRoot);
       root.scale.set(2.0, 2.0, 2.0);
-      root.position.set(x, 0, z);
+      root.position.set(x, 1.40, z);
       root.traverse((o) => {
         if (!o.isMesh) return;
         o.castShadow = true;
@@ -10074,6 +10074,7 @@ if (typeof window !== "undefined") {
 
     let bossVictoryActive = false;
     let bossVictoryTimer = 0;
+    let bossVictoryMsgShown = false;
     const bossGoldParticles = [];
 
     function triggerBossVictory(pos) {
@@ -10136,14 +10137,20 @@ if (typeof window !== "undefined") {
         const s = fogProgress * fogProgress * (3 - 2 * fogProgress);
         const darkFog = new THREE.Color(0x1a1a22);
         const clearFog = new THREE.Color(0x87ceeb);
-        scene.fog.color.copy(darkFog).lerp(clearFog, s);
-        scene.background.copy(darkFog).lerp(clearFog, s);
-        scene.fog.near = THREE.MathUtils.lerp(scene.fog.near, 60, s);
-        scene.fog.far = THREE.MathUtils.lerp(scene.fog.far, 250, s);
+        const blended = darkFog.clone().lerp(clearFog, s);
+        if (scene.fog) scene.fog.color.copy(blended);
+        if (scene.background && scene.background.isColor) scene.background.copy(blended);
+        else scene.background = blended.clone();
+        if (scene.fog) {
+          scene.fog.near = THREE.MathUtils.lerp(8, 80, s);
+          scene.fog.far = THREE.MathUtils.lerp(50, 280, s);
+        }
+        camera.far = THREE.MathUtils.clamp(scene.fog ? scene.fog.far + 48 : 280, 52, 320);
+        camera.updateProjectionMatrix();
       }
 
-      if (bossVictoryTimer >= 3.0 && !bossVictoryActive._msgShown) {
-        bossVictoryActive._msgShown = true;
+      if (bossVictoryTimer >= 3.0 && !bossVictoryMsgShown) {
+        bossVictoryMsgShown = true;
         const overlay = document.createElement("div");
         overlay.id = "bossVictoryOverlay";
         overlay.style.cssText = "position:fixed;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;flex-direction:column;z-index:9999;pointer-events:none;";
@@ -14521,6 +14528,7 @@ if (typeof window !== "undefined") {
         let bossAnimOverride = false;
         const HUNCH = 0.55;
         const ELBOW_REST = -0.7;
+        const BOSS_BASE_Y = 1.40;
         if (enemy.isBoss) {
           enemy.bossAnimTimer += dt;
           const lfa = enemy.leftForearmRoot;
@@ -14547,7 +14555,7 @@ if (typeof window !== "undefined") {
               lfa.rotation.x = THREE.MathUtils.lerp(-0.3, -0.15, s);
               rfa.rotation.x = THREE.MathUtils.lerp(-0.3, -0.15, s);
               enemy.torsoRoot.rotation.x = THREE.MathUtils.lerp(HUNCH - 0.2, HUNCH - 0.35, s);
-              enemy.group.position.y = s * 0.12;
+              enemy.group.position.y = BOSS_BASE_Y + s * 0.12;
             } else {
               const pulse = Math.sin((t - 0.5) * 12) * 0.12;
               enemy.leftArmRoot.rotation.x = -2.8 + pulse;
@@ -14557,14 +14565,14 @@ if (typeof window !== "undefined") {
               lfa.rotation.x = -0.15 + pulse * 0.3;
               rfa.rotation.x = -0.15 + pulse * 0.3;
               enemy.torsoRoot.rotation.x = HUNCH - 0.35 + Math.sin((t - 0.5) * 16) * 0.05;
-              enemy.group.position.y = 0.12 * Math.max(0, 1 - (t - 0.5) / 0.5);
+              enemy.group.position.y = BOSS_BASE_Y + 0.12 * Math.max(0, 1 - (t - 0.5) / 0.5);
               state.camShake = Math.max(state.camShake || 0, 0.15);
             }
             if (t >= 1) {
               enemy.bossAnimState = "idle";
               enemy.bossAnimTimer = 0;
               enemy.torsoRoot.rotation.x = HUNCH;
-              enemy.group.position.y = 0;
+              enemy.group.position.y = BOSS_BASE_Y;
             }
           }
 
@@ -14580,7 +14588,7 @@ if (typeof window !== "undefined") {
               lfa.rotation.x = THREE.MathUtils.lerp(ELBOW_REST, -0.2, s);
               rfa.rotation.x = THREE.MathUtils.lerp(ELBOW_REST, -0.2, s);
               enemy.torsoRoot.rotation.x = THREE.MathUtils.lerp(HUNCH, HUNCH - 0.25, s);
-              enemy.group.position.y = 0.08 * s;
+              enemy.group.position.y = BOSS_BASE_Y + 0.08 * s;
             } else if (t < 0.6) {
               const pulse = Math.sin((t - 0.3) * 20) * 0.15;
               enemy.leftArmRoot.rotation.x = -1.6 + pulse;
@@ -14590,7 +14598,7 @@ if (typeof window !== "undefined") {
               lfa.rotation.x = -0.2 + pulse * 0.3;
               rfa.rotation.x = -0.2 + pulse * 0.3;
               enemy.torsoRoot.rotation.x = HUNCH - 0.25 + Math.sin((t - 0.3) * 24) * 0.06;
-              enemy.group.position.y = 0.08;
+              enemy.group.position.y = BOSS_BASE_Y + 0.08;
               state.camShake = Math.max(state.camShake || 0, 0.3);
             } else {
               const s = 1 - Math.pow(1 - (t - 0.6) / 0.4, 2);
@@ -14601,13 +14609,13 @@ if (typeof window !== "undefined") {
               lfa.rotation.x = THREE.MathUtils.lerp(-0.2, ELBOW_REST, s);
               rfa.rotation.x = THREE.MathUtils.lerp(-0.2, ELBOW_REST, s);
               enemy.torsoRoot.rotation.x = THREE.MathUtils.lerp(HUNCH - 0.25, HUNCH, s);
-              enemy.group.position.y = THREE.MathUtils.lerp(0.08, 0, s);
+              enemy.group.position.y = THREE.MathUtils.lerp(BOSS_BASE_Y + 0.08, BOSS_BASE_Y, s);
             }
             if (t >= 1) {
               enemy.bossAnimState = "idle";
               enemy.bossAnimTimer = 0;
               enemy.torsoRoot.rotation.x = HUNCH;
-              enemy.group.position.y = 0;
+              enemy.group.position.y = BOSS_BASE_Y;
             }
           }
 
@@ -14624,7 +14632,7 @@ if (typeof window !== "undefined") {
               lfa.rotation.x = THREE.MathUtils.lerp(ELBOW_REST, -0.15, s);
               rfa.rotation.x = THREE.MathUtils.lerp(ELBOW_REST, -0.15, s);
               enemy.torsoRoot.rotation.x = THREE.MathUtils.lerp(HUNCH, HUNCH - 0.40, s);
-              enemy.group.position.y = THREE.MathUtils.lerp(0, 0.15, s);
+              enemy.group.position.y = THREE.MathUtils.lerp(BOSS_BASE_Y, BOSS_BASE_Y + 0.15, s);
             } else if (t < 0.52) {
               const pow = 1 - Math.pow(1 - (t - 0.40) / 0.12, 4);
               enemy.leftArmRoot.rotation.x = THREE.MathUtils.lerp(-3.0, 0.6, pow);
@@ -14634,7 +14642,7 @@ if (typeof window !== "undefined") {
               lfa.rotation.x = THREE.MathUtils.lerp(-0.15, -1.4, pow);
               rfa.rotation.x = THREE.MathUtils.lerp(-0.15, -1.4, pow);
               enemy.torsoRoot.rotation.x = THREE.MathUtils.lerp(HUNCH - 0.40, HUNCH + 0.50, pow);
-              enemy.group.position.y = THREE.MathUtils.lerp(0.15, 0, pow);
+              enemy.group.position.y = THREE.MathUtils.lerp(BOSS_BASE_Y + 0.15, BOSS_BASE_Y, pow);
               if (pow > 0.8 && !enemy._smashShook) {
                 enemy._smashShook = true;
                 state.camShake = Math.max(state.camShake || 0, 0.7);
@@ -14648,14 +14656,14 @@ if (typeof window !== "undefined") {
               lfa.rotation.x = THREE.MathUtils.lerp(-1.4, ELBOW_REST, s);
               rfa.rotation.x = THREE.MathUtils.lerp(-1.4, ELBOW_REST, s);
               enemy.torsoRoot.rotation.x = THREE.MathUtils.lerp(HUNCH + 0.50, HUNCH, s);
-              enemy.group.position.y = 0;
+              enemy.group.position.y = BOSS_BASE_Y;
             }
             if (t >= 1) {
               enemy.bossAnimState = "idle";
               enemy.bossAnimTimer = 0;
               enemy._smashShook = false;
               enemy.torsoRoot.rotation.x = HUNCH;
-              enemy.group.position.y = 0;
+              enemy.group.position.y = BOSS_BASE_Y;
             }
           }
         }
@@ -14694,6 +14702,7 @@ if (typeof window !== "undefined") {
           enemy.rightLegRoot.rotation.x = enemy.legRV;
           enemy.torsoBobYV = dampScalar(enemy.torsoBobYV, enemy.moving ? Math.abs(Math.sin(enemy.walkTime * 2)) * 0.06 : 0, dt, 16);
           enemy.torsoRoot.position.y = enemy.torsoBobYV;
+          enemy.group.position.y = BOSS_BASE_Y;
         }
 
         if (!bossAnimOverride && !enemy.isBoss) {
