@@ -1019,6 +1019,7 @@
       <p id="menuCreditsGame" data-i18n="creditsGame">Game by Tintly555</p>
       <p id="menuCreditsMusic" data-i18n="creditsMusic">Music by JimmyQrg</p>
       <button type="button" id="btnArena" data-i18n="btnZombieArena">Zombie Arena</button>
+      <button type="button" id="btnBossFight">BOSS FIGHT</button>
       <button type="button" id="btnTraining" data-i18n="btnTrainingCamp">Training Camp</button>
       <button type="button" id="btnCrossfire" data-i18n="btnCrossfire">Crossfire (PVP)</button>
       <button type="button" id="btnMenuSettings" data-i18n="menuSettings">SETTINGS</button>
@@ -1028,6 +1029,19 @@
       <button type="button" id="btnArenaSingle" data-i18n="btnSingleplayer">SINGLEPLAYER</button>
       <button type="button" id="btnArenaCoop" data-i18n="btnCoopMode">CO-OP MODE</button>
       <button type="button" id="btnArenaBack" data-i18n="btnBack">← BACK</button>
+    </div>
+    <div id="menuBossMode" style="display:none;flex-direction:column;align-items:center;gap:10px;">
+      <h2 style="font-family:var(--game-font-ui);font-size:28px;margin:0 0 14px 0;letter-spacing:3px;">BOSS FIGHT</h2>
+      <p style="font-family:var(--game-font-ui);font-size:12px;opacity:0.78;margin:0 0 8px 0;max-width:320px;text-align:center;line-height:1.45;">Fight the Hormone Zombie (激素僵尸) — a hulking boss that switches between Tank, Speed, and Gunner modes.</p>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px;">
+        <span style="font-family:var(--game-font-ui);font-size:13px;letter-spacing:1px;">BOSSES:</span>
+        <button type="button" class="bossDiffBtn" data-boss-count="1" style="font-family:var(--game-font-ui);padding:6px 14px;border:2px solid #4fd1ff;border-radius:6px;background:rgba(79,209,255,0.25);color:#fff;cursor:pointer;font-size:14px;">1</button>
+        <button type="button" class="bossDiffBtn" data-boss-count="2" style="font-family:var(--game-font-ui);padding:6px 14px;border:2px solid #4fd1ff;border-radius:6px;background:transparent;color:#fff;cursor:pointer;font-size:14px;">2</button>
+        <button type="button" class="bossDiffBtn" data-boss-count="3" style="font-family:var(--game-font-ui);padding:6px 14px;border:2px solid #4fd1ff;border-radius:6px;background:transparent;color:#fff;cursor:pointer;font-size:14px;">3</button>
+      </div>
+      <button type="button" id="btnBossSingle">SINGLEPLAYER</button>
+      <button type="button" id="btnBossCoop">CO-OP MODE</button>
+      <button type="button" id="btnBossBack">← BACK</button>
     </div>
     <div id="menuTrainingMode" style="display:none;flex-direction:column;align-items:center;gap:10px;">
       <h2 id="menuTrainingHeading" style="font-family:var(--game-font-ui);font-size:28px;margin:0 0 14px 0;letter-spacing:3px;" data-i18n="trainingCampTitle">TRAINING CAMP</h2>
@@ -4670,6 +4684,9 @@ if (typeof window !== "undefined") {
     function isTrainingMap(m) {
       return m === "training";
     }
+    function isArenaLikeMap(m) {
+      return m === "arena" || m === "boss_arena";
+    }
     function isBrightIndoorMap(m) {
       return m === "crossfire_grid" || m === "training";
     }
@@ -4697,6 +4714,8 @@ if (typeof window !== "undefined") {
     let _zombieSyncAcc = 0;
     let ROOM_CODE = "";
     let pendingLobbyMode = "";
+    let BOSS_FIGHT_COUNT = 1;
+    const bossProjectiles = [];
     let started = false;
     /** False during boot overlay: no movement, shooting, zombie AI, or damage until map + assets are ready. */
     let gameWorldReady = false;
@@ -4981,7 +5000,7 @@ if (typeof window !== "undefined") {
       socket.emit("joinRoom", activeRoomId, (ack) => {
         if (gen !== _joinRoomGeneration) return;
         if (!ack || !ack.ok) return;
-        if (MULTIPLAYER && ARENA_COOP && CURRENT_MAP === "arena") {
+        if (MULTIPLAYER && ARENA_COOP && isArenaLikeMap(CURRENT_MAP)) {
           ZOMBIE_HOST_KNOWN = true;
           if (ack.hostId != null) {
             ZOMBIE_AUTHORITY = String(ack.hostId) === String(socket.id);
@@ -5456,7 +5475,7 @@ if (typeof window !== "undefined") {
     });
 
     socket.on("zombieSync", (data) => {
-      if (!MULTIPLAYER || !ARENA_COOP || CURRENT_MAP !== "arena") return;
+      if (!MULTIPLAYER || !ARENA_COOP || !isArenaLikeMap(CURRENT_MAP)) return;
       if (ZOMBIE_AUTHORITY) return;
       applyZombieSyncPayload(data);
     });
@@ -8323,11 +8342,13 @@ if (typeof window !== "undefined") {
     function lobbyMapFromPending() {
       if (pendingLobbyMode === "crossfire") return PENDING_PVP_MAP;
       if (pendingLobbyMode === "training-coop") return "training";
+      if (pendingLobbyMode === "boss-coop") return "boss_arena";
       return "arena";
     }
 
     const MAP_BUILDERS = {
       arena: buildMapArena,
+      boss_arena: buildMapArena,
       crossfire: buildMapCrossfire,
       crossfire_grid: buildMapCrossfireGrid,
       training: buildMapTraining,
@@ -8370,7 +8391,7 @@ if (typeof window !== "undefined") {
     }
 
     function findSpawnPosition(minDist) {
-      if (CURRENT_MAP === "arena") {
+      if (isArenaLikeMap(CURRENT_MAP)) {
         const players = getAllPlayerPositions();
         let dist = minDist;
         const px = player.position.x;
@@ -8745,7 +8766,9 @@ if (typeof window !== "undefined") {
       const roomLine = (MULTIPLAYER && ROOM_CODE) ? `<b style="color:#4fd1ff;">Room: ${ROOM_CODE}</b><br>` : "";
       const lang = LANGUAGE_OPTIONS.includes(gameSettings.language) ? gameSettings.language : "en";
       const mapLabel =
-        CURRENT_MAP === "arena"
+        CURRENT_MAP === "boss_arena"
+          ? (lang === "zh" ? "Boss战 — 激素僵尸" : "BOSS FIGHT — Hormone Zombie")
+          : CURRENT_MAP === "arena"
           ? (lang === "zh" ? "僵尸竞技场" : "zombie arena")
           : isTrainingMap(CURRENT_MAP)
             ? tr("mapTraining", lang === "zh" ? "训练营" : "training camp")
@@ -9117,12 +9140,247 @@ if (typeof window !== "undefined") {
       ctx.clearRect(0, 0, 128, 24);
       ctx.fillStyle = "rgba(0,0,0,0.55)";
       ctx.fillRect(4, 8, 120, 8);
-      ctx.fillStyle = enemy.type === "tank" ? "#60a5fa" : (enemy.type === "gunner" ? "#f87171" : (enemy.type === "fast" ? "#facc15" : "#22c55e"));
+      ctx.fillStyle = enemy.isBoss ? "#e040ff" : enemy.type === "tank" ? "#60a5fa" : (enemy.type === "gunner" ? "#f87171" : (enemy.type === "fast" ? "#facc15" : "#22c55e"));
       ctx.fillRect(4, 8, 120 * Math.max(0, enemy.hp) / enemy.maxHp, 8);
       ctx.strokeStyle = "rgba(255,255,255,0.85)";
       ctx.lineWidth = 1;
       ctx.strokeRect(4, 8, 120, 8);
       enemy.hpTexture.needsUpdate = true;
+    }
+
+    function makeHormoneZombie(x, z) {
+      const root = new THREE.Group();
+      const torsoRoot = new THREE.Group();
+      const leftArmRoot = new THREE.Group();
+      const rightArmRoot = new THREE.Group();
+      const leftLegRoot = new THREE.Group();
+      const rightLegRoot = new THREE.Group();
+
+      const skinColor = 0x7a5c8a;
+      const skinDark = 0x5a3d6a;
+      const shirtColor = 0x2a2030;
+      const pantsColor = 0x3a3a2e;
+      const woundColor = 0x8b3a3a;
+      const eyeColor = 0xff2222;
+
+      const matSkin = new THREE.MeshStandardMaterial({ color: skinColor, roughness: 0.95, metalness: 0 });
+      const matSkinD = new THREE.MeshStandardMaterial({ color: skinDark, roughness: 0.95, metalness: 0 });
+      const matShirt = new THREE.MeshStandardMaterial({ color: shirtColor, roughness: 0.96, metalness: 0 });
+      const matPants = new THREE.MeshStandardMaterial({ color: pantsColor, roughness: 0.96, metalness: 0 });
+      const matWound = new THREE.MeshStandardMaterial({ color: woundColor, roughness: 0.94, metalness: 0 });
+      const matBone = new THREE.MeshStandardMaterial({ color: 0xd4c8a8, roughness: 0.94, metalness: 0 });
+      const matBlood = new THREE.MeshStandardMaterial({ color: 0x551111, roughness: 0.93, metalness: 0 });
+
+      const S = 1.8;
+      const chest = new THREE.Mesh(new THREE.BoxGeometry(0.68 * S, 0.56 * S, 0.34 * S), matShirt);
+      chest.position.y = 1.32; torsoRoot.add(chest);
+      const belly = new THREE.Mesh(new THREE.BoxGeometry(0.62 * S, 0.32 * S, 0.32 * S), matShirt);
+      belly.position.y = 0.88; torsoRoot.add(belly);
+      const ribWound = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.18, 0.06), matWound);
+      ribWound.position.set(0.18, 1.22, 0.30); torsoRoot.add(ribWound);
+      const rib1 = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.02, 0.04), matBone);
+      rib1.position.set(0.18, 1.26, 0.32); torsoRoot.add(rib1);
+      const rib2 = rib1.clone(); rib2.position.y = 1.18; torsoRoot.add(rib2);
+      const tearL = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.10, 0.05), matSkin);
+      tearL.position.set(-0.30, 1.00, 0.30); torsoRoot.add(tearL);
+      const bloodStain = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.12, 0.05), matBlood);
+      bloodStain.position.set(-0.14, 0.92, 0.30); torsoRoot.add(bloodStain);
+      const collar = new THREE.Mesh(new THREE.BoxGeometry(0.52 * S, 0.07, 0.30 * S), matShirt);
+      collar.position.set(0, 1.64, 0); torsoRoot.add(collar);
+      const collarTear = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.10, 0.07), matSkin);
+      collarTear.position.set(0.22, 1.64, 0.16); torsoRoot.add(collarTear);
+
+      const trapMat = new THREE.MeshStandardMaterial({ color: skinColor, roughness: 0.94, metalness: 0 });
+      const trapL = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.22, 0.24), trapMat);
+      trapL.position.set(-0.38, 1.62, 0); torsoRoot.add(trapL);
+      const trapR = trapL.clone(); trapR.position.x = 0.38; torsoRoot.add(trapR);
+      const neckTrap = new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.18, 0.26), trapMat);
+      neckTrap.position.set(0, 1.72, -0.02); torsoRoot.add(neckTrap);
+
+      const headGroup = new THREE.Group();
+      const skull = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.48, 0.44), matSkin);
+      headGroup.add(skull);
+      const jawBone = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.13, 0.34), matSkinD);
+      jawBone.position.set(0, -0.26, 0.02); headGroup.add(jawBone);
+
+      const eyeGlowMat = new THREE.MeshBasicMaterial({ color: eyeColor });
+      const eyeSocketMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 1, metalness: 0 });
+      const sockL = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.10, 0.04), eyeSocketMat);
+      sockL.position.set(-0.10, 0.06, 0.21); headGroup.add(sockL);
+      const sockR = sockL.clone(); sockR.position.x = 0.10; headGroup.add(sockR);
+      const eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.07, 0.05), eyeGlowMat);
+      eyeL.position.set(-0.10, 0.06, 0.225); headGroup.add(eyeL);
+      const eyeR = eyeL.clone(); eyeR.position.x = 0.10; headGroup.add(eyeR);
+
+      const brow = new THREE.Mesh(new THREE.BoxGeometry(0.40, 0.07, 0.09), matSkinD);
+      brow.position.set(0, 0.16, 0.20); headGroup.add(brow);
+      const cheekL = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.10, 0.10), matSkinD);
+      cheekL.position.set(-0.22, -0.06, 0.15); headGroup.add(cheekL);
+      const cheekR = cheekL.clone(); cheekR.position.x = 0.22; headGroup.add(cheekR);
+      const mouthWound = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.05, 0.05), matWound);
+      mouthWound.position.set(0.03, -0.15, 0.22); headGroup.add(mouthWound);
+      const teeth = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.04, 0.04), matBone);
+      teeth.position.set(0, -0.19, 0.21); headGroup.add(teeth);
+      const noseBridge = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.09, 0.07), matSkinD);
+      noseBridge.position.set(0, -0.02, 0.23); headGroup.add(noseBridge);
+
+      const hairMat = new THREE.MeshStandardMaterial({ color: 0x25201d, roughness: 0.96, metalness: 0 });
+      const h1 = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.06, 0.30), hairMat);
+      h1.position.set(0, 0.28, -0.06); headGroup.add(h1);
+
+      const earMat = matSkinD;
+      const earL = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.10, 0.06), earMat);
+      earL.position.set(-0.25, 0.02, 0); headGroup.add(earL);
+      const earR = earL.clone(); earR.position.x = 0.25; headGroup.add(earR);
+
+      const neck = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.16, 0.24), matSkin);
+      neck.position.set(0, -0.34, 0); headGroup.add(neck);
+      const neckVein = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.14, 0.04), matWound);
+      neckVein.position.set(0.07, -0.32, 0.09); headGroup.add(neckVein);
+      const neckVein2 = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.12, 0.04), matWound);
+      neckVein2.position.set(-0.08, -0.30, 0.08); headGroup.add(neckVein2);
+
+      headGroup.position.y = 2.2; torsoRoot.add(headGroup);
+
+      leftArmRoot.position.set(-0.62 * S, 1.58, 0);
+      rightArmRoot.position.set(0.62 * S, 1.58, 0);
+      const makeArm = (ar, side) => {
+        const up = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.44, 0.26), matShirt);
+        up.position.set(0, -0.22, 0); ar.add(up);
+        const bicep = new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.28, 0.28), matSkin);
+        bicep.position.set(0, -0.14, 0); ar.add(bicep);
+        const sleeve = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.10, 0.28), matShirt);
+        sleeve.position.set(0, -0.02, 0); ar.add(sleeve);
+        const fa = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.40, 0.22), matSkin);
+        fa.position.set(0, -0.60, 0.06); ar.add(fa);
+        if (side === "left") {
+          const w = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.07), matWound);
+          w.position.set(0.06, -0.52, 0.14); ar.add(w);
+          const b = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.05, 0.05), matBone);
+          b.position.set(0.06, -0.50, 0.16); ar.add(b);
+        }
+        if (side === "right") {
+          const scratch = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.16, 0.05), matWound);
+          scratch.position.set(-0.07, -0.44, 0.12); ar.add(scratch);
+        }
+        const hand = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.16, 0.20), matSkin);
+        hand.position.set(0, -0.86, 0.12); ar.add(hand);
+        const f1 = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.10, 0.07), matSkinD);
+        f1.position.set(-0.05, -0.96, 0.18); ar.add(f1);
+        const f2 = f1.clone(); f2.position.x = 0; ar.add(f2);
+        const f3 = f1.clone(); f3.position.x = 0.05; ar.add(f3);
+        const thumb = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.07, 0.05), matSkinD);
+        thumb.position.set(side === "left" ? 0.10 : -0.10, -0.90, 0.18); ar.add(thumb);
+      };
+      makeArm(leftArmRoot, "left"); makeArm(rightArmRoot, "right");
+
+      const LS = 0.6;
+      leftLegRoot.position.set(-0.18, 0.62, 0);
+      rightLegRoot.position.set(0.18, 0.62, 0);
+      const makeLeg = (lr, side) => {
+        const th = new THREE.Mesh(new THREE.BoxGeometry(0.22 * LS, 0.44, 0.22 * LS), matPants);
+        th.position.set(0, -0.22, 0); lr.add(th);
+        const sh = new THREE.Mesh(new THREE.BoxGeometry(0.20 * LS, 0.40, 0.20 * LS), matPants);
+        sh.position.set(0, -0.60, 0); lr.add(sh);
+        if (side === "right") {
+          const tear = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.10, 0.06), matSkin);
+          tear.position.set(0, -0.68, 0.08); lr.add(tear);
+        }
+        if (side === "left") {
+          const bloodDrip = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.16, 0.04), matBlood);
+          bloodDrip.position.set(0.04, -0.52, 0.08); lr.add(bloodDrip);
+        }
+        const foot = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.10, 0.28), matSkinD);
+        foot.position.set(0, -0.86, 0.04); lr.add(foot);
+        const toe = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.06, 0.06), matSkinD);
+        toe.position.set(0, -0.88, 0.16); lr.add(toe);
+      };
+      makeLeg(leftLegRoot, "left"); makeLeg(rightLegRoot, "right");
+
+      root.add(torsoRoot, leftArmRoot, rightArmRoot, leftLegRoot, rightLegRoot);
+      const fy0 = Math.random() * Math.PI * 2;
+      root.position.set(x, 0, z);
+      chest.castShadow = true;
+      belly.castShadow = true;
+      skull.castShadow = true;
+      root.traverse((o) => {
+        if (!o.isMesh) return;
+        o.receiveShadow = true;
+        if (!o.castShadow) o.castShadow = false;
+      });
+
+      scene.add(root);
+
+      const hpCanvas = document.createElement("canvas");
+      hpCanvas.width = 128;
+      hpCanvas.height = 24;
+      const hpCtx = hpCanvas.getContext("2d");
+      const hpTexture = new THREE.CanvasTexture(hpCanvas);
+      const hpSprite = new THREE.Sprite(
+        new THREE.SpriteMaterial({
+          map: hpTexture,
+          transparent: true,
+          depthTest: true,
+          depthWrite: false
+        })
+      );
+      hpSprite.scale.set(1.7, 0.32, 1);
+      hpSprite.position.set(0, 3.1, 0);
+      root.add(hpSprite);
+      hpSprite.raycast = () => {};
+
+      return {
+        type: "boss",
+        group: root,
+        torsoRoot,
+        leftArmRoot,
+        rightArmRoot,
+        leftLegRoot,
+        rightLegRoot,
+        hpCanvas,
+        hpCtx,
+        hpTexture,
+        hpSprite,
+        alive: true,
+        hp: 800,
+        maxHp: 800,
+        attackCooldownTimer: 0,
+        attackCooldown: 0.8,
+        attackDamage: 35,
+        ranged: false,
+        rangeDistance: 20,
+        respawnTimer: 0,
+        spawn: new THREE.Vector3(x, 0, z),
+        walkTime: Math.random() * 10,
+        moving: false,
+        attackPhase: 0,
+        speed: 2.2,
+        aware: false,
+        hiddenTimer: 0,
+        facingYaw: fy0,
+        visYaw: fy0,
+        armLV: -0.2,
+        armRV: -0.2,
+        legLV: 0,
+        legRV: 0,
+        torsoBobYV: 0,
+        torsoXV: 0,
+        torsoZV: 0,
+        torsoPitchV: 0,
+        targetId: null,
+        retargetTimer: 0,
+        moveYaw: 0,
+        rangedLosAcquireTimer: 0,
+        isBoss: true,
+        isHormoneZombie: true,
+        bossMode: "tank",
+        bossModeSwitchTimer: 5,
+        baseTankHp: 800,
+        baseSpeedHp: 400,
+        baseGunnerHp: 500,
+        summonCooldown: 0,
+        summonCount: 0
+      };
     }
 
     
@@ -11825,7 +12083,7 @@ if (typeof window !== "undefined") {
       }
       MAP_BUILDERS[CURRENT_MAP]();
       applySceneFogAndCameraFar();
-      if (CURRENT_MAP === "arena") {
+      if (isArenaLikeMap(CURRENT_MAP)) {
         applyArenaMazePlayerSpawn();
       }
       buildNavGrid();
@@ -11917,6 +12175,18 @@ if (typeof window !== "undefined") {
       _spawnRng = MULTIPLAYER && ARENA_COOP && activeRoomId
         ? mulberry32(hashRoomSeed(activeRoomId))
         : null;
+
+      if (CURRENT_MAP === "boss_arena") {
+        for (let i = 0; i < BOSS_FIGHT_COUNT; i++) {
+          const { x, z } = findSpawnPosition(SPAWN_MIN_DIST_BASE);
+          const boss = makeHormoneZombie(x, z);
+          boss.netIndex = i;
+          drawEnemyHp(boss);
+          state.enemies.push(boss);
+        }
+        _spawnRng = null;
+        return;
+      }
 
       for (let i = 0; i < ZOMBIE_COUNT; i++) {
         const { x, z } = findSpawnPosition(SPAWN_MIN_DIST_BASE);
@@ -12696,7 +12966,7 @@ if (typeof window !== "undefined") {
             continue;
           }
 
-          const coopArena = MULTIPLAYER && ARENA_COOP && CURRENT_MAP === "arena";
+          const coopArena = MULTIPLAYER && ARENA_COOP && isArenaLikeMap(CURRENT_MAP);
           if (coopArena && !ZOMBIE_AUTHORITY) {
             const ei = bestEnemy.netIndex ?? state.enemies.indexOf(bestEnemy);
             applyDamage(bestEnemy, bestEnemyZone, w);
@@ -12754,13 +13024,11 @@ if (typeof window !== "undefined") {
               rpVictim.group.visible = false;
               state.score += 1;
               showCombatFeedback(tr("combatKill", "KILL!"), "#ff5050", 0.34);
-              playWeaponHitSfx(true, bestRpZone === "head");
               createSparks(bp.clone(), 0xff5555);
               createSparks(bp.clone(), 0xff8888);
             }
           }
           triggerHitFeedback(predictedKill, bestRpZone === "head");
-          if (!predictedKill) playWeaponHitSfx(false, bestRpZone === "head");
           socket.emit("hit", {
             target: bestRpId,
             damage: dmg,
@@ -13210,7 +13478,7 @@ if (typeof window !== "undefined") {
 
     /** Host sim: hurt local player or send zombie hit to a remote co-op player (server `hit` → `damaged`). */
     function applyCoopZombieDamageToTarget(enemy) {
-      if (MULTIPLAYER && ARENA_COOP && CURRENT_MAP === "arena" && enemy.targetId != null) {
+      if (MULTIPLAYER && ARENA_COOP && isArenaLikeMap(CURRENT_MAP) && enemy.targetId != null) {
         socket.emit("hit", {
           target: enemy.targetId,
           damage: enemy.attackDamage,
@@ -13328,7 +13596,7 @@ if (typeof window !== "undefined") {
     let _flowDistBufLen = 0;
 
     function buildNavGrid() {
-      if (CURRENT_MAP === "arena") {
+      if (isArenaLikeMap(CURRENT_MAP)) {
         mazeNavAnchorCx = null;
         mazeNavAnchorCz = null;
         rebuildMazeNavGrid(
@@ -13587,11 +13855,59 @@ if (typeof window !== "undefined") {
         if (typeof z.hp === "number") e.hp = z.hp;
         if (typeof z.a === "number") e.alive = z.a !== 0;
         if (typeof z.rt === "number") e.respawnTimer = z.rt;
+        if (z.bm && e.isBoss) e.bossMode = z.bm;
         if (e.alive) e.dissolveTimer = 0;
         e.group.visible = e.alive;
         drawEnemyHp(e);
       }
       updateHud();
+    }
+
+    function spawnBossProjectile(ox, oy, oz, dx, dy, dz, damage) {
+      const geo = new THREE.SphereGeometry(0.25, 8, 6);
+      const mat = new THREE.MeshBasicMaterial({ color: 0xff4422 });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.position.set(ox, oy, oz);
+      scene.add(mesh);
+      const spd = 18;
+      bossProjectiles.push({
+        mesh,
+        velocity: new THREE.Vector3(dx * spd, dy * spd, dz * spd),
+        life: 3,
+        damage: damage || 8
+      });
+    }
+
+    function updateBossProjectiles(dt) {
+      for (let i = bossProjectiles.length - 1; i >= 0; i--) {
+        const bp = bossProjectiles[i];
+        bp.mesh.position.x += bp.velocity.x * dt;
+        bp.mesh.position.y += bp.velocity.y * dt;
+        bp.mesh.position.z += bp.velocity.z * dt;
+        bp.life -= dt;
+        if (bp.life <= 0) {
+          scene.remove(bp.mesh);
+          bp.mesh.geometry.dispose();
+          bp.mesh.material.dispose();
+          bossProjectiles.splice(i, 1);
+          continue;
+        }
+        const pdx = bp.mesh.position.x - player.position.x;
+        const pdy = bp.mesh.position.y - player.position.y;
+        const pdz = bp.mesh.position.z - player.position.z;
+        const pdist = Math.sqrt(pdx * pdx + pdy * pdy + pdz * pdz);
+        if (pdist < 0.6 && player.health > 0) {
+          player.health -= bp.damage;
+          if (player.health < 0) player.health = 0;
+          state.flashTimer = 0.25;
+          player.regenTimer = 0;
+          updateHud();
+          scene.remove(bp.mesh);
+          bp.mesh.geometry.dispose();
+          bp.mesh.material.dispose();
+          bossProjectiles.splice(i, 1);
+        }
+      }
     }
 
     function updateEnemies(dt) {
@@ -13605,7 +13921,7 @@ if (typeof window !== "undefined") {
         }
       }
 
-      if (MULTIPLAYER && ARENA_COOP && CURRENT_MAP === "arena" && !ZOMBIE_AUTHORITY) {
+      if (MULTIPLAYER && ARENA_COOP && isArenaLikeMap(CURRENT_MAP) && !ZOMBIE_AUTHORITY) {
         return;
       }
 
@@ -13658,9 +13974,17 @@ if (typeof window !== "undefined") {
       for (let ei = 0; ei < state.enemies.length; ei++) {
         const enemy = state.enemies[ei];
         if (!enemy.alive) {
+          if (enemy._bossDeathHandled !== true && (enemy.summonedBy || enemy.isBoss)) {
+            enemy._bossDeathHandled = true;
+            if (enemy.summonedBy && enemy.summonedBy.summonCount > 0) {
+              enemy.summonedBy.summonCount--;
+            }
+          }
+          if (enemy.isBoss) continue;
           enemy.respawnTimer -= dt;
           if (enemy.respawnTimer <= 0) {
             enemy.alive = true;
+            enemy._bossDeathHandled = false;
             enemy.dissolveTimer = 0;
             enemy.hp = enemy.maxHp;
             enemy._hpBarRatio = -1;
@@ -13682,6 +14006,53 @@ if (typeof window !== "undefined") {
             drawEnemyHp(enemy);
           }
           continue;
+        }
+
+        if (enemy.isBoss) {
+          enemy.bossModeSwitchTimer -= dt;
+          if (enemy.bossModeSwitchTimer <= 0) {
+            enemy.bossModeSwitchTimer = 5;
+            const hpRatio = enemy.hp / enemy.maxHp;
+            if (enemy.bossMode === "tank") {
+              enemy.bossMode = "speed";
+              enemy.maxHp = enemy.baseSpeedHp;
+              enemy.speed = 7.4;
+              enemy.attackDamage = 12;
+              enemy.attackCooldown = 0.25;
+              enemy.ranged = false;
+            } else if (enemy.bossMode === "speed") {
+              enemy.bossMode = "gunner";
+              enemy.maxHp = enemy.baseGunnerHp;
+              enemy.speed = 2.2;
+              enemy.attackDamage = 8;
+              enemy.attackCooldown = 1.2;
+              enemy.ranged = true;
+              enemy.rangeDistance = 20;
+            } else {
+              enemy.bossMode = "tank";
+              enemy.maxHp = enemy.baseTankHp;
+              enemy.speed = 2.2;
+              enemy.attackDamage = 35;
+              enemy.attackCooldown = 0.8;
+              enemy.ranged = false;
+            }
+            enemy.hp = Math.max(1, Math.round(hpRatio * enemy.maxHp));
+            enemy._hpBarRatio = -1;
+            drawEnemyHp(enemy);
+          }
+
+          enemy.summonCooldown -= dt;
+          if (enemy.summonCooldown <= 0 && enemy.summonCount < 2) {
+            enemy.summonCooldown = 12;
+            const sx = enemy.group.position.x + (Math.random() - 0.5) * 4;
+            const sz = enemy.group.position.z + (Math.random() - 0.5) * 4;
+            const minion = makeZombie(sx, sz, "normal");
+            minion.netIndex = state.enemies.length;
+            minion.summonedBy = enemy;
+            drawEnemyHp(minion);
+            state.enemies.push(minion);
+            enemy.summonCount++;
+          }
         }
 
         const target = getEnemyTarget(enemy);
@@ -13843,13 +14214,21 @@ if (typeof window !== "undefined") {
               )
             ) {
               enemy.attackCooldownTimer = enemy.attackCooldown;
-              applyCoopZombieDamageToTarget(enemy);
-              _tracerEnd.set(
-                target.x + (Math.random() - 0.5) * 0.45,
-                (target.y ?? 1.65) + 1.25 + (Math.random() - 0.5) * 0.45,
-                target.z + (Math.random() - 0.5) * 0.45
-              );
-              createBulletTrail(_visOrigin.clone(), _tracerEnd.clone(), 0xff6666);
+              if (enemy.isBoss) {
+                spawnBossProjectile(
+                  enemy.group.position.x, 1.6, enemy.group.position.z,
+                  _enemyShotDir.x, _enemyShotDir.y, _enemyShotDir.z,
+                  enemy.attackDamage
+                );
+              } else {
+                applyCoopZombieDamageToTarget(enemy);
+                _tracerEnd.set(
+                  target.x + (Math.random() - 0.5) * 0.45,
+                  (target.y ?? 1.65) + 1.25 + (Math.random() - 0.5) * 0.45,
+                  target.z + (Math.random() - 0.5) * 0.45
+                );
+                createBulletTrail(_visOrigin.clone(), _tracerEnd.clone(), 0xff6666);
+              }
             }
           }
         } else {
@@ -14160,36 +14539,41 @@ if (typeof window !== "undefined") {
         updateTrainingDummies(dt);
       }
 
-      if (CURRENT_MAP === "arena") {
+      if (isArenaLikeMap(CURRENT_MAP)) {
         const runZombieAi =
           gameWorldReady &&
           (player.health > 0 ||
-            (MULTIPLAYER && ARENA_COOP && ZOMBIE_AUTHORITY && CURRENT_MAP === "arena"));
+            (MULTIPLAYER && ARENA_COOP && ZOMBIE_AUTHORITY && isArenaLikeMap(CURRENT_MAP)));
         if (runZombieAi) {
           updateEnemies(dt);
         }
+        if (gameWorldReady) updateBossProjectiles(dt);
         if (gameWorldReady) updateDeathAnim(dt);
-        if (gameWorldReady && MULTIPLAYER && ARENA_COOP && ZOMBIE_AUTHORITY && CURRENT_MAP === "arena") {
+        if (gameWorldReady && MULTIPLAYER && ARENA_COOP && ZOMBIE_AUTHORITY && isArenaLikeMap(CURRENT_MAP)) {
           _zombieSyncAcc += dt;
           if (_zombieSyncAcc >= 1 / 14) {
             _zombieSyncAcc = 0;
             socket.emit("zombieSync", {
               score: state.score,
-              zombies: state.enemies.map((e, idx) => ({
-                i: e.netIndex ?? idx,
-                x: e.group.position.x,
-                z: e.group.position.z,
-                y: e.visYaw,
-                hp: e.hp,
-                a: e.alive ? 1 : 0,
-                rt: e.respawnTimer,
-              })),
+              zombies: state.enemies.map((e, idx) => {
+                const zd = {
+                  i: e.netIndex ?? idx,
+                  x: e.group.position.x,
+                  z: e.group.position.z,
+                  y: e.visYaw,
+                  hp: e.hp,
+                  a: e.alive ? 1 : 0,
+                  rt: e.respawnTimer,
+                };
+                if (e.isBoss) zd.bm = e.bossMode;
+                return zd;
+              }),
             });
           }
         }
       }
 
-      if (CURRENT_MAP === "arena" && started && gameWorldReady) {
+      if (isArenaLikeMap(CURRENT_MAP) && started && gameWorldReady) {
         updateInfiniteMaze(dt);
         processOneMazeChunkBuild();
         cullMazeLightsNearCamera();
@@ -14370,7 +14754,7 @@ if (typeof window !== "undefined") {
       MAP_BUILDERS[CURRENT_MAP]();
       applySceneFogAndCameraFar();
 
-      if (CURRENT_MAP === "arena") {
+      if (isArenaLikeMap(CURRENT_MAP)) {
         applyArenaMazePlayerSpawn();
         ensureArenaBootstrapChunks();
       }
@@ -14381,10 +14765,12 @@ if (typeof window !== "undefined") {
         scene.remove(enemy.group);
       }
       state.enemies.length = 0;
+      for (const bp of bossProjectiles) { scene.remove(bp.mesh); }
+      bossProjectiles.length = 0;
 
       if (isTrainingMap(CURRENT_MAP)) {
         rebuildTrainingDummies();
-      } else if (CURRENT_MAP === "arena") {
+      } else if (isArenaLikeMap(CURRENT_MAP)) {
         rebuildEnemyRoster();
         for (const e of state.enemies) {
           e.group.visible = false;
@@ -14445,7 +14831,7 @@ if (typeof window !== "undefined") {
         console.warn("[boot] asset preload", err);
       }
 
-      if (CURRENT_MAP === "arena") {
+      if (isArenaLikeMap(CURRENT_MAP)) {
         for (const e of state.enemies) {
           if (e.alive) e.group.visible = true;
         }
@@ -14513,6 +14899,8 @@ if (typeof window !== "undefined") {
         scene.remove(enemy.group);
       }
       state.enemies.length = 0;
+      for (const bp of bossProjectiles) { scene.remove(bp.mesh); }
+      bossProjectiles.length = 0;
       for (const [id, rp] of remotePlayers) {
         scene.remove(rp.group);
       }
@@ -14526,7 +14914,7 @@ if (typeof window !== "undefined") {
     }
 
     function showMenuPanel(id) {
-      for (const p of [menuMain, menuArenaMode, menuTrainingMode, menuPvpMaps, menuLobby, menuJoinCode]) p.style.display = "none";
+      for (const p of [menuMain, menuArenaMode, menuBossMode, menuTrainingMode, menuPvpMaps, menuLobby, menuJoinCode]) p.style.display = "none";
       clearLobbyErr();
       document.getElementById(id).style.display = "flex";
     }
@@ -14560,6 +14948,21 @@ if (typeof window !== "undefined") {
     btnArenaSingle.addEventListener("click", () => startGame("arena", false));
     btnArenaCoop.addEventListener("click", () => showLobby("arena-coop", tr("lobbyArenaCoop", "ARENA CO-OP")));
     btnArenaBack.addEventListener("click", () => showMenuPanel("menuMain"));
+
+    btnBossFight.addEventListener("click", () => showMenuPanel("menuBossMode"));
+    btnBossSingle.addEventListener("click", () => startGame("boss_arena", false));
+    btnBossCoop.addEventListener("click", () =>
+      showLobby("boss-coop", "BOSS FIGHT — CO-OP")
+    );
+    btnBossBack.addEventListener("click", () => showMenuPanel("menuMain"));
+    for (const btn of document.querySelectorAll(".bossDiffBtn")) {
+      btn.addEventListener("click", () => {
+        BOSS_FIGHT_COUNT = parseInt(btn.dataset.bossCount, 10) || 1;
+        for (const b of document.querySelectorAll(".bossDiffBtn")) {
+          b.style.background = b === btn ? "rgba(79,209,255,0.25)" : "transparent";
+        }
+      });
+    }
 
     btnTraining.addEventListener("click", () => showMenuPanel("menuTrainingMode"));
     btnTrainingSingle.addEventListener("click", () => startGame("training", false, false, false));
@@ -14687,6 +15090,7 @@ if (typeof window !== "undefined") {
     btnLobbyBack.addEventListener("click", () => {
       if (pendingLobbyMode === "crossfire") showMenuPanel("menuMain");
       else if (pendingLobbyMode === "training-coop") showMenuPanel("menuTrainingMode");
+      else if (pendingLobbyMode === "boss-coop") showMenuPanel("menuBossMode");
       else showMenuPanel("menuArenaMode");
     });
 
@@ -14694,7 +15098,8 @@ if (typeof window !== "undefined") {
       playerName = nameInput.value.trim().slice(0, 16) || "Player";
       nameModal.style.display = "none";
       const map = nameModal._pendingMap || "crossfire";
-      const coopArena = map === "arena" && pendingLobbyMode === "arena-coop";
+      const coopArena = (map === "arena" && pendingLobbyMode === "arena-coop") ||
+                        (map === "boss_arena" && pendingLobbyMode === "boss-coop");
       const coopTraining = map === "training" && pendingLobbyMode === "training-coop";
       startGame(map, true, coopArena, coopTraining);
     });
