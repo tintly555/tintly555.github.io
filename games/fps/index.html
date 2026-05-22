@@ -5101,11 +5101,40 @@ if (typeof window !== "undefined") {
       applyRemoteTrainingHit(data);
     });
 
+    function damagedEventTargetsLocalPlayer(data) {
+      if (!data || !socket) return true;
+      const tid =
+        data.target != null
+          ? String(data.target)
+          : data.victim != null
+            ? String(data.victim)
+            : data.to != null
+              ? String(data.to)
+              : null;
+      if (tid == null) return true;
+      return tid === String(socket.id);
+    }
+
+    function damagedEventFromLocalShooter(data) {
+      if (!data || !socket) return false;
+      const aid =
+        data.attacker != null
+          ? String(data.attacker)
+          : data.shooter != null
+            ? String(data.shooter)
+            : data.from != null
+              ? String(data.from)
+              : null;
+      return aid != null && aid === String(socket.id);
+    }
+
     socket.on("damaged", (data) => {
       if (isTrainingMap(CURRENT_MAP)) return;
       if (!gameWorldReady) return;
       if (player.health <= 0) return;
       if (performance.now() < player.spawnProtectUntil) return;
+      if (data && !damagedEventTargetsLocalPlayer(data)) return;
+      if (data && damagedEventFromLocalShooter(data)) return;
       if (
         data &&
         (data.hitKind === "dartSlow" ||
@@ -6805,6 +6834,15 @@ if (typeof window !== "undefined") {
       }
     }
 
+    function resolveWallTint(color) {
+      const defaultTint = isBrightIndoorMap(CURRENT_MAP) ? 0x8a96a8 : 0x6b7384;
+      const base = color != null ? color : defaultTint;
+      if (!isBrightIndoorMap(CURRENT_MAP)) return base;
+      const c = new THREE.Color(base);
+      c.lerp(new THREE.Color(0xffffff), 0.2);
+      return c.getHex();
+    }
+
     function addWallBox(w, h, d, x, y, z, color = 0x6b7384) {
       const S = WALL_TEXTURE_METERS_PER_REPEAT;
       const rep = (u, v) => ({
@@ -6819,7 +6857,8 @@ if (typeof window !== "undefined") {
         rep(w, h),
         rep(w, h),
       ];
-      const materials = faceRepeats.map((fr) => makeWallMaterial(fr.rx, fr.ry, color));
+      const tint = resolveWallTint(color);
+      const materials = faceRepeats.map((fr) => makeWallMaterial(fr.rx, fr.ry, tint));
       const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), materials);
       mesh.position.set(x, y, z);
       mesh.castShadow = true;
@@ -6829,7 +6868,7 @@ if (typeof window !== "undefined") {
       const wallBox = new THREE.Box3().setFromObject(mesh);
       mesh.userData.wallBox = wallBox;
       wallBoxes.push(wallBox);
-      _texturedMeshes.push({ mesh, faceRepeats, tint: color });
+      _texturedMeshes.push({ mesh, faceRepeats, tint });
       return mesh;
     }
 
@@ -7776,7 +7815,7 @@ if (typeof window !== "undefined") {
       clearPvpMapLights();
       const H = 4.5;
       const thick = 1.0;
-      const trim = 0x70798a;
+      const trim = 0x929bab;
       const EYE_Y = 1.65;
 
       const half = 30;
@@ -7963,7 +8002,7 @@ if (typeof window !== "undefined") {
       clearPvpMapLights();
       const H = 4.5;
       const thick = 1.0;
-      const trim = 0x70798a;
+      const trim = 0x929bab;
       const half = 28;
       addWallBox(half * 2, H, thick, 0, H / 2, -half);
       addWallBox(half * 2, H, thick, 0, H / 2, half);
@@ -11343,6 +11382,7 @@ if (typeof window !== "undefined") {
         slowDuration: dur,
         x: hx,
         z: hz,
+        attacker: socket.id,
       };
       socket.emit("playerSlow", payload);
       socket.emit("dartSlow", payload);
@@ -11350,11 +11390,12 @@ if (typeof window !== "undefined") {
       socket.emit("blind", payload);
       socket.emit("hit", {
         target: targetId,
-        damage: 1,
+        damage: 0,
         x: hx,
         z: hz,
         hitKind: "dartSlow",
         slowDuration: dur,
+        attacker: socket.id,
       });
       if (hitPoint && hitPoint.isVector3) {
         emitShootNetwork(hitPoint, hitPoint, 0x6bd4ff, "dartSlow", {
@@ -11383,6 +11424,7 @@ if (typeof window !== "undefined") {
       const speed = (weaponCfg && weaponCfg.projectileSpeed) || 36;
       const proj = {
         type: "paralysisDart",
+        fromShooter: true,
         pos: origin.clone(),
         prev: origin.clone(),
         vel: dir.clone().multiplyScalar(speed),
@@ -11472,7 +11514,6 @@ if (typeof window !== "undefined") {
         if (dx * dx + dy * dy + dz * dz <= r * r) {
           if (enemy.trainingDummy) {
             registerTrainingHit("body");
-            startSlowEffect(Math.min(slowDuration || 5, 3));
           } else {
             applyEnemySlowDebuff(enemy, slowDuration);
           }
@@ -11530,7 +11571,7 @@ if (typeof window !== "undefined") {
             }
           }
 
-          if (!consumed && !localImmune) {
+          if (!consumed && !localImmune && !p.fromShooter) {
             const headW = camera.position;
             const dxc = p.pos.x - headW.x;
             const dyc = p.pos.y - headW.y;
@@ -11551,7 +11592,6 @@ if (typeof window !== "undefined") {
                 createSparks(hit.point || p.pos.clone(), 0x6bd4ff);
                 if (enemy.trainingDummy) {
                   registerTrainingHit(hit.zone || "body");
-                  startSlowEffect(Math.min(p.slowDuration || 5, 3));
                 } else {
                   applyEnemySlowDebuff(enemy, p.slowDuration);
                 }
