@@ -6419,13 +6419,13 @@ if (typeof window !== "undefined") {
 
     function getCurrentMapFogColor() {
       if (isBrightIndoorMap(CURRENT_MAP)) return 0x8ea6c6;
-      if (isBossArenaMap(CURRENT_MAP)) return 0x7a9a6a;
+      if (isBossArenaMap(CURRENT_MAP)) return 0x87ceeb;
       return 0x070504;
     }
 
     function getCurrentMapBackgroundColor() {
       if (isBrightIndoorMap(CURRENT_MAP)) return 0xa9c3e6;
-      if (isBossArenaMap(CURRENT_MAP)) return 0x8aaa7a;
+      if (isBossArenaMap(CURRENT_MAP)) return 0x87ceeb;
       return 0x070504;
     }
 
@@ -8194,7 +8194,7 @@ if (typeof window !== "undefined") {
       addWallBox(1.0, coverH, 2.5, -30, coverH / 2, 8, coverColor);
       addWallBox(4.0, coverH, 1.5, 0, coverH / 2, 35, coverColor);
 
-      const groundMat = new THREE.MeshStandardMaterial({ color: 0x5a7a4a, roughness: 0.95, metalness: 0 });
+      const groundMat = new THREE.MeshStandardMaterial({ color: 0x3d9b2e, roughness: 0.92, metalness: 0 });
       const ground = new THREE.Mesh(new THREE.PlaneGeometry(half * 2, half * 2), groundMat);
       ground.rotation.x = -Math.PI / 2;
       ground.position.y = 0.005;
@@ -8210,6 +8210,20 @@ if (typeof window !== "undefined") {
       sun.position.set(20, 50, 30);
       sun.castShadow = false;
       scene.add(sun); pvpMapLights.push(sun);
+
+      const skyGeo = new THREE.SphereGeometry(200, 24, 16);
+      const skyMat = new THREE.MeshBasicMaterial({ color: 0x87ceeb, side: THREE.BackSide });
+      const skyDome = new THREE.Mesh(skyGeo, skyMat);
+      scene.add(skyDome);
+      wallMeshes.push(skyDome);
+
+      const sunVisGeo = new THREE.SphereGeometry(6, 12, 8);
+      const sunVisMat = new THREE.MeshBasicMaterial({ color: 0xfffde0 });
+      const sunVisMesh = new THREE.Mesh(sunVisGeo, sunVisMat);
+      sunVisMesh.position.set(40, 120, -30);
+      scene.add(sunVisMesh);
+      wallMeshes.push(sunVisMesh);
+
       ceiling.visible = false;
     }
 
@@ -9191,14 +9205,16 @@ if (typeof window !== "undefined") {
       if (enemy._hpBarRatio === ratio) return;
       enemy._hpBarRatio = ratio;
       const ctx = enemy.hpCtx;
-      ctx.clearRect(0, 0, 128, 24);
+      const cw = enemy.hpCanvas.width;
+      const bw = cw - 8;
+      ctx.clearRect(0, 0, cw, 24);
       ctx.fillStyle = "rgba(0,0,0,0.55)";
-      ctx.fillRect(4, 8, 120, 8);
+      ctx.fillRect(4, 8, bw, 8);
       ctx.fillStyle = enemy.isBoss ? "#e040ff" : enemy.type === "tank" ? "#60a5fa" : (enemy.type === "gunner" ? "#f87171" : (enemy.type === "fast" ? "#facc15" : "#22c55e"));
-      ctx.fillRect(4, 8, 120 * Math.max(0, enemy.hp) / enemy.maxHp, 8);
+      ctx.fillRect(4, 8, bw * Math.max(0, enemy.hp) / enemy.maxHp, 8);
       ctx.strokeStyle = "rgba(255,255,255,0.85)";
       ctx.lineWidth = 1;
-      ctx.strokeRect(4, 8, 120, 8);
+      ctx.strokeRect(4, 8, bw, 8);
       enemy.hpTexture.needsUpdate = true;
     }
 
@@ -9210,163 +9226,167 @@ if (typeof window !== "undefined") {
       const leftLegRoot = new THREE.Group();
       const rightLegRoot = new THREE.Group();
 
-      const skinColor = 0x7a5c8a;
-      const skinDark = 0x5a3d6a;
-      const shirtColor = 0x2a2030;
-      const pantsColor = 0x3a3a2e;
-      const woundColor = 0x8b3a3a;
-      const eyeColor = 0xff2222;
+      const skinColor = 0x6a5080;
+      const skinDark = 0x4a3060;
+      const shirtColor = 0x1a1520;
+      const pantsColor = 0x2a2a22;
+      const veinColor = 0x9a2255;
+      const eyeColor = 0xff1111;
 
-      const matSkin = new THREE.MeshStandardMaterial({ color: skinColor, roughness: 0.95, metalness: 0 });
-      const matSkinD = new THREE.MeshStandardMaterial({ color: skinDark, roughness: 0.95, metalness: 0 });
+      const matSkin = new THREE.MeshStandardMaterial({ color: skinColor, roughness: 0.92, metalness: 0 });
+      const matSkinD = new THREE.MeshStandardMaterial({ color: skinDark, roughness: 0.92, metalness: 0 });
       const matShirt = new THREE.MeshStandardMaterial({ color: shirtColor, roughness: 0.96, metalness: 0 });
       const matPants = new THREE.MeshStandardMaterial({ color: pantsColor, roughness: 0.96, metalness: 0 });
-      const matWound = new THREE.MeshStandardMaterial({ color: woundColor, roughness: 0.94, metalness: 0 });
+      const matVein = new THREE.MeshStandardMaterial({ color: veinColor, roughness: 0.9, metalness: 0.1 });
       const matBone = new THREE.MeshStandardMaterial({ color: 0xd4c8a8, roughness: 0.94, metalness: 0 });
-      const matBlood = new THREE.MeshStandardMaterial({ color: 0x551111, roughness: 0.93, metalness: 0 });
 
-      const S = 1.8;
-      const chest = new THREE.Mesh(new THREE.BoxGeometry(0.68 * S, 0.56 * S, 0.34 * S), matShirt);
-      chest.position.y = 1.32; torsoRoot.add(chest);
-      const belly = new THREE.Mesh(new THREE.BoxGeometry(0.62 * S, 0.32 * S, 0.32 * S), matShirt);
-      belly.position.y = 0.88; torsoRoot.add(belly);
-      const ribWound = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.18, 0.06), matWound);
-      ribWound.position.set(0.18, 1.22, 0.30); torsoRoot.add(ribWound);
-      const rib1 = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.02, 0.04), matBone);
-      rib1.position.set(0.18, 1.26, 0.32); torsoRoot.add(rib1);
-      const rib2 = rib1.clone(); rib2.position.y = 1.18; torsoRoot.add(rib2);
-      const tearL = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.10, 0.05), matSkin);
-      tearL.position.set(-0.30, 1.00, 0.30); torsoRoot.add(tearL);
-      const bloodStain = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.12, 0.05), matBlood);
-      bloodStain.position.set(-0.14, 0.92, 0.30); torsoRoot.add(bloodStain);
-      const collar = new THREE.Mesh(new THREE.BoxGeometry(0.52 * S, 0.07, 0.30 * S), matShirt);
-      collar.position.set(0, 1.64, 0); torsoRoot.add(collar);
-      const collarTear = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.10, 0.07), matSkin);
-      collarTear.position.set(0.22, 1.64, 0.16); torsoRoot.add(collarTear);
+      // MASSIVE upper body
+      const chest = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.7, 0.5), matShirt);
+      chest.position.y = 1.55; torsoRoot.add(chest);
+      const belly = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.4, 0.45), matShirt);
+      belly.position.y = 1.05; torsoRoot.add(belly);
 
-      const trapMat = new THREE.MeshStandardMaterial({ color: skinColor, roughness: 0.94, metalness: 0 });
-      const trapL = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.22, 0.24), trapMat);
-      trapL.position.set(-0.38, 1.62, 0); torsoRoot.add(trapL);
-      const trapR = trapL.clone(); trapR.position.x = 0.38; torsoRoot.add(trapR);
-      const neckTrap = new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.18, 0.26), trapMat);
-      neckTrap.position.set(0, 1.72, -0.02); torsoRoot.add(neckTrap);
+      // Pectoral detail
+      const pecL = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.25, 0.08), matSkin);
+      pecL.position.set(-0.2, 1.6, 0.26); torsoRoot.add(pecL);
+      const pecR = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.25, 0.08), matSkin);
+      pecR.position.set(0.2, 1.6, 0.26); torsoRoot.add(pecR);
 
+      // Shirt tears exposing skin
+      const tearL = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.15, 0.06), matSkin);
+      tearL.position.set(-0.35, 1.4, 0.26); torsoRoot.add(tearL);
+      const tearR = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.12, 0.06), matSkin);
+      tearR.position.set(0.3, 1.2, 0.24); torsoRoot.add(tearR);
+
+      // Veins on torso
+      const tVein1 = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.2, 0.04), matVein);
+      tVein1.position.set(0.25, 1.5, 0.27); torsoRoot.add(tVein1);
+      const tVein2 = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.18, 0.04), matVein);
+      tVein2.position.set(-0.3, 1.35, 0.26); torsoRoot.add(tVein2);
+
+      // Enormous trapezius
+      const trapL = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.28, 0.3), matSkin);
+      trapL.position.set(-0.4, 1.95, -0.02); torsoRoot.add(trapL);
+      const trapR = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.28, 0.3), matSkin);
+      trapR.position.set(0.4, 1.95, -0.02); torsoRoot.add(trapR);
+      const neckTrap = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.24, 0.32), matSkin);
+      neckTrap.position.set(0, 2.0, -0.02); torsoRoot.add(neckTrap);
+
+      // Thick neck
+      const neck = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.2, 0.3), matSkin);
+      neck.position.set(0, 2.18, 0); torsoRoot.add(neck);
+      const neckVein1 = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.18, 0.04), matVein);
+      neckVein1.position.set(0.09, 2.15, 0.12); torsoRoot.add(neckVein1);
+      const neckVein2 = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.16, 0.04), matVein);
+      neckVein2.position.set(-0.1, 2.12, 0.11); torsoRoot.add(neckVein2);
+
+      // Deltoid shoulder caps
+      const deltL = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.24, 0.28), matSkin);
+      deltL.position.set(-0.58, 1.85, 0); deltL.rotation.z = 0.2; torsoRoot.add(deltL);
+      const deltR = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.24, 0.28), matSkin);
+      deltR.position.set(0.58, 1.85, 0); deltR.rotation.z = -0.2; torsoRoot.add(deltR);
+
+      // HEAD (slightly smaller relative to body)
       const headGroup = new THREE.Group();
-      const skull = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.48, 0.44), matSkin);
+      const skull = new THREE.Mesh(new THREE.BoxGeometry(0.40, 0.44, 0.40), matSkin);
       headGroup.add(skull);
-      const jawBone = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.13, 0.34), matSkinD);
-      jawBone.position.set(0, -0.26, 0.02); headGroup.add(jawBone);
+      const jawBone = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.12, 0.32), matSkinD);
+      jawBone.position.set(0, -0.24, 0.02); headGroup.add(jawBone);
 
+      // Heavy brow ridge
+      const brow = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.09, 0.12), matSkinD);
+      brow.position.set(0, 0.16, 0.18); headGroup.add(brow);
+
+      // Deep-set glowing red eyes
       const eyeGlowMat = new THREE.MeshBasicMaterial({ color: eyeColor });
-      const eyeSocketMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 1, metalness: 0 });
-      const sockL = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.10, 0.04), eyeSocketMat);
-      sockL.position.set(-0.10, 0.06, 0.21); headGroup.add(sockL);
-      const sockR = sockL.clone(); sockR.position.x = 0.10; headGroup.add(sockR);
-      const eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.07, 0.05), eyeGlowMat);
-      eyeL.position.set(-0.10, 0.06, 0.225); headGroup.add(eyeL);
-      const eyeR = eyeL.clone(); eyeR.position.x = 0.10; headGroup.add(eyeR);
+      const eyeSocketMat = new THREE.MeshStandardMaterial({ color: 0x0a0a0a, roughness: 1, metalness: 0 });
+      const sockL = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.09, 0.06), eyeSocketMat);
+      sockL.position.set(-0.09, 0.06, 0.19); headGroup.add(sockL);
+      const sockR = sockL.clone(); sockR.position.x = 0.09; headGroup.add(sockR);
+      const eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.06, 0.07), eyeGlowMat);
+      eyeL.position.set(-0.09, 0.06, 0.21); headGroup.add(eyeL);
+      const eyeR = eyeL.clone(); eyeR.position.x = 0.09; headGroup.add(eyeR);
 
-      const brow = new THREE.Mesh(new THREE.BoxGeometry(0.40, 0.07, 0.09), matSkinD);
-      brow.position.set(0, 0.16, 0.20); headGroup.add(brow);
-      const cheekL = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.10, 0.10), matSkinD);
-      cheekL.position.set(-0.22, -0.06, 0.15); headGroup.add(cheekL);
-      const cheekR = cheekL.clone(); cheekR.position.x = 0.22; headGroup.add(cheekR);
-      const mouthWound = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.05, 0.05), matWound);
-      mouthWound.position.set(0.03, -0.15, 0.22); headGroup.add(mouthWound);
-      const teeth = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.04, 0.04), matBone);
-      teeth.position.set(0, -0.19, 0.21); headGroup.add(teeth);
-      const noseBridge = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.09, 0.07), matSkinD);
-      noseBridge.position.set(0, -0.02, 0.23); headGroup.add(noseBridge);
+      // Exposed fangs/teeth
+      const fangL = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.07, 0.04), matBone);
+      fangL.position.set(-0.06, -0.22, 0.18); headGroup.add(fangL);
+      const fangR = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.07, 0.04), matBone);
+      fangR.position.set(0.06, -0.22, 0.18); headGroup.add(fangR);
+      const teethRow = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.03, 0.04), matBone);
+      teethRow.position.set(0, -0.18, 0.19); headGroup.add(teethRow);
 
-      const hairMat = new THREE.MeshStandardMaterial({ color: 0x25201d, roughness: 0.96, metalness: 0 });
-      const h1 = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.06, 0.30), hairMat);
-      h1.position.set(0, 0.28, -0.06); headGroup.add(h1);
+      // Scar across face
+      const scar = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.03, 0.04), matVein);
+      scar.position.set(0, 0.0, 0.21); scar.rotation.z = 0.3; headGroup.add(scar);
 
-      const earMat = matSkinD;
-      const earL = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.10, 0.06), earMat);
-      earL.position.set(-0.25, 0.02, 0); headGroup.add(earL);
-      const earR = earL.clone(); earR.position.x = 0.25; headGroup.add(earR);
+      // Nose
+      const nose = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.08, 0.08), matSkinD);
+      nose.position.set(0, -0.04, 0.22); headGroup.add(nose);
 
-      const neck = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.16, 0.24), matSkin);
-      neck.position.set(0, -0.34, 0); headGroup.add(neck);
-      const neckVein = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.14, 0.04), matWound);
-      neckVein.position.set(0.07, -0.32, 0.09); headGroup.add(neckVein);
-      const neckVein2 = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.12, 0.04), matWound);
-      neckVein2.position.set(-0.08, -0.30, 0.08); headGroup.add(neckVein2);
+      // Ears
+      const earL = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.09, 0.06), matSkinD);
+      earL.position.set(-0.22, 0.02, 0); headGroup.add(earL);
+      const earR = earL.clone(); earR.position.x = 0.22; headGroup.add(earR);
 
-      headGroup.position.y = 2.2; torsoRoot.add(headGroup);
+      headGroup.position.y = 2.45; torsoRoot.add(headGroup);
 
-      leftArmRoot.position.set(-0.62 * S, 1.58, 0);
-      rightArmRoot.position.set(0.62 * S, 1.58, 0);
+      // MASSIVE ARMS
+      leftArmRoot.position.set(-0.7, 1.7, 0);
+      rightArmRoot.position.set(0.7, 1.7, 0);
       const makeArm = (ar, side) => {
-        const up = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.44, 0.26), matShirt);
-        up.position.set(0, -0.22, 0); ar.add(up);
-        const bicep = new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.28, 0.28), matSkin);
-        bicep.position.set(0, -0.14, 0); ar.add(bicep);
-        const sleeve = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.10, 0.28), matShirt);
+        const bicep = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.5, 0.32), matSkin);
+        bicep.position.set(0, -0.25, 0); ar.add(bicep);
+        const sleeve = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.15, 0.34), matShirt);
         sleeve.position.set(0, -0.02, 0); ar.add(sleeve);
-        const fa = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.40, 0.22), matSkin);
-        fa.position.set(0, -0.60, 0.06); ar.add(fa);
-        if (side === "left") {
-          const w = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.07), matWound);
-          w.position.set(0.06, -0.52, 0.14); ar.add(w);
-          const b = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.05, 0.05), matBone);
-          b.position.set(0.06, -0.50, 0.16); ar.add(b);
-        }
-        if (side === "right") {
-          const scratch = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.16, 0.05), matWound);
-          scratch.position.set(-0.07, -0.44, 0.12); ar.add(scratch);
-        }
-        const hand = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.16, 0.20), matSkin);
-        hand.position.set(0, -0.86, 0.12); ar.add(hand);
-        const f1 = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.10, 0.07), matSkinD);
-        f1.position.set(-0.05, -0.96, 0.18); ar.add(f1);
+        const forearm = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.45, 0.25), matSkin);
+        forearm.position.set(0, -0.65, 0.04); ar.add(forearm);
+        // Veins on forearm
+        const vein1 = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.22, 0.03), matVein);
+        vein1.position.set(side === "left" ? 0.08 : -0.08, -0.55, 0.12); ar.add(vein1);
+        const vein2 = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.16, 0.03), matVein);
+        vein2.position.set(side === "left" ? -0.05 : 0.05, -0.7, 0.10); ar.add(vein2);
+        // Big fists
+        const hand = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.20, 0.24), matSkinD);
+        hand.position.set(0, -0.95, 0.08); ar.add(hand);
+        const f1 = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.09, 0.07), matSkinD);
+        f1.position.set(-0.06, -1.08, 0.12); ar.add(f1);
         const f2 = f1.clone(); f2.position.x = 0; ar.add(f2);
-        const f3 = f1.clone(); f3.position.x = 0.05; ar.add(f3);
-        const thumb = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.07, 0.05), matSkinD);
-        thumb.position.set(side === "left" ? 0.10 : -0.10, -0.90, 0.18); ar.add(thumb);
+        const f3 = f1.clone(); f3.position.x = 0.06; ar.add(f3);
+        const thumb = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.07, 0.06), matSkinD);
+        thumb.position.set(side === "left" ? 0.12 : -0.12, -0.98, 0.14); ar.add(thumb);
       };
       makeArm(leftArmRoot, "left"); makeArm(rightArmRoot, "right");
 
-      const LS = 0.6;
-      leftLegRoot.position.set(-0.18, 0.62, 0);
-      rightLegRoot.position.set(0.18, 0.62, 0);
+      // TINY LEGS ("skips leg day")
+      leftLegRoot.position.set(-0.2, 0.65, 0);
+      rightLegRoot.position.set(0.2, 0.65, 0);
       const makeLeg = (lr, side) => {
-        const th = new THREE.Mesh(new THREE.BoxGeometry(0.22 * LS, 0.44, 0.22 * LS), matPants);
-        th.position.set(0, -0.22, 0); lr.add(th);
-        const sh = new THREE.Mesh(new THREE.BoxGeometry(0.20 * LS, 0.40, 0.20 * LS), matPants);
-        sh.position.set(0, -0.60, 0); lr.add(sh);
+        const thigh = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.5, 0.14), matPants);
+        thigh.position.set(0, -0.25, 0); lr.add(thigh);
+        const shin = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.45, 0.12), matPants);
+        shin.position.set(0, -0.68, 0); lr.add(shin);
         if (side === "right") {
-          const tear = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.10, 0.06), matSkin);
-          tear.position.set(0, -0.68, 0.08); lr.add(tear);
+          const tear = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.08, 0.05), matSkin);
+          tear.position.set(0, -0.72, 0.07); lr.add(tear);
         }
-        if (side === "left") {
-          const bloodDrip = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.16, 0.04), matBlood);
-          bloodDrip.position.set(0.04, -0.52, 0.08); lr.add(bloodDrip);
-        }
-        const foot = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.10, 0.28), matSkinD);
-        foot.position.set(0, -0.86, 0.04); lr.add(foot);
-        const toe = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.06, 0.06), matSkinD);
-        toe.position.set(0, -0.88, 0.16); lr.add(toe);
+        const foot = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.08, 0.24), matSkinD);
+        foot.position.set(0, -0.95, 0.04); lr.add(foot);
       };
       makeLeg(leftLegRoot, "left"); makeLeg(rightLegRoot, "right");
 
       root.add(torsoRoot, leftArmRoot, rightArmRoot, leftLegRoot, rightLegRoot);
-      const fy0 = Math.random() * Math.PI * 2;
+      root.scale.set(2.0, 2.0, 2.0);
       root.position.set(x, 0, z);
-      chest.castShadow = true;
-      belly.castShadow = true;
-      skull.castShadow = true;
       root.traverse((o) => {
         if (!o.isMesh) return;
+        o.castShadow = true;
         o.receiveShadow = true;
-        if (!o.castShadow) o.castShadow = false;
       });
 
       scene.add(root);
 
       const hpCanvas = document.createElement("canvas");
-      hpCanvas.width = 128;
+      hpCanvas.width = 256;
       hpCanvas.height = 24;
       const hpCtx = hpCanvas.getContext("2d");
       const hpTexture = new THREE.CanvasTexture(hpCanvas);
@@ -9378,8 +9398,8 @@ if (typeof window !== "undefined") {
           depthWrite: false
         })
       );
-      hpSprite.scale.set(1.7, 0.32, 1);
-      hpSprite.position.set(0, 3.1, 0);
+      hpSprite.scale.set(3.2, 0.5, 1);
+      hpSprite.position.set(0, 3.2, 0);
       root.add(hpSprite);
       hpSprite.raycast = () => {};
 
@@ -9387,6 +9407,7 @@ if (typeof window !== "undefined") {
         type: "boss",
         group: root,
         torsoRoot,
+        headGroup,
         leftArmRoot,
         rightArmRoot,
         leftLegRoot,
@@ -9396,11 +9417,11 @@ if (typeof window !== "undefined") {
         hpTexture,
         hpSprite,
         alive: true,
-        hp: 800,
-        maxHp: 800,
+        hp: 15000,
+        maxHp: 15000,
         attackCooldownTimer: 0,
-        attackCooldown: 0.8,
-        attackDamage: 35,
+        attackCooldown: 1.2,
+        attackDamage: 50,
         ranged: false,
         rangeDistance: 20,
         respawnTimer: 0,
@@ -9408,11 +9429,11 @@ if (typeof window !== "undefined") {
         walkTime: Math.random() * 10,
         moving: false,
         attackPhase: 0,
-        speed: 2.2,
+        speed: 5.5,
         aware: false,
         hiddenTimer: 0,
-        facingYaw: fy0,
-        visYaw: fy0,
+        facingYaw: 0,
+        visYaw: 0,
         armLV: -0.2,
         armRV: -0.2,
         legLV: 0,
@@ -9429,11 +9450,14 @@ if (typeof window !== "undefined") {
         isHormoneZombie: true,
         bossMode: "tank",
         bossModeSwitchTimer: 5,
-        baseTankHp: 800,
-        baseSpeedHp: 400,
-        baseGunnerHp: 500,
-        summonCooldown: 0,
-        summonCount: 0
+        baseTankHp: 15000,
+        baseSpeedHp: 8000,
+        baseGunnerHp: 10000,
+        summonCooldown: 999,
+        summonCount: 0,
+        summonTriggered: false,
+        bossAnimState: "idle",
+        bossAnimTimer: 0
       };
     }
 
@@ -14068,31 +14092,37 @@ if (typeof window !== "undefined") {
         }
 
         if (enemy.isBoss) {
+          const bDx = player.position.x - enemy.group.position.x;
+          const bDz = player.position.z - enemy.group.position.z;
+          enemy.facingYaw = Math.atan2(bDx, bDz);
+
           enemy.bossModeSwitchTimer -= dt;
           if (enemy.bossModeSwitchTimer <= 0) {
             enemy.bossModeSwitchTimer = 5;
+            enemy.bossAnimState = "modeSwitch";
+            enemy.bossAnimTimer = 0;
             const hpRatio = enemy.hp / enemy.maxHp;
             if (enemy.bossMode === "tank") {
               enemy.bossMode = "speed";
               enemy.maxHp = enemy.baseSpeedHp;
-              enemy.speed = 7.4;
-              enemy.attackDamage = 12;
-              enemy.attackCooldown = 0.25;
+              enemy.speed = 8.0;
+              enemy.attackDamage = 20;
+              enemy.attackCooldown = 0.35;
               enemy.ranged = false;
             } else if (enemy.bossMode === "speed") {
               enemy.bossMode = "gunner";
               enemy.maxHp = enemy.baseGunnerHp;
-              enemy.speed = 2.2;
-              enemy.attackDamage = 8;
+              enemy.speed = 5.5;
+              enemy.attackDamage = 12;
               enemy.attackCooldown = 1.2;
               enemy.ranged = true;
               enemy.rangeDistance = 20;
             } else {
               enemy.bossMode = "tank";
               enemy.maxHp = enemy.baseTankHp;
-              enemy.speed = 2.2;
-              enemy.attackDamage = 35;
-              enemy.attackCooldown = 0.8;
+              enemy.speed = 5.5;
+              enemy.attackDamage = 50;
+              enemy.attackCooldown = 1.2;
               enemy.ranged = false;
             }
             enemy.hp = Math.max(1, Math.round(hpRatio * enemy.maxHp));
@@ -14100,17 +14130,20 @@ if (typeof window !== "undefined") {
             drawEnemyHp(enemy);
           }
 
-          enemy.summonCooldown -= dt;
-          if (enemy.summonCooldown <= 0 && enemy.summonCount < 2) {
-            enemy.summonCooldown = 12;
-            const sx = enemy.group.position.x + (Math.random() - 0.5) * 4;
-            const sz = enemy.group.position.z + (Math.random() - 0.5) * 4;
-            const minion = makeZombie(sx, sz, "normal");
-            minion.netIndex = state.enemies.length;
-            minion.summonedBy = enemy;
-            drawEnemyHp(minion);
-            state.enemies.push(minion);
-            enemy.summonCount++;
+          if (!enemy.summonTriggered && enemy.hp <= enemy.maxHp * 0.5) {
+            enemy.summonTriggered = true;
+            enemy.bossAnimState = "summoning";
+            enemy.bossAnimTimer = 0;
+            for (let si = 0; si < 2; si++) {
+              const sx = enemy.group.position.x + (si === 0 ? -3 : 3);
+              const sz = enemy.group.position.z + (Math.random() - 0.5) * 4;
+              const minion = makeZombie(sx, sz, "normal");
+              minion.netIndex = state.enemies.length;
+              minion.summonedBy = enemy;
+              drawEnemyHp(minion);
+              state.enemies.push(minion);
+              enemy.summonCount++;
+            }
           }
         }
 
@@ -14239,8 +14272,12 @@ if (typeof window !== "undefined") {
           }
 
           if (!enemy.ranged) {
-            if (dist < 2.05 && enemy.attackCooldownTimer <= 0) {
+            if (dist < (enemy.isBoss ? 3.5 : 2.05) && enemy.attackCooldownTimer <= 0) {
               enemy.attackCooldownTimer = enemy.attackCooldown;
+              if (enemy.isBoss) {
+                enemy.bossAnimState = "attacking";
+                enemy.bossAnimTimer = 0;
+              }
               applyCoopZombieDamageToTarget(enemy);
             }
           } else if (
@@ -14307,40 +14344,199 @@ if (typeof window !== "undefined") {
           : Math.sin(shakePhase * 0.35) * 0.035;
         const bobble = enemy.moving ? Math.cos(enemy.walkTime * 5.1 + ei * 1.2) * 0.028 : 0;
 
-        if (enemy.aware && dist < 2.2 && !enemy.ranged) {
-          enemy.attackPhase += dt * 10;
-        } else if (enemy.aware && enemy.ranged && dist < enemy.rangeDistance) {
-          enemy.attackPhase += dt * 6;
-        } else {
-          enemy.attackPhase = 0;
+        let bossAnimOverride = false;
+        if (enemy.isBoss) {
+          enemy.bossAnimTimer += dt;
+
+          if (enemy.bossAnimState === "summoning") {
+            bossAnimOverride = true;
+            const t = Math.min(enemy.bossAnimTimer / 2.5, 1);
+            if (t < 0.25) {
+              const e = t / 0.25;
+              const s = e * e * (3 - 2 * e);
+              enemy.leftArmRoot.rotation.x = THREE.MathUtils.lerp(-0.2, -0.6, s);
+              enemy.leftArmRoot.rotation.z = THREE.MathUtils.lerp(0, 1.4, s);
+              enemy.rightArmRoot.rotation.x = THREE.MathUtils.lerp(-0.2, -0.6, s);
+              enemy.rightArmRoot.rotation.z = THREE.MathUtils.lerp(0, -1.4, s);
+              enemy.torsoRoot.rotation.x = THREE.MathUtils.lerp(0, -0.15, s);
+            } else if (t < 0.5) {
+              const e = (t - 0.25) / 0.25;
+              const s = e * e * (3 - 2 * e);
+              enemy.leftArmRoot.rotation.x = THREE.MathUtils.lerp(-0.6, -3.0, s);
+              enemy.leftArmRoot.rotation.z = THREE.MathUtils.lerp(1.4, 0.4, s);
+              enemy.rightArmRoot.rotation.x = THREE.MathUtils.lerp(-0.6, -3.0, s);
+              enemy.rightArmRoot.rotation.z = THREE.MathUtils.lerp(-1.4, -0.4, s);
+              enemy.torsoRoot.rotation.x = THREE.MathUtils.lerp(-0.15, -0.30, s);
+              enemy.group.position.y = s * 0.12;
+            } else {
+              const pulse = Math.sin((t - 0.5) * 12) * 0.12;
+              enemy.leftArmRoot.rotation.x = -3.0 + pulse;
+              enemy.leftArmRoot.rotation.z = 0.4;
+              enemy.rightArmRoot.rotation.x = -3.0 + pulse;
+              enemy.rightArmRoot.rotation.z = -0.4;
+              enemy.torsoRoot.rotation.x = -0.30 + Math.sin((t - 0.5) * 16) * 0.05;
+              enemy.group.position.y = 0.12 * Math.max(0, 1 - (t - 0.5) / 0.5);
+              state.camShake = Math.max(state.camShake || 0, 0.15 * Math.abs(pulse) / 0.12);
+            }
+            if (t >= 1) {
+              enemy.bossAnimState = "idle";
+              enemy.bossAnimTimer = 0;
+              enemy.torsoRoot.rotation.x = 0;
+              enemy.group.position.y = 0;
+            }
+          }
+
+          if (!bossAnimOverride && enemy.bossAnimState === "modeSwitch") {
+            bossAnimOverride = true;
+            const t = Math.min(enemy.bossAnimTimer / 1.4, 1);
+            if (t < 0.3) {
+              const e = t / 0.3;
+              const s = e * e;
+              enemy.leftArmRoot.rotation.x = -1.8 * s;
+              enemy.leftArmRoot.rotation.z = 1.0 * s;
+              enemy.rightArmRoot.rotation.x = -1.8 * s;
+              enemy.rightArmRoot.rotation.z = -1.0 * s;
+              enemy.torsoRoot.rotation.x = -0.20 * s;
+              enemy.group.position.y = 0.08 * s;
+            } else if (t < 0.6) {
+              const pulse = Math.sin((t - 0.3) * 20) * 0.15;
+              enemy.leftArmRoot.rotation.x = -1.8 + pulse;
+              enemy.leftArmRoot.rotation.z = 1.0;
+              enemy.rightArmRoot.rotation.x = -1.8 + pulse;
+              enemy.rightArmRoot.rotation.z = -1.0;
+              enemy.torsoRoot.rotation.x = -0.20 + Math.sin((t - 0.3) * 24) * 0.06;
+              enemy.group.position.y = 0.08;
+              state.camShake = Math.max(state.camShake || 0, 0.3);
+            } else {
+              const e = (t - 0.6) / 0.4;
+              const s = 1 - Math.pow(1 - e, 2);
+              enemy.leftArmRoot.rotation.x = THREE.MathUtils.lerp(-1.8, -0.2, s);
+              enemy.leftArmRoot.rotation.z = THREE.MathUtils.lerp(1.0, 0, s);
+              enemy.rightArmRoot.rotation.x = THREE.MathUtils.lerp(-1.8, -0.2, s);
+              enemy.rightArmRoot.rotation.z = THREE.MathUtils.lerp(-1.0, 0, s);
+              enemy.torsoRoot.rotation.x = THREE.MathUtils.lerp(-0.20, 0, s);
+              enemy.group.position.y = THREE.MathUtils.lerp(0.08, 0, s);
+            }
+            if (t >= 1) {
+              enemy.bossAnimState = "idle";
+              enemy.bossAnimTimer = 0;
+              enemy.torsoRoot.rotation.x = 0;
+              enemy.group.position.y = 0;
+            }
+          }
+
+          if (!bossAnimOverride && enemy.bossAnimState === "attacking") {
+            bossAnimOverride = true;
+            const dur = 1.1;
+            const t = Math.min(enemy.bossAnimTimer / dur, 1);
+            if (t < 0.40) {
+              const e = t / 0.40;
+              const smooth = e * e * (3 - 2 * e);
+              enemy.leftArmRoot.rotation.x = THREE.MathUtils.lerp(-0.2, -3.2, smooth);
+              enemy.rightArmRoot.rotation.x = THREE.MathUtils.lerp(-0.2, -3.2, smooth);
+              enemy.leftArmRoot.rotation.z = THREE.MathUtils.lerp(0, 0.20, smooth);
+              enemy.rightArmRoot.rotation.z = THREE.MathUtils.lerp(0, -0.20, smooth);
+              enemy.torsoRoot.rotation.x = THREE.MathUtils.lerp(0, -0.35, smooth);
+              enemy.group.position.y = THREE.MathUtils.lerp(0, 0.15, smooth);
+            } else if (t < 0.52) {
+              const e = (t - 0.40) / 0.12;
+              const pow = 1 - Math.pow(1 - e, 4);
+              enemy.leftArmRoot.rotation.x = THREE.MathUtils.lerp(-3.2, 0.8, pow);
+              enemy.rightArmRoot.rotation.x = THREE.MathUtils.lerp(-3.2, 0.8, pow);
+              enemy.leftArmRoot.rotation.z = 0.20 * (1 - pow);
+              enemy.rightArmRoot.rotation.z = -0.20 * (1 - pow);
+              enemy.torsoRoot.rotation.x = THREE.MathUtils.lerp(-0.35, 0.45, pow);
+              enemy.group.position.y = THREE.MathUtils.lerp(0.15, 0, pow);
+              if (pow > 0.8 && !enemy._smashShook) {
+                enemy._smashShook = true;
+                state.camShake = Math.max(state.camShake || 0, 0.6);
+              }
+            } else {
+              const e = (t - 0.52) / 0.48;
+              const smooth = 1 - Math.pow(1 - e, 2);
+              enemy.leftArmRoot.rotation.x = THREE.MathUtils.lerp(0.8, -0.2, smooth);
+              enemy.rightArmRoot.rotation.x = THREE.MathUtils.lerp(0.8, -0.2, smooth);
+              enemy.leftArmRoot.rotation.z = 0;
+              enemy.rightArmRoot.rotation.z = 0;
+              enemy.torsoRoot.rotation.x = THREE.MathUtils.lerp(0.45, 0, smooth);
+              enemy.group.position.y = 0;
+            }
+            if (t >= 1) {
+              enemy.bossAnimState = "idle";
+              enemy.bossAnimTimer = 0;
+              enemy._smashShook = false;
+              enemy.torsoRoot.rotation.x = 0;
+              enemy.group.position.y = 0;
+            }
+          }
         }
 
-        const attackSwing = enemy.attackPhase > 0 ? Math.max(0, Math.sin(enemy.attackPhase)) * 0.6 : 0;
-        const tgtArmL = (enemy.aware ? -1.0 : -0.2) + attackSwing + (enemy.moving ? walk * 0.15 : 0);
-        const tgtArmR = (enemy.aware ? -1.0 : -0.2) + attackSwing - (enemy.moving ? walk * 0.15 : 0);
-        const tgtLegL = enemy.moving ? -walk : 0;
-        const tgtLegR = enemy.moving ? walk : 0;
-        const torsoXTgt = enemy.moving
-          ? Math.sin(shakePhase * 1.12) * 0.075
-          : Math.sin(shakePhase * 0.42) * 0.022;
+        if (!bossAnimOverride && enemy.isBoss) {
+          const breathe = Math.sin(enemy.walkTime * 1.5) * 0.04;
+          const sway0 = Math.sin(enemy.walkTime * 0.8) * 0.02;
+          if (!enemy.moving) {
+            enemy.leftArmRoot.rotation.x = -0.3 + breathe;
+            enemy.rightArmRoot.rotation.x = -0.3 + breathe;
+            enemy.leftArmRoot.rotation.z = 0.15 + sway0;
+            enemy.rightArmRoot.rotation.z = -0.15 - sway0;
+            enemy.torsoRoot.rotation.x = breathe * 0.5;
+          } else {
+            const stride = Math.sin(enemy.walkTime) * 0.50;
+            enemy.leftArmRoot.rotation.x = -0.5 + stride * 0.3;
+            enemy.rightArmRoot.rotation.x = -0.5 - stride * 0.3;
+            enemy.leftArmRoot.rotation.z = 0.10;
+            enemy.rightArmRoot.rotation.z = -0.10;
+            enemy.torsoRoot.rotation.x = Math.sin(enemy.walkTime * 2) * 0.04;
+            enemy.torsoRoot.rotation.z = Math.sin(enemy.walkTime) * 0.06;
+          }
+          const bLegL = enemy.moving ? -Math.sin(enemy.walkTime) * 0.6 : 0;
+          const bLegR = enemy.moving ? Math.sin(enemy.walkTime) * 0.6 : 0;
+          enemy.legLV = dampScalar(enemy.legLV, bLegL, dt, 12);
+          enemy.legRV = dampScalar(enemy.legRV, bLegR, dt, 12);
+          enemy.leftLegRoot.rotation.x = enemy.legLV;
+          enemy.rightLegRoot.rotation.x = enemy.legRV;
+          enemy.torsoBobYV = dampScalar(enemy.torsoBobYV, bob, dt, 16);
+          enemy.torsoRoot.position.y = enemy.torsoBobYV;
+        }
 
-        enemy.armLV = dampScalar(enemy.armLV, tgtArmL, dt, 19);
-        enemy.armRV = dampScalar(enemy.armRV, tgtArmR, dt, 19);
-        enemy.legLV = dampScalar(enemy.legLV, tgtLegL, dt, 15);
-        enemy.legRV = dampScalar(enemy.legRV, tgtLegR, dt, 15);
-        enemy.leftArmRoot.rotation.x = enemy.armLV;
-        enemy.rightArmRoot.rotation.x = enemy.armRV;
-        enemy.leftLegRoot.rotation.x = enemy.legLV;
-        enemy.rightLegRoot.rotation.x = enemy.legRV;
+        if (!bossAnimOverride && !enemy.isBoss) {
+          if (enemy.aware && dist < 2.2 && !enemy.ranged) {
+            enemy.attackPhase += dt * 10;
+          } else if (enemy.aware && enemy.ranged && dist < enemy.rangeDistance) {
+            enemy.attackPhase += dt * 6;
+          } else {
+            enemy.attackPhase = 0;
+          }
 
-        enemy.torsoBobYV = dampScalar(enemy.torsoBobYV, bob, dt, 16);
-        enemy.torsoXV = dampScalar(enemy.torsoXV, torsoXTgt, dt, 14);
-        enemy.torsoZV = dampScalar(enemy.torsoZV, sway, dt, 15);
-        enemy.torsoPitchV = dampScalar(enemy.torsoPitchV, bobble, dt, 16);
-        enemy.torsoRoot.position.y = enemy.torsoBobYV;
-        enemy.torsoRoot.position.x = enemy.torsoXV;
-        enemy.torsoRoot.rotation.z = enemy.torsoZV;
-        enemy.torsoRoot.rotation.x = enemy.torsoPitchV;
+          const attackSwing = enemy.attackPhase > 0 ? Math.max(0, Math.sin(enemy.attackPhase)) * 0.6 : 0;
+          const tgtArmL = (enemy.aware ? -1.0 : -0.2) + attackSwing + (enemy.moving ? walk * 0.15 : 0);
+          const tgtArmR = (enemy.aware ? -1.0 : -0.2) + attackSwing - (enemy.moving ? walk * 0.15 : 0);
+          const tgtLegL = enemy.moving ? -walk : 0;
+          const tgtLegR = enemy.moving ? walk : 0;
+          const torsoXTgt = enemy.moving
+            ? Math.sin(shakePhase * 1.12) * 0.075
+            : Math.sin(shakePhase * 0.42) * 0.022;
+
+          enemy.armLV = dampScalar(enemy.armLV, tgtArmL, dt, 19);
+          enemy.armRV = dampScalar(enemy.armRV, tgtArmR, dt, 19);
+          enemy.legLV = dampScalar(enemy.legLV, tgtLegL, dt, 15);
+          enemy.legRV = dampScalar(enemy.legRV, tgtLegR, dt, 15);
+          enemy.leftArmRoot.rotation.x = enemy.armLV;
+          enemy.rightArmRoot.rotation.x = enemy.armRV;
+          enemy.leftArmRoot.rotation.z = 0;
+          enemy.rightArmRoot.rotation.z = 0;
+          enemy.leftLegRoot.rotation.x = enemy.legLV;
+          enemy.rightLegRoot.rotation.x = enemy.legRV;
+
+          enemy.torsoBobYV = dampScalar(enemy.torsoBobYV, bob, dt, 16);
+          enemy.torsoXV = dampScalar(enemy.torsoXV, torsoXTgt, dt, 14);
+          enemy.torsoZV = dampScalar(enemy.torsoZV, sway, dt, 15);
+          enemy.torsoPitchV = dampScalar(enemy.torsoPitchV, bobble, dt, 16);
+          enemy.torsoRoot.position.y = enemy.torsoBobYV;
+          enemy.torsoRoot.position.x = enemy.torsoXV;
+          enemy.torsoRoot.rotation.z = enemy.torsoZV;
+          enemy.torsoRoot.rotation.x = enemy.torsoPitchV;
+        }
       }
     }
 
