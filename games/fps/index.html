@@ -3,7 +3,7 @@
   Deploy / GitHub Pages: https://tintly555.github.io/games/fps/ — multiplayer relay + static prefix set below.
   Self-hosted same tree: open game-self-hosted.html (empty game-multiplayer-origin, empty game-static-prefix).
   Crossfire = PVP; Arena = PVE / co-op vs zombies.
-  Build: fps-paralysis-v27
+  Build: fps-paralysis-v28
 -->
 <!--
   Swap Med Kit and AMR weapon positions (4↔5) and improve lighting 让AMR和Swap Med Kit没法使用，所以退回merge versions
@@ -5004,6 +5004,53 @@ if (typeof window !== "undefined") {
       return 5;
     }
 
+    /**
+     * v28: recent-dart-shooter correlation. The relay server may strip our custom fields
+     * (hitKind / slowDuration / weaponIndex) and rewrite `damage` from 1 to its own weapon
+     * table value. So we can't trust the `damaged` payload alone. Instead, whenever we
+     * receive a `shoot` event tagged as a dart, we remember the shooter id for ~1.6s,
+     * and any subsequent `damaged` from that attacker counts as a paralysis hit (no HP loss).
+     */
+    const recentDartShooters = new Map();
+    const RECENT_DART_WINDOW_MS = 1600;
+    function noteRecentDartShooter(shooterId, durationSec) {
+      if (shooterId == null || shooterId === "") return;
+      const id = String(shooterId);
+      const expireAt = performance.now() + RECENT_DART_WINDOW_MS;
+      recentDartShooters.set(id, { expireAt, duration: dartSlowDurationFromData({ slowDuration: durationSec }) });
+      if (window.__fpsDartDebug) console.info("[fps-paralysis-v28] noted dart shooter", id, "for", RECENT_DART_WINDOW_MS, "ms");
+    }
+    function consumeRecentDartShooter(attackerId) {
+      if (attackerId == null || attackerId === "") return null;
+      const id = String(attackerId);
+      const entry = recentDartShooters.get(id);
+      if (!entry) return null;
+      if (performance.now() > entry.expireAt) {
+        recentDartShooters.delete(id);
+        return null;
+      }
+      return entry;
+    }
+    function extractShooterId(data) {
+      if (!data) return "";
+      const cands = [data.id, data.shooter, data.attacker, data.from];
+      for (let i = 0; i < cands.length; i++) {
+        if (cands[i] != null && cands[i] !== "") return String(cands[i]);
+      }
+      return "";
+    }
+    function shootDataLooksLikeDart(data) {
+      if (!data) return false;
+      if (data.type === "dartSlow" || data.type === "blind") return true;
+      if (data.hitKind === "dartSlow" || data.hitKind === "blind") return true;
+      if (data.slow === true || data.blind === true) return true;
+      if (data.slowTarget != null || data.blindTarget != null) return true;
+      if (data.weaponIndex === 6 || data.weapon === 6) return true;
+      const col = Number(data.color);
+      if (col === 0x6bd4ff || col === 11398143) return true;
+      return false;
+    }
+
     /** Relay often strips hitKind/slowDuration; dart is the only PvP emit that uses damage: 1 chip. */
     function isParalysisDartNetworkData(data) {
       if (!data) return false;
@@ -5075,6 +5122,13 @@ if (typeof window !== "undefined") {
     }
 
     function handleIncomingDartSlowEvent(data) {
+      if (window.__fpsDartDebug) {
+        try { console.info("[fps-paralysis-v28] custom slow/blind event recv", JSON.parse(JSON.stringify(data || {}))); } catch (_) {}
+      }
+      const sid = extractShooterId(data);
+      if (sid && sid !== String(socket.id)) {
+        noteRecentDartShooter(sid, dartSlowDurationFromData(data));
+      }
       tryApplyDartSlowFromNetwork(data);
     }
 
@@ -5085,6 +5139,13 @@ if (typeof window !== "undefined") {
 
     socket.on("shoot", (data) => {
       if (!data) return;
+      if (shootDataLooksLikeDart(data)) {
+        const sid = extractShooterId(data);
+        if (sid && sid !== String(socket.id)) {
+          noteRecentDartShooter(sid, dartSlowDurationFromData(data));
+        }
+        if (window.__fpsDartDebug) console.info("[fps-paralysis-v28] shoot(dart) recv", { id: sid, type: data.type, hitKind: data.hitKind, target: data.target, color: data.color });
+      }
       if (tryApplyDartSlowFromShootProximity(data)) {
       } else if (
         data.type === "dartSlow" ||
@@ -5182,9 +5243,12 @@ if (typeof window !== "undefined") {
     socket.on("hit", (data) => {
       if (!data || !socket || !gameWorldReady) return;
       if (isTrainingMap(CURRENT_MAP)) return;
+      if (window.__fpsDartDebug) {
+        try { console.info("[fps-paralysis-v28] hit raw", JSON.parse(JSON.stringify(data))); } catch (_) {}
+      }
       if (damagedEventFromLocalShooter(data)) return;
       if (tryApplyDartSlowFromNetwork(data)) {
-        console.info("[fps-paralysis-v27] paralysis applied via hit relay");
+        console.info("[fps-paralysis-v28] paralysis applied via hit relay");
       }
     });
 
@@ -5229,8 +5293,16 @@ if (typeof window !== "undefined") {
       const isForMe = damagedEventTargetsLocalPlayer(data);
       const dmgRaw = Number(data.damage) || 0;
       const isPvp = isPvpCrossfireMap(CURRENT_MAP);
-      // In PvP a 1-point chip is always a paralysis dart (dart is the only weapon that emits dmg:1).
+      const attackerId = extractShooterId(data);
+      const recentDart = consumeRecentDartShooter(attackerId);
+      if (window.__fpsDartDebug) {
+        try { console.info("[fps-paralysis-v28] damaged raw", JSON.parse(JSON.stringify(data)), { isMyAttack, isForMe, isPvp, recentDartHit: !!recentDart, currentMap: CURRENT_MAP }); } catch (_) {}
+      }
+      // v28: shooter-correlation wins. If we just saw a dart shoot from this attacker, treat ANY
+      // subsequent damaged from them as the dart hit, regardless of what the relay server did to
+      // the damage value or custom fields. This survives servers that strip hitKind / rewrite damage.
       const looksLikeDart =
+        !!recentDart ||
         isParalysisDartNetworkData(data) ||
         (isPvp &&
           dmgRaw > 0 &&
@@ -5240,8 +5312,9 @@ if (typeof window !== "undefined") {
       if (looksLikeDart) {
         if (isMyAttack) return;
         if (!isForMe) return;
-        console.info("[fps-paralysis-v27] paralysis applied via damaged", { dmg: dmgRaw, hitKind: data.hitKind });
-        startSlowEffect(dartSlowDurationFromData(data));
+        const dur = recentDart ? recentDart.duration : dartSlowDurationFromData(data);
+        console.info("[fps-paralysis-v28] paralysis applied via damaged", { dmg: dmgRaw, hitKind: data.hitKind, via: recentDart ? "shooter-correlation" : "payload" });
+        startSlowEffect(dur);
         return;
       }
       if (!isForMe) return;
@@ -11429,7 +11502,10 @@ if (typeof window !== "undefined") {
       return isPlayerSlowed() ? DART_SLOW_RELOAD_MULT : 1;
     }
 
-    console.info("[fps-paralysis-v27] loaded - dart networking active");
+    console.info("[fps-paralysis-v28] loaded - dart networking + shooter-correlation active. Set window.__fpsDartDebug=false to silence diagnostic logs.");
+    if (typeof window !== "undefined" && window.__fpsDartDebug === undefined) {
+      window.__fpsDartDebug = true;
+    }
     function startSlowEffect(durationSec) {
       const dur = Math.max(0.5, durationSec || 5.0);
       const end = performance.now() + dur * 1000;
