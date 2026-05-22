@@ -1033,15 +1033,21 @@
     <div id="menuBossMode" style="display:none;flex-direction:column;align-items:center;gap:10px;">
       <h2 style="font-family:var(--game-font-ui);font-size:28px;margin:0 0 14px 0;letter-spacing:3px;">BOSS FIGHT</h2>
       <p style="font-family:var(--game-font-ui);font-size:12px;opacity:0.78;margin:0 0 8px 0;max-width:320px;text-align:center;line-height:1.45;">Fight the Hormone Zombie (激素僵尸) — a hulking boss that switches between Tank, Speed, and Gunner modes.</p>
+      <button type="button" id="btnBossSingle" style="font-family:var(--game-font-ui);padding:10px 30px;border:2px solid #4fd1ff;border-radius:8px;background:rgba(79,209,255,0.18);color:#fff;cursor:pointer;font-size:15px;letter-spacing:1px;">SINGLEPLAYER</button>
+      <button type="button" id="btnBossCoop" style="font-family:var(--game-font-ui);padding:10px 30px;border:2px solid #4fd1ff;border-radius:8px;background:rgba(79,209,255,0.18);color:#fff;cursor:pointer;font-size:15px;letter-spacing:1px;">CO-OP MODE</button>
+      <button type="button" id="btnBossBack" style="font-family:var(--game-font-ui);padding:8px 20px;border:2px solid #888;border-radius:8px;background:transparent;color:#fff;cursor:pointer;font-size:13px;">← BACK</button>
+    </div>
+    <div id="menuBossDifficulty" style="display:none;flex-direction:column;align-items:center;gap:10px;">
+      <h2 style="font-family:var(--game-font-ui);font-size:24px;margin:0 0 10px 0;letter-spacing:2px;">SELECT DIFFICULTY</h2>
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px;">
         <span style="font-family:var(--game-font-ui);font-size:13px;letter-spacing:1px;">BOSSES:</span>
         <button type="button" class="bossDiffBtn" data-boss-count="1" style="font-family:var(--game-font-ui);padding:6px 14px;border:2px solid #4fd1ff;border-radius:6px;background:rgba(79,209,255,0.25);color:#fff;cursor:pointer;font-size:14px;">1</button>
         <button type="button" class="bossDiffBtn" data-boss-count="2" style="font-family:var(--game-font-ui);padding:6px 14px;border:2px solid #4fd1ff;border-radius:6px;background:transparent;color:#fff;cursor:pointer;font-size:14px;">2</button>
         <button type="button" class="bossDiffBtn" data-boss-count="3" style="font-family:var(--game-font-ui);padding:6px 14px;border:2px solid #4fd1ff;border-radius:6px;background:transparent;color:#fff;cursor:pointer;font-size:14px;">3</button>
       </div>
-      <button type="button" id="btnBossSingle">SINGLEPLAYER</button>
-      <button type="button" id="btnBossCoop">CO-OP MODE</button>
-      <button type="button" id="btnBossBack">← BACK</button>
+      <button type="button" id="btnBossHell" style="display:none;font-family:var(--game-font-ui);padding:8px 22px;border:2px solid #ff2244;border-radius:6px;background:rgba(255,34,68,0.22);color:#ff4466;cursor:pointer;font-size:14px;letter-spacing:1px;">🔥 HELL MODE 🔥</button>
+      <button type="button" id="btnBossStartDiff" style="font-family:var(--game-font-ui);padding:10px 30px;border:2px solid #4fd1ff;border-radius:8px;background:rgba(79,209,255,0.18);color:#fff;cursor:pointer;font-size:15px;letter-spacing:1px;">START</button>
+      <button type="button" id="btnBossDiffBack" style="font-family:var(--game-font-ui);padding:8px 20px;border:2px solid #888;border-radius:8px;background:transparent;color:#fff;cursor:pointer;font-size:13px;">← BACK</button>
     </div>
     <div id="menuTrainingMode" style="display:none;flex-direction:column;align-items:center;gap:10px;">
       <h2 id="menuTrainingHeading" style="font-family:var(--game-font-ui);font-size:28px;margin:0 0 14px 0;letter-spacing:3px;" data-i18n="trainingCampTitle">TRAINING CAMP</h2>
@@ -4718,6 +4724,8 @@ if (typeof window !== "undefined") {
     let ROOM_CODE = "";
     let pendingLobbyMode = "";
     let BOSS_FIGHT_COUNT = 1;
+    let BOSS_HELL_MODE = false;
+    let BOSS_IS_COOP = false;
     const bossProjectiles = [];
     let started = false;
     /** False during boot overlay: no movement, shooting, zombie AI, or damage until map + assets are ready. */
@@ -9207,7 +9215,7 @@ if (typeof window !== "undefined") {
       enemy.hpTexture.needsUpdate = true;
     }
 
-    function makeHormoneZombie(x, z) {
+    function makeHormoneZombie(x, z, isHell) {
       const root = new THREE.Group();
       const torsoRoot = new THREE.Group();
       const leftArmRoot = new THREE.Group();
@@ -9217,12 +9225,12 @@ if (typeof window !== "undefined") {
       const leftLegRoot = new THREE.Group();
       const rightLegRoot = new THREE.Group();
 
-      const skinColor = 0x8a7098;
-      const skinDark = 0x6a5078;
-      const shirtColor = 0x2a6050;
-      const pantsColor = 0x3a3a32;
+      const skinColor = isHell ? 0x2a3a6a : 0x8a7098;
+      const skinDark = isHell ? 0x1a2848 : 0x6a5078;
+      const shirtColor = isHell ? 0x1a1a2a : 0x2a6050;
+      const pantsColor = isHell ? 0x1a1a1a : 0x3a3a32;
       const veinColor = 0x9a2255;
-      const eyeColor = 0xff1111;
+      const eyeColor = 0xff0000;
 
       const matSkin = new THREE.MeshStandardMaterial({ color: skinColor, roughness: 0.92, metalness: 0 });
       const matSkinD = new THREE.MeshStandardMaterial({ color: skinDark, roughness: 0.92, metalness: 0 });
@@ -9289,6 +9297,12 @@ if (typeof window !== "undefined") {
       const eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.07, 0.07), eyeGlowMat);
       eyeL.position.set(-0.10, 0.07, 0.22); headGroup.add(eyeL);
       const eyeR = eyeL.clone(); eyeR.position.x = 0.10; headGroup.add(eyeR);
+      if (isHell) {
+        const eyeGlowL = new THREE.PointLight(0xff0000, 2.5, 4);
+        eyeGlowL.position.set(-0.10, 0.07, 0.28); headGroup.add(eyeGlowL);
+        const eyeGlowR = new THREE.PointLight(0xff0000, 2.5, 4);
+        eyeGlowR.position.set(0.10, 0.07, 0.28); headGroup.add(eyeGlowR);
+      }
       const fangL = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.08, 0.04), matBone);
       fangL.position.set(-0.07, -0.24, 0.19); headGroup.add(fangL);
       const fangR = fangL.clone(); fangR.position.x = 0.07; headGroup.add(fangR);
@@ -9370,8 +9384,10 @@ if (typeof window !== "undefined") {
 
       torsoRoot.add(leftArmRoot, rightArmRoot);
       root.add(torsoRoot, leftLegRoot, rightLegRoot);
-      root.scale.set(2.0, 2.0, 2.0);
-      root.position.set(x, 0.64, z);
+      const bossScale = isHell ? 2.6 : 2.0;
+      const bossBaseY = isHell ? 0.83 : 0.64;
+      root.scale.set(bossScale, bossScale, bossScale);
+      root.position.set(x, bossBaseY, z);
       root.traverse((o) => {
         if (!o.isMesh) return;
         o.castShadow = true;
@@ -9393,8 +9409,8 @@ if (typeof window !== "undefined") {
           depthWrite: false
         })
       );
-      hpSprite.scale.set(3.2, 0.5, 1);
-      hpSprite.position.set(0, 3.2, 0);
+      hpSprite.scale.set(isHell ? 4.0 : 3.2, isHell ? 0.6 : 0.5, 1);
+      hpSprite.position.set(0, isHell ? 3.6 : 3.2, 0);
       root.add(hpSprite);
       hpSprite.raycast = () => {};
 
@@ -9416,11 +9432,11 @@ if (typeof window !== "undefined") {
         hpTexture,
         hpSprite,
         alive: true,
-        hp: 15000,
-        maxHp: 15000,
+        hp: isHell ? 75000 : 15000,
+        maxHp: isHell ? 75000 : 15000,
         attackCooldownTimer: 0,
         attackCooldown: 1.2,
-        attackDamage: 50,
+        attackDamage: isHell ? 250 : 50,
         ranged: false,
         rangeDistance: 20,
         respawnTimer: 0,
@@ -9428,7 +9444,7 @@ if (typeof window !== "undefined") {
         walkTime: Math.random() * 10,
         moving: false,
         attackPhase: 0,
-        speed: 5.5,
+        speed: isHell ? 7.5 : 5.5,
         aware: false,
         hiddenTimer: 0,
         facingYaw: 0,
@@ -9447,11 +9463,12 @@ if (typeof window !== "undefined") {
         rangedLosAcquireTimer: 0,
         isBoss: true,
         isHormoneZombie: true,
+        isHellBoss: !!isHell,
         bossMode: "tank",
         bossModeSwitchTimer: 5,
-        baseTankHp: 15000,
-        baseSpeedHp: 8000,
-        baseGunnerHp: 10000,
+        baseTankHp: isHell ? 75000 : 15000,
+        baseSpeedHp: isHell ? 40000 : 8000,
+        baseGunnerHp: isHell ? 50000 : 10000,
         summonCooldown: 999,
         summonCount: 0,
         summonTriggered: false,
@@ -12446,7 +12463,7 @@ if (typeof window !== "undefined") {
       if (CURRENT_MAP === "boss_arena") {
         for (let i = 0; i < BOSS_FIGHT_COUNT; i++) {
           const { x, z } = findSpawnPosition(SPAWN_MIN_DIST_BASE);
-          const boss = makeHormoneZombie(x, z);
+          const boss = makeHormoneZombie(x, z, BOSS_HELL_MODE);
           boss.netIndex = i;
           drawEnemyHp(boss);
           state.enemies.push(boss);
@@ -12518,9 +12535,9 @@ if (typeof window !== "undefined") {
       _ehLo.copy(raycaster.ray.origin).applyMatrix4(_invEnemyMat);
       _ehLd.copy(raycaster.ray.direction).transformDirection(_invEnemyMat).normalize();
       const volumes = isBossEnemy ? [
-        { cx: 0, cy: 4.6, cz: 0.5, r: 0.65, zone: "head" },
-        { cx: 0, cy: 3.0, cz: 0.6, r: 1.2, zone: "body" },
-        { cx: 0, cy: 1.2, cz: 0, r: 0.7, zone: "leg" },
+        { cx: 0, cy: 1.65, cz: 1.65, r: 0.50, zone: "head" },
+        { cx: 0, cy: 1.05, cz: 0.85, r: 0.95, zone: "body" },
+        { cx: 0, cy: 0.48, cz: 0.28, r: 0.45, zone: "leg" },
       ] : [
         { cx: 0, cy: 1.82, cz: 0, r: 0.3, zone: "head" },
         { cx: 0, cy: 1.12, cz: 0, r: 0.52, zone: "body" },
@@ -12731,9 +12748,9 @@ if (typeof window !== "undefined") {
       _ehLo.copy(raycaster.ray.origin).applyMatrix4(_invEnemyMat);
       _ehLd.copy(raycaster.ray.direction).transformDirection(_invEnemyMat).normalize();
       const volumes = isBossEnemy ? [
-        { cx: 0, cy: 4.6, cz: 0.5, r: 0.65 * pad, zone: "head" },
-        { cx: 0, cy: 3.0, cz: 0.6, r: 1.2 * pad, zone: "body" },
-        { cx: 0, cy: 1.2, cz: 0, r: 0.7 * pad, zone: "leg" },
+        { cx: 0, cy: 1.65, cz: 1.65, r: 0.50 * pad, zone: "head" },
+        { cx: 0, cy: 1.05, cz: 0.85, r: 0.95 * pad, zone: "body" },
+        { cx: 0, cy: 0.48, cz: 0.28, r: 0.45 * pad, zone: "leg" },
       ] : [
         { cx: 0, cy: 1.82, cz: 0, r: 0.3 * pad, zone: "head" },
         { cx: 0, cy: 1.12, cz: 0, r: 0.52 * pad, zone: "body" },
@@ -14091,6 +14108,11 @@ if (typeof window !== "undefined") {
     }
 
     function updateAwareness(enemy, dt) {
+      if (enemy.isBoss) {
+        enemy.aware = true;
+        enemy.hiddenTimer = 0;
+        return;
+      }
       const target = getEnemyTarget(enemy);
       const ex = enemy.group.position.x;
       const ez = enemy.group.position.z;
@@ -14551,7 +14573,7 @@ if (typeof window !== "undefined") {
         let bossAnimOverride = false;
         const HUNCH = 0.75;
         const ELBOW_REST = -0.55;
-        const BOSS_BASE_Y = 0.64;
+        const BOSS_BASE_Y = enemy.isHellBoss ? 0.83 : 0.64;
         if (enemy.isBoss) {
           enemy.bossAnimTimer += dt;
           const lfa = enemy.leftForearmRoot;
@@ -15431,7 +15453,7 @@ if (typeof window !== "undefined") {
     }
 
     function showMenuPanel(id) {
-      for (const p of [menuMain, menuArenaMode, menuBossMode, menuTrainingMode, menuPvpMaps, menuLobby, menuJoinCode]) p.style.display = "none";
+      for (const p of [menuMain, menuArenaMode, menuBossMode, menuBossDifficulty, menuTrainingMode, menuPvpMaps, menuLobby, menuJoinCode]) p.style.display = "none";
       clearLobbyErr();
       document.getElementById(id).style.display = "flex";
     }
@@ -15467,11 +15489,42 @@ if (typeof window !== "undefined") {
     btnArenaBack.addEventListener("click", () => showMenuPanel("menuMain"));
 
     btnBossFight.addEventListener("click", () => showMenuPanel("menuBossMode"));
-    btnBossSingle.addEventListener("click", () => startGame("boss_arena", false));
-    btnBossCoop.addEventListener("click", () =>
-      showLobby("boss-coop", "BOSS FIGHT — CO-OP")
-    );
+
+    btnBossSingle.addEventListener("click", () => {
+      BOSS_IS_COOP = false;
+      BOSS_HELL_MODE = false;
+      const hellBtn = document.getElementById("btnBossHell");
+      hellBtn.style.display = "none";
+      showMenuPanel("menuBossDifficulty");
+    });
+
+    btnBossCoop.addEventListener("click", () => {
+      BOSS_IS_COOP = true;
+      BOSS_HELL_MODE = false;
+      const hellBtn = document.getElementById("btnBossHell");
+      hellBtn.style.display = "block";
+      showMenuPanel("menuBossDifficulty");
+    });
+
     btnBossBack.addEventListener("click", () => showMenuPanel("menuMain"));
+
+    document.getElementById("btnBossDiffBack").addEventListener("click", () => showMenuPanel("menuBossMode"));
+
+    document.getElementById("btnBossHell").addEventListener("click", () => {
+      BOSS_HELL_MODE = !BOSS_HELL_MODE;
+      const hellBtn = document.getElementById("btnBossHell");
+      hellBtn.style.background = BOSS_HELL_MODE ? "rgba(255,34,68,0.50)" : "rgba(255,34,68,0.22)";
+      hellBtn.style.borderColor = BOSS_HELL_MODE ? "#ff6688" : "#ff2244";
+    });
+
+    document.getElementById("btnBossStartDiff").addEventListener("click", () => {
+      if (BOSS_IS_COOP) {
+        showLobby("boss-coop", "BOSS FIGHT — CO-OP");
+      } else {
+        startGame("boss_arena", false);
+      }
+    });
+
     for (const btn of document.querySelectorAll(".bossDiffBtn")) {
       btn.addEventListener("click", () => {
         BOSS_FIGHT_COUNT = parseInt(btn.dataset.bossCount, 10) || 1;
@@ -15607,7 +15660,7 @@ if (typeof window !== "undefined") {
     btnLobbyBack.addEventListener("click", () => {
       if (pendingLobbyMode === "crossfire") showMenuPanel("menuMain");
       else if (pendingLobbyMode === "training-coop") showMenuPanel("menuTrainingMode");
-      else if (pendingLobbyMode === "boss-coop") showMenuPanel("menuBossMode");
+      else if (pendingLobbyMode === "boss-coop") showMenuPanel("menuBossDifficulty");
       else showMenuPanel("menuArenaMode");
     });
 
