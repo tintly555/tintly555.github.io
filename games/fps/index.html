@@ -3,7 +3,7 @@
   Deploy / GitHub Pages: https://tintly555.github.io/games/fps/ — multiplayer relay + static prefix set below.
   Self-hosted same tree: open game-self-hosted.html (empty game-multiplayer-origin, empty game-static-prefix).
   Crossfire = PVP; Arena = PVE / co-op vs zombies.
-  Build: fps-paralysis-v26
+  Build: fps-paralysis-v27
 -->
 <!--
   Swap Med Kit and AMR weapon positions (4↔5) and improve lighting 让AMR和Swap Med Kit没法使用，所以退回merge versions
@@ -5182,7 +5182,10 @@ if (typeof window !== "undefined") {
     socket.on("hit", (data) => {
       if (!data || !socket || !gameWorldReady) return;
       if (isTrainingMap(CURRENT_MAP)) return;
-      if (tryApplyDartSlowFromNetwork(data)) return;
+      if (damagedEventFromLocalShooter(data)) return;
+      if (tryApplyDartSlowFromNetwork(data)) {
+        console.info("[fps-paralysis-v27] paralysis applied via hit relay");
+      }
     });
 
     socket.on("trainingHit", (data) => {
@@ -5221,19 +5224,28 @@ if (typeof window !== "undefined") {
       if (!gameWorldReady) return;
       if (player.health <= 0) return;
       if (performance.now() < player.spawnProtectUntil) return;
-      if (data && isParalysisDartNetworkData(data)) {
-        if (!damagedEventTargetsLocalPlayer(data)) return;
-        if (damagedEventFromLocalShooter(data)) return;
+      if (!data) data = {};
+      const isMyAttack = damagedEventFromLocalShooter(data);
+      const isForMe = damagedEventTargetsLocalPlayer(data);
+      const dmgRaw = Number(data.damage) || 0;
+      const isPvp = isPvpCrossfireMap(CURRENT_MAP);
+      // In PvP a 1-point chip is always a paralysis dart (dart is the only weapon that emits dmg:1).
+      const looksLikeDart =
+        isParalysisDartNetworkData(data) ||
+        (isPvp &&
+          dmgRaw > 0 &&
+          dmgRaw <= 1 &&
+          data.hitKind !== "bullet" &&
+          data.hitKind !== "melee");
+      if (looksLikeDart) {
+        if (isMyAttack) return;
+        if (!isForMe) return;
+        console.info("[fps-paralysis-v27] paralysis applied via damaged", { dmg: dmgRaw, hitKind: data.hitKind });
         startSlowEffect(dartSlowDurationFromData(data));
         return;
       }
-      if (data && !damagedEventTargetsLocalPlayer(data)) return;
-      if (data && damagedEventFromLocalShooter(data)) return;
-      const chipDmg = Number(data.damage) || 0;
-      if (chipDmg > 0 && chipDmg <= 1 && isPvpCrossfireMap(CURRENT_MAP) && data.hitKind !== "bullet" && data.hitKind !== "melee") {
-        startSlowEffect(dartSlowDurationFromData(data));
-        return;
-      }
+      if (!isForMe) return;
+      if (isMyAttack) return;
       player.health = Math.max(0, player.health - (data.damage || 0));
       player.regenTimer = 0;
       state.flashTimer = 0.14;
@@ -11417,7 +11429,7 @@ if (typeof window !== "undefined") {
       return isPlayerSlowed() ? DART_SLOW_RELOAD_MULT : 1;
     }
 
-    console.info("[fps-paralysis-v26] loaded");
+    console.info("[fps-paralysis-v27] loaded - dart networking active");
     function startSlowEffect(durationSec) {
       const dur = Math.max(0.5, durationSec || 5.0);
       const end = performance.now() + dur * 1000;
@@ -11477,6 +11489,23 @@ if (typeof window !== "undefined") {
       socket.emit("dartSlow", payload);
       socket.emit("playerBlind", payload);
       socket.emit("blind", payload);
+      // Relay via standard hit/damaged channel: 1 chip dmg in PvP = paralysis dart.
+      socket.emit("hit", {
+        target: targetId,
+        targetId,
+        damage: 1,
+        x: hx,
+        y: hy,
+        z: hz,
+        hitKind: "dartSlow",
+        slowDuration: dur,
+        slow: true,
+        weaponIndex: 6,
+        weapon: 6,
+        attacker: socket.id,
+        shooter: socket.id,
+        from: socket.id,
+      });
       const muzzle = muzzleOpt && muzzleOpt.isVector3
         ? muzzleOpt
         : new THREE.Vector3(hx, hy, hz);
