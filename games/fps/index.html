@@ -3,7 +3,7 @@
   Deploy / GitHub Pages: https://tintly555.github.io/games/fps/ — multiplayer relay + static prefix set below.
   Self-hosted same tree: open game-self-hosted.html (empty game-multiplayer-origin, empty game-static-prefix).
   Crossfire = PVP; Arena = PVE / co-op vs zombies.
-  Build: fps-paralysis-v28
+  Build: fps-paralysis-v29
 -->
 <!--
   Swap Med Kit and AMR weapon positions (4↔5) and improve lighting 让AMR和Swap Med Kit没法使用，所以退回merge versions
@@ -5018,7 +5018,7 @@ if (typeof window !== "undefined") {
       const id = String(shooterId);
       const expireAt = performance.now() + RECENT_DART_WINDOW_MS;
       recentDartShooters.set(id, { expireAt, duration: dartSlowDurationFromData({ slowDuration: durationSec }) });
-      if (window.__fpsDartDebug) console.info("[fps-paralysis-v28] noted dart shooter", id, "for", RECENT_DART_WINDOW_MS, "ms");
+      if (window.__fpsDartDebug) console.info("[fps-paralysis-v29] noted dart shooter", id, "for", RECENT_DART_WINDOW_MS, "ms");
     }
     function consumeRecentDartShooter(attackerId) {
       if (attackerId == null || attackerId === "") return null;
@@ -5033,7 +5033,8 @@ if (typeof window !== "undefined") {
     }
     function extractShooterId(data) {
       if (!data) return "";
-      const cands = [data.id, data.shooter, data.attacker, data.from];
+      // v29: server stamps attacker as `by` on damaged events. Include it as a candidate.
+      const cands = [data.id, data.shooter, data.attacker, data.from, data.by];
       for (let i = 0; i < cands.length; i++) {
         if (cands[i] != null && cands[i] !== "") return String(cands[i]);
       }
@@ -5123,7 +5124,7 @@ if (typeof window !== "undefined") {
 
     function handleIncomingDartSlowEvent(data) {
       if (window.__fpsDartDebug) {
-        try { console.info("[fps-paralysis-v28] custom slow/blind event recv", JSON.parse(JSON.stringify(data || {}))); } catch (_) {}
+        try { console.info("[fps-paralysis-v29] custom slow/blind event recv", JSON.parse(JSON.stringify(data || {}))); } catch (_) {}
       }
       const sid = extractShooterId(data);
       if (sid && sid !== String(socket.id)) {
@@ -5144,7 +5145,7 @@ if (typeof window !== "undefined") {
         if (sid && sid !== String(socket.id)) {
           noteRecentDartShooter(sid, dartSlowDurationFromData(data));
         }
-        if (window.__fpsDartDebug) console.info("[fps-paralysis-v28] shoot(dart) recv", { id: sid, type: data.type, hitKind: data.hitKind, target: data.target, color: data.color });
+        if (window.__fpsDartDebug) console.info("[fps-paralysis-v29] shoot(dart) recv", { id: sid, type: data.type, hitKind: data.hitKind, target: data.target, color: data.color });
       }
       if (tryApplyDartSlowFromShootProximity(data)) {
       } else if (
@@ -5244,11 +5245,11 @@ if (typeof window !== "undefined") {
       if (!data || !socket || !gameWorldReady) return;
       if (isTrainingMap(CURRENT_MAP)) return;
       if (window.__fpsDartDebug) {
-        try { console.info("[fps-paralysis-v28] hit raw", JSON.parse(JSON.stringify(data))); } catch (_) {}
+        try { console.info("[fps-paralysis-v29] hit raw", JSON.parse(JSON.stringify(data))); } catch (_) {}
       }
       if (damagedEventFromLocalShooter(data)) return;
       if (tryApplyDartSlowFromNetwork(data)) {
-        console.info("[fps-paralysis-v28] paralysis applied via hit relay");
+        console.info("[fps-paralysis-v29] paralysis applied via hit relay");
       }
     });
 
@@ -5272,6 +5273,7 @@ if (typeof window !== "undefined") {
 
     function damagedEventFromLocalShooter(data) {
       if (!data || !socket) return false;
+      // v29: server stamps attacker as `by` on damaged events.
       const aid =
         data.attacker != null
           ? String(data.attacker)
@@ -5279,7 +5281,9 @@ if (typeof window !== "undefined") {
             ? String(data.shooter)
             : data.from != null
               ? String(data.from)
-              : null;
+              : data.by != null
+                ? String(data.by)
+                : null;
       return aid != null && aid === String(socket.id);
     }
 
@@ -5296,24 +5300,20 @@ if (typeof window !== "undefined") {
       const attackerId = extractShooterId(data);
       const recentDart = consumeRecentDartShooter(attackerId);
       if (window.__fpsDartDebug) {
-        try { console.info("[fps-paralysis-v28] damaged raw", JSON.parse(JSON.stringify(data)), { isMyAttack, isForMe, isPvp, recentDartHit: !!recentDart, currentMap: CURRENT_MAP }); } catch (_) {}
+        try { console.info("[fps-paralysis-v29] damaged raw", JSON.parse(JSON.stringify(data)), { isMyAttack, isForMe, isPvp, attackerId, recentDartHit: !!recentDart, currentMap: CURRENT_MAP }); } catch (_) {}
       }
-      // v28: shooter-correlation wins. If we just saw a dart shoot from this attacker, treat ANY
-      // subsequent damaged from them as the dart hit, regardless of what the relay server did to
-      // the damage value or custom fields. This survives servers that strip hitKind / rewrite damage.
+      // v29: server rewrites hitKind -> 'bullet' for everything and stamps attacker as `by`.
+      // In PvP only the paralysis dart emits damage:1 (regular weapons all deal >=10), so
+      // damage===1 is a reliable dart marker regardless of hitKind.
       const looksLikeDart =
         !!recentDart ||
         isParalysisDartNetworkData(data) ||
-        (isPvp &&
-          dmgRaw > 0 &&
-          dmgRaw <= 1 &&
-          data.hitKind !== "bullet" &&
-          data.hitKind !== "melee");
+        (isPvp && dmgRaw === 1);
       if (looksLikeDart) {
         if (isMyAttack) return;
         if (!isForMe) return;
         const dur = recentDart ? recentDart.duration : dartSlowDurationFromData(data);
-        console.info("[fps-paralysis-v28] paralysis applied via damaged", { dmg: dmgRaw, hitKind: data.hitKind, via: recentDart ? "shooter-correlation" : "payload" });
+        console.info("[fps-paralysis-v29] paralysis applied via damaged", { dmg: dmgRaw, hitKind: data.hitKind, attackerId, via: recentDart ? "shooter-correlation" : (isPvp && dmgRaw === 1 ? "pvp-dmg1-marker" : "payload-fields") });
         startSlowEffect(dur);
         return;
       }
@@ -11502,7 +11502,7 @@ if (typeof window !== "undefined") {
       return isPlayerSlowed() ? DART_SLOW_RELOAD_MULT : 1;
     }
 
-    console.info("[fps-paralysis-v28] loaded - dart networking + shooter-correlation active. Set window.__fpsDartDebug=false to silence diagnostic logs.");
+    console.info("[fps-paralysis-v29] loaded - PvP damage===1 marker (server rewrites hitKind to 'bullet', stamps attacker as 'by'). Set window.__fpsDartDebug=false to silence diagnostic logs.");
     if (typeof window !== "undefined" && window.__fpsDartDebug === undefined) {
       window.__fpsDartDebug = true;
     }
@@ -11548,6 +11548,9 @@ if (typeof window !== "undefined") {
       const hx = hitPoint && hitPoint.x != null ? hitPoint.x : player.position.x;
       const hy = hitPoint && hitPoint.y != null ? hitPoint.y : player.position.y + 1.12;
       const hz = hitPoint && hitPoint.z != null ? hitPoint.z : player.position.z;
+      if (window.__fpsDartDebug !== false) {
+        console.info("[fps-paralysis-v29][SHOOTER] emitting dart hit/shoot", { target: String(targetId), dur, mySocketId: socket.id, currentMap: CURRENT_MAP, isPvp: isPvpCrossfireMap(CURRENT_MAP) });
+      }
       const payload = {
         target: targetId,
         targetId,
