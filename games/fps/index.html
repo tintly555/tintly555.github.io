@@ -9303,7 +9303,7 @@ if (typeof window !== "undefined") {
       const earR = earL.clone(); earR.position.x = 0.24; headGroup.add(earR);
       headGroup.position.set(0, 2.32, 0.08); torsoRoot.add(headGroup);
 
-      torsoRoot.rotation.x = 0.55;
+      torsoRoot.rotation.x = 0.40;
 
       leftArmRoot.position.set(-0.62, 1.82, 0);
       rightArmRoot.position.set(0.62, 1.82, 0);
@@ -9337,27 +9337,27 @@ if (typeof window !== "undefined") {
       makeArm(leftArmRoot, leftForearmRoot, "left");
       makeArm(rightArmRoot, rightForearmRoot, "right");
 
-      leftLegRoot.position.set(-0.20, 0.72, 0);
-      rightLegRoot.position.set(0.20, 0.72, 0);
+      leftLegRoot.position.set(-0.22, 0.68, 0);
+      rightLegRoot.position.set(0.22, 0.68, 0);
       const makeLeg = (lr, side) => {
-        const thigh = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.70, 0.24), matPants);
-        thigh.position.set(0, -0.35, 0); lr.add(thigh);
-        const knee = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.14, 0.22), matSkinD);
-        knee.position.set(0, -0.72, 0.02); lr.add(knee);
-        const shin = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.64, 0.22), matPants);
-        shin.position.set(0, -1.06, 0); lr.add(shin);
+        const thigh = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.44, 0.24), matPants);
+        thigh.position.set(0, -0.22, 0); lr.add(thigh);
+        const knee = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.12, 0.22), matSkinD);
+        knee.position.set(0, -0.46, 0.02); lr.add(knee);
+        const shin = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.38, 0.22), matPants);
+        shin.position.set(0, -0.66, 0); lr.add(shin);
         if (side === "right") {
-          const tear = new THREE.Mesh(new THREE.BoxGeometry(0.23, 0.09, 0.06), matSkin);
-          tear.position.set(0, -1.14, 0.12); lr.add(tear);
+          const tear = new THREE.Mesh(new THREE.BoxGeometry(0.23, 0.08, 0.06), matSkin);
+          tear.position.set(0, -0.72, 0.12); lr.add(tear);
         }
         const foot = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.10, 0.32), matSkinD);
-        foot.position.set(0, -1.42, 0.04); lr.add(foot);
+        foot.position.set(0, -0.90, 0.04); lr.add(foot);
       };
       makeLeg(leftLegRoot, "left"); makeLeg(rightLegRoot, "right");
 
       root.add(torsoRoot, leftArmRoot, rightArmRoot, leftLegRoot, rightLegRoot);
       root.scale.set(2.0, 2.0, 2.0);
-      root.position.set(x, 1.40, z);
+      root.position.set(x, 0.54, z);
       root.traverse((o) => {
         if (!o.isMesh) return;
         o.castShadow = true;
@@ -14526,9 +14526,9 @@ if (typeof window !== "undefined") {
         const bobble = enemy.moving ? Math.cos(enemy.walkTime * 5.1 + ei * 1.2) * 0.028 : 0;
 
         let bossAnimOverride = false;
-        const HUNCH = 0.55;
+        const HUNCH = 0.40;
         const ELBOW_REST = -0.7;
-        const BOSS_BASE_Y = 1.40;
+        const BOSS_BASE_Y = 0.54;
         if (enemy.isBoss) {
           enemy.bossAnimTimer += dt;
           const lfa = enemy.leftForearmRoot;
@@ -14674,10 +14674,10 @@ if (typeof window !== "undefined") {
           const breathe = Math.sin(enemy.walkTime * 1.5) * 0.04;
           const sway0 = Math.sin(enemy.walkTime * 0.8) * 0.02;
           if (!enemy.moving) {
-            enemy.leftArmRoot.rotation.x = -0.4 + breathe;
-            enemy.rightArmRoot.rotation.x = -0.4 + breathe;
-            enemy.leftArmRoot.rotation.z = 0.12 + sway0;
-            enemy.rightArmRoot.rotation.z = -0.12 - sway0;
+            enemy.leftArmRoot.rotation.x = -0.25 + breathe;
+            enemy.rightArmRoot.rotation.x = -0.25 + breathe;
+            enemy.leftArmRoot.rotation.z = 0.45 + sway0;
+            enemy.rightArmRoot.rotation.z = -0.45 - sway0;
             lfa.rotation.x = ELBOW_REST + breathe * 0.5;
             rfa.rotation.x = ELBOW_REST + breathe * 0.5;
             enemy.torsoRoot.rotation.x = HUNCH + breathe * 0.5;
@@ -14685,10 +14685,10 @@ if (typeof window !== "undefined") {
           } else {
             const w = enemy.walkTime;
             const stride = Math.sin(w);
-            enemy.leftArmRoot.rotation.x = -0.6 + stride * 0.45;
-            enemy.rightArmRoot.rotation.x = -0.6 - stride * 0.45;
-            enemy.leftArmRoot.rotation.z = 0.08;
-            enemy.rightArmRoot.rotation.z = -0.08;
+            enemy.leftArmRoot.rotation.x = -0.4 + stride * 0.40;
+            enemy.rightArmRoot.rotation.x = -0.4 - stride * 0.40;
+            enemy.leftArmRoot.rotation.z = 0.30;
+            enemy.rightArmRoot.rotation.z = -0.30;
             lfa.rotation.x = ELBOW_REST + stride * 0.15;
             rfa.rotation.x = ELBOW_REST - stride * 0.15;
             enemy.torsoRoot.rotation.x = HUNCH + Math.sin(w * 2) * 0.05;
