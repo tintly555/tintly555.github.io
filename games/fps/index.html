@@ -10605,69 +10605,88 @@ if (typeof window !== "undefined") {
     }
 
     /**
-     * Combat knife (slot 7, key "0"). Three-level group nesting so animation transforms
-     * compose cleanly with the bob/ADS system:
-     *   root -> gun (outer; bob/ADS/scale)
-     *         -> knifePose (base held pose; never animated)
-     *         -> knife (pivot at handle/blade junction; all attack/draw animations live here)
-     * Blade and handle are ~equal length so the toss-spin rotates around a visually centered point.
+     * Combat knife (slot 7, key "0"). Scene-graph layering so each animation drives the
+     * right level without fighting the others:
+     *   root -> gun        (outer; bob/ADS/scale)
+     *         -> knifePose (base held pose; never animated by us)
+     *         -> swing     (CHOP animations live here — moves arm AND knife together as one
+     *                       rigid unit, so the chops read as ARM SWINGS, not wrist flicks)
+     *               -> knife (TOSS-DRAW animation lives here — knife alone spins; arm stays
+     *                         level via the per-frame position-only follow)
+     *               -> arm   (held in saber-grip pose; during toss-draw we sync its position
+     *                         to the knife so the hand reaches up to catch)
+     *
+     * Knife is built in normal saber-grip orientation: blade VERTICAL (cutting edge down,
+     * spine up), handle vertical in the fist. Blade and handle have ~equal length so the
+     * toss-spin rotates around a visually centered pivot at the crossguard.
      */
     function makeKnifeModel() {
       const root = new THREE.Group();
       const gun = new THREE.Group();
       const knifePose = new THREE.Group();
+      const swing = new THREE.Group();
       const knife = new THREE.Group();
 
-      const mBlade = new THREE.MeshStandardMaterial({ color: 0xd8dee6, roughness: 0.28, metalness: 0.85 });
-      const mEdge = new THREE.MeshStandardMaterial({ color: 0xeef2f6, roughness: 0.22, metalness: 0.9 });
-      const mGuard = new THREE.MeshStandardMaterial({ color: 0x3a4250, roughness: 0.45, metalness: 0.7 });
-      const mGrip = new THREE.MeshStandardMaterial({ color: 0x1b1f25, roughness: 0.75, metalness: 0.18 });
-      const mGripWrap = new THREE.MeshStandardMaterial({ color: 0x2a313c, roughness: 0.65, metalness: 0.25 });
-      const mPommel = new THREE.MeshStandardMaterial({ color: 0x4a5260, roughness: 0.35, metalness: 0.8 });
+      const mBlade = new THREE.MeshStandardMaterial({ color: 0xc8d0db, roughness: 0.28, metalness: 0.88 });
+      const mEdge = new THREE.MeshStandardMaterial({ color: 0xeef2f6, roughness: 0.18, metalness: 0.92 });
+      const mSpine = new THREE.MeshStandardMaterial({ color: 0x6a7280, roughness: 0.35, metalness: 0.85 });
+      const mGuard = new THREE.MeshStandardMaterial({ color: 0x2a313c, roughness: 0.45, metalness: 0.75 });
+      const mGrip = new THREE.MeshStandardMaterial({ color: 0x14171c, roughness: 0.82, metalness: 0.18 });
+      const mGripWrap = new THREE.MeshStandardMaterial({ color: 0x232831, roughness: 0.7, metalness: 0.25 });
+      const mPommel = new THREE.MeshStandardMaterial({ color: 0x4a5260, roughness: 0.32, metalness: 0.82 });
 
-      // Blade: thin tapered slab, ~0.22 long; extends along -Z from pivot.
-      const blade = new THREE.Mesh(new THREE.BoxGeometry(0.028, 0.006, 0.22), mBlade);
-      blade.position.set(0, 0, -0.11);
-      knife.add(blade);
-      const bladeEdge = new THREE.Mesh(new THREE.BoxGeometry(0.034, 0.003, 0.21), mEdge);
-      bladeEdge.position.set(0, -0.0025, -0.115);
+      // --- BLADE (VERTICAL): thickness on X (0.006), height on Y (0.030), length on -Z ---
+      const bladeCore = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.024, 0.22), mBlade);
+      bladeCore.position.set(0, 0.003, -0.11);
+      knife.add(bladeCore);
+      // Cutting edge: brighter slim box along the bottom of the blade.
+      const bladeEdge = new THREE.Mesh(new THREE.BoxGeometry(0.0035, 0.006, 0.21), mEdge);
+      bladeEdge.position.set(0, -0.012, -0.115);
       knife.add(bladeEdge);
-      const bladeTip = new THREE.Mesh(new THREE.ConeGeometry(0.014, 0.05, 6), mBlade);
-      bladeTip.rotation.x = -Math.PI / 2;
-      bladeTip.position.set(0, 0, -0.245);
+      // Spine: darker top edge for contrast.
+      const bladeSpine = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.004, 0.22), mSpine);
+      bladeSpine.position.set(0, 0.016, -0.11);
+      knife.add(bladeSpine);
+      // Tip: vertical wedge that comes to a point pointing forward.
+      const bladeTip = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.018, 0.05), mBlade);
+      bladeTip.position.set(0, -0.001, -0.235);
       knife.add(bladeTip);
+      const bladeTipEdge = new THREE.Mesh(new THREE.BoxGeometry(0.0035, 0.005, 0.05), mEdge);
+      bladeTipEdge.position.set(0, -0.008, -0.235);
+      knife.add(bladeTipEdge);
 
-      // Crossguard sits exactly at the junction (the visual + math pivot).
-      const guard = new THREE.Mesh(new THREE.BoxGeometry(0.062, 0.022, 0.018), mGuard);
-      guard.position.set(0, 0, 0);
+      // Crossguard: small horizontal block at the junction, wider than the blade.
+      const guard = new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.014, 0.020), mGuard);
+      guard.position.set(0, -0.002, 0);
       knife.add(guard);
 
-      // Handle: ~0.20 long including pommel; extends along +Z from pivot.
-      const grip = new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.026, 0.18), mGrip);
-      grip.position.set(0, 0, 0.10);
+      // --- HANDLE: extends along +Z from the junction. Vertical cross-section (taller than
+      // wide) for a more ergonomic-looking grip than a square cross-section. ---
+      const grip = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.032, 0.18), mGrip);
+      grip.position.set(0, -0.002, 0.10);
       knife.add(grip);
+      // Grip wraps: vertical stripes around the handle for tactile detail.
       for (let i = 0; i < 4; i++) {
-        const wrap = new THREE.Mesh(new THREE.BoxGeometry(0.030, 0.030, 0.014), mGripWrap);
-        wrap.position.set(0, 0, 0.04 + i * 0.04);
+        const wrap = new THREE.Mesh(new THREE.BoxGeometry(0.026, 0.036, 0.012), mGripWrap);
+        wrap.position.set(0, -0.002, 0.04 + i * 0.04);
         knife.add(wrap);
       }
-      const pommel = new THREE.Mesh(new THREE.BoxGeometry(0.034, 0.034, 0.022), mPommel);
-      pommel.position.set(0, 0, 0.198);
+      // Pommel: rounded butt cap at the end of the handle.
+      const pommel = new THREE.Mesh(new THREE.BoxGeometry(0.028, 0.038, 0.022), mPommel);
+      pommel.position.set(0, -0.002, 0.198);
       knife.add(pommel);
+      // Lanyard hole on pommel — single tiny dark notch.
+      const lanyard = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.012, 0.008), mGuard);
+      lanyard.position.set(0, -0.002, 0.215);
+      knife.add(lanyard);
 
-      // Base pose tilt lives on knifePose so the per-frame gun.rotation override doesn't wipe it.
-      knifePose.rotation.set(-0.08, 0, 0);
-      knifePose.add(knife);
+      // Knife slots into the swing group. Swing holds the chop animations.
+      swing.add(knife);
 
-      // First-person hand/forearm in the chunky low-poly camo+glove style that matches the
-      // remote-player avatars (see makePlayerArm around the avatar builder). Attached to
-      // `knifePose` (NOT to `knife`) so the spinning toss-animation on `knife` doesn't drag
-      // the arm into anatomically broken rotations. We sync the arm's POSITION to the knife
-      // per frame in applyWeaponHandsAnim so the hand still tracks the knife visually.
+      // --- HAND + FOREARM (chunky camo+glove, matches remote player avatar style) ---
       const arm = new THREE.Group();
       arm.name = "knifeArm";
 
-      // Palette: dark olive glove + olive-khaki camo sleeve + black strap/pad.
       const mKnifeGlove = new THREE.MeshStandardMaterial({ color: 0x2b271e, roughness: 0.86, metalness: 0.05 });
       const mKnifeGloveTop = new THREE.MeshStandardMaterial({ color: 0x35302a, roughness: 0.78, metalness: 0.08 });
       const mKnifeCuff = new THREE.MeshStandardMaterial({ color: 0x141109, roughness: 0.92, metalness: 0.1 });
@@ -10677,78 +10696,87 @@ if (typeof window !== "undefined") {
       const mKnifeStrap = new THREE.MeshStandardMaterial({ color: 0x1f1c14, roughness: 0.92, metalness: 0.15 });
       const mKnifeStud = new THREE.MeshStandardMaterial({ color: 0x6a6a5c, roughness: 0.4, metalness: 0.78 });
 
-      // --- FIST (knifeGloveTop on top, slightly darker glove on the bottom for shading) ---
-      const palmBack = new THREE.Mesh(new THREE.BoxGeometry(0.058, 0.038, 0.084), mKnifeGloveTop);
-      palmBack.position.set(0, 0.013, 0);
+      // FIST: oriented so it wraps the VERTICAL handle (taller-than-wide, like the grip).
+      // Local +Y = back-of-hand, -Y = palm. The handle sits in the palm running along the Z axis.
+      const palmBack = new THREE.Mesh(new THREE.BoxGeometry(0.054, 0.034, 0.090), mKnifeGloveTop);
+      palmBack.position.set(0, 0.022, 0);
       arm.add(palmBack);
-      const palmUnder = new THREE.Mesh(new THREE.BoxGeometry(0.058, 0.030, 0.084), mKnifeGlove);
-      palmUnder.position.set(0, -0.018, 0);
+      const palmUnder = new THREE.Mesh(new THREE.BoxGeometry(0.054, 0.034, 0.090), mKnifeGlove);
+      palmUnder.position.set(0, -0.014, 0);
       arm.add(palmUnder);
-
-      // Four curled finger ridges visible on top of the fist (knuckles facing camera).
+      // Four curled finger ridges visible on the inboard side (camera left) — these are the
+      // fingers wrapping AROUND the handle. Vertical orientation matches saber grip.
       for (let i = 0; i < 4; i++) {
-        const finger = new THREE.Mesh(new THREE.BoxGeometry(0.011, 0.014, 0.024), mKnifeGloveTop);
-        finger.position.set(-0.0195 + i * 0.013, 0.034, -0.024);
+        const finger = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.011, 0.022), mKnifeGloveTop);
+        finger.position.set(-0.026, 0.022 - i * 0.013, -0.022 + i * 0.005);
         arm.add(finger);
-        const knuckle = new THREE.Mesh(new THREE.BoxGeometry(0.011, 0.006, 0.012), mKnifeStrap);
-        knuckle.position.set(finger.position.x, 0.041, -0.018);
-        arm.add(knuckle);
+        const fingerJoint = new THREE.Mesh(new THREE.BoxGeometry(0.005, 0.011, 0.020), mKnifeStrap);
+        fingerJoint.position.set(-0.034, 0.022 - i * 0.013, -0.022 + i * 0.005);
+        arm.add(fingerJoint);
       }
-
-      // Thumb wraps around the knife handle on the inboard side of the fist.
-      const thumbBase = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.028, 0.030), mKnifeGlove);
-      thumbBase.position.set(-0.030, 0.014, -0.008);
+      // Thumb crosses OVER the handle (saber-grip style: thumb on top of the spine).
+      const thumbBase = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.020, 0.024), mKnifeGlove);
+      thumbBase.position.set(-0.012, 0.034, -0.018);
       arm.add(thumbBase);
-      const thumbTip = new THREE.Mesh(new THREE.BoxGeometry(0.015, 0.020, 0.022), mKnifeGloveTop);
-      thumbTip.position.set(-0.030, 0.026, -0.024);
+      const thumbTip = new THREE.Mesh(new THREE.BoxGeometry(0.020, 0.018, 0.020), mKnifeGloveTop);
+      thumbTip.position.set(-0.026, 0.038, -0.026);
       arm.add(thumbTip);
 
       // Wrist cuff: hard black strap separating glove from sleeve. Studded.
-      const cuff = new THREE.Mesh(new THREE.BoxGeometry(0.070, 0.066, 0.022), mKnifeCuff);
-      cuff.position.set(0.004, -0.002, 0.054);
+      const cuff = new THREE.Mesh(new THREE.BoxGeometry(0.062, 0.066, 0.022), mKnifeCuff);
+      cuff.position.set(0.002, 0.002, 0.058);
       arm.add(cuff);
       const stud = new THREE.Mesh(new THREE.BoxGeometry(0.014, 0.014, 0.008), mKnifeStud);
-      stud.position.set(0.024, 0.008, 0.054);
+      stud.position.set(0.022, 0.014, 0.058);
       arm.add(stud);
 
-      // --- FOREARM: a tilted sleeve group so the whole arm extends back-right-down into the
-      // off-screen shoulder. Internal pieces sit along the local +Z of forearmGroup. ---
+      // FOREARM: comes UP from below-right into the wrist. The tilted sleeve group makes
+      // the elbow sit off-screen at bottom-right rather than straight back, which looks
+      // way more natural than a horizontal extension.
       const forearmGroup = new THREE.Group();
-      forearmGroup.position.set(0.030, -0.024, 0.082);
+      forearmGroup.position.set(0.018, -0.012, 0.078);
       forearmGroup.rotation.order = "YXZ";
-      forearmGroup.rotation.set(0.18, 0.34, 0.06);
+      // X = tilt forearm DOWN toward the lower-right (positive X tilts +Z down)
+      // Y = swing forearm outward to the right
+      // Z = small bank for natural look
+      forearmGroup.rotation.set(0.62, 0.42, 0.05);
       arm.add(forearmGroup);
 
-      const forearmMain = new THREE.Mesh(new THREE.BoxGeometry(0.080, 0.080, 0.34), mKnifeSleeve);
-      forearmMain.position.set(0, 0, 0.18);
+      const forearmMain = new THREE.Mesh(new THREE.BoxGeometry(0.078, 0.082, 0.36), mKnifeSleeve);
+      forearmMain.position.set(0, 0, 0.20);
       forearmGroup.add(forearmMain);
-      // Darker camo stripe along the top of the sleeve, breaks up the flat box.
-      const camoStripe = new THREE.Mesh(new THREE.BoxGeometry(0.082, 0.020, 0.22), mKnifeSleeveD);
-      camoStripe.position.set(0, 0.032, 0.18);
+      // Darker camo stripe along the top.
+      const camoStripe = new THREE.Mesh(new THREE.BoxGeometry(0.080, 0.022, 0.24), mKnifeSleeveD);
+      camoStripe.position.set(0, 0.032, 0.20);
       forearmGroup.add(camoStripe);
-      // Two cargo straps wrapped around the forearm for visual texture.
-      const strap1 = new THREE.Mesh(new THREE.BoxGeometry(0.084, 0.084, 0.014), mKnifeStrap);
-      strap1.position.set(0, 0, 0.10);
+      // Two cargo straps wrapped around the forearm.
+      const strap1 = new THREE.Mesh(new THREE.BoxGeometry(0.082, 0.086, 0.014), mKnifeStrap);
+      strap1.position.set(0, 0, 0.11);
       forearmGroup.add(strap1);
       const strap2 = strap1.clone();
-      strap2.position.z = 0.26;
+      strap2.position.z = 0.29;
       forearmGroup.add(strap2);
-
-      // Elbow pad caps the back end of the forearm — matches the player avatar's pads.
-      const elbowPad = new THREE.Mesh(new THREE.BoxGeometry(0.086, 0.086, 0.058), mKnifePad);
-      elbowPad.position.set(0, 0, 0.36);
+      // Elbow pad at the back end of the forearm.
+      const elbowPad = new THREE.Mesh(new THREE.BoxGeometry(0.086, 0.090, 0.062), mKnifePad);
+      elbowPad.position.set(0, 0, 0.40);
       forearmGroup.add(elbowPad);
-      const elbowStitch = new THREE.Mesh(new THREE.BoxGeometry(0.090, 0.014, 0.060), mKnifeStrap);
-      elbowStitch.position.set(0, 0.038, 0.36);
+      const elbowStitch = new THREE.Mesh(new THREE.BoxGeometry(0.090, 0.014, 0.064), mKnifeStrap);
+      elbowStitch.position.set(0, 0.040, 0.40);
       forearmGroup.add(elbowStitch);
 
-      // Place arm so the fist sits just to the right of the knife handle (handle ~ z=+0.10).
-      arm.position.set(0.036, -0.006, 0.105);
-      knifePose.add(arm);
+      // Place arm so the fist wraps the knife handle (handle ~ z=+0.10 in knife local space).
+      arm.position.set(0.020, -0.004, 0.108);
+      swing.add(arm);
+
+      knifePose.add(swing);
+      // Base held pose: slight downward tilt on the whole knife-and-arm unit so the held
+      // knife rests in a natural saber-grip ready stance rather than pointing dead-level.
+      knifePose.rotation.set(-0.18, -0.06, -0.05);
 
       gun.add(knifePose);
-      gun.position.set(0.22, -0.20, -0.55);
-      gun.rotation.y = 0.18; // viewAnim only writes rotation.x / rotation.z, so Y survives.
+      // Held position: lower-right of view, blade pointing forward into the world.
+      gun.position.set(0.20, -0.18, -0.50);
+      gun.rotation.y = 0.14; // viewAnim only writes rotation.x / rotation.z, so Y survives.
 
       const muzzleNode = new THREE.Object3D();
       muzzleNode.position.set(0, 0, -0.25);
@@ -10760,6 +10788,7 @@ if (typeof window !== "undefined") {
       root.userData.basePos = gun.position.clone();
       root.userData.adsOffset = new THREE.Vector3(0, 0, 0);
       root.userData.knifeGroup = knife;
+      root.userData.knifeSwing = swing;
       root.userData.knifePose = knifePose;
       root.userData.knifeArm = arm;
       root.userData.knifeArmBasePos = arm.position.clone();
@@ -11220,132 +11249,156 @@ if (typeof window !== "undefined") {
         offY = -0.05 * Math.sin(rp * Math.PI);
         rotZ = -0.25 * Math.sin(rp * Math.PI);
       } else if (wi === 7) {
-        // Knife: drive the inner `knifeGroup` so the gun outer group still respects bob/etc.
-        // The hand/arm (knifeArm) lives one level up in knifePose and follows knife.position
-        // only (no rotation inheritance) so the fist tracks the blade through tosses and
-        // slashes without spinning anatomically-incorrectly during the draw animation.
+        // Knife system. Two animation layers:
+        //   - `swing` group moves BOTH the knife AND the arm rigidly (used for chops/thrust,
+        //     so the whole arm rotates from the shoulder — looks like a real swing, not a
+        //     wrist flick).
+        //   - `knife` group moves the blade alone (used for the toss-draw spin; arm follows
+        //     via position-only so the hand reaches up to catch but doesn't spin with the
+        //     blade through 2 full rotations).
         const knife = ud.knifeGroup;
+        const swingGrp = ud.knifeSwing;
         const arm = ud.knifeArm;
         const armBase = ud.knifeArmBasePos;
         if (knife) {
           knife.position.set(0, 0, 0);
           knife.rotation.set(0, 0, 0);
         }
+        if (swingGrp) {
+          swingGrp.position.set(0, 0, 0);
+          swingGrp.rotation.set(0, 0, 0);
+        }
+        if (arm && armBase) {
+          arm.position.copy(armBase);
+        }
+
         if (act === "knifeDraw" && knife) {
-          // Toss up, spin 2 rotations around X (pivot at handle/blade junction = local origin), catch.
-          // Lift: parabolic sin envelope. Spin: linear 0 -> 4π over the active phase, then settle.
+          // Toss the knife up, free-spin 2 full rotations around X (pivot at handle/blade
+          // junction), catch. The arm follows knife.position so the hand reaches up.
           const lift = Math.sin(t * Math.PI) * 0.42;
           knife.position.y = lift;
           knife.position.z = -Math.sin(t * Math.PI) * 0.18;
           const spinPhase = THREE.MathUtils.smoothstep(t, 0.05, 0.92);
           knife.rotation.x = -spinPhase * Math.PI * 4;
-          // Hand recoils slightly while the knife is airborne.
           offY = -0.04 * Math.sin(t * Math.PI);
-        } else if (act === "knifeSlashL" && knife) {
-          // Left slash: 3-phase wind-up → strike → recover. Each phase uses a single ease
-          // curve on every channel so there are no competing sinusoids fighting each other
-          // (which caused the previous "Parkinson tremor" look).
-          //   wind-up   (0.00..0.18): smoothstep pull up-right (anticipation pose)
-          //   strike    (0.18..0.55): easeOutQuart snap from wind-up through neutral to LEFT
-          //   recover   (0.55..1.00): easeOutCubic settle back to rest
-          let zRot, xRot, yRot, xPos, yPos, zPos;
-          if (t < 0.18) {
-            const u = t / 0.18;
-            const e = u * u * (3 - 2 * u);
-            zRot = -0.55 * e; xRot = -0.30 * e; yRot = 0.30 * e;
-            xPos = 0.08 * e; yPos = 0.06 * e; zPos = 0;
-          } else if (t < 0.55) {
-            const u = (t - 0.18) / 0.37;
-            const e = 1 - Math.pow(1 - u, 4);
-            zRot = THREE.MathUtils.lerp(-0.55, 1.45, e);
-            xRot = THREE.MathUtils.lerp(-0.30, 0.35, e);
-            yRot = THREE.MathUtils.lerp(0.30, -0.65, e);
-            xPos = THREE.MathUtils.lerp(0.08, -0.22, e);
-            yPos = THREE.MathUtils.lerp(0.06, -0.12, e);
-            zPos = -0.22 * Math.sin(u * Math.PI);
-          } else {
-            const u = (t - 0.55) / 0.45;
-            const e = 1 - Math.pow(1 - u, 3);
-            zRot = THREE.MathUtils.lerp(1.45, 0, e);
-            xRot = THREE.MathUtils.lerp(0.35, 0, e);
-            yRot = THREE.MathUtils.lerp(-0.65, 0, e);
-            xPos = THREE.MathUtils.lerp(-0.22, 0, e);
-            yPos = THREE.MathUtils.lerp(-0.12, 0, e);
-            zPos = 0;
+          if (arm && armBase) {
+            arm.position.set(armBase.x, armBase.y + knife.position.y, armBase.z + knife.position.z);
           }
-          knife.rotation.set(xRot, yRot, zRot);
-          knife.position.set(xPos, yPos, zPos);
-        } else if (act === "knifeSlashR" && knife) {
-          // Right slash: mirror of knifeSlashL. Same 3-phase envelope, signs flipped on the
-          // left/right channels (Z rotation, Y rotation, X position).
-          let zRot, xRot, yRot, xPos, yPos, zPos;
-          if (t < 0.18) {
-            const u = t / 0.18;
-            const e = u * u * (3 - 2 * u);
-            zRot = 0.55 * e; xRot = -0.30 * e; yRot = -0.30 * e;
-            xPos = -0.08 * e; yPos = 0.06 * e; zPos = 0;
-          } else if (t < 0.55) {
-            const u = (t - 0.18) / 0.37;
-            const e = 1 - Math.pow(1 - u, 4);
-            zRot = THREE.MathUtils.lerp(0.55, -1.45, e);
-            xRot = THREE.MathUtils.lerp(-0.30, 0.35, e);
-            yRot = THREE.MathUtils.lerp(-0.30, 0.65, e);
-            xPos = THREE.MathUtils.lerp(-0.08, 0.22, e);
-            yPos = THREE.MathUtils.lerp(0.06, -0.12, e);
-            zPos = -0.22 * Math.sin(u * Math.PI);
-          } else {
-            const u = (t - 0.55) / 0.45;
-            const e = 1 - Math.pow(1 - u, 3);
-            zRot = THREE.MathUtils.lerp(-1.45, 0, e);
-            xRot = THREE.MathUtils.lerp(0.35, 0, e);
-            yRot = THREE.MathUtils.lerp(0.65, 0, e);
-            xPos = THREE.MathUtils.lerp(0.22, 0, e);
-            yPos = THREE.MathUtils.lerp(-0.12, 0, e);
-            zPos = 0;
-          }
-          knife.rotation.set(xRot, yRot, zRot);
-          knife.position.set(xPos, yPos, zPos);
-        } else if (act === "knifeThrust" && knife) {
-          // Thrust: 4-phase wind-up → stab → hold → recover.
-          //   wind-up (0.00..0.22): pull knife back + tip up slightly (chambered pose)
-          //   stab    (0.22..0.50): easeOutQuart fast extension straight forward
-          //   hold    (0.50..0.65): freeze at full extension (sells the impact)
-          //   recover (0.65..1.00): easeOutCubic pull back to rest
-          let xRot, yRot, xPos, yPos, zPos;
+        } else if (act === "knifeSlashL" && swingGrp) {
+          // LEFT CHOP: arm raises overhead-right (wind-up), then ARM swings across body
+          // from upper-right down to lower-left. The whole `swing` group rotates from the
+          // shoulder — big arcs, dramatic motion, no wrist flicks.
+          //   wind-up (0.00..0.22): rotate UP-RIGHT (-X = raise; +Z = lean right; +Y = face out)
+          //   strike  (0.22..0.55): easeOutQuart snap DOWN-LEFT (+X = chop; -Z = lean left)
+          //   recover (0.55..1.00): easeOutCubic settle back
+          let sxRot, syRot, szRot, sxPos, syPos, szPos;
           if (t < 0.22) {
             const u = t / 0.22;
             const e = u * u * (3 - 2 * u);
-            zPos = 0.08 * e; yPos = 0.04 * e; xRot = 0.22 * e; yRot = 0.06 * e; xPos = 0.02 * e;
-          } else if (t < 0.50) {
-            const u = (t - 0.22) / 0.28;
+            sxRot = -0.55 * e;  // raise (back-up)
+            syRot = 0.30 * e;   // turn out right
+            szRot = 0.45 * e;   // lean right
+            sxPos = 0.10 * e;   // arm moves right
+            syPos = 0.16 * e;   // arm raises up
+            szPos = 0;
+          } else if (t < 0.55) {
+            const u = (t - 0.22) / 0.33;
             const e = 1 - Math.pow(1 - u, 4);
-            zPos = THREE.MathUtils.lerp(0.08, -0.34, e);
-            yPos = THREE.MathUtils.lerp(0.04, -0.05, e);
-            xRot = THREE.MathUtils.lerp(0.22, -0.08, e);
-            yRot = THREE.MathUtils.lerp(0.06, 0, e);
-            xPos = THREE.MathUtils.lerp(0.02, -0.02, e);
-          } else if (t < 0.65) {
-            zPos = -0.34; yPos = -0.05; xRot = -0.08; yRot = 0; xPos = -0.02;
+            sxRot = THREE.MathUtils.lerp(-0.55, 0.95, e);  // chop down
+            syRot = THREE.MathUtils.lerp(0.30, -0.55, e);  // sweep facing left
+            szRot = THREE.MathUtils.lerp(0.45, -1.05, e);  // bank hard left
+            sxPos = THREE.MathUtils.lerp(0.10, -0.22, e);  // arm sweeps to left
+            syPos = THREE.MathUtils.lerp(0.16, -0.14, e);  // arm drops below rest
+            szPos = -0.18 * Math.sin(u * Math.PI);          // forward extension at peak
           } else {
-            const u = (t - 0.65) / 0.35;
+            const u = (t - 0.55) / 0.45;
             const e = 1 - Math.pow(1 - u, 3);
-            zPos = THREE.MathUtils.lerp(-0.34, 0, e);
-            yPos = THREE.MathUtils.lerp(-0.05, 0, e);
-            xRot = THREE.MathUtils.lerp(-0.08, 0, e);
-            yRot = 0;
-            xPos = THREE.MathUtils.lerp(-0.02, 0, e);
+            sxRot = THREE.MathUtils.lerp(0.95, 0, e);
+            syRot = THREE.MathUtils.lerp(-0.55, 0, e);
+            szRot = THREE.MathUtils.lerp(-1.05, 0, e);
+            sxPos = THREE.MathUtils.lerp(-0.22, 0, e);
+            syPos = THREE.MathUtils.lerp(-0.14, 0, e);
+            szPos = 0;
           }
-          knife.rotation.set(xRot, yRot, 0);
-          knife.position.set(xPos, yPos, zPos);
-        }
-        // Sync arm position to track the knife's translation (but leave arm rotation locked
-        // to its base — see the makeKnifeModel header for why).
-        if (arm && armBase && knife) {
-          arm.position.set(
-            armBase.x + knife.position.x,
-            armBase.y + knife.position.y,
-            armBase.z + knife.position.z
-          );
+          swingGrp.rotation.set(sxRot, syRot, szRot);
+          swingGrp.position.set(sxPos, syPos, szPos);
+          // Tiny camera-side kick: hand recoils up slightly at the strike apex.
+          offY = -0.025 * Math.sin(THREE.MathUtils.clamp((t - 0.18) * 3, 0, 1) * Math.PI);
+        } else if (act === "knifeSlashR" && swingGrp) {
+          // RIGHT CHOP: mirror of left. Wind up upper-LEFT, chop down to lower-RIGHT.
+          let sxRot, syRot, szRot, sxPos, syPos, szPos;
+          if (t < 0.22) {
+            const u = t / 0.22;
+            const e = u * u * (3 - 2 * u);
+            sxRot = -0.55 * e;
+            syRot = -0.30 * e;
+            szRot = -0.45 * e;
+            sxPos = -0.10 * e;
+            syPos = 0.16 * e;
+            szPos = 0;
+          } else if (t < 0.55) {
+            const u = (t - 0.22) / 0.33;
+            const e = 1 - Math.pow(1 - u, 4);
+            sxRot = THREE.MathUtils.lerp(-0.55, 0.95, e);
+            syRot = THREE.MathUtils.lerp(-0.30, 0.55, e);
+            szRot = THREE.MathUtils.lerp(-0.45, 1.05, e);
+            sxPos = THREE.MathUtils.lerp(-0.10, 0.22, e);
+            syPos = THREE.MathUtils.lerp(0.16, -0.14, e);
+            szPos = -0.18 * Math.sin(u * Math.PI);
+          } else {
+            const u = (t - 0.55) / 0.45;
+            const e = 1 - Math.pow(1 - u, 3);
+            sxRot = THREE.MathUtils.lerp(0.95, 0, e);
+            syRot = THREE.MathUtils.lerp(0.55, 0, e);
+            szRot = THREE.MathUtils.lerp(1.05, 0, e);
+            sxPos = THREE.MathUtils.lerp(0.22, 0, e);
+            syPos = THREE.MathUtils.lerp(-0.14, 0, e);
+            szPos = 0;
+          }
+          swingGrp.rotation.set(sxRot, syRot, szRot);
+          swingGrp.position.set(sxPos, syPos, szPos);
+          offY = -0.025 * Math.sin(THREE.MathUtils.clamp((t - 0.18) * 3, 0, 1) * Math.PI);
+        } else if (act === "knifeThrust" && swingGrp) {
+          // THRUST: arm pulls back (chambered with elbow flared up), then PUNCHES forward
+          // straight. The whole `swing` group translates and rotates as one.
+          //   wind-up (0.00..0.24): arm chambers back-up
+          //   stab    (0.24..0.50): easeOutQuart punch forward (-Z)
+          //   hold    (0.50..0.66): freeze at extension
+          //   recover (0.66..1.00): easeOutCubic settle back
+          let sxRot, syRot, szRot, sxPos, syPos, szPos;
+          if (t < 0.24) {
+            const u = t / 0.24;
+            const e = u * u * (3 - 2 * u);
+            sxRot = -0.35 * e;
+            syRot = 0.18 * e;
+            szRot = 0;
+            sxPos = 0.04 * e;
+            syPos = 0.08 * e;
+            szPos = 0.10 * e;  // pull back
+          } else if (t < 0.50) {
+            const u = (t - 0.24) / 0.26;
+            const e = 1 - Math.pow(1 - u, 4);
+            sxRot = THREE.MathUtils.lerp(-0.35, 0.15, e);
+            syRot = THREE.MathUtils.lerp(0.18, -0.05, e);
+            szRot = 0;
+            sxPos = THREE.MathUtils.lerp(0.04, -0.04, e);
+            syPos = THREE.MathUtils.lerp(0.08, -0.04, e);
+            szPos = THREE.MathUtils.lerp(0.10, -0.36, e);  // FAST forward stab
+          } else if (t < 0.66) {
+            sxRot = 0.15; syRot = -0.05; szRot = 0;
+            sxPos = -0.04; syPos = -0.04; szPos = -0.36;
+          } else {
+            const u = (t - 0.66) / 0.34;
+            const e = 1 - Math.pow(1 - u, 3);
+            sxRot = THREE.MathUtils.lerp(0.15, 0, e);
+            syRot = THREE.MathUtils.lerp(-0.05, 0, e);
+            szRot = 0;
+            sxPos = THREE.MathUtils.lerp(-0.04, 0, e);
+            syPos = THREE.MathUtils.lerp(-0.04, 0, e);
+            szPos = THREE.MathUtils.lerp(-0.36, 0, e);
+          }
+          swingGrp.rotation.set(sxRot, syRot, szRot);
+          swingGrp.position.set(sxPos, syPos, szPos);
         }
       }
 
@@ -12299,7 +12352,7 @@ if (typeof window !== "undefined") {
         const combo = state.knifeComboIdx % 3;
         state.knifeComboIdx = (state.knifeComboIdx + 1) % 3;
         state.weaponAction = combo === 0 ? "knifeSlashL" : combo === 1 ? "knifeSlashR" : "knifeThrust";
-        state.weaponActionDur = combo === 2 ? 360 : 280;
+        state.weaponActionDur = combo === 2 ? 400 : 340;
         state.weaponActionStart = now;
         performKnifeAttack(w);
         updateHud();
