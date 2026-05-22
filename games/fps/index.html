@@ -4438,10 +4438,12 @@ if (typeof window !== "undefined") {
     let _freeLookHasLast = false;
 
     function controlsInputReady() {
-      return (
-        state.locked ||
-        (gameSettings.skipClickToPlay && gameWorldReady && player.health > 0)
-      );
+      if (!gameWorldReady || player.health <= 0 || paused) return false;
+      return state.locked || !!gameSettings.skipClickToPlay;
+    }
+
+    function canFireWithoutMouse() {
+      return controlsInputReady();
     }
 
     function updateClickHintVisibility() {
@@ -4458,6 +4460,12 @@ if (typeof window !== "undefined") {
     function tryAutoCapturePointer() {
       if (!gameSettings.skipClickToPlay || !gameWorldReady || player.health <= 0) return;
       if (paused || settingsModalOpen || chatOpen) return;
+      try {
+        if (!renderer.domElement.hasAttribute("tabindex")) {
+          renderer.domElement.tabIndex = 0;
+        }
+        renderer.domElement.focus({ preventScroll: true });
+      } catch (_) {}
       try {
         renderer.domElement.requestPointerLock();
       } catch (_) {}
@@ -8130,7 +8138,7 @@ if (typeof window !== "undefined") {
       spawnProtectUntil: 0,
     };
 
-    const keys = { w:false, a:false, s:false, d:false, space:false, shift:false, f:false };
+    const keys = { w:false, a:false, s:false, d:false, space:false, shift:false, f:false, v:false };
     const state = {
       locked: false,
       mouseDown: false,
@@ -10923,6 +10931,11 @@ if (typeof window !== "undefined") {
       if (k === "6") setWeapon(6);
       if (k === "7") setWeapon(4);
       if (k === "r") startReload();
+      if (k === "v" || e.code === "KeyV") {
+        keys.v = true;
+        if (canFireWithoutMouse() && state.weaponIndex !== 4) tryShoot();
+        e.preventDefault();
+      }
     });
 
     document.addEventListener("keyup", (e) => {
@@ -10937,6 +10950,7 @@ if (typeof window !== "undefined") {
         keys.f = false;
         if (state.weaponIndex === 4) state.medKitNeedsRelease = false;
       }
+      if (k === "v") keys.v = false;
     });
 
     renderer.domElement.addEventListener("mousedown", (e) => {
@@ -10982,6 +10996,7 @@ if (typeof window !== "undefined") {
 
     renderer.domElement.addEventListener("click", () => {
       if (!gameWorldReady) return;
+      if (gameSettings.skipClickToPlay) return;
       if (!state.locked && !paused && player.health > 0) renderer.domElement.requestPointerLock();
     });
 
@@ -11022,7 +11037,18 @@ if (typeof window !== "undefined") {
       state.ads = false;
     });
 
-    renderer.domElement.addEventListener("mousemove", (e) => {
+    function applyFreeLookMouseDelta(dx, dy) {
+      if (!gameSettings.skipClickToPlay || state.locked || !gameWorldReady) return;
+      if (paused || player.health <= 0) return;
+      if (dx === 0 && dy === 0) return;
+      const sens = getLookSensitivityMul(isAdsLookSensitivityActive());
+      player.yaw -= dx * LOOK_SENS_BASE_YAW * sens * 0.28;
+      player.pitch -= dy * LOOK_SENS_BASE_PITCH * sens * 0.28;
+      const limit = Math.PI / 2 - 0.01;
+      player.pitch = Math.max(-limit, Math.min(limit, player.pitch));
+    }
+
+    function handleSkipClickFreeLook(e) {
       if (!gameSettings.skipClickToPlay || state.locked || !gameWorldReady) return;
       if (paused || player.health <= 0) return;
       if (!_freeLookHasLast) {
@@ -11035,13 +11061,11 @@ if (typeof window !== "undefined") {
       const dy = e.clientY - _freeLookLastY;
       _freeLookLastX = e.clientX;
       _freeLookLastY = e.clientY;
-      if (dx === 0 && dy === 0) return;
-      const sens = getLookSensitivityMul(isAdsLookSensitivityActive());
-      player.yaw -= dx * LOOK_SENS_BASE_YAW * sens * 0.22;
-      player.pitch -= dy * LOOK_SENS_BASE_PITCH * sens * 0.22;
-      const limit = Math.PI / 2 - 0.01;
-      player.pitch = Math.max(-limit, Math.min(limit, player.pitch));
-    });
+      applyFreeLookMouseDelta(dx, dy);
+    }
+
+    document.addEventListener("mousemove", handleSkipClickFreeLook);
+    renderer.domElement.addEventListener("mousemove", handleSkipClickFreeLook);
 
     document.addEventListener("mousemove", (e) => {
       if (!controlsInputReady() || paused || player.health <= 0) return;
@@ -11438,6 +11462,7 @@ if (typeof window !== "undefined") {
         if (dx * dx + dy * dy + dz * dz <= r * r) {
           if (enemy.trainingDummy) {
             registerTrainingHit("body");
+            startBlindEffect(Math.min(blindDuration || 5, 3));
           } else {
             enemy.blindUntil = performance.now() + (blindDuration || 5) * 1000;
             enemy.aware = false;
@@ -11521,6 +11546,7 @@ if (typeof window !== "undefined") {
                 createSparks(hit.point || p.pos.clone(), 0x6bd4ff);
                 if (enemy.trainingDummy) {
                   registerTrainingHit(hit.zone || "body");
+                  startBlindEffect(Math.min(p.blindDuration || 5, 3));
                 } else {
                   enemy.blindUntil = performance.now() + (p.blindDuration || 5) * 1000;
                   enemy.aware = false;
@@ -13244,9 +13270,9 @@ if (typeof window !== "undefined") {
       if (
         player.health > 0 &&
         !paused &&
-        state.mouseDown &&
         state.weaponIndex !== 4 &&
-        weapon().auto
+        weapon().auto &&
+        (state.mouseDown || (keys.v && canFireWithoutMouse()))
       ) {
         tryShoot();
       }
@@ -13480,6 +13506,9 @@ if (typeof window !== "undefined") {
 
       weaponRoot.visible = true;
       gameWorldReady = true;
+      try {
+        renderer.domElement.tabIndex = 0;
+      } catch (_) {}
       bumpRendererLayoutSync(320);
       setTrainingScoreboardVisible(isTrainingMap(CURRENT_MAP));
       if (isTrainingMap(CURRENT_MAP)) updateTrainingScoreboardUI();
@@ -13782,6 +13811,26 @@ if (typeof window !== "undefined") {
       applyWallTexture();
       compileSceneShaders();
     });
+
+    const btnSkipClickOff = document.getElementById("btnSkipClickOff");
+    const btnSkipClickOn = document.getElementById("btnSkipClickOn");
+    if (btnSkipClickOff) {
+      btnSkipClickOff.addEventListener("click", () => {
+        gameSettings.skipClickToPlay = false;
+        syncSettingsUI();
+        saveGameSettings();
+        updateClickHintVisibility();
+      });
+    }
+    if (btnSkipClickOn) {
+      btnSkipClickOn.addEventListener("click", () => {
+        gameSettings.skipClickToPlay = true;
+        syncSettingsUI();
+        saveGameSettings();
+        updateClickHintVisibility();
+        if (gameWorldReady && player.health > 0) tryAutoCapturePointer();
+      });
+    }
 
     function cycleRenderDistance(delta) {
       const n = RENDER_DISTANCE_LEVELS.length;
