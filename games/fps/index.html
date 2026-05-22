@@ -10768,9 +10768,9 @@ if (typeof window !== "undefined") {
       knifePose.add(swing);
       // Base held pose: slight downward tip + slight inward turn so the knife reads as
       // "carried, ready", not "presented for inspection".
-      // -0.45 on X tilts the blade tip ~26° above horizontal — reads as a proper upright
-      // saber-grip ready stance instead of a flat fist-punch orientation.
-      knifePose.rotation.set(-0.45, -0.04, -0.06);
+      // +0.30 on X tilts the blade tip ~17° BELOW horizontal — fist raised, blade angling
+      // forward-down in a natural saber-grip ready stance.
+      knifePose.rotation.set(0.30, -0.04, -0.06);
 
       gun.add(knifePose);
       gun.position.set(0.18, -0.16, -0.48);
