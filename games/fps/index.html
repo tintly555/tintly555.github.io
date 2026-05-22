@@ -6419,13 +6419,13 @@ if (typeof window !== "undefined") {
 
     function getCurrentMapFogColor() {
       if (isBrightIndoorMap(CURRENT_MAP)) return 0x8ea6c6;
-      if (isBossArenaMap(CURRENT_MAP)) return 0x87ceeb;
+      if (isBossArenaMap(CURRENT_MAP)) return 0x1a1a22;
       return 0x070504;
     }
 
     function getCurrentMapBackgroundColor() {
       if (isBrightIndoorMap(CURRENT_MAP)) return 0xa9c3e6;
-      if (isBossArenaMap(CURRENT_MAP)) return 0x87ceeb;
+      if (isBossArenaMap(CURRENT_MAP)) return 0x1a1a22;
       return 0x070504;
     }
 
@@ -6434,7 +6434,7 @@ if (typeof window !== "undefined") {
       if (!scene.fog || !scene.fog.isFog) return;
       let far;
       let near;
-      if (isBrightIndoorMap(CURRENT_MAP) || isBossArenaMap(CURRENT_MAP)) {
+      if (isBrightIndoorMap(CURRENT_MAP)) {
         const rdIdx = THREE.MathUtils.clamp(
           gameSettings.renderDistanceIndex | 0,
           0,
@@ -6443,6 +6443,13 @@ if (typeof window !== "undefined") {
         const scale = RENDER_DISTANCE_LEVELS[rdIdx].scale;
         far = Math.max(140, 210 * scale);
         near = THREE.MathUtils.clamp(28 * scale, 14, far - 28);
+        scene.fog.color.set(getCurrentMapFogColor());
+        scene.background.set(getCurrentMapBackgroundColor());
+      } else if (isBossArenaMap(CURRENT_MAP)) {
+        const rdIdx = THREE.MathUtils.clamp(gameSettings.renderDistanceIndex | 0, 0, RENDER_DISTANCE_LEVELS.length - 1);
+        const scale = RENDER_DISTANCE_LEVELS[rdIdx].scale;
+        far = Math.max(50, 80 * scale);
+        near = THREE.MathUtils.clamp(8 * scale, 4, far - 12);
         scene.fog.color.set(getCurrentMapFogColor());
         scene.background.set(getCurrentMapBackgroundColor());
       } else {
@@ -8194,35 +8201,16 @@ if (typeof window !== "undefined") {
       addWallBox(1.0, coverH, 2.5, -30, coverH / 2, 8, coverColor);
       addWallBox(4.0, coverH, 1.5, 0, coverH / 2, 35, coverColor);
 
-      const groundMat = new THREE.MeshStandardMaterial({ color: 0x3d9b2e, roughness: 0.92, metalness: 0 });
-      const ground = new THREE.Mesh(new THREE.PlaneGeometry(half * 2, half * 2), groundMat);
-      ground.rotation.x = -Math.PI / 2;
-      ground.position.y = 0.005;
-      ground.receiveShadow = true;
-      scene.add(ground);
-      wallMeshes.push(ground);
+      floor.visible = true;
 
-      const amb = new THREE.AmbientLight(0xb8c8a8, 1.8);
+      const amb = new THREE.AmbientLight(0x404858, 1.2);
       scene.add(amb); pvpMapLights.push(amb);
-      const hemi = new THREE.HemisphereLight(0xd8e8c8, 0x3a3018, 3.0);
+      const hemi = new THREE.HemisphereLight(0x384050, 0x0a0808, 1.6);
       scene.add(hemi); pvpMapLights.push(hemi);
-      const sun = new THREE.DirectionalLight(0xfff0d0, 6.0);
-      sun.position.set(20, 50, 30);
-      sun.castShadow = false;
-      scene.add(sun); pvpMapLights.push(sun);
-
-      const skyGeo = new THREE.SphereGeometry(200, 24, 16);
-      const skyMat = new THREE.MeshBasicMaterial({ color: 0x87ceeb, side: THREE.BackSide });
-      const skyDome = new THREE.Mesh(skyGeo, skyMat);
-      scene.add(skyDome);
-      wallMeshes.push(skyDome);
-
-      const sunVisGeo = new THREE.SphereGeometry(6, 12, 8);
-      const sunVisMat = new THREE.MeshBasicMaterial({ color: 0xfffde0 });
-      const sunVisMesh = new THREE.Mesh(sunVisGeo, sunVisMat);
-      sunVisMesh.position.set(40, 120, -30);
-      scene.add(sunVisMesh);
-      wallMeshes.push(sunVisMesh);
+      const dim = new THREE.DirectionalLight(0x8090b0, 2.0);
+      dim.position.set(20, 40, 30);
+      dim.castShadow = false;
+      scene.add(dim); pvpMapLights.push(dim);
 
       ceiling.visible = false;
     }
@@ -9314,7 +9302,7 @@ if (typeof window !== "undefined") {
       const earR = earL.clone(); earR.position.x = 0.24; headGroup.add(earR);
       headGroup.position.y = 2.42; torsoRoot.add(headGroup);
 
-      torsoRoot.rotation.x = 0.30;
+      torsoRoot.rotation.x = 0.55;
 
       leftArmRoot.position.set(-0.62, 1.82, 0);
       rightArmRoot.position.set(0.62, 1.82, 0);
@@ -9348,23 +9336,23 @@ if (typeof window !== "undefined") {
       makeArm(leftArmRoot, leftForearmRoot, "left");
       makeArm(rightArmRoot, rightForearmRoot, "right");
 
-      leftLegRoot.position.set(-0.22, 0.60, 0);
-      rightLegRoot.position.set(0.22, 0.60, 0);
+      leftLegRoot.position.set(-0.22, 0.68, 0);
+      rightLegRoot.position.set(0.22, 0.68, 0);
       const makeLeg = (lr, side) => {
-        const hipJoint = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.12, 0.16), matPants);
+        const hipJoint = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.16, 0.24), matPants);
         hipJoint.position.set(0, 0.0, 0); lr.add(hipJoint);
-        const thigh = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.48, 0.15), matPants);
-        thigh.position.set(0, -0.28, 0); lr.add(thigh);
-        const knee = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.10, 0.14), matSkinD);
-        knee.position.set(0, -0.52, 0.02); lr.add(knee);
-        const shin = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.44, 0.13), matPants);
-        shin.position.set(0, -0.72, 0); lr.add(shin);
+        const thigh = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.62, 0.24), matPants);
+        thigh.position.set(0, -0.36, 0); lr.add(thigh);
+        const knee = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.14, 0.22), matSkinD);
+        knee.position.set(0, -0.68, 0.02); lr.add(knee);
+        const shin = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.56, 0.22), matPants);
+        shin.position.set(0, -0.94, 0); lr.add(shin);
         if (side === "right") {
-          const tear = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.08, 0.05), matSkin);
-          tear.position.set(0, -0.76, 0.08); lr.add(tear);
+          const tear = new THREE.Mesh(new THREE.BoxGeometry(0.23, 0.09, 0.06), matSkin);
+          tear.position.set(0, -1.00, 0.12); lr.add(tear);
         }
-        const foot = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.09, 0.26), matSkinD);
-        foot.position.set(0, -0.98, 0.04); lr.add(foot);
+        const foot = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.10, 0.32), matSkinD);
+        foot.position.set(0, -1.26, 0.04); lr.add(foot);
       };
       makeLeg(leftLegRoot, "left"); makeLeg(rightLegRoot, "right");
 
@@ -10108,43 +10096,74 @@ if (typeof window !== "undefined") {
       _lastBossRoarTime = now;
       try {
         const t0 = audioCtx.currentTime;
-        const dur = 0.7 + Math.random() * 0.4;
+        const dur = 1.0 + Math.random() * 0.5;
+        const sr = audioCtx.sampleRate;
 
-        const noiseLen = audioCtx.sampleRate * dur;
-        const noiseBuf = audioCtx.createBuffer(1, noiseLen, audioCtx.sampleRate);
-        const nd = noiseBuf.getChannelData(0);
-        for (let i = 0; i < noiseLen; i++) nd[i] = (Math.random() * 2 - 1);
-        const noiseSrc = audioCtx.createBufferSource();
-        noiseSrc.buffer = noiseBuf;
+        const nLen = sr * dur;
+        const nBuf = audioCtx.createBuffer(1, nLen, sr);
+        const nd = nBuf.getChannelData(0);
+        let prev = 0;
+        for (let i = 0; i < nLen; i++) {
+          prev = prev * 0.92 + (Math.random() * 2 - 1) * 0.08;
+          nd[i] = prev + Math.sin(i / sr * 2 * Math.PI * (40 + Math.random() * 10)) * 0.5;
+        }
+        const nSrc = audioCtx.createBufferSource();
+        nSrc.buffer = nBuf;
+        nSrc.playbackRate.setValueAtTime(0.8 + Math.random() * 0.3, t0);
 
-        const bp = audioCtx.createBiquadFilter();
-        bp.type = "bandpass"; bp.frequency.value = 180; bp.Q.value = 1.2;
-        bp.frequency.setValueAtTime(180, t0);
-        bp.frequency.linearRampToValueAtTime(120, t0 + dur * 0.6);
-        bp.frequency.linearRampToValueAtTime(80, t0 + dur);
+        const bp1 = audioCtx.createBiquadFilter();
+        bp1.type = "lowpass"; bp1.frequency.value = 350; bp1.Q.value = 2.5;
+        const bp2 = audioCtx.createBiquadFilter();
+        bp2.type = "peaking"; bp2.frequency.value = 120; bp2.gain.value = 12; bp2.Q.value = 1.5;
+        const bp3 = audioCtx.createBiquadFilter();
+        bp3.type = "peaking"; bp3.frequency.value = 220; bp3.gain.value = 8; bp3.Q.value = 2;
 
-        const lp = audioCtx.createBiquadFilter();
-        lp.type = "lowpass"; lp.frequency.value = 600;
+        const nGain = audioCtx.createGain();
+        nGain.gain.setValueAtTime(0, t0);
+        nGain.gain.linearRampToValueAtTime(0.5, t0 + 0.08);
+        nGain.gain.setValueAtTime(0.5, t0 + dur * 0.2);
+        nGain.gain.linearRampToValueAtTime(0.55, t0 + dur * 0.35);
+        nGain.gain.exponentialRampToValueAtTime(0.01, t0 + dur);
 
-        const gain = audioCtx.createGain();
-        gain.gain.setValueAtTime(0, t0);
-        gain.gain.linearRampToValueAtTime(0.35, t0 + 0.06);
-        gain.gain.setValueAtTime(0.35, t0 + dur * 0.3);
-        gain.gain.exponentialRampToValueAtTime(0.01, t0 + dur);
+        const o1 = audioCtx.createOscillator();
+        o1.type = "sawtooth";
+        o1.frequency.setValueAtTime(55, t0);
+        o1.frequency.linearRampToValueAtTime(42, t0 + dur * 0.5);
+        o1.frequency.linearRampToValueAtTime(35, t0 + dur);
+        const o1g = audioCtx.createGain();
+        o1g.gain.setValueAtTime(0, t0);
+        o1g.gain.linearRampToValueAtTime(0.30, t0 + 0.05);
+        o1g.gain.exponentialRampToValueAtTime(0.01, t0 + dur);
 
-        const osc = audioCtx.createOscillator();
-        osc.type = "sawtooth";
-        osc.frequency.setValueAtTime(90 + Math.random() * 20, t0);
-        osc.frequency.linearRampToValueAtTime(60, t0 + dur);
-        const oscGain = audioCtx.createGain();
-        oscGain.gain.setValueAtTime(0.18, t0);
-        oscGain.gain.exponentialRampToValueAtTime(0.01, t0 + dur);
+        const o2 = audioCtx.createOscillator();
+        o2.type = "square";
+        o2.frequency.setValueAtTime(28, t0);
+        o2.frequency.linearRampToValueAtTime(22, t0 + dur);
+        const o2g = audioCtx.createGain();
+        o2g.gain.setValueAtTime(0.15, t0);
+        o2g.gain.exponentialRampToValueAtTime(0.01, t0 + dur * 0.8);
 
-        noiseSrc.connect(bp).connect(lp).connect(gain).connect(audioSfx);
-        osc.connect(oscGain).connect(audioSfx);
+        const dist = audioCtx.createWaveShaperFunction
+          ? null
+          : (function() {
+            const ws = audioCtx.createWaveShaper();
+            const n = 256; const c = new Float32Array(n);
+            for (let i = 0; i < n; i++) { const x = (i * 2) / n - 1; c[i] = Math.tanh(x * 3); }
+            ws.curve = c; ws.oversample = "2x"; return ws;
+          })();
 
-        noiseSrc.start(t0); noiseSrc.stop(t0 + dur);
-        osc.start(t0); osc.stop(t0 + dur);
+        const master = audioCtx.createGain();
+        master.gain.value = 0.45;
+
+        nSrc.connect(bp1).connect(bp2).connect(bp3).connect(nGain).connect(master);
+        o1.connect(o1g).connect(master);
+        o2.connect(o2g).connect(master);
+        if (dist) master.connect(dist).connect(audioSfx);
+        else master.connect(audioSfx);
+
+        nSrc.start(t0); nSrc.stop(t0 + dur);
+        o1.start(t0); o1.stop(t0 + dur);
+        o2.start(t0); o2.stop(t0 + dur);
       } catch (_) {}
     }
 
@@ -10622,8 +10641,7 @@ if (typeof window !== "undefined") {
         setLocalPlayerLights(false);
         return;
       }
-      /** Bright open-roof duel map: keep flashlight/body fill off (matches HUD hint). */
-      if (isBrightIndoorMap(CURRENT_MAP)) {
+      if (isBrightIndoorMap(CURRENT_MAP) || isBossArenaMap(CURRENT_MAP)) {
         setLocalPlayerLights(false);
         return;
       }
@@ -12371,12 +12389,16 @@ if (typeof window !== "undefined") {
     }
 
     /** Head / torso / leg spheres in humanoid root space (zombies + remote PvP avatars). */
-    function humanoidHitAlongRay(raycaster, rootGroup) {
+    function humanoidHitAlongRay(raycaster, rootGroup, isBossEnemy) {
       rootGroup.updateMatrixWorld(true);
       _invEnemyMat.copy(rootGroup.matrixWorld).invert();
       _ehLo.copy(raycaster.ray.origin).applyMatrix4(_invEnemyMat);
       _ehLd.copy(raycaster.ray.direction).transformDirection(_invEnemyMat).normalize();
-      const volumes = [
+      const volumes = isBossEnemy ? [
+        { cx: 0, cy: 4.6, cz: 0.5, r: 0.65, zone: "head" },
+        { cx: 0, cy: 3.0, cz: 0.6, r: 1.2, zone: "body" },
+        { cx: 0, cy: 1.2, cz: 0, r: 0.7, zone: "leg" },
+      ] : [
         { cx: 0, cy: 1.82, cz: 0, r: 0.3, zone: "head" },
         { cx: 0, cy: 1.12, cz: 0, r: 0.52, zone: "body" },
         { cx: 0, cy: 0.42, cz: 0, r: 0.46, zone: "leg" },
@@ -12405,7 +12427,7 @@ if (typeof window !== "undefined") {
 
     /** Hit volumes are fixed in zombie root space so torso sway does not move hitboxes. */
     function enemyHitAlongRay(raycaster, enemy) {
-      return humanoidHitAlongRay(raycaster, enemy.group);
+      return humanoidHitAlongRay(raycaster, enemy.group, !!enemy.isBoss);
     }
 
     function applyDamage(enemy, zone, w) {
@@ -12578,14 +12600,18 @@ if (typeof window !== "undefined") {
       p.mesh = null;
     }
 
-    function humanoidHitAlongRayPadded(raycaster, rootGroup, pad) {
-      const hit = humanoidHitAlongRay(raycaster, rootGroup);
+    function humanoidHitAlongRayPadded(raycaster, rootGroup, pad, isBossEnemy) {
+      const hit = humanoidHitAlongRay(raycaster, rootGroup, isBossEnemy);
       if (hit || pad <= 1.001) return hit;
       rootGroup.updateMatrixWorld(true);
       _invEnemyMat.copy(rootGroup.matrixWorld).invert();
       _ehLo.copy(raycaster.ray.origin).applyMatrix4(_invEnemyMat);
       _ehLd.copy(raycaster.ray.direction).transformDirection(_invEnemyMat).normalize();
-      const volumes = [
+      const volumes = isBossEnemy ? [
+        { cx: 0, cy: 4.6, cz: 0.5, r: 0.65 * pad, zone: "head" },
+        { cx: 0, cy: 3.0, cz: 0.6, r: 1.2 * pad, zone: "body" },
+        { cx: 0, cy: 1.2, cz: 0, r: 0.7 * pad, zone: "leg" },
+      ] : [
         { cx: 0, cy: 1.82, cz: 0, r: 0.3 * pad, zone: "head" },
         { cx: 0, cy: 1.12, cz: 0, r: 0.52 * pad, zone: "body" },
         { cx: 0, cy: 0.42, cz: 0, r: 0.46 * pad, zone: "leg" },
@@ -12717,7 +12743,7 @@ if (typeof window !== "undefined") {
             for (const enemy of state.enemies) {
               if (!enemyBlockingHits(enemy)) continue;
               enemy.group.updateMatrixWorld(true);
-              const hit = humanoidHitAlongRayPadded(segRay, enemy.group, hitPad);
+              const hit = humanoidHitAlongRayPadded(segRay, enemy.group, hitPad, !!enemy.isBoss);
               if (hit) {
                 createSparks(hit.point || p.pos.clone(), 0x6bd4ff);
                 if (enemy.trainingDummy) {
@@ -12814,7 +12840,7 @@ if (typeof window !== "undefined") {
         if (!enemyBlockingHits(enemy)) continue;
         enemy.group.updateMatrixWorld(true);
         const eh = enemy.trainingDummy
-          ? humanoidHitAlongRayPadded(ray, enemy.group, 1.45)
+          ? humanoidHitAlongRayPadded(ray, enemy.group, 1.45, !!enemy.isBoss)
           : enemyHitAlongRay(ray, enemy);
         if (eh && eh.t < bestEnemyT) {
           bestEnemy = enemy;
@@ -14397,7 +14423,7 @@ if (typeof window !== "undefined") {
         const bobble = enemy.moving ? Math.cos(enemy.walkTime * 5.1 + ei * 1.2) * 0.028 : 0;
 
         let bossAnimOverride = false;
-        const HUNCH = 0.30;
+        const HUNCH = 0.55;
         const ELBOW_REST = -0.7;
         if (enemy.isBoss) {
           enemy.bossAnimTimer += dt;
