@@ -11571,6 +11571,13 @@ if (typeof window !== "undefined") {
       );
       grip.position.set(0, -0.10, 0.05);
       g.add(grip);
+      const muzzleNode = new THREE.Object3D();
+      muzzleNode.position.set(0, 0.02, -0.67);
+      g.add(muzzleNode);
+      g.userData.muzzleNode = muzzleNode;
+      g.userData.gun = body;
+      g.userData.basePos = body.position.clone();
+      g.userData.adsOffset = new THREE.Vector3(0, 0, 0);
       g.position.set(0.22, -0.18, -0.35);
       return g;
     }
