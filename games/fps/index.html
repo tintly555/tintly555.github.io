@@ -9242,10 +9242,14 @@ if (typeof window !== "undefined") {
       const chest = new THREE.Mesh(new THREE.BoxGeometry(1.30, 0.70, 0.65), matShirt);
       chest.position.set(0, 1.55, 0.15);
       torsoRoot.add(chest);
-      const pecL = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.34, 0.16), matSkin);
-      pecL.position.set(-0.25, 1.52, 0.46); torsoRoot.add(pecL);
-      const pecR = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.34, 0.16), matSkin);
-      pecR.position.set(0.25, 1.52, 0.46); torsoRoot.add(pecR);
+      const pecL = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.36, 0.24), matSkin);
+      pecL.position.set(-0.25, 1.48, 0.48);
+      pecL.rotation.x = 0.30;
+      torsoRoot.add(pecL);
+      const pecR = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.36, 0.24), matSkin);
+      pecR.position.set(0.25, 1.48, 0.48);
+      pecR.rotation.x = 0.30;
+      torsoRoot.add(pecR);
 
       const upperBack = new THREE.Mesh(new THREE.BoxGeometry(1.30, 0.60, 0.60), matShirt);
       upperBack.position.set(0, 1.82, -0.10);
@@ -9380,8 +9384,8 @@ if (typeof window !== "undefined") {
 
       leftLegRoot.position.set(-0.30, 0.68, 0);
       rightLegRoot.position.set(0.30, 0.68, 0);
-      leftLegRoot.rotation.x = 0.18;
-      rightLegRoot.rotation.x = 0.18;
+      leftLegRoot.rotation.x = 0.0;
+      rightLegRoot.rotation.x = 0.0;
       const leftShinRoot = new THREE.Group();
       const rightShinRoot = new THREE.Group();
       const makeLeg = (lr, shinGrp, side) => {
@@ -9391,7 +9395,7 @@ if (typeof window !== "undefined") {
         thighMuscle.position.set(0, -0.18, 0.18); lr.add(thighMuscle);
 
         shinGrp.position.set(0, -0.48, 0);
-        shinGrp.rotation.x = -0.35;
+        shinGrp.rotation.x = -0.18;
         const knee = new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.14, 0.30), matSkinD);
         knee.position.set(0, 0.02, 0.02); shinGrp.add(knee);
         const shin = new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.42, 0.30), matPants);
@@ -14810,8 +14814,8 @@ if (typeof window !== "undefined") {
             enemy.torsoRoot.rotation.x = torsoLean + Math.sin(w * 2) * (sprinting ? 0.08 : 0.05);
             enemy.torsoRoot.rotation.z = Math.sin(w) * (sprinting ? 0.10 : 0.07);
           }
-          const LEG_BASE_TILT = 0.18;
-          const SHIN_BASE_BEND = -0.35;
+          const LEG_BASE_TILT = 0.0;
+          const SHIN_BASE_BEND = -0.18;
           const isSprinting = !!enemy._bossSprinting;
           const legSwingAmp = isSprinting ? 0.75 : 0.50;
           const shinKickAmp = isSprinting ? 0.65 : 0.45;
