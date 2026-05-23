@@ -5,7 +5,9 @@
   Crossfire = PVP; Arena = PVE / co-op vs zombies.
   Build: zone-no-light-v30 (paralysis dart fix + combat knife)
 -->
-
+<!--
+  Swap Med Kit and AMR weapon positions (4↔5) and improve lighting 让AMR和Swap Med Kit没法使用，所以退回merge versions
+-->
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -9244,12 +9246,12 @@ if (typeof window !== "undefined") {
       const pecR = new THREE.Mesh(new THREE.BoxGeometry(0.50, 0.36, 0.16), matSkin);
       pecR.position.set(0.25, 1.58, 0.38); torsoRoot.add(pecR);
 
-      const midTorso = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.34, 0.58), matShirt);
+      const midTorso = new THREE.Mesh(new THREE.BoxGeometry(0.80, 0.30, 0.44), matShirt);
       midTorso.position.y = 1.08; torsoRoot.add(midTorso);
-      const belly = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.32, 0.50), matSkin);
+      const belly = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.28, 0.38), matSkin);
       belly.position.y = 0.85; torsoRoot.add(belly);
 
-      const hip = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.14, 0.36), matPants);
+      const hip = new THREE.Mesh(new THREE.BoxGeometry(0.50, 0.14, 0.34), matPants);
       hip.position.y = 0.68; torsoRoot.add(hip);
 
       const tearL = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.16, 0.06), matSkin);
@@ -9357,32 +9359,36 @@ if (typeof window !== "undefined") {
       makeArm(leftArmRoot, leftForearmRoot, "left");
       makeArm(rightArmRoot, rightForearmRoot, "right");
 
-      const hipBridge = new THREE.Mesh(new THREE.BoxGeometry(0.70, 0.18, 0.40), matPants);
-      hipBridge.position.set(0, 0.50, 0.30);
+      const hipBridge = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.16, 0.36), matPants);
+      hipBridge.position.set(0, 0.52, 0.28);
       root.add(hipBridge);
 
-      leftLegRoot.position.set(-0.30, 0.52, 0.28);
-      rightLegRoot.position.set(0.30, 0.52, 0.28);
-      leftLegRoot.rotation.x = 0.45;
-      rightLegRoot.rotation.x = 0.45;
+      leftLegRoot.position.set(-0.24, 0.52, 0.26);
+      rightLegRoot.position.set(0.24, 0.52, 0.26);
+      leftLegRoot.rotation.x = 0.30;
+      rightLegRoot.rotation.x = 0.30;
       const leftShinRoot = new THREE.Group();
       const rightShinRoot = new THREE.Group();
       const makeLeg = (lr, shinGrp, side) => {
-        const thigh = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.42, 0.24), matPants);
-        thigh.position.set(0, -0.22, 0); lr.add(thigh);
+        const thigh = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.46, 0.34), matPants);
+        thigh.position.set(0, -0.24, 0); lr.add(thigh);
+        const thighMuscle = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.28, 0.16), matSkin);
+        thighMuscle.position.set(0, -0.18, 0.18); lr.add(thighMuscle);
 
-        shinGrp.position.set(0, -0.44, 0);
-        shinGrp.rotation.x = -0.70;
-        const shin = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.40, 0.22), matPants);
-        shin.position.set(0, -0.22, 0); shinGrp.add(shin);
-        const knee = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.12, 0.22), matSkinD);
+        shinGrp.position.set(0, -0.48, 0);
+        shinGrp.rotation.x = -0.45;
+        const knee = new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.14, 0.30), matSkinD);
         knee.position.set(0, 0.02, 0.02); shinGrp.add(knee);
+        const shin = new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.42, 0.30), matPants);
+        shin.position.set(0, -0.22, 0); shinGrp.add(shin);
+        const calf = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.24, 0.14), matSkin);
+        calf.position.set(0, -0.16, -0.16); shinGrp.add(calf);
         if (side === "right") {
-          const tear = new THREE.Mesh(new THREE.BoxGeometry(0.23, 0.08, 0.06), matSkin);
-          tear.position.set(0, -0.30, 0.12); shinGrp.add(tear);
+          const tear = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.08, 0.06), matSkin);
+          tear.position.set(0, -0.32, 0.14); shinGrp.add(tear);
         }
-        const foot = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.10, 0.32), matSkinD);
-        foot.position.set(0, -0.46, 0.04); shinGrp.add(foot);
+        const foot = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.12, 0.38), matSkinD);
+        foot.position.set(0, -0.48, 0.06); shinGrp.add(foot);
         lr.add(shinGrp);
       };
       makeLeg(leftLegRoot, leftShinRoot, "left");
@@ -9391,7 +9397,7 @@ if (typeof window !== "undefined") {
       torsoRoot.add(leftArmRoot, rightArmRoot);
       root.add(torsoRoot, leftLegRoot, rightLegRoot);
       const bossScale = isHell ? 2.6 : 2.0;
-      const bossBaseY = isHell ? 0.86 : 0.66;
+      const bossBaseY = isHell ? 1.10 : 0.85;
       root.scale.set(bossScale, bossScale, bossScale);
       root.position.set(x, bossBaseY, z);
       root.traverse((o) => {
@@ -14593,7 +14599,7 @@ if (typeof window !== "undefined") {
         let bossAnimOverride = false;
         const HUNCH = 0.75;
         const ELBOW_REST = -0.55;
-        const BOSS_BASE_Y = enemy.isHellBoss ? 0.86 : 0.66;
+        const BOSS_BASE_Y = enemy.isHellBoss ? 1.10 : 0.85;
         if (enemy.isBoss) {
           enemy.bossAnimTimer += dt;
           const lfa = enemy.leftForearmRoot;
@@ -14789,8 +14795,8 @@ if (typeof window !== "undefined") {
             enemy.torsoRoot.rotation.x = torsoLean + Math.sin(w * 2) * (sprinting ? 0.08 : 0.05);
             enemy.torsoRoot.rotation.z = Math.sin(w) * (sprinting ? 0.10 : 0.07);
           }
-          const LEG_BASE_TILT = 0.45;
-          const SHIN_BASE_BEND = -0.70;
+          const LEG_BASE_TILT = 0.30;
+          const SHIN_BASE_BEND = -0.45;
           const isSprinting = !!enemy._bossSprinting;
           const legSwingAmp = isSprinting ? 0.75 : 0.50;
           const shinKickAmp = isSprinting ? 0.65 : 0.45;
