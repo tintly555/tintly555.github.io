@@ -12568,7 +12568,14 @@ if (typeof window !== "undefined") {
       const volumes = isBossEnemy ? [
         { cx: 0, cy: 1.98, cz: 0.55, r: 0.45, zone: "head" },
         { cx: 0, cy: 1.55, cz: 0.10, r: 0.90, zone: "body" },
-        { cx: 0, cy: 0.68, cz: 0, r: 0.45, zone: "leg" },
+        { cx: -0.85, cy: 1.40, cz: 0.10, r: 0.42, zone: "body" },
+        { cx: 0.85, cy: 1.40, cz: 0.10, r: 0.42, zone: "body" },
+        { cx: -0.90, cy: 0.90, cz: 0.10, r: 0.38, zone: "body" },
+        { cx: 0.90, cy: 0.90, cz: 0.10, r: 0.38, zone: "body" },
+        { cx: -0.30, cy: 0.68, cz: 0, r: 0.32, zone: "leg" },
+        { cx: 0.30, cy: 0.68, cz: 0, r: 0.32, zone: "leg" },
+        { cx: -0.30, cy: 0.25, cz: 0, r: 0.30, zone: "leg" },
+        { cx: 0.30, cy: 0.25, cz: 0, r: 0.30, zone: "leg" },
       ] : [
         { cx: 0, cy: 1.82, cz: 0, r: 0.3, zone: "head" },
         { cx: 0, cy: 1.12, cz: 0, r: 0.52, zone: "body" },
@@ -12781,7 +12788,14 @@ if (typeof window !== "undefined") {
       const volumes = isBossEnemy ? [
         { cx: 0, cy: 1.98, cz: 0.55, r: 0.45 * pad, zone: "head" },
         { cx: 0, cy: 1.55, cz: 0.10, r: 0.90 * pad, zone: "body" },
-        { cx: 0, cy: 0.68, cz: 0, r: 0.45 * pad, zone: "leg" },
+        { cx: -0.85, cy: 1.40, cz: 0.10, r: 0.42 * pad, zone: "body" },
+        { cx: 0.85, cy: 1.40, cz: 0.10, r: 0.42 * pad, zone: "body" },
+        { cx: -0.90, cy: 0.90, cz: 0.10, r: 0.38 * pad, zone: "body" },
+        { cx: 0.90, cy: 0.90, cz: 0.10, r: 0.38 * pad, zone: "body" },
+        { cx: -0.30, cy: 0.68, cz: 0, r: 0.32 * pad, zone: "leg" },
+        { cx: 0.30, cy: 0.68, cz: 0, r: 0.32 * pad, zone: "leg" },
+        { cx: -0.30, cy: 0.25, cz: 0, r: 0.30 * pad, zone: "leg" },
+        { cx: 0.30, cy: 0.25, cz: 0, r: 0.30 * pad, zone: "leg" },
       ] : [
         { cx: 0, cy: 1.82, cz: 0, r: 0.3 * pad, zone: "head" },
         { cx: 0, cy: 1.12, cz: 0, r: 0.52 * pad, zone: "body" },
@@ -14195,9 +14209,11 @@ if (typeof window !== "undefined") {
     }
 
     function spawnBossProjectile(ox, oy, oz, dx, dy, dz, damage) {
-      const geo = new THREE.SphereGeometry(0.25, 8, 6);
+      const geo = new THREE.SphereGeometry(0.45, 10, 8);
       const mat = new THREE.MeshBasicMaterial({ color: 0xff4422 });
       const mesh = new THREE.Mesh(geo, mat);
+      const glow = new THREE.PointLight(0xff2200, 3, 6);
+      mesh.add(glow);
       mesh.position.set(ox, oy, oz);
       scene.add(mesh);
       const spd = 18;
@@ -14582,8 +14598,18 @@ if (typeof window !== "undefined") {
             ) {
               enemy.attackCooldownTimer = enemy.attackCooldown;
               if (enemy.isBoss) {
+                const bScale = enemy.isHellBoss ? 2.6 : 2.0;
+                const bBaseY = enemy.isHellBoss ? 1.30 : 1.00;
+                const headLocalY = 1.96;
+                const headLocalZ = 0.50;
+                const hunch = 0.18;
+                const mouthWorldY = bBaseY + (headLocalY * Math.cos(hunch) - headLocalZ * Math.sin(hunch)) * bScale - 0.15 * bScale;
+                const mouthWorldZ = (headLocalZ * Math.cos(hunch) + headLocalY * Math.sin(hunch)) * bScale;
+                const yaw = enemy.visYaw || enemy.facingYaw || 0;
+                const mouthX = enemy.group.position.x + Math.sin(yaw) * mouthWorldZ;
+                const mouthZ = enemy.group.position.z + Math.cos(yaw) * mouthWorldZ;
                 spawnBossProjectile(
-                  enemy.group.position.x, 1.6, enemy.group.position.z,
+                  mouthX, mouthWorldY, mouthZ,
                   _enemyShotDir.x, _enemyShotDir.y, _enemyShotDir.z,
                   enemy.attackDamage
                 );
