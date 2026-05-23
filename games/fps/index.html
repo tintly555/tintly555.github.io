@@ -14431,7 +14431,7 @@ if (typeof window !== "undefined") {
           if (!shouldStopForRanged && dist > 1.8) {
             let moveSpeed = enemy.speed;
             if (enemy._bossSprinting) {
-              moveSpeed = enemy.isHellBoss ? 22 : 18;
+              moveSpeed = enemy.isHellBoss ? 19.5 : 16.25;
             }
             const totalStep = moveSpeed * dt;
             const dLen = Math.sqrt(dx * dx + dz * dz);
@@ -14439,7 +14439,9 @@ if (typeof window !== "undefined") {
             let dirX = 0, dirZ = 0;
             const flow = getFlowDirection(enemy.group.position.x, enemy.group.position.z);
             let losClear = enemy._lastLosClear;
-            if (losClear === undefined || (visFrameCounter + ei) % 2 === 0) {
+            if (enemy.isBoss) {
+              losClear = true;
+            } else if (losClear === undefined || (visFrameCounter + ei) % 2 === 0) {
               losClear = clearLosToTarget(
                 enemy.group.position.x,
                 enemy.group.position.z,
