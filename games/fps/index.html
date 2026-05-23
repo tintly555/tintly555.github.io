@@ -9239,28 +9239,24 @@ if (typeof window !== "undefined") {
       const matVein = new THREE.MeshStandardMaterial({ color: veinColor, roughness: 0.9, metalness: 0.1 });
       const matBone = new THREE.MeshStandardMaterial({ color: 0xd4c8a8, roughness: 0.94, metalness: 0 });
 
-      // Chest: large, pushed forward
       const chest = new THREE.Mesh(new THREE.BoxGeometry(1.30, 0.70, 0.65), matShirt);
-      chest.position.set(0, 1.55, 0.20);
-      chest.rotation.x = 0.15;
+      chest.position.set(0, 1.55, 0.15);
       torsoRoot.add(chest);
       const pecL = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.34, 0.16), matSkin);
-      pecL.position.set(-0.25, 1.52, 0.50); torsoRoot.add(pecL);
+      pecL.position.set(-0.25, 1.52, 0.46); torsoRoot.add(pecL);
       const pecR = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.34, 0.16), matSkin);
-      pecR.position.set(0.25, 1.52, 0.50); torsoRoot.add(pecR);
+      pecR.position.set(0.25, 1.52, 0.46); torsoRoot.add(pecR);
 
-      // Upper back: tilted backward to form the hump curve
       const upperBack = new THREE.Mesh(new THREE.BoxGeometry(1.30, 0.60, 0.60), matShirt);
-      upperBack.position.set(0, 1.80, -0.20);
-      upperBack.rotation.x = -0.30;
+      upperBack.position.set(0, 1.82, -0.10);
+      upperBack.rotation.x = 0.25;
       torsoRoot.add(upperBack);
 
-      // Narrow waist
-      const midTorso = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.30, 0.40), matShirt);
+      const midTorso = new THREE.Mesh(new THREE.BoxGeometry(0.82, 0.32, 0.46), matShirt);
       midTorso.position.y = 1.08; torsoRoot.add(midTorso);
-      const belly = new THREE.Mesh(new THREE.BoxGeometry(0.60, 0.26, 0.36), matSkin);
+      const belly = new THREE.Mesh(new THREE.BoxGeometry(0.70, 0.28, 0.40), matSkin);
       belly.position.y = 0.88; torsoRoot.add(belly);
-      const hip = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.14, 0.32), matPants);
+      const hip = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.16, 0.38), matPants);
       hip.position.y = 0.70; torsoRoot.add(hip);
 
       const tearL = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.16, 0.06), matSkin);
@@ -9272,18 +9268,17 @@ if (typeof window !== "undefined") {
       const tVein2 = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.22, 0.05), matVein);
       tVein2.position.set(-0.40, 1.38, 0.36); torsoRoot.add(tVein2);
 
-      // Traps: slope from shoulders upward to back, angled to form hunch curve
-      const trapL = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.34, 0.44), matSkin);
-      trapL.position.set(-0.40, 2.06, -0.12);
-      trapL.rotation.x = -0.25;
+      const trapL = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.36, 0.46), matSkin);
+      trapL.position.set(-0.40, 2.04, -0.06);
+      trapL.rotation.x = 0.20;
       torsoRoot.add(trapL);
-      const trapR = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.34, 0.44), matSkin);
-      trapR.position.set(0.40, 2.06, -0.12);
-      trapR.rotation.x = -0.25;
+      const trapR = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.36, 0.46), matSkin);
+      trapR.position.set(0.40, 2.04, -0.06);
+      trapR.rotation.x = 0.20;
       torsoRoot.add(trapR);
       const neckTrap = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.30, 0.46), matSkin);
-      neckTrap.position.set(0, 2.08, -0.08);
-      neckTrap.rotation.x = -0.20;
+      neckTrap.position.set(0, 2.06, -0.02);
+      neckTrap.rotation.x = 0.18;
       torsoRoot.add(neckTrap);
 
       const neck = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.12, 0.28), matSkin);
@@ -9333,9 +9328,11 @@ if (typeof window !== "undefined") {
       const earL = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.10, 0.06), matSkinD);
       earL.position.set(-0.24, 0.02, 0); headGroup.add(earL);
       const earR = earL.clone(); earR.position.x = 0.24; headGroup.add(earR);
-      headGroup.position.set(0, 1.98, 0.55); torsoRoot.add(headGroup);
+      headGroup.position.set(0, 1.96, 0.50);
+      headGroup.rotation.x = 0.25;
+      torsoRoot.add(headGroup);
 
-      torsoRoot.rotation.x = 0;
+      torsoRoot.rotation.x = 0.18;
 
       leftArmRoot.position.set(-0.80, 1.76, 0.10);
       rightArmRoot.position.set(0.80, 1.76, 0.10);
@@ -9377,14 +9374,14 @@ if (typeof window !== "undefined") {
       makeArm(leftArmRoot, leftForearmRoot, "left");
       makeArm(rightArmRoot, rightForearmRoot, "right");
 
-      const hipBridge = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.16, 0.34), matPants);
+      const hipBridge = new THREE.Mesh(new THREE.BoxGeometry(0.64, 0.18, 0.38), matPants);
       hipBridge.position.set(0, 0.70, 0);
       root.add(hipBridge);
 
-      leftLegRoot.position.set(-0.22, 0.68, 0);
-      rightLegRoot.position.set(0.22, 0.68, 0);
-      leftLegRoot.rotation.x = 0.12;
-      rightLegRoot.rotation.x = 0.12;
+      leftLegRoot.position.set(-0.30, 0.68, 0);
+      rightLegRoot.position.set(0.30, 0.68, 0);
+      leftLegRoot.rotation.x = 0.18;
+      rightLegRoot.rotation.x = 0.18;
       const leftShinRoot = new THREE.Group();
       const rightShinRoot = new THREE.Group();
       const makeLeg = (lr, shinGrp, side) => {
@@ -9394,7 +9391,7 @@ if (typeof window !== "undefined") {
         thighMuscle.position.set(0, -0.18, 0.18); lr.add(thighMuscle);
 
         shinGrp.position.set(0, -0.48, 0);
-        shinGrp.rotation.x = -0.25;
+        shinGrp.rotation.x = -0.35;
         const knee = new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.14, 0.30), matSkinD);
         knee.position.set(0, 0.02, 0.02); shinGrp.add(knee);
         const shin = new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.42, 0.30), matPants);
@@ -14615,7 +14612,7 @@ if (typeof window !== "undefined") {
         const bobble = enemy.moving ? Math.cos(enemy.walkTime * 5.1 + ei * 1.2) * 0.028 : 0;
 
         let bossAnimOverride = false;
-        const HUNCH = 0;
+        const HUNCH = 0.18;
         const ELBOW_REST = -0.55;
         const BOSS_BASE_Y = enemy.isHellBoss ? 1.30 : 1.00;
         if (enemy.isBoss) {
@@ -14813,8 +14810,8 @@ if (typeof window !== "undefined") {
             enemy.torsoRoot.rotation.x = torsoLean + Math.sin(w * 2) * (sprinting ? 0.08 : 0.05);
             enemy.torsoRoot.rotation.z = Math.sin(w) * (sprinting ? 0.10 : 0.07);
           }
-          const LEG_BASE_TILT = 0.12;
-          const SHIN_BASE_BEND = -0.25;
+          const LEG_BASE_TILT = 0.18;
+          const SHIN_BASE_BEND = -0.35;
           const isSprinting = !!enemy._bossSprinting;
           const legSwingAmp = isSprinting ? 0.75 : 0.50;
           const shinKickAmp = isSprinting ? 0.65 : 0.45;
