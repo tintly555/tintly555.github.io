@@ -9239,20 +9239,24 @@ if (typeof window !== "undefined") {
       const matVein = new THREE.MeshStandardMaterial({ color: veinColor, roughness: 0.9, metalness: 0.1 });
       const matBone = new THREE.MeshStandardMaterial({ color: 0xd4c8a8, roughness: 0.94, metalness: 0 });
 
-      const chest = new THREE.Mesh(new THREE.BoxGeometry(1.30, 0.80, 0.70), matShirt);
-      chest.position.y = 1.55; torsoRoot.add(chest);
-      const pecL = new THREE.Mesh(new THREE.BoxGeometry(0.50, 0.36, 0.16), matSkin);
-      pecL.position.set(-0.25, 1.58, 0.38); torsoRoot.add(pecL);
-      const pecR = new THREE.Mesh(new THREE.BoxGeometry(0.50, 0.36, 0.16), matSkin);
-      pecR.position.set(0.25, 1.58, 0.38); torsoRoot.add(pecR);
+      // Upper back: huge, sits high and slightly backward — creates the hunch silhouette
+      const upperBack = new THREE.Mesh(new THREE.BoxGeometry(1.40, 0.70, 0.80), matShirt);
+      upperBack.position.set(0, 1.70, -0.15); torsoRoot.add(upperBack);
+      // Chest: slightly forward of upper back
+      const chest = new THREE.Mesh(new THREE.BoxGeometry(1.30, 0.60, 0.50), matShirt);
+      chest.position.set(0, 1.50, 0.25); torsoRoot.add(chest);
+      const pecL = new THREE.Mesh(new THREE.BoxGeometry(0.50, 0.36, 0.18), matSkin);
+      pecL.position.set(-0.25, 1.52, 0.48); torsoRoot.add(pecL);
+      const pecR = new THREE.Mesh(new THREE.BoxGeometry(0.50, 0.36, 0.18), matSkin);
+      pecR.position.set(0.25, 1.52, 0.48); torsoRoot.add(pecR);
 
-      const midTorso = new THREE.Mesh(new THREE.BoxGeometry(0.80, 0.30, 0.44), matShirt);
+      // Narrow waist
+      const midTorso = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.30, 0.40), matShirt);
       midTorso.position.y = 1.08; torsoRoot.add(midTorso);
-      const belly = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.28, 0.38), matSkin);
-      belly.position.y = 0.85; torsoRoot.add(belly);
-
-      const hip = new THREE.Mesh(new THREE.BoxGeometry(0.50, 0.14, 0.34), matPants);
-      hip.position.y = 0.68; torsoRoot.add(hip);
+      const belly = new THREE.Mesh(new THREE.BoxGeometry(0.60, 0.26, 0.36), matSkin);
+      belly.position.y = 0.88; torsoRoot.add(belly);
+      const hip = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.14, 0.32), matPants);
+      hip.position.y = 0.70; torsoRoot.add(hip);
 
       const tearL = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.16, 0.06), matSkin);
       tearL.position.set(-0.45, 1.42, 0.36); torsoRoot.add(tearL);
@@ -9263,25 +9267,31 @@ if (typeof window !== "undefined") {
       const tVein2 = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.22, 0.05), matVein);
       tVein2.position.set(-0.40, 1.38, 0.36); torsoRoot.add(tVein2);
 
-      const trapL = new THREE.Mesh(new THREE.BoxGeometry(0.40, 0.36, 0.40), matSkin);
-      trapL.position.set(-0.44, 2.00, -0.04); torsoRoot.add(trapL);
-      const trapR = new THREE.Mesh(new THREE.BoxGeometry(0.40, 0.36, 0.40), matSkin);
-      trapR.position.set(0.44, 2.00, -0.04); torsoRoot.add(trapR);
-      const neckTrap = new THREE.Mesh(new THREE.BoxGeometry(0.60, 0.32, 0.46), matSkin);
-      neckTrap.position.set(0, 2.04, -0.04); torsoRoot.add(neckTrap);
+      // Massive traps: the highest point, towering above the head
+      const trapL = new THREE.Mesh(new THREE.BoxGeometry(0.50, 0.50, 0.54), matSkin);
+      trapL.position.set(-0.42, 2.18, -0.10); torsoRoot.add(trapL);
+      const trapR = new THREE.Mesh(new THREE.BoxGeometry(0.50, 0.50, 0.54), matSkin);
+      trapR.position.set(0.42, 2.18, -0.10); torsoRoot.add(trapR);
+      const neckTrap = new THREE.Mesh(new THREE.BoxGeometry(0.70, 0.44, 0.56), matSkin);
+      neckTrap.position.set(0, 2.22, -0.10); torsoRoot.add(neckTrap);
+      // Back hump
+      const backHump = new THREE.Mesh(new THREE.BoxGeometry(1.10, 0.50, 0.40), matShirt);
+      backHump.position.set(0, 2.00, -0.40); torsoRoot.add(backHump);
 
-      const neck = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.16, 0.34), matSkin);
-      neck.position.set(0, 2.24, 0); torsoRoot.add(neck);
+      const neck = new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.12, 0.30), matSkin);
+      neck.position.set(0, 2.00, 0.22); torsoRoot.add(neck);
       const neckVein1 = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.18, 0.05), matVein);
-      neckVein1.position.set(0.10, 2.20, 0.14); torsoRoot.add(neckVein1);
+      neckVein1.position.set(0.10, 2.06, 0.30); torsoRoot.add(neckVein1);
       const neckVein2 = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.16, 0.05), matVein);
-      neckVein2.position.set(-0.12, 2.18, 0.12); torsoRoot.add(neckVein2);
+      neckVein2.position.set(-0.12, 2.04, 0.28); torsoRoot.add(neckVein2);
 
-      const deltL = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.32, 0.38), matSkin);
-      deltL.position.set(-0.72, 1.88, 0); torsoRoot.add(deltL);
-      const deltR = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.32, 0.38), matSkin);
-      deltR.position.set(0.72, 1.88, 0); torsoRoot.add(deltR);
+      // Delts at shoulder height
+      const deltL = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.36, 0.42), matSkin);
+      deltL.position.set(-0.76, 1.90, 0.05); torsoRoot.add(deltL);
+      const deltR = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.36, 0.42), matSkin);
+      deltR.position.set(0.76, 1.90, 0.05); torsoRoot.add(deltR);
 
+      // Head: low and forward, BELOW the traps — creates the hunched look
       const headGroup = new THREE.Group();
       const skull = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.46, 0.42), matSkin);
       headGroup.add(skull);
@@ -9315,12 +9325,12 @@ if (typeof window !== "undefined") {
       const earL = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.10, 0.06), matSkinD);
       earL.position.set(-0.24, 0.02, 0); headGroup.add(earL);
       const earR = earL.clone(); earR.position.x = 0.24; headGroup.add(earR);
-      headGroup.position.set(0, 2.22, 0.18); torsoRoot.add(headGroup);
+      headGroup.position.set(0, 1.90, 0.40); torsoRoot.add(headGroup);
 
-      torsoRoot.rotation.x = 0.75;
+      torsoRoot.rotation.x = 0;
 
-      leftArmRoot.position.set(-0.76, 1.84, 0);
-      rightArmRoot.position.set(0.76, 1.84, 0);
+      leftArmRoot.position.set(-0.80, 1.76, 0.10);
+      rightArmRoot.position.set(0.80, 1.76, 0.10);
       const makeArm = (ar, forearmGrp, side) => {
         const shoulder = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.26, 0.48), matShirt);
         shoulder.position.set(0, -0.06, 0); ar.add(shoulder);
@@ -9359,14 +9369,14 @@ if (typeof window !== "undefined") {
       makeArm(leftArmRoot, leftForearmRoot, "left");
       makeArm(rightArmRoot, rightForearmRoot, "right");
 
-      const hipBridge = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.16, 0.36), matPants);
-      hipBridge.position.set(0, 0.52, 0.28);
+      const hipBridge = new THREE.Mesh(new THREE.BoxGeometry(0.52, 0.16, 0.34), matPants);
+      hipBridge.position.set(0, 0.70, 0);
       root.add(hipBridge);
 
-      leftLegRoot.position.set(-0.24, 0.52, 0.26);
-      rightLegRoot.position.set(0.24, 0.52, 0.26);
-      leftLegRoot.rotation.x = 0.30;
-      rightLegRoot.rotation.x = 0.30;
+      leftLegRoot.position.set(-0.22, 0.68, 0);
+      rightLegRoot.position.set(0.22, 0.68, 0);
+      leftLegRoot.rotation.x = 0.0;
+      rightLegRoot.rotation.x = 0.0;
       const leftShinRoot = new THREE.Group();
       const rightShinRoot = new THREE.Group();
       const makeLeg = (lr, shinGrp, side) => {
@@ -9376,7 +9386,7 @@ if (typeof window !== "undefined") {
         thighMuscle.position.set(0, -0.18, 0.18); lr.add(thighMuscle);
 
         shinGrp.position.set(0, -0.48, 0);
-        shinGrp.rotation.x = -0.45;
+        shinGrp.rotation.x = -0.15;
         const knee = new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.14, 0.30), matSkinD);
         knee.position.set(0, 0.02, 0.02); shinGrp.add(knee);
         const shin = new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.42, 0.30), matPants);
@@ -9397,7 +9407,7 @@ if (typeof window !== "undefined") {
       torsoRoot.add(leftArmRoot, rightArmRoot);
       root.add(torsoRoot, leftLegRoot, rightLegRoot);
       const bossScale = isHell ? 2.6 : 2.0;
-      const bossBaseY = isHell ? 1.10 : 0.85;
+      const bossBaseY = isHell ? 1.30 : 1.00;
       root.scale.set(bossScale, bossScale, bossScale);
       root.position.set(x, bossBaseY, z);
       root.traverse((o) => {
@@ -12547,9 +12557,9 @@ if (typeof window !== "undefined") {
       _ehLo.copy(raycaster.ray.origin).applyMatrix4(_invEnemyMat);
       _ehLd.copy(raycaster.ray.direction).transformDirection(_invEnemyMat).normalize();
       const volumes = isBossEnemy ? [
-        { cx: 0, cy: 1.65, cz: 1.65, r: 0.50, zone: "head" },
-        { cx: 0, cy: 1.05, cz: 0.85, r: 0.95, zone: "body" },
-        { cx: 0, cy: 0.48, cz: 0.28, r: 0.45, zone: "leg" },
+        { cx: 0, cy: 1.90, cz: 0.40, r: 0.45, zone: "head" },
+        { cx: 0, cy: 1.50, cz: 0.05, r: 0.90, zone: "body" },
+        { cx: 0, cy: 0.68, cz: 0, r: 0.45, zone: "leg" },
       ] : [
         { cx: 0, cy: 1.82, cz: 0, r: 0.3, zone: "head" },
         { cx: 0, cy: 1.12, cz: 0, r: 0.52, zone: "body" },
@@ -12760,9 +12770,9 @@ if (typeof window !== "undefined") {
       _ehLo.copy(raycaster.ray.origin).applyMatrix4(_invEnemyMat);
       _ehLd.copy(raycaster.ray.direction).transformDirection(_invEnemyMat).normalize();
       const volumes = isBossEnemy ? [
-        { cx: 0, cy: 1.65, cz: 1.65, r: 0.50 * pad, zone: "head" },
-        { cx: 0, cy: 1.05, cz: 0.85, r: 0.95 * pad, zone: "body" },
-        { cx: 0, cy: 0.48, cz: 0.28, r: 0.45 * pad, zone: "leg" },
+        { cx: 0, cy: 1.90, cz: 0.40, r: 0.45 * pad, zone: "head" },
+        { cx: 0, cy: 1.50, cz: 0.05, r: 0.90 * pad, zone: "body" },
+        { cx: 0, cy: 0.68, cz: 0, r: 0.45 * pad, zone: "leg" },
       ] : [
         { cx: 0, cy: 1.82, cz: 0, r: 0.3 * pad, zone: "head" },
         { cx: 0, cy: 1.12, cz: 0, r: 0.52 * pad, zone: "body" },
@@ -14597,9 +14607,9 @@ if (typeof window !== "undefined") {
         const bobble = enemy.moving ? Math.cos(enemy.walkTime * 5.1 + ei * 1.2) * 0.028 : 0;
 
         let bossAnimOverride = false;
-        const HUNCH = 0.75;
+        const HUNCH = 0;
         const ELBOW_REST = -0.55;
-        const BOSS_BASE_Y = enemy.isHellBoss ? 1.10 : 0.85;
+        const BOSS_BASE_Y = enemy.isHellBoss ? 1.30 : 1.00;
         if (enemy.isBoss) {
           enemy.bossAnimTimer += dt;
           const lfa = enemy.leftForearmRoot;
@@ -14795,8 +14805,8 @@ if (typeof window !== "undefined") {
             enemy.torsoRoot.rotation.x = torsoLean + Math.sin(w * 2) * (sprinting ? 0.08 : 0.05);
             enemy.torsoRoot.rotation.z = Math.sin(w) * (sprinting ? 0.10 : 0.07);
           }
-          const LEG_BASE_TILT = 0.30;
-          const SHIN_BASE_BEND = -0.45;
+          const LEG_BASE_TILT = 0;
+          const SHIN_BASE_BEND = -0.15;
           const isSprinting = !!enemy._bossSprinting;
           const legSwingAmp = isSprinting ? 0.75 : 0.50;
           const shinKickAmp = isSprinting ? 0.65 : 0.45;
