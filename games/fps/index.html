@@ -13282,13 +13282,41 @@ if (typeof window !== "undefined") {
           }
         }
 
+        let bestProjIdx = -1;
+        let bestProjT = Infinity;
+        for (let pi = 0; pi < bossProjectiles.length; pi++) {
+          const proj = bossProjectiles[pi];
+          const toP = new THREE.Vector3().subVectors(proj.mesh.position, ray.ray.origin);
+          const along = toP.dot(ray.ray.direction);
+          if (along < 0.02 || along > 160) continue;
+          const closest = new THREE.Vector3().copy(ray.ray.origin).addScaledVector(ray.ray.direction, along);
+          const dist2 = closest.distanceToSquared(proj.mesh.position);
+          if (dist2 < 0.65 * 0.65 && along < bestProjT) {
+            bestProjIdx = pi;
+            bestProjT = along;
+          }
+        }
+
         const wallHits = ray.intersectObjects(wallMeshes, false);
         const wallHit = wallHits.length > 0 ? wallHits[0] : null;
 
         const enemyDist = bestEnemy ? bestEnemyHitT : Infinity;
         const rpDist = bestRpId != null ? bestRpHitT : Infinity;
         const wallDist = wallHit ? wallHit.distance : Infinity;
-        const closestDist = Math.min(enemyDist, rpDist, wallDist);
+        const projDist = bestProjIdx >= 0 ? bestProjT : Infinity;
+        const closestDist = Math.min(enemyDist, rpDist, wallDist, projDist);
+
+        if (closestDist === projDist && bestProjIdx >= 0) {
+          const proj = bossProjectiles[bestProjIdx];
+          proj.hp -= w.damageBody;
+          const hitPt = new THREE.Vector3().copy(ray.ray.origin).addScaledVector(ray.ray.direction, bestProjT);
+          createSparks(hitPt, 0xff6622);
+          createBulletTrail(muzzleStart, hitPt, w.color);
+          if (proj.hp <= 0) {
+            destroyBossProjectile(bestProjIdx);
+          }
+          continue;
+        }
 
         if (closestDist === enemyDist && bestEnemy && bestEnemyHitT < Infinity) {
           const bp = _ehHitWorld.copy(ray.ray.origin).addScaledVector(ray.ray.direction, bestEnemyHitT);
@@ -14216,27 +14244,50 @@ if (typeof window !== "undefined") {
       mesh.add(glow);
       mesh.position.set(ox, oy, oz);
       scene.add(mesh);
-      const spd = 18;
+      const spd = 22;
       bossProjectiles.push({
         mesh,
         velocity: new THREE.Vector3(dx * spd, dy * spd, dz * spd),
-        life: 3,
-        damage: damage || 8
+        life: 5,
+        damage: damage || 8,
+        hp: 60
       });
     }
 
+    function destroyBossProjectile(idx) {
+      const bp = bossProjectiles[idx];
+      scene.remove(bp.mesh);
+      bp.mesh.geometry.dispose();
+      bp.mesh.material.dispose();
+      bossProjectiles.splice(idx, 1);
+    }
+
     function updateBossProjectiles(dt) {
+      const HOMING_TURN = 3.5;
       for (let i = bossProjectiles.length - 1; i >= 0; i--) {
         const bp = bossProjectiles[i];
+        const toPx = player.position.x - bp.mesh.position.x;
+        const toPy = (player.position.y + 0.8) - bp.mesh.position.y;
+        const toPz = player.position.z - bp.mesh.position.z;
+        const toLen = Math.sqrt(toPx * toPx + toPy * toPy + toPz * toPz);
+        if (toLen > 0.1) {
+          const desX = toPx / toLen;
+          const desY = toPy / toLen;
+          const desZ = toPz / toLen;
+          const curSpd = bp.velocity.length();
+          const vn = bp.velocity.clone().normalize();
+          vn.x += (desX - vn.x) * HOMING_TURN * dt;
+          vn.y += (desY - vn.y) * HOMING_TURN * dt;
+          vn.z += (desZ - vn.z) * HOMING_TURN * dt;
+          vn.normalize();
+          bp.velocity.set(vn.x * curSpd, vn.y * curSpd, vn.z * curSpd);
+        }
         bp.mesh.position.x += bp.velocity.x * dt;
         bp.mesh.position.y += bp.velocity.y * dt;
         bp.mesh.position.z += bp.velocity.z * dt;
         bp.life -= dt;
-        if (bp.life <= 0) {
-          scene.remove(bp.mesh);
-          bp.mesh.geometry.dispose();
-          bp.mesh.material.dispose();
-          bossProjectiles.splice(i, 1);
+        if (bp.life <= 0 || bp.hp <= 0) {
+          destroyBossProjectile(i);
           continue;
         }
         const pdx = bp.mesh.position.x - player.position.x;
@@ -14249,10 +14300,7 @@ if (typeof window !== "undefined") {
           state.flashTimer = 0.25;
           player.regenTimer = 0;
           updateHud();
-          scene.remove(bp.mesh);
-          bp.mesh.geometry.dispose();
-          bp.mesh.material.dispose();
-          bossProjectiles.splice(i, 1);
+          destroyBossProjectile(i);
         }
       }
     }
@@ -14403,7 +14451,49 @@ if (typeof window !== "undefined") {
             drawEnemyHp(enemy);
           }
 
-          if (!enemy.summonTriggered && enemy.hp <= enemy.maxHp * 0.5) {
+          if (enemy.isHellBoss) {
+            if (!enemy._hellSummonStage) enemy._hellSummonStage = 0;
+            const hpPct = enemy.hp / enemy.maxHp;
+            const stage = Math.floor((1 - hpPct) * 10);
+            if (stage > enemy._hellSummonStage && hpPct > 0.10) {
+              const wavesToSpawn = stage - enemy._hellSummonStage;
+              enemy._hellSummonStage = stage;
+              enemy.bossAnimState = "summoning";
+              enemy.bossAnimTimer = 0;
+              playBossRoarSfx();
+              const types = ["normal", "fast", "gunner", "tank"];
+              for (let w = 0; w < wavesToSpawn; w++) {
+                for (let si = 0; si < 10; si++) {
+                  const angle = (si / 10) * Math.PI * 2 + w * 0.5;
+                  const rad = 5 + Math.random() * 3;
+                  const sx = enemy.group.position.x + Math.cos(angle) * rad;
+                  const sz = enemy.group.position.z + Math.sin(angle) * rad;
+                  const t = types[Math.floor(Math.random() * types.length)];
+                  const minion = makeZombie(sx, sz, t);
+                  minion.netIndex = state.enemies.length;
+                  minion.aware = true;
+                  drawEnemyHp(minion);
+                  state.enemies.push(minion);
+                }
+              }
+            }
+            if (!enemy._hellBossSummoned && hpPct <= 0.10) {
+              enemy._hellBossSummoned = true;
+              enemy.bossAnimState = "summoning";
+              enemy.bossAnimTimer = 0;
+              playBossRoarSfx();
+              for (let si = 0; si < 3; si++) {
+                const angle = (si / 3) * Math.PI * 2;
+                const sx = enemy.group.position.x + Math.cos(angle) * 8;
+                const sz = enemy.group.position.z + Math.sin(angle) * 8;
+                const miniBoss = makeHormoneZombie(sx, sz, false);
+                miniBoss.netIndex = state.enemies.length;
+                miniBoss.aware = true;
+                drawEnemyHp(miniBoss);
+                state.enemies.push(miniBoss);
+              }
+            }
+          } else if (!enemy.summonTriggered && enemy.hp <= enemy.maxHp * 0.5) {
             enemy.summonTriggered = true;
             enemy.bossAnimState = "summoning";
             enemy.bossAnimTimer = 0;
