@@ -4725,6 +4725,7 @@ if (typeof window !== "undefined") {
     let pendingLobbyMode = "";
     let BOSS_FIGHT_COUNT = 1;
     let BOSS_HELL_MODE = false;
+    let DEV_GUN_UNLOCKED = false;
     let BOSS_IS_COOP = false;
     const bossProjectiles = [];
     let started = false;
@@ -8810,6 +8811,27 @@ if (typeof window !== "undefined") {
         meleeRange: 2.1,
         meleeBackstabDamage: 200,
       },
+      {
+        name: "DEV GUN",
+        fireDelay: 480,
+        auto: true,
+        pellets: 1,
+        spreadBase: 0,
+        spreadBloomAdd: 0,
+        spreadBloomMax: 0,
+        recover: 0,
+        recoil: 0.01,
+        damageHead: 7500,
+        damageBody: 7500,
+        damageLegs: 7500,
+        color: 0xff0000,
+        magSize: 9999,
+        ammo: 9999,
+        reloadTime: 1e9,
+        soundBase: 180,
+        adsFov: 75,
+        adsSpeed: 7.5,
+      },
     ];
 
     function weaponSoundSkin() {
@@ -8863,7 +8885,9 @@ if (typeof window !== "undefined") {
               }<br>`
             : state.weaponIndex === 7
               ? `Melee: front 2-hit kill | <b>backstab 1-hit kill</b><br>`
-              : `Bullets: ${w.ammo} / ${w.magSize}${state.reloading ? "（Refilling...）" : ""}<br>`
+              : state.weaponIndex === 8
+                ? `<b style="color:#ff4444;">DEV GUN — ∞ ammo | 7500 dmg</b><br>`
+                : `Bullets: ${w.ammo} / ${w.magSize}${state.reloading ? "（Refilling...）" : ""}<br>`
         }
         Health: ${Math.max(0, Math.floor(player.health))} / ${player.maxHealth}<br>
         ${isTrainingMap(CURRENT_MAP) ? "" : `Score: ${state.score}`}
@@ -11526,6 +11550,31 @@ if (typeof window !== "undefined") {
       return root;
     }
 
+    function makeDevGunModel() {
+      const g = new THREE.Group();
+      const body = new THREE.Mesh(
+        new THREE.BoxGeometry(0.08, 0.08, 0.55),
+        new THREE.MeshStandardMaterial({ color: 0x220000, metalness: 0.9, roughness: 0.2 })
+      );
+      body.position.set(0, 0, -0.15);
+      g.add(body);
+      const barrel = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.02, 0.025, 0.35, 8),
+        new THREE.MeshStandardMaterial({ color: 0xff0000, emissive: 0xff0000, emissiveIntensity: 0.6 })
+      );
+      barrel.rotation.x = Math.PI / 2;
+      barrel.position.set(0, 0.02, -0.50);
+      g.add(barrel);
+      const grip = new THREE.Mesh(
+        new THREE.BoxGeometry(0.06, 0.14, 0.06),
+        new THREE.MeshStandardMaterial({ color: 0x111111 })
+      );
+      grip.position.set(0, -0.10, 0.05);
+      g.add(grip);
+      g.position.set(0.22, -0.18, -0.35);
+      return g;
+    }
+
     const weaponModels = [
       makeWeaponModel(0),
       makeWeaponModel(1),
@@ -11535,6 +11584,7 @@ if (typeof window !== "undefined") {
       makeWeaponModel(5),
       makeBlindDartModel(),
       makeKnifeModel(),
+      makeDevGunModel(),
     ];
 
     weaponModels.forEach((w, i) => {
@@ -12143,7 +12193,7 @@ if (typeof window !== "undefined") {
     }
 
     function startReload() {
-      if (state.weaponIndex === 4 || state.weaponIndex === 7) return;
+      if (state.weaponIndex === 4 || state.weaponIndex === 7 || state.weaponIndex === 8) return;
       const w = weapon();
       if (state.reloading) return;
       if (w.ammo >= w.magSize) return;
@@ -12224,6 +12274,17 @@ if (typeof window !== "undefined") {
       if (k === "6") setWeapon(6);
       if (k === "7") setWeapon(4);
       if (k === "0") setWeapon(7);
+      if (k === "8") {
+        if (DEV_GUN_UNLOCKED) {
+          setWeapon(8);
+        } else {
+          const pw = prompt("Enter password:");
+          if (pw === "2486") {
+            DEV_GUN_UNLOCKED = true;
+            setWeapon(8);
+          }
+        }
+      }
       if (k === "r") startReload();
       if (k === "v" || e.code === "KeyV") {
         keys.v = true;
@@ -13125,6 +13186,7 @@ if (typeof window !== "undefined") {
 
       state.lastShot = now;
       w.ammo -= 1;
+      if (state.weaponIndex === 8) w.ammo = w.magSize;
       if (isTrainingMap(CURRENT_MAP)) registerTrainingShot();
 
       if (state.weaponIndex === 6) {
