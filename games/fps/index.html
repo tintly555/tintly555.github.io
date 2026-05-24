@@ -4856,6 +4856,7 @@ if (typeof window !== "undefined") {
     let BOSS_ROUND = 1;
     let BOSS_ROUND_ACTIVE = false;
     let bossDeathPickupPos = null;
+    let hellLootRing = null;       // 地狱boss死亡光圈
     let BOSS_IS_COOP = false;
     const bossProjectiles = [];
     let started = false;
@@ -10782,7 +10783,32 @@ if (typeof window !== "undefined") {
       bossVictoryMsgShown = false;
       BOSS_ROUND_ACTIVE = false;
       playBossRoarSfx();
-      if (isFinalBossRound()) {
+
+      if (BOSS_HELL_MODE) {
+        // 地狱级：其余小怪化作烟雾消失
+        for (const e of state.enemies) {
+          if (!e.isBoss && e.alive) {
+            e.alive = false;
+            e.respawnTimer = 999;
+            e.dissolveTimer = DISSOLVE_DURATION + 0.12;
+            const hitPt = new THREE.Vector3(e.group.position.x, 1.2, e.group.position.z);
+            spawnHumanoidDissolve(e.group, hitPt);
+            e.group.visible = false;
+          }
+        }
+        // 在死亡地点生成紫色光圈
+        bossDeathPickupPos = pos.clone();
+        bossDeathPickupPos._picked = false;
+        if (hellLootRing) { scene.remove(hellLootRing); hellLootRing = null; }
+        const ringGeo = new THREE.TorusGeometry(1.8, 0.09, 16, 72);
+        const ringMat = new THREE.MeshBasicMaterial({ color: 0xbb44ff, transparent: true, opacity: 0.9, side: THREE.DoubleSide });
+        hellLootRing = new THREE.Mesh(ringGeo, ringMat);
+        hellLootRing.rotation.x = -Math.PI / 2;
+        hellLootRing.position.set(pos.x, 0.15, pos.z);
+        hellLootRing._phase = 0;
+        scene.add(hellLootRing);
+        checkHellAchievement();
+      } else if (isFinalBossRound()) {
         bossDeathPickupPos = pos.clone();
         bossDeathPickupPos._picked = false;
         checkHellAchievement();
@@ -10919,6 +10945,15 @@ if (typeof window !== "undefined") {
       }
 
       // Auto-advance to next round removed — each fight stays at selected difficulty.
+
+      // 光圈脉冲动画
+      if (hellLootRing) {
+        hellLootRing._phase += dt;
+        hellLootRing.material.opacity = 0.55 + 0.35 * Math.sin(hellLootRing._phase * 3.2);
+        const pulse = 1.0 + 0.06 * Math.sin(hellLootRing._phase * 2.2);
+        hellLootRing.scale.setScalar(pulse);
+        hellLootRing.rotation.z += dt * 0.6; // 缓慢自转
+      }
     }
 
     function createBlood(point) {
@@ -16230,6 +16265,11 @@ if (typeof window !== "undefined") {
           if (pdx * pdx + pdz * pdz < 4) {
             bossDeathPickupPos._picked = true;
             DEV_GUN_UNLOCKED = true;
+            // 地狱模式走进光圈：给"终极"成就并移除光圈
+            if (BOSS_HELL_MODE) {
+              unlockAchievement("ultimate");
+              if (hellLootRing) { scene.remove(hellLootRing); hellLootRing.material.dispose(); hellLootRing.geometry.dispose(); hellLootRing = null; }
+            }
             persistUnlocks();
             const msg = document.createElement("div");
             msg.style.cssText = "position:fixed;top:35%;left:50%;transform:translate(-50%,-50%);font-size:36px;font-weight:900;color:#ffd700;text-shadow:0 0 20px rgba(255,215,0,0.8),0 0 40px rgba(255,165,0,0.5);letter-spacing:4px;z-index:9999;pointer-events:none;opacity:0;animation:bossVicFadeIn 1s ease forwards;";
@@ -16423,6 +16463,7 @@ if (typeof window !== "undefined") {
       pauseMenuBgm();
 
       bossDeathPickupPos = null;
+      if (hellLootRing) { scene.remove(hellLootRing); hellLootRing.material.dispose(); hellLootRing.geometry.dispose(); hellLootRing = null; }
       sessionKillCount = 0;
       sessionBossKillCount = 0;
       pvpKillStreak = 0;
