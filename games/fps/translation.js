@@ -1,5 +1,5 @@
 /**
- * UI strings for Zone No Light / 无光之境 — translate.js
+ * UI strings for Zone No Light / 无光之境 — translation.js
  * Keys shared across all locales. Fallback: English if a key is missing.
  *
  * Sensitivity / controls copy: edit i18n-controls.json then re-run:
