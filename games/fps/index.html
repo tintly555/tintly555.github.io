@@ -12675,15 +12675,27 @@ if (typeof window !== "undefined") {
         if (act === "slide") slideBack = 0.09 * k;
         if (ud.animSlide) ud.animSlide.position.z = slideBack;
         if (act === "pistolDraw") {
-          // Quick-draw: rises from hip-right, slight roll snaps to aim
-          const rise   = THREE.MathUtils.smoothstep(t, 0.00, 0.42);
-          const center = THREE.MathUtils.smoothstep(t, 0.10, 0.52);
-          const level  = THREE.MathUtils.smoothstep(t, 0.08, 0.58);
-          const settle = THREE.MathUtils.smoothstep(t, 0.58, 1.00);
-          offY = THREE.MathUtils.lerp(-0.32, 0.04, rise) - 0.04 * settle;
-          offX = THREE.MathUtils.lerp( 0.10, 0.00, center);
-          rotZ = THREE.MathUtils.lerp(-0.36, 0.00, level);
-          rotX = -0.06 * Math.sin(t * Math.PI);
+          // 旋转出枪：从右侧伸手，枪旋转270°（rotZ）后定位，手臂随枪一同运动
+          const spinEnd = 0.62;
+          if (t < spinEnd) {
+            const u    = t / spinEnd;
+            const ease = THREE.MathUtils.smoothstep(u, 0.0, 1.0);
+            rotZ = THREE.MathUtils.lerp(Math.PI * 1.5, 0.0, ease);  // 270° 旋转切入
+            offX = THREE.MathUtils.lerp(0.18, 0.00, ease);
+            offY = THREE.MathUtils.lerp(-0.24, 0.02, ease);
+          } else {
+            const u      = (t - spinEnd) / (1.0 - spinEnd);
+            const settle = THREE.MathUtils.smoothstep(u, 0.0, 1.0);
+            offY = THREE.MathUtils.lerp(0.02, 0.00, settle);
+            rotZ = 0;
+            offX = 0;
+          }
+          // 手臂跟随：从右侧横移进入持枪位
+          if (ud.viewArmR && ud.armRBasePos && ud.armRBaseRot) {
+            const armSlide = THREE.MathUtils.smoothstep(t, 0.00, 0.60);
+            const armDx = THREE.MathUtils.lerp(0.12, 0.00, armSlide);
+            setViewHandPose(ud.viewArmR, ud.armRBasePos, ud.armRBaseRot, armDx, 0, 0, 0, 0, 0);
+          }
         } else {
           rotX = state.reloading ? 0 : -0.035 * k;
         }
@@ -12703,16 +12715,17 @@ if (typeof window !== "undefined") {
         }
       } else if (wi === 2) {
         if (act === "shotgunDraw") {
-          // Pump-rack draw: rises barrel-down then whips level to aim
-          const rise   = THREE.MathUtils.smoothstep(t, 0.00, 0.40);
-          const rack   = THREE.MathUtils.smoothstep(t, 0.30, 0.62);
-          const level  = THREE.MathUtils.smoothstep(t, 0.42, 0.76);
-          const settle = THREE.MathUtils.smoothstep(t, 0.76, 1.00);
-          offY = THREE.MathUtils.lerp(-0.52, 0.05, rise) - 0.05 * settle;
-          offX = THREE.MathUtils.lerp( 0.08, 0.00, THREE.MathUtils.smoothstep(t, 0.05, 0.50));
-          offZ = THREE.MathUtils.lerp(-0.08, 0.00, rack);
-          rotX = THREE.MathUtils.lerp(-0.24, 0.03, level) - 0.03 * settle;
-          rotZ = THREE.MathUtils.lerp( 0.18, 0.00, THREE.MathUtils.smoothstep(t, 0.10, 0.55));
+          // 喷子：从屏幕底部横向抛出，空中旋转270°后抓住复位
+          // Phase 1 (0.00–0.28)：横向抛出上升
+          // Phase 2 (0.22–0.72)：空中旋转270°（rotZ: +3π/2 → 0）
+          // Phase 3 (0.70–1.00)：抓住复位稳定
+          const toss   = THREE.MathUtils.smoothstep(t, 0.00, 0.28);
+          const spin   = THREE.MathUtils.smoothstep(t, 0.22, 0.72);
+          const settle = THREE.MathUtils.smoothstep(t, 0.70, 1.00);
+          offX = THREE.MathUtils.lerp(0.32, 0.00, THREE.MathUtils.smoothstep(t, 0.00, 0.55));
+          offY = THREE.MathUtils.lerp(-0.68, 0.04, toss) - 0.04 * settle;
+          rotZ = THREE.MathUtils.lerp(Math.PI * 1.5, 0.00, spin);  // 270° 旋转
+          rotX = -0.04 * Math.sin(settle * Math.PI);
         } else {
           let pumpZ = 0;
           if (act === "pump" && !state.reloading) pumpZ = 0.11 * k;
@@ -12904,12 +12917,13 @@ if (typeof window !== "undefined") {
       }
       if (wi === 8) {
         if (act === "devDraw") {
-          // Dev gun: slams down from above — dramatic power-weapon reveal
-          const slam   = THREE.MathUtils.smoothstep(t, 0.00, 0.38);
-          const settle = THREE.MathUtils.smoothstep(t, 0.38, 0.75);
-          offY = THREE.MathUtils.lerp(0.48, -0.06, slam) + 0.06 * settle;
-          rotX = THREE.MathUtils.lerp(-0.32, 0.04, slam) - 0.04 * settle;
-          offX = -0.06 * Math.sin(t * Math.PI * 0.8);
+          // 天罚之锤：从右下整体弧形入场，无 rotX，枪身整体联动不分离
+          const swing  = THREE.MathUtils.smoothstep(t, 0.00, 0.52);
+          const level  = THREE.MathUtils.smoothstep(t, 0.08, 0.56);
+          const settle = THREE.MathUtils.smoothstep(t, 0.56, 1.00);
+          offY = THREE.MathUtils.lerp(-0.38, 0.05, swing) - 0.05 * settle;
+          offX = THREE.MathUtils.lerp( 0.22, 0.00, swing);
+          rotZ = THREE.MathUtils.lerp( 0.44, 0.00, level);
         }
       }
 
@@ -12941,12 +12955,12 @@ if (typeof window !== "undefined") {
       }
       if (state.weaponIndex === 0 && prev !== 0) {
         state.weaponAction = "pistolDraw";
-        state.weaponActionDur = 420;  // quick-draw optimized
+        state.weaponActionDur = 620;  // 旋转出枪动画时长
         state.weaponActionStart = performance.now();
       }
       if (state.weaponIndex === 2 && prev !== 2) {
         state.weaponAction = "shotgunDraw";
-        state.weaponActionDur = 600;  // pump-rack optimized
+        state.weaponActionDur = 780;  // 横向抛出旋转270°入场
         state.weaponActionStart = performance.now();
       }
       if (state.weaponIndex === 1 && prev !== 1) {
@@ -14169,7 +14183,7 @@ if (typeof window !== "undefined") {
         }
         const dir = getWeaponDirection(totalSpread);
         const rayOrigin =
-          state.weaponIndex === 2 || state.weaponIndex === 8 ? muzzleStart : camera.position;
+          state.weaponIndex === 2 ? muzzleStart : camera.position;
         const ray = new THREE.Raycaster(rayOrigin, dir, 0.02, 160);
         ray.camera = camera;
 
@@ -16516,7 +16530,7 @@ if (typeof window !== "undefined") {
       }
       resetMedKitChargeState();
 
-      setWeapon(1);
+      setWeapon(0);  // 入场默认持手枪
       updateHud();
 
       if (!started) {
