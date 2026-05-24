@@ -1134,7 +1134,7 @@
         <button type="button" class="bossDiffBtn" data-boss-count="2" style="font-family:var(--game-font-ui);padding:6px 14px;border:2px solid #4fd1ff;border-radius:6px;background:transparent;color:#fff;cursor:pointer;font-size:14px;">2</button>
         <button type="button" class="bossDiffBtn" data-boss-count="3" style="font-family:var(--game-font-ui);padding:6px 14px;border:2px solid #4fd1ff;border-radius:6px;background:transparent;color:#fff;cursor:pointer;font-size:14px;">3</button>
       </div>
-      <button type="button" id="btnBossHell" style="display:none;font-family:var(--game-font-ui);padding:8px 22px;border:2px solid #ff2244;border-radius:6px;background:rgba(255,34,68,0.22);color:#ff4466;cursor:pointer;font-size:14px;letter-spacing:1px;">🔥 HELL MODE 🔥</button>
+      <button type="button" id="btnBossHell" style="font-family:var(--game-font-ui);padding:8px 22px;border:2px solid #ff2244;border-radius:6px;background:rgba(255,34,68,0.22);color:#ff4466;cursor:pointer;font-size:14px;letter-spacing:1px;">🔥 HELL MODE 🔥</button>
       <button type="button" id="btnBossStartDiff" style="font-family:var(--game-font-ui);padding:10px 30px;border:2px solid #4fd1ff;border-radius:8px;background:rgba(79,209,255,0.18);color:#fff;cursor:pointer;font-size:15px;letter-spacing:1px;">START</button>
       <button type="button" id="btnBossDiffBack" style="font-family:var(--game-font-ui);padding:8px 20px;border:2px solid #888;border-radius:8px;background:transparent;color:#fff;cursor:pointer;font-size:13px;">← BACK</button>
     </div>
@@ -16665,16 +16665,28 @@ if (typeof window !== "undefined") {
     btnBossSingle.addEventListener("click", () => {
       BOSS_IS_COOP = false;
       BOSS_HELL_MODE = false;
+      BOSS_FIGHT_COUNT = 1;
+      // Reset all difficulty button highlights
+      for (const b of document.querySelectorAll(".bossDiffBtn")) b.style.background = "transparent";
+      const first = document.querySelector(".bossDiffBtn[data-boss-count='1']");
+      if (first) first.style.background = "rgba(79,209,255,0.25)";
       const hellBtn = document.getElementById("btnBossHell");
-      hellBtn.style.display = "none";
+      hellBtn.style.background = "rgba(255,34,68,0.22)";
+      hellBtn.style.borderColor = "#ff2244";
       showMenuPanel("menuBossDifficulty");
     });
 
     btnBossCoop.addEventListener("click", () => {
       BOSS_IS_COOP = true;
       BOSS_HELL_MODE = false;
+      BOSS_FIGHT_COUNT = 1;
+      // Reset all difficulty button highlights
+      for (const b of document.querySelectorAll(".bossDiffBtn")) b.style.background = "transparent";
+      const first = document.querySelector(".bossDiffBtn[data-boss-count='1']");
+      if (first) first.style.background = "rgba(79,209,255,0.25)";
       const hellBtn = document.getElementById("btnBossHell");
-      hellBtn.style.display = "block";
+      hellBtn.style.background = "rgba(255,34,68,0.22)";
+      hellBtn.style.borderColor = "#ff2244";
       showMenuPanel("menuBossDifficulty");
     });
 
@@ -16683,10 +16695,13 @@ if (typeof window !== "undefined") {
     document.getElementById("btnBossDiffBack").addEventListener("click", () => showMenuPanel("menuBossMode"));
 
     document.getElementById("btnBossHell").addEventListener("click", () => {
-      BOSS_HELL_MODE = !BOSS_HELL_MODE;
+      // Hell mode is a standalone difficulty — deselect 1/2/3, fix count at 1
+      BOSS_HELL_MODE = true;
+      BOSS_FIGHT_COUNT = 1;
+      for (const b of document.querySelectorAll(".bossDiffBtn")) b.style.background = "transparent";
       const hellBtn = document.getElementById("btnBossHell");
-      hellBtn.style.background = BOSS_HELL_MODE ? "rgba(255,34,68,0.50)" : "rgba(255,34,68,0.22)";
-      hellBtn.style.borderColor = BOSS_HELL_MODE ? "#ff6688" : "#ff2244";
+      hellBtn.style.background = "rgba(255,34,68,0.50)";
+      hellBtn.style.borderColor = "#ff6688";
     });
 
     document.getElementById("btnBossStartDiff").addEventListener("click", () => {
@@ -16699,10 +16714,15 @@ if (typeof window !== "undefined") {
 
     for (const btn of document.querySelectorAll(".bossDiffBtn")) {
       btn.addEventListener("click", () => {
+        // Selecting 1/2/3 deactivates hell mode
+        BOSS_HELL_MODE = false;
         BOSS_FIGHT_COUNT = parseInt(btn.dataset.bossCount, 10) || 1;
         for (const b of document.querySelectorAll(".bossDiffBtn")) {
           b.style.background = b === btn ? "rgba(79,209,255,0.25)" : "transparent";
         }
+        const hellBtn = document.getElementById("btnBossHell");
+        hellBtn.style.background = "rgba(255,34,68,0.22)";
+        hellBtn.style.borderColor = "#ff2244";
       });
     }
 
