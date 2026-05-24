@@ -775,6 +775,56 @@
       font-size: 14px;
     }
 
+    .settings-action-btn {
+      font-family: var(--game-font-ui);
+      padding: 10px 18px;
+      border: 2px solid rgba(79, 209, 255, 0.55);
+      border-radius: 8px;
+      background: rgba(79, 209, 255, 0.12);
+      color: #fff;
+      cursor: pointer;
+      font-size: 13px;
+      letter-spacing: 1px;
+      width: 100%;
+      max-width: 320px;
+    }
+    .settings-action-btn:hover {
+      background: rgba(79, 209, 255, 0.22);
+    }
+    .settings-action-btn.danger {
+      border-color: rgba(255, 80, 80, 0.55);
+      background: rgba(255, 60, 60, 0.12);
+    }
+    .settings-action-btn.danger:hover {
+      background: rgba(255, 60, 60, 0.22);
+    }
+
+    .ach-item {
+      font-family: var(--game-font-ui);
+      padding: 10px 14px;
+      border: 2px solid rgba(255, 215, 0, 0.35);
+      border-radius: 8px;
+      background: rgba(0, 0, 0, 0.45);
+      color: #fff;
+      cursor: pointer;
+      font-size: 14px;
+      letter-spacing: 1px;
+      text-align: left;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    .ach-item:hover {
+      background: rgba(255, 215, 0, 0.12);
+    }
+    .ach-item.locked {
+      border-color: rgba(120, 120, 120, 0.45);
+      color: #aaa;
+    }
+    .ach-item.equipped {
+      border-color: rgba(79, 209, 255, 0.75);
+      box-shadow: 0 0 12px rgba(79, 209, 255, 0.25);
+    }
+
     .settings-close {
       position: absolute;
       top: 18px;
@@ -1014,26 +1064,27 @@
   <canvas id="menuWallBackdrop" aria-hidden="true"></canvas>
   <div id="menu" class="menu">
     <div class="menu-panels-wrap">
-    <div id="menuLogin" style="display:flex;flex-direction:column;align-items:center;gap:12px;">
-      <h1 style="font-family:var(--game-font-ui);font-size:36px;letter-spacing:4px;margin:0 0 8px 0;">Zone No Light</h1>
-      <p style="font-family:var(--game-font-ui);font-size:13px;opacity:0.7;margin:0;">登录 / 注册账号</p>
-      <input id="loginUser" type="text" placeholder="用户名" autocomplete="username" style="font-family:var(--game-font-ui);padding:10px 18px;border:2px solid #4fd1ff;border-radius:8px;background:rgba(0,0,0,0.5);color:#fff;font-size:15px;width:220px;text-align:center;outline:none;">
-      <input id="loginPass" type="password" placeholder="密码" autocomplete="current-password" style="font-family:var(--game-font-ui);padding:10px 18px;border:2px solid #4fd1ff;border-radius:8px;background:rgba(0,0,0,0.5);color:#fff;font-size:15px;width:220px;text-align:center;outline:none;">
-      <p id="loginError" style="color:#ff4444;font-size:13px;margin:0;display:none;font-family:var(--game-font-ui);">密码错误</p>
-      <button type="button" id="btnLogin" style="font-family:var(--game-font-ui);padding:10px 40px;border:2px solid #4fd1ff;border-radius:8px;background:rgba(79,209,255,0.18);color:#fff;cursor:pointer;font-size:16px;letter-spacing:2px;">登录 / 注册</button>
-      <p id="loginHint" style="font-family:var(--game-font-ui);font-size:11px;opacity:0.5;margin:4px 0 0 0;max-width:260px;text-align:center;">新用户名将自动注册</p>
-    </div>
-    <div id="menuMain" style="display:none;flex-direction:column;align-items:center;gap:10px;">
+    <div id="menuMain" style="display:flex;flex-direction:column;align-items:center;gap:10px;">
       <h1 id="menuGameTitle" data-i18n="gameTitle">Zone No Light</h1>
       <p id="menuCreditsGame" data-i18n="creditsGame">Game by Tintly555</p>
       <p id="menuCreditsMusic" data-i18n="creditsMusic">Music by JimmyQrg</p>
-      <p id="menuAccountInfo" style="font-family:var(--game-font-ui);font-size:12px;opacity:0.6;margin:0;"></p>
       <button type="button" id="btnArena" data-i18n="btnZombieArena">Zombie Arena</button>
       <button type="button" id="btnBossFight">BOSS FIGHT</button>
       <button type="button" id="btnTraining" data-i18n="btnTrainingCamp">Training Camp</button>
       <button type="button" id="btnCrossfire" data-i18n="btnCrossfire">Crossfire (PVP)</button>
+      <button type="button" id="btnAchievements">成就</button>
       <button type="button" id="btnMenuSettings" data-i18n="menuSettings">SETTINGS</button>
-      <button type="button" id="btnLogout" style="font-family:var(--game-font-ui);padding:6px 16px;border:1px solid #888;border-radius:6px;background:transparent;color:#aaa;cursor:pointer;font-size:11px;margin-top:4px;">切换账号</button>
+    </div>
+    <div id="menuAchievements" style="display:none;flex-direction:column;align-items:center;gap:10px;max-width:420px;width:92vw;">
+      <h2 style="font-family:var(--game-font-ui);font-size:28px;margin:0 0 8px 0;letter-spacing:3px;color:#ffd700;">成就</h2>
+      <p style="font-family:var(--game-font-ui);font-size:11px;opacity:0.65;margin:0 0 6px 0;text-align:center;">点击成就查看获得方式；已解锁的可装备显示在名字上方。</p>
+      <div id="achList" style="display:flex;flex-direction:column;gap:8px;width:100%;max-height:340px;overflow-y:auto;padding:4px 2px;"></div>
+      <div id="achDetail" style="display:none;width:100%;padding:14px 16px;border-radius:10px;background:rgba(0,0,0,0.55);border:1px solid rgba(255,215,0,0.35);box-sizing:border-box;">
+        <div id="achDetailName" style="font-family:var(--game-font-ui);font-size:20px;font-weight:700;color:#ffd700;margin-bottom:8px;"></div>
+        <div id="achDetailHint" style="font-family:var(--game-font-ui);font-size:13px;line-height:1.5;color:#ddd;margin-bottom:12px;"></div>
+        <div id="achDetailActions" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
+      </div>
+      <button type="button" id="btnAchBack" style="font-family:var(--game-font-ui);padding:8px 20px;border:2px solid #888;border-radius:8px;background:transparent;color:#fff;cursor:pointer;font-size:13px;margin-top:4px;">← BACK</button>
     </div>
     <div id="menuArenaMode" style="display:none;flex-direction:column;align-items:center;gap:10px;">
       <h2 id="menuZombieArenaHeading" style="font-family:var(--game-font-ui);font-size:28px;margin:0 0 14px 0;letter-spacing:3px;" data-i18n="zombieArenaTitle">ZOMBIE ARENA</h2>
@@ -1285,6 +1336,21 @@
               </div>
               <p id="languageHint" style="font-size:11px;opacity:0.65;margin-top:10px;max-width:480px;line-height:1.45;">
                 Switches menu and HUD labels immediately.
+              </p>
+            </div>
+          </section>
+          <section class="settings-section" id="settingsSectionData">
+            <h2 id="settingsHeadingData">数据</h2>
+            <div class="settings-row" style="flex-direction:column;align-items:flex-start;gap:10px;">
+              <button type="button" class="settings-action-btn" id="btnCreatorUnlock">我是制作者</button>
+              <p style="font-size:11px;opacity:0.65;margin:0;max-width:480px;line-height:1.45;">
+                输入制作者密码后，解锁全部武器（含天罚之锤）。
+              </p>
+            </div>
+            <div class="settings-row" style="flex-direction:column;align-items:flex-start;gap:10px;margin-top:14px;">
+              <button type="button" class="settings-action-btn danger" id="btnDeleteAllData">删除一切数据</button>
+              <p style="font-size:11px;opacity:0.65;margin:0;max-width:480px;line-height:1.45;">
+                清除本机所有武器解锁进度与击杀记录，不可恢复。
               </p>
             </div>
           </section>
@@ -4738,6 +4804,7 @@ if (typeof window !== "undefined") {
     let BOSS_FIGHT_COUNT = 1;
     let BOSS_HELL_MODE = false;
     let DEV_GUN_UNLOCKED = false;
+    let CREATOR_UNLOCKED = false;
     let BOSS_ROUND = 1;
     let BOSS_ROUND_ACTIVE = false;
     let bossDeathPickupPos = null;
@@ -5051,6 +5118,7 @@ if (typeof window !== "undefined") {
         rp = createRemotePlayer(data.name);
         remotePlayers.set(data.id, rp);
         scene.add(rp.group);
+        if (data.achievement) updateNameSprite(rp, rp.name, data.achievement);
       }
       rp.x = data.x;
       rp.y = data.y;
@@ -5058,7 +5126,9 @@ if (typeof window !== "undefined") {
       rp.yaw = data.yaw || 0;
       if (data.name && data.name !== rp.name) {
         rp.name = data.name;
-        updateNameSprite(rp, data.name);
+        updateNameSprite(rp, data.name, data.achievement || null);
+      } else if (data.achievement !== undefined && data.achievement !== rp.equippedAchievement) {
+        updateNameSprite(rp, rp.name, data.achievement || null);
       }
       let rawWeapon;
       if (data) {
@@ -5667,19 +5737,12 @@ if (typeof window !== "undefined") {
       }
     }
 
-    function makeNameSprite(name) {
+    function makeNameSprite(name, achievementId) {
       const canvas = document.createElement("canvas");
       canvas.width = 256;
-      canvas.height = 48;
+      canvas.height = achievementId ? 72 : 48;
       const ctx = canvas.getContext("2d");
-      ctx.clearRect(0, 0, 256, 48);
-      ctx.font = "bold 28px Audiowide, Arial";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillStyle = "#fff";
-      ctx.shadowColor = "rgba(0,0,0,0.7)";
-      ctx.shadowBlur = 6;
-      ctx.fillText(name.slice(0, 16), 128, 24);
+      drawNameSprite(ctx, canvas.width, canvas.height, name, achievementId);
       const tex = new THREE.CanvasTexture(canvas);
       const sprite = new THREE.Sprite(
         new THREE.SpriteMaterial({
@@ -5691,21 +5754,43 @@ if (typeof window !== "undefined") {
         })
       );
       sprite.renderOrder = 999;
-      sprite.scale.set(2.2, 0.42, 1);
+      sprite.scale.set(2.2, achievementId ? 0.62 : 0.42, 1);
       sprite.raycast = () => {};
       return { sprite, canvas, ctx, tex };
     }
 
-    function updateNameSprite(rp, name) {
-      const ctx = rp.nameCtx;
-      ctx.clearRect(0, 0, 256, 48);
-      ctx.font = "bold 28px Audiowide, Arial";
+    function drawNameSprite(ctx, w, h, name, achievementId) {
+      ctx.clearRect(0, 0, w, h);
       ctx.textAlign = "center";
-      ctx.textBaseline = "middle";
-      ctx.fillStyle = "#fff";
       ctx.shadowColor = "rgba(0,0,0,0.7)";
       ctx.shadowBlur = 6;
-      ctx.fillText(name.slice(0, 16), 128, 24);
+      const achDef = achievementId ? getAchievementDef(achievementId) : null;
+      if (achDef) {
+        ctx.font = "bold 18px Audiowide, Arial";
+        ctx.textBaseline = "middle";
+        ctx.fillStyle = achDef.color || "#ffd700";
+        ctx.fillText(achDef.name.slice(0, 12), w * 0.5, 18);
+        ctx.font = "bold 24px Audiowide, Arial";
+        ctx.fillStyle = "#fff";
+        ctx.fillText((name || "Player").slice(0, 16), w * 0.5, 50);
+      } else {
+        ctx.font = "bold 28px Audiowide, Arial";
+        ctx.textBaseline = "middle";
+        ctx.fillStyle = "#fff";
+        ctx.fillText((name || "Player").slice(0, 16), w * 0.5, h * 0.5);
+      }
+    }
+
+    function updateNameSprite(rp, name, achievementId) {
+      const achId = achievementId !== undefined ? achievementId : (rp.equippedAchievement || null);
+      rp.equippedAchievement = achId || null;
+      const canvas = rp.nameCanvas;
+      const h = achId ? 72 : 48;
+      if (canvas.height !== h) {
+        canvas.height = h;
+        rp.nameSprite.scale.y = achId ? 0.62 : 0.42;
+      }
+      drawNameSprite(rp.nameCtx, canvas.width, canvas.height, name, achId);
       rp.nameTex.needsUpdate = true;
     }
 
@@ -6201,7 +6286,7 @@ if (typeof window !== "undefined") {
       const supportSocket = attachRemoteSupportHand(gunModel, 1, mGlove);
       const primarySocket = attachRemotePrimaryHand(gunModel, 1, mGlove);
 
-      const ns = makeNameSprite(name || "Player");
+      const ns = makeNameSprite(name || "Player", null);
       ns.sprite.position.set(0, 2.55, 0);
       group.add(ns.sprite);
 
@@ -6250,6 +6335,7 @@ if (typeof window !== "undefined") {
         nameCanvas: ns.canvas,
         nameCtx: ns.ctx,
         nameTex: ns.tex,
+        equippedAchievement: null,
         rightArm,
         leftArm,
         rightHandGrip,
@@ -8864,86 +8950,267 @@ if (typeof window !== "undefined") {
     let totalKillCount = 0;
     let bossKillCount = 0;
 
-    let currentAccount = null;
-    const ACCOUNT_STORAGE_KEY = "fps_accounts";
+    const UNLOCK_STORAGE_KEY = "fps_unlocks";
 
-    function getAllAccounts() {
-      try {
-        return JSON.parse(localStorage.getItem(ACCOUNT_STORAGE_KEY) || "{}");
-      } catch { return {}; }
+    function unlockAllWeapons() {
+      for (const k of Object.keys(weaponUnlocked)) weaponUnlocked[k] = true;
+      DEV_GUN_UNLOCKED = true;
     }
 
-    function saveAllAccounts(accounts) {
-      localStorage.setItem(ACCOUNT_STORAGE_KEY, JSON.stringify(accounts));
-    }
-
-    function getAccountData() {
-      if (!currentAccount) return null;
-      const accounts = getAllAccounts();
-      return accounts[currentAccount] || null;
-    }
-
-    function saveAccountData(data) {
-      if (!currentAccount) return;
-      const accounts = getAllAccounts();
-      accounts[currentAccount] = data;
-      saveAllAccounts(accounts);
-    }
-
-    function loginAccount(username, password) {
-      const accounts = getAllAccounts();
-      if (accounts[username]) {
-        if (accounts[username].password !== password) return false;
-        currentAccount = username;
-        loadAccountUnlocks();
-        return true;
-      }
-      accounts[username] = {
-        password,
-        weaponUnlocked: { 0: true, 4: true, 7: true },
-        totalKillCount: 0,
-        bossKillCount: 0,
-        devGunUnlocked: false,
-      };
-      saveAllAccounts(accounts);
-      currentAccount = username;
-      loadAccountUnlocks();
-      return true;
-    }
-
-    function loadAccountUnlocks() {
-      const data = getAccountData();
+    function resetUnlockProgress() {
       for (const k of Object.keys(weaponUnlocked)) weaponUnlocked[k] = false;
       weaponUnlocked[0] = true;
       weaponUnlocked[4] = true;
       weaponUnlocked[7] = true;
-      if (data) {
-        if (data.weaponUnlocked) {
-          for (const [k, v] of Object.entries(data.weaponUnlocked)) {
-            if (v) weaponUnlocked[parseInt(k)] = true;
+      totalKillCount = 0;
+      bossKillCount = 0;
+      DEV_GUN_UNLOCKED = false;
+      CREATOR_UNLOCKED = false;
+    }
+
+    function loadUnlocks() {
+      try {
+        const data = JSON.parse(localStorage.getItem(UNLOCK_STORAGE_KEY) || "null");
+        resetUnlockProgress();
+        if (data) {
+          if (data.weaponUnlocked) {
+            for (const [k, v] of Object.entries(data.weaponUnlocked)) {
+              if (v) weaponUnlocked[parseInt(k)] = true;
+            }
           }
+          totalKillCount = data.totalKillCount || 0;
+          bossKillCount = data.bossKillCount || 0;
+          if (data.devGunUnlocked) DEV_GUN_UNLOCKED = true;
+          if (data.creatorUnlocked) {
+            CREATOR_UNLOCKED = true;
+            unlockAllWeapons();
+          }
+          if (data.achievementsUnlocked) {
+            for (const [k, v] of Object.entries(data.achievementsUnlocked)) {
+              if (v) achievementsUnlocked[k] = true;
+            }
+            if (achievementsUnlocked.light) achievementsUnlocked.light_liberator = true;
+          }
+          equippedAchievementId = data.equippedAchievementId || null;
+          if (equippedAchievementId === "light") equippedAchievementId = "light_liberator";
+          totalTrainingDummyKills = data.totalTrainingDummyKills || 0;
         }
-        totalKillCount = data.totalKillCount || 0;
-        bossKillCount = data.bossKillCount || 0;
-        if (data.devGunUnlocked) DEV_GUN_UNLOCKED = true;
-      } else {
-        totalKillCount = 0;
-        bossKillCount = 0;
+      } catch {
+        resetUnlockProgress();
+        resetAchievementProgress();
       }
     }
 
-    function persistAccountUnlocks() {
-      if (!currentAccount) return;
-      const data = getAccountData() || {};
-      data.weaponUnlocked = {};
+    const ACHIEVEMENT_DEFS = [
+      { id: "what_is_this", name: "这是什么", hint: "击杀第一只激素僵尸", color: "#b8b8ff" },
+      { id: "monster_hunter", name: "怪物猎人", hint: "单局击杀200只僵尸", color: "#ff8844" },
+      { id: "strong_one", name: "强者", hint: "单人模式单局击败3只激素僵尸", color: "#ff6622" },
+      { id: "elite_hunter", name: "高级猎手", hint: "多人模式单局击败3只激素僵尸", color: "#cc44ff" },
+      { id: "light_liberator", name: "光明·解放者", hint: "击败地狱级激素僵尸", color: "#ffd700" },
+      { id: "trainer", name: "训练者", hint: "累计击杀1000个训练傀儡", color: "#4fd1ff" },
+      { id: "pvp_weak", name: "各位弱爆了", hint: "单挑模式连续击败5名玩家（中途不能死亡）", color: "#88cc88" },
+      { id: "pvp_hunter_king", name: "猎手之王", hint: "单挑模式连续击败10名玩家（中途不能死亡）", color: "#ff8844" },
+      { id: "undefeated", name: "不败神话", hint: "单挑模式连续击败15名玩家（中途不能死亡）", color: "#ff5050" },
+    ];
+    const achievementsUnlocked = {};
+    let equippedAchievementId = null;
+    let totalTrainingDummyKills = 0;
+    let sessionKillCount = 0;
+    let sessionBossKillCount = 0;
+    let pvpKillStreak = 0;
+
+    function persistUnlocks() {
+      const data = {
+        weaponUnlocked: {},
+        totalKillCount,
+        bossKillCount,
+        devGunUnlocked: DEV_GUN_UNLOCKED,
+        creatorUnlocked: CREATOR_UNLOCKED,
+        achievementsUnlocked,
+        equippedAchievementId,
+        totalTrainingDummyKills,
+      };
       for (const [k, v] of Object.entries(weaponUnlocked)) {
         if (v) data.weaponUnlocked[k] = true;
       }
-      data.totalKillCount = totalKillCount;
-      data.bossKillCount = bossKillCount;
-      data.devGunUnlocked = DEV_GUN_UNLOCKED;
-      saveAccountData(data);
+      localStorage.setItem(UNLOCK_STORAGE_KEY, JSON.stringify(data));
     }
+
+    function getAchievementDef(id) {
+      return ACHIEVEMENT_DEFS.find(a => a.id === id) || null;
+    }
+
+    function resetAchievementProgress() {
+      for (const k of Object.keys(achievementsUnlocked)) delete achievementsUnlocked[k];
+      equippedAchievementId = null;
+      totalTrainingDummyKills = 0;
+      sessionKillCount = 0;
+      sessionBossKillCount = 0;
+      pvpKillStreak = 0;
+    }
+
+    function unlockAchievement(id) {
+      if (achievementsUnlocked[id]) return;
+      const def = getAchievementDef(id);
+      if (!def) return;
+      achievementsUnlocked[id] = true;
+      persistUnlocks();
+      showAchievementUnlockMsg(def.name);
+    }
+
+    function showAchievementUnlockMsg(name) {
+      const msg = document.createElement("div");
+      msg.style.cssText = "position:fixed;top:22%;left:50%;transform:translate(-50%,-50%);font-size:30px;font-weight:900;color:#ffd700;text-shadow:0 0 20px rgba(255,215,0,0.8),0 0 40px rgba(255,165,0,0.4);letter-spacing:3px;z-index:9999;pointer-events:none;opacity:0;animation:bossVicFadeIn 1s ease forwards;white-space:nowrap;";
+      msg.textContent = `解锁成就: ${name}`;
+      document.body.appendChild(msg);
+      setTimeout(() => {
+        msg.style.animation = "bossVicFadeOut 1.5s ease forwards";
+        setTimeout(() => { if (msg.parentNode) msg.remove(); }, 1600);
+      }, 3200);
+    }
+
+    function checkAchievements() {
+      if (bossKillCount >= 1) unlockAchievement("what_is_this");
+      if (sessionKillCount >= 200) unlockAchievement("monster_hunter");
+      if (!MULTIPLAYER && isBossArenaMap(CURRENT_MAP) && sessionBossKillCount >= 3) {
+        unlockAchievement("strong_one");
+      }
+      if (MULTIPLAYER && isBossArenaMap(CURRENT_MAP) && sessionBossKillCount >= 3) {
+        unlockAchievement("elite_hunter");
+      }
+      if (totalTrainingDummyKills >= 1000) unlockAchievement("trainer");
+      if (pvpKillStreak >= 5) unlockAchievement("pvp_weak");
+      if (pvpKillStreak >= 10) unlockAchievement("pvp_hunter_king");
+      if (pvpKillStreak >= 15) unlockAchievement("undefeated");
+    }
+
+    function checkHellAchievement() {
+      if (BOSS_ROUND >= 4 || BOSS_HELL_MODE) unlockAchievement("light_liberator");
+    }
+
+    function registerPvpKill() {
+      if (!MULTIPLAYER || ARENA_COOP || !isPvpCrossfireMap(CURRENT_MAP)) return;
+      pvpKillStreak++;
+      checkAchievements();
+    }
+
+    function resetPvpKillStreak() {
+      pvpKillStreak = 0;
+    }
+
+    /** PvP solo: apply lethal hit to a remote player once and advance kill streak. */
+    function applyPvpKillToVictim(rpVictim, hitPoint) {
+      if (!rpVictim || rpVictim.isDown) return false;
+      if (!MULTIPLAYER || ARENA_COOP || !isPvpCrossfireMap(CURRENT_MAP)) return false;
+      rpVictim.isDown = true;
+      rpVictim.downAt = performance.now();
+      rpVictim.hpEstimate = 0;
+      if (rpVictim.group) {
+        spawnHumanoidDissolve(rpVictim.group, hitPoint);
+        rpVictim.group.visible = false;
+      }
+      state.score += 1;
+      registerPvpKill();
+      return true;
+    }
+
+    function equipAchievement(id) {
+      if (!id) {
+        equippedAchievementId = null;
+        persistUnlocks();
+        return;
+      }
+      if (!achievementsUnlocked[id]) return;
+      equippedAchievementId = id;
+      persistUnlocks();
+    }
+
+    function renderAchievementsPanel() {
+      const listEl = document.getElementById("achList");
+      const detailEl = document.getElementById("achDetail");
+      if (!listEl) return;
+      if (detailEl) detailEl.style.display = "none";
+      listEl.innerHTML = "";
+      for (const def of ACHIEVEMENT_DEFS) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "ach-item" + (achievementsUnlocked[def.id] ? "" : " locked") + (equippedAchievementId === def.id ? " equipped" : "");
+        const status = achievementsUnlocked[def.id]
+          ? (equippedAchievementId === def.id ? " ✦ 已装备" : " ✓ 已解锁")
+          : " 🔒 未解锁";
+        btn.textContent = `${def.name}${status}`;
+        btn.addEventListener("click", () => showAchievementDetail(def.id));
+        listEl.appendChild(btn);
+      }
+    }
+
+    function showAchievementDetail(id) {
+      const def = getAchievementDef(id);
+      const detailEl = document.getElementById("achDetail");
+      const nameEl = document.getElementById("achDetailName");
+      const hintEl = document.getElementById("achDetailHint");
+      const actionsEl = document.getElementById("achDetailActions");
+      if (!def || !detailEl || !nameEl || !hintEl || !actionsEl) return;
+      detailEl.style.display = "block";
+      nameEl.textContent = def.name;
+      nameEl.style.color = def.color;
+      hintEl.textContent = `获得方式：${def.hint}`;
+      actionsEl.innerHTML = "";
+      if (achievementsUnlocked[def.id]) {
+        const equipBtn = document.createElement("button");
+        equipBtn.type = "button";
+        equipBtn.className = "settings-action-btn";
+        equipBtn.textContent = equippedAchievementId === def.id ? "已装备" : "装备成就";
+        equipBtn.disabled = equippedAchievementId === def.id;
+        equipBtn.addEventListener("click", () => {
+          equipAchievement(def.id);
+          renderAchievementsPanel();
+          showAchievementDetail(def.id);
+        });
+        actionsEl.appendChild(equipBtn);
+        if (equippedAchievementId === def.id) {
+          const unequipBtn = document.createElement("button");
+          unequipBtn.type = "button";
+          unequipBtn.className = "settings-action-btn";
+          unequipBtn.textContent = "卸下";
+          unequipBtn.addEventListener("click", () => {
+            equipAchievement(null);
+            renderAchievementsPanel();
+            showAchievementDetail(def.id);
+          });
+          actionsEl.appendChild(unequipBtn);
+        }
+      }
+    }
+
+    function deleteAllGameData() {
+      localStorage.removeItem(UNLOCK_STORAGE_KEY);
+      resetUnlockProgress();
+      resetAchievementProgress();
+      updateQuestHud();
+      updateHud();
+      renderAchievementsPanel();
+    }
+
+    function tryCreatorUnlock() {
+      if (CREATOR_UNLOCKED) {
+        alert("制作者模式已解锁。");
+        return;
+      }
+      const pw = prompt("输入制作者密码:");
+      if (pw !== "tintly555jimmyqrg") {
+        if (pw !== null) alert("密码错误。");
+        return;
+      }
+      CREATOR_UNLOCKED = true;
+      unlockAllWeapons();
+      persistUnlocks();
+      updateQuestHud();
+      updateHud();
+      alert("制作者模式已解锁，全部武器可用。");
+    }
+
+    loadUnlocks();
 
     const WEAPON_UNLOCK_TABLE = [
       { idx: 2, kills: 10, bossKills: 0, label: "霰弹枪 (Shotgun)" },
@@ -8966,7 +9233,7 @@ if (typeof window !== "undefined") {
           changed = true;
         }
       }
-      if (changed) persistAccountUnlocks();
+      if (changed) persistUnlocks();
     }
 
     function showWeaponUnlockMsg(label) {
@@ -8983,22 +9250,20 @@ if (typeof window !== "undefined") {
     function trySelectWeapon(idx) {
       if (weaponUnlocked[idx]) {
         setWeapon(idx);
-      } else {
-        const pw = prompt("输入密码解锁武器:");
-        if (pw === "2486") {
-          weaponUnlocked[idx] = true;
-          setWeapon(idx);
-          persistAccountUnlocks();
-          updateQuestHud();
-        }
       }
     }
 
     function registerEnemyKill(enemy) {
       totalKillCount++;
-      if (enemy.isBoss) bossKillCount++;
+      if (enemy.isBoss) {
+        bossKillCount++;
+        if (isBossArenaMap(CURRENT_MAP)) sessionBossKillCount++;
+      } else if (!enemy.trainingDummy) {
+        sessionKillCount++;
+      }
       checkWeaponUnlocks();
-      persistAccountUnlocks();
+      checkAchievements();
+      persistUnlocks();
       updateQuestHud();
     }
 
@@ -10437,6 +10702,7 @@ if (typeof window !== "undefined") {
       if (isFinalBossRound()) {
         bossDeathPickupPos = pos.clone();
         bossDeathPickupPos._picked = false;
+        checkHellAchievement();
       }
 
       const particleCount = Math.round(120 * BOSS_ROUND);
@@ -10927,6 +11193,9 @@ if (typeof window !== "undefined") {
       if (!enemy || !enemy.group || enemy.dissolveTimer > 0) return;
       enemy.dissolveTimer = DISSOLVE_DURATION + 0.12;
       enemy.group.visible = false;
+      totalTrainingDummyKills++;
+      checkAchievements();
+      persistUnlocks();
       spawnHumanoidDissolve(enemy.group, hitWorld, {
         onComplete: () => {
           if (enemy.group) enemy.group.visible = true;
@@ -12956,11 +13225,83 @@ if (typeof window !== "undefined") {
       const t1 = (-b - s) * inv2a;
       const t2 = (-b + s) * inv2a;
       const eps = 1e-4;
-      if (c < 0) return 0;
+      if (c < 0) {
+        if (t2 >= eps) return t2;
+        return 0;
+      }
       let best = null;
       if (t1 >= eps) best = t1;
       if (t2 >= eps && (best === null || t2 < best)) best = t2;
       return best;
+    }
+
+    function getVerticalWallDist(ray) {
+      const hits = ray.intersectObjects(wallMeshes, false);
+      for (let i = 0; i < hits.length; i++) {
+        const h = hits[i];
+        if (h.face && h.object) {
+          _ehLd.copy(h.face.normal).transformDirection(h.object.matrixWorld).normalize();
+          if (Math.abs(_ehLd.y) > 0.65) continue;
+        }
+        return h.distance;
+      }
+      return Infinity;
+    }
+
+    function performDevGunPierce(ray, muzzleStart, w) {
+      const wallDist = getVerticalWallDist(ray);
+      const pierceHits = [];
+      for (const enemy of state.enemies) {
+        if (!enemyBlockingHits(enemy)) continue;
+        enemy.group.updateMatrixWorld(true);
+        const hit = enemy.trainingDummy
+          ? humanoidHitAlongRay(ray, enemy.group)
+          : enemyHitAlongRay(ray, enemy);
+        if (hit && hit.t < wallDist) {
+          pierceHits.push({ enemy, t: hit.t, zone: hit.zone });
+        }
+      }
+      pierceHits.sort((a, b) => a.t - b.t);
+      let trailEnd = null;
+      for (const ph of pierceHits) {
+        const bp = _ehHitWorld.copy(ray.ray.origin).addScaledVector(ray.ray.direction, ph.t);
+        createBlood(bp);
+        triggerHitFeedback(false, ph.zone === "head");
+        applyDamage(ph.enemy, ph.zone, w);
+        if (ph.enemy.hp <= 0 && ph.enemy.alive) {
+          ph.enemy.alive = false;
+          ph.enemy.respawnTimer = 3.0;
+          ph.enemy.dissolveTimer = DISSOLVE_DURATION + 0.12;
+          spawnHumanoidDissolve(ph.enemy.group, bp);
+          ph.enemy.group.visible = false;
+          state.score += 1;
+          registerEnemyKill(ph.enemy);
+          triggerHitFeedback(true, ph.zone === "head");
+          createSparks(bp.clone(), 0xff5555);
+          if (ph.enemy.isBoss) checkAllBossesDead(ph.enemy.group.position.clone());
+        }
+        trailEnd = bp;
+      }
+      if (pierceHits.length === 0) {
+        const wallHits = ray.intersectObjects(wallMeshes, false);
+        let wallHit = null;
+        for (let i = 0; i < wallHits.length; i++) {
+          const h = wallHits[i];
+          if (h.face && h.object) {
+            _ehLd.copy(h.face.normal).transformDirection(h.object.matrixWorld).normalize();
+            if (Math.abs(_ehLd.y) > 0.65) continue;
+          }
+          wallHit = h;
+          break;
+        }
+        if (wallHit) {
+          trailEnd = wallHit.point;
+          createSparks(wallHit.point.clone(), 0xffdd88);
+        } else {
+          trailEnd = _ehHitWorld.copy(ray.ray.origin).addScaledVector(ray.ray.direction, 80);
+        }
+      }
+      if (trailEnd) createBulletTrail(muzzleStart, trailEnd, w.color);
     }
 
     function enemyBlockingHits(enemy) {
@@ -13457,6 +13798,22 @@ if (typeof window !== "undefined") {
         createBlood(bp);
         playKnifeHitSound();
         triggerHitFeedback(isBack, false);
+        const rpVictim = remotePlayers.get(bestRpId);
+        if (rpVictim && !rpVictim.isDown) {
+          const prev = typeof rpVictim.hpEstimate === "number" ? rpVictim.hpEstimate : 100;
+          const after = prev - dmg;
+          rpVictim.hpEstimate = Math.max(0, after);
+          if (after <= 0) {
+            if (applyPvpKillToVictim(rpVictim, bp.clone ? bp.clone() : bp)) {
+              showCombatFeedback(
+                isBack ? tr("combatBackstab", "BACKSTAB!") : tr("combatKill", "KILL!"),
+                "#ff5050",
+                0.34
+              );
+              createSparks(bp.clone ? bp.clone() : bp, 0xff5555);
+            }
+          }
+        }
         if (MULTIPLAYER) {
           socket.emit("hit", {
             target: bestRpId,
@@ -13465,15 +13822,6 @@ if (typeof window !== "undefined") {
             z: player.position.z,
             hitKind: "melee",
           });
-        }
-        // Backstab is reliably one-shot (200 dmg >> 100 max HP), so show the local KILL feedback
-        // and credit the score immediately. For regular 50-dmg hits we let the server's `playerDown`
-        // event drive the dissolve/visibility — local kill prediction was hiding still-alive victims
-        // and breaking subsequent raycasts (the "只能打一下 + 特别卡" bug).
-        if (isBack) {
-          state.score += 1;
-          showCombatFeedback(tr("combatBackstab", "BACKSTAB!"), "#ff5050", 0.34);
-          createSparks(bp.clone ? bp.clone() : bp, 0xff5555);
         }
         return;
       }
@@ -13655,56 +14003,18 @@ if (typeof window !== "undefined") {
         }
         const dir = getWeaponDirection(totalSpread);
         const rayOrigin =
-          state.weaponIndex === 2 ? muzzleStart : camera.position;
+          state.weaponIndex === 2 || state.weaponIndex === 8 ? muzzleStart : camera.position;
         const ray = new THREE.Raycaster(rayOrigin, dir, 0.02, 160);
         ray.camera = camera;
+
+        if (state.weaponIndex === 8) {
+          performDevGunPierce(ray, muzzleStart, w);
+          continue;
+        }
 
         const wallHits = ray.intersectObjects(wallMeshes, false);
         const wallHit = wallHits.length > 0 ? wallHits[0] : null;
         const wallDist = wallHit ? wallHit.distance : Infinity;
-
-        if (state.weaponIndex === 8) {
-          const pierceHits = [];
-          for (const enemy of state.enemies) {
-            if (!enemyBlockingHits(enemy)) continue;
-            enemy.group.updateMatrixWorld(true);
-            const hit = enemy.trainingDummy
-              ? humanoidHitAlongRay(ray, enemy.group)
-              : enemyHitAlongRay(ray, enemy);
-            if (hit && hit.t < wallDist) {
-              pierceHits.push({ enemy, t: hit.t, zone: hit.zone });
-            }
-          }
-          pierceHits.sort((a, b) => a.t - b.t);
-          let trailEnd = null;
-          for (const ph of pierceHits) {
-            const bp = new THREE.Vector3().copy(ray.ray.origin).addScaledVector(ray.ray.direction, ph.t);
-            createBlood(bp);
-            triggerHitFeedback(false, ph.zone === "head");
-            applyDamage(ph.enemy, ph.zone, w);
-            if (ph.enemy.hp <= 0 && ph.enemy.alive) {
-              ph.enemy.alive = false;
-              ph.enemy.respawnTimer = 3.0;
-              ph.enemy.dissolveTimer = DISSOLVE_DURATION + 0.12;
-              spawnHumanoidDissolve(ph.enemy.group, bp);
-              ph.enemy.group.visible = false;
-              state.score += 1;
-              registerEnemyKill(ph.enemy);
-              triggerHitFeedback(true, ph.zone === "head");
-              createSparks(bp.clone(), 0xff5555);
-              if (ph.enemy.isBoss) checkAllBossesDead(ph.enemy.group.position.clone());
-            }
-            trailEnd = bp;
-          }
-          if (pierceHits.length === 0 && wallHit) {
-            trailEnd = wallHit.point;
-            createSparks(wallHit.point.clone(), 0xffdd88);
-          } else if (pierceHits.length === 0) {
-            trailEnd = new THREE.Vector3().copy(ray.ray.origin).addScaledVector(ray.ray.direction, 80);
-          }
-          if (trailEnd) createBulletTrail(muzzleStart, trailEnd, w.color);
-          continue;
-        }
 
         let bestEnemy = null;
         let bestEnemyHitT = Infinity;
@@ -13842,16 +14152,12 @@ if (typeof window !== "undefined") {
             const after = prev - dmg;
             rpVictim.hpEstimate = after;
             if (after <= 0) {
-              predictedKill = true;
-              rpVictim.isDown = true;
-              rpVictim.downAt = performance.now();
-              rpVictim.hpEstimate = 0;
-              spawnHumanoidDissolve(rpVictim.group, bp.clone());
-              rpVictim.group.visible = false;
-              state.score += 1;
-              showCombatFeedback(tr("combatKill", "KILL!"), "#ff5050", 0.34);
-              createSparks(bp.clone(), 0xff5555);
-              createSparks(bp.clone(), 0xff8888);
+              predictedKill = applyPvpKillToVictim(rpVictim, bp.clone ? bp.clone() : bp);
+              if (predictedKill) {
+                showCombatFeedback(tr("combatKill", "KILL!"), "#ff5050", 0.34);
+                createSparks(bp.clone(), 0xff5555);
+                createSparks(bp.clone(), 0xff8888);
+              }
             }
           }
           triggerHitFeedback(predictedKill, bestRpZone === "head");
@@ -14178,10 +14484,14 @@ if (typeof window !== "undefined") {
           reloading: state.reloading,
           ads: !!state.ads,
           pitch: player.pitch,
+          achievement: equippedAchievementId || "",
         });
       }
     }
     function showDeathScreen(killer) {
+      if (isPvpCrossfireMap(CURRENT_MAP) && MULTIPLAYER && !ARENA_COOP) {
+        resetPvpKillStreak();
+      }
       killerEnemy = killer || null;
       deathAnimTime = 0;
       spawnLocalPlayerDeathDissolve(lastPlayerHitWorld);
@@ -15740,7 +16050,7 @@ if (typeof window !== "undefined") {
           if (pdx * pdx + pdz * pdz < 4) {
             bossDeathPickupPos._picked = true;
             DEV_GUN_UNLOCKED = true;
-            persistAccountUnlocks();
+            persistUnlocks();
             const msg = document.createElement("div");
             msg.style.cssText = "position:fixed;top:35%;left:50%;transform:translate(-50%,-50%);font-size:36px;font-weight:900;color:#ffd700;text-shadow:0 0 20px rgba(255,215,0,0.8),0 0 40px rgba(255,165,0,0.5);letter-spacing:4px;z-index:9999;pointer-events:none;opacity:0;animation:bossVicFadeIn 1s ease forwards;";
             msg.textContent = "获得 天罚之锤 — 按 / 装备";
@@ -15933,7 +16243,10 @@ if (typeof window !== "undefined") {
       pauseMenuBgm();
 
       bossDeathPickupPos = null;
-      loadAccountUnlocks();
+      sessionKillCount = 0;
+      sessionBossKillCount = 0;
+      pvpKillStreak = 0;
+      loadUnlocks();
       setWeapon(0);
 
       clearMap();
@@ -16136,8 +16449,8 @@ if (typeof window !== "undefined") {
     }
 
     function showMenuPanel(id) {
-      const loginPanel = document.getElementById("menuLogin");
-      for (const p of [loginPanel, menuMain, menuArenaMode, menuBossMode, menuBossDifficulty, menuTrainingMode, menuPvpMaps, menuLobby, menuJoinCode]) p.style.display = "none";
+      const menuAchievements = document.getElementById("menuAchievements");
+      for (const p of [menuMain, menuAchievements, menuArenaMode, menuBossMode, menuBossDifficulty, menuTrainingMode, menuPvpMaps, menuLobby, menuJoinCode]) p.style.display = "none";
       clearLobbyErr();
       document.getElementById(id).style.display = "flex";
     }
@@ -16167,31 +16480,13 @@ if (typeof window !== "undefined") {
       nameModal._pendingMap = mapName;
     }
 
-    document.getElementById("btnLogin").addEventListener("click", () => {
-      const user = document.getElementById("loginUser").value.trim();
-      const pass = document.getElementById("loginPass").value;
-      const errEl = document.getElementById("loginError");
-      if (!user || !pass) { errEl.textContent = "请输入用户名和密码"; errEl.style.display = "block"; return; }
-      const ok = loginAccount(user, pass);
-      if (!ok) { errEl.textContent = "密码错误"; errEl.style.display = "block"; return; }
-      errEl.style.display = "none";
-      document.getElementById("menuLogin").style.display = "none";
-      document.getElementById("menuMain").style.display = "flex";
-      document.getElementById("menuAccountInfo").textContent = "账号: " + currentAccount;
-    });
-    document.getElementById("loginPass").addEventListener("keydown", e => {
-      if (e.key === "Enter") document.getElementById("btnLogin").click();
-    });
-    document.getElementById("btnLogout").addEventListener("click", () => {
-      currentAccount = null;
-      document.getElementById("menuMain").style.display = "none";
-      document.getElementById("menuLogin").style.display = "flex";
-      document.getElementById("loginUser").value = "";
-      document.getElementById("loginPass").value = "";
-      document.getElementById("loginError").style.display = "none";
-    });
-
     btnArena.addEventListener("click", () => showMenuPanel("menuArenaMode"));
+
+    document.getElementById("btnAchievements").addEventListener("click", () => {
+      renderAchievementsPanel();
+      showMenuPanel("menuAchievements");
+    });
+    document.getElementById("btnAchBack").addEventListener("click", () => showMenuPanel("menuMain"));
     btnArenaSingle.addEventListener("click", () => startGame("arena", false));
     btnArenaCoop.addEventListener("click", () => showLobby("arena-coop", tr("lobbyArenaCoop", "ARENA CO-OP")));
     btnArenaBack.addEventListener("click", () => showMenuPanel("menuMain"));
@@ -16399,6 +16694,12 @@ if (typeof window !== "undefined") {
     btnMenuSettings.addEventListener("click", () => openSettingsModal());
 
     btnCloseSettings.addEventListener("click", () => closeSettingsModal());
+    document.getElementById("btnCreatorUnlock").addEventListener("click", () => tryCreatorUnlock());
+    document.getElementById("btnDeleteAllData").addEventListener("click", () => {
+      if (!confirm("确定删除一切数据？武器解锁进度和击杀记录将被清除，不可恢复。")) return;
+      deleteAllGameData();
+      alert("所有数据已删除。");
+    });
     settingsModal.addEventListener("click", (e) => {
       if (e.target === settingsModal) closeSettingsModal();
     });
