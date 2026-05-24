@@ -2317,7 +2317,7 @@ if (typeof window !== "undefined") {
 </script>
   <script type="module">
     import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.182.0/build/three.module.js";
-    import { GAME_I18N, LANGUAGE_OPTIONS as LANG_META, translate as translateGame } from "./translate.js";
+    import { GAME_I18N, LANGUAGE_OPTIONS as LANG_META, translate as translateGame } from "./translation.js";
 
     const app = document.getElementById("app");
     const hud = document.getElementById("hud");
@@ -9035,8 +9035,8 @@ if (typeof window !== "undefined") {
             }
             if (achievementsUnlocked.light) achievementsUnlocked.light_liberator = true;
           }
-          equippedAchievementId = data.equippedAchievementId || null;
-          if (equippedAchievementId === "light") equippedAchievementId = "light_liberator";
+          const _rawEquipped = data.equippedAchievementIds || (data.equippedAchievementId ? [data.equippedAchievementId] : []);
+          equippedAchievementIds = _rawEquipped.map(id => id === "light" ? "light_liberator" : id).filter(Boolean);
           totalTrainingDummyKills = data.totalTrainingDummyKills || 0;
           if (data.creatorUnlocked) {
             CREATOR_UNLOCKED = true;
@@ -9067,7 +9067,7 @@ if (typeof window !== "undefined") {
       { id: "ultimate", nameKey: "achUltimate", hintKey: "", secret: true, color: "#e040ff" },
     ];
     const achievementsUnlocked = {};
-    let equippedAchievementId = null;
+    let equippedAchievementIds = [];
     let totalTrainingDummyKills = 0;
     let sessionKillCount = 0;
     let sessionBossKillCount = 0;
@@ -9102,7 +9102,7 @@ if (typeof window !== "undefined") {
         devGunUnlocked: DEV_GUN_UNLOCKED,
         creatorUnlocked: CREATOR_UNLOCKED,
         achievementsUnlocked,
-        equippedAchievementId,
+        equippedAchievementIds,
         totalTrainingDummyKills,
       };
       for (const [k, v] of Object.entries(weaponUnlocked)) {
@@ -9126,7 +9126,7 @@ if (typeof window !== "undefined") {
 
     function resetAchievementProgress() {
       for (const k of Object.keys(achievementsUnlocked)) delete achievementsUnlocked[k];
-      equippedAchievementId = null;
+      equippedAchievementIds = [];
       totalTrainingDummyKills = 0;
       sessionKillCount = 0;
       sessionBossKillCount = 0;
@@ -9200,12 +9200,17 @@ if (typeof window !== "undefined") {
 
     function equipAchievement(id) {
       if (!id) {
-        equippedAchievementId = null;
+        equippedAchievementIds = [];
         persistUnlocks();
         return;
       }
       if (!achievementsUnlocked[id]) return;
-      equippedAchievementId = id;
+      const _idx = equippedAchievementIds.indexOf(id);
+      if (_idx >= 0) {
+        equippedAchievementIds.splice(_idx, 1);
+      } else if (equippedAchievementIds.length < 5) {
+        equippedAchievementIds.push(id);
+      }
       persistUnlocks();
     }
 
@@ -9218,7 +9223,7 @@ if (typeof window !== "undefined") {
       for (const def of ACHIEVEMENT_DEFS) {
         const btn = document.createElement("button");
         btn.type = "button";
-        btn.className = "ach-item" + (achievementsUnlocked[def.id] ? "" : " locked") + (equippedAchievementId === def.id ? " equipped" : "");
+        btn.className = "ach-item" + (achievementsUnlocked[def.id] ? "" : " locked") + (equippedAchievementIds.includes(def.id) ? " equipped" : "");
         btn.textContent = achName(def);
         btn.addEventListener("click", () => showAchievementDetail(def.id));
         listEl.appendChild(btn);
@@ -9239,32 +9244,36 @@ if (typeof window !== "undefined") {
       hintEl.textContent = def.secret ? tr("achSecret", "???") : `${tr("achUnlockHow", "How to unlock:")}${achHint(def)}`;
       actionsEl.innerHTML = "";
       const unlocked = !!achievementsUnlocked[def.id];
-      const equipped = equippedAchievementId === def.id;
+      const equipped = equippedAchievementIds.includes(def.id);
       if (unlocked) {
-        statusEl.textContent = equipped ? tr("achEquipped", "Equipped") : tr("achUnlocked", "Unlocked");
-        statusEl.style.color = equipped ? "#4fd1ff" : "#88dd88";
-        const equipBtn = document.createElement("button");
-        equipBtn.type = "button";
-        equipBtn.className = "settings-action-btn";
-        equipBtn.textContent = equipped ? tr("achEquippedBtn", "Currently equipped") : tr("achEquip", "Equip");
-        equipBtn.disabled = equipped;
-        equipBtn.addEventListener("click", () => {
-          equipAchievement(def.id);
-          renderAchievementsPanel();
-          showAchievementDetail(def.id);
-        });
-        actionsEl.appendChild(equipBtn);
         if (equipped) {
+          statusEl.textContent = tr("achEquipped", "Equipped") + " (" + equippedAchievementIds.length + "/5)";
+          statusEl.style.color = "#4fd1ff";
           const unequipBtn = document.createElement("button");
           unequipBtn.type = "button";
           unequipBtn.className = "settings-action-btn";
           unequipBtn.textContent = tr("achUnequip", "Remove");
           unequipBtn.addEventListener("click", () => {
-            equipAchievement(null);
+            equipAchievement(def.id);
             renderAchievementsPanel();
             showAchievementDetail(def.id);
           });
           actionsEl.appendChild(unequipBtn);
+        } else {
+          statusEl.textContent = tr("achUnlocked", "Unlocked");
+          statusEl.style.color = "#88dd88";
+          const _isFull = equippedAchievementIds.length >= 5;
+          const equipBtn = document.createElement("button");
+          equipBtn.type = "button";
+          equipBtn.className = "settings-action-btn";
+          equipBtn.textContent = _isFull ? "Full (5/5)" : tr("achEquip", "Equip");
+          equipBtn.disabled = _isFull;
+          equipBtn.addEventListener("click", () => {
+            equipAchievement(def.id);
+            renderAchievementsPanel();
+            showAchievementDetail(def.id);
+          });
+          actionsEl.appendChild(equipBtn);
         }
       } else {
         statusEl.textContent = tr("achLocked", "Locked");
@@ -10753,26 +10762,10 @@ if (typeof window !== "undefined") {
       state.enemies.length = 0;
       const round = BOSS_ROUND;
       const isHellRound = round >= 4;
-      const statsMult = isHellRound ? 5 * Math.pow(1.5, round - 4) : Math.pow(1.8, round - 1);
+      // Stats are fixed (no round scaling): normal 15000hp/50dmg, hell 75000hp/250dmg
       for (let i = 0; i < BOSS_FIGHT_COUNT; i++) {
         const { x, z } = findSpawnPosition(SPAWN_MIN_DIST_BASE);
         const boss = makeHormoneZombie(x, z, isHellRound);
-        if (!isHellRound) {
-          boss.hp = Math.round(boss.hp * statsMult);
-          boss.maxHp = Math.round(boss.maxHp * statsMult);
-          boss.baseTankHp = Math.round(boss.baseTankHp * statsMult);
-          boss.baseSpeedHp = Math.round(boss.baseSpeedHp * statsMult);
-          boss.baseGunnerHp = Math.round(boss.baseGunnerHp * statsMult);
-          boss.attackDamage = Math.round(boss.attackDamage * statsMult);
-        } else if (round > 4) {
-          const extra = Math.pow(1.5, round - 4);
-          boss.hp = Math.round(boss.hp * extra);
-          boss.maxHp = Math.round(boss.maxHp * extra);
-          boss.baseTankHp = Math.round(boss.baseTankHp * extra);
-          boss.baseSpeedHp = Math.round(boss.baseSpeedHp * extra);
-          boss.baseGunnerHp = Math.round(boss.baseGunnerHp * extra);
-          boss.attackDamage = Math.round(boss.attackDamage * extra);
-        }
         boss.netIndex = i;
         drawEnemyHp(boss);
         state.enemies.push(boss);
@@ -10925,18 +10918,7 @@ if (typeof window !== "undefined") {
         }, fadeDelay);
       }
 
-      if (!isFinalBossRound() && bossVictoryTimer >= 8.0 && !BOSS_ROUND_ACTIVE) {
-        BOSS_ROUND_ACTIVE = true;
-        BOSS_ROUND++;
-        const old = document.getElementById("bossVictoryOverlay");
-        if (old) old.remove();
-        bossVictoryActive = false;
-        bossVictoryMsgShown = false;
-        bossVictoryTimer = 0;
-        player.health = player.maxHealth;
-        updateHud();
-        spawnNextBossRound();
-      }
+      // Auto-advance to next round removed — each fight stays at selected difficulty.
     }
 
     function createBlood(point) {
@@ -12693,28 +12675,44 @@ if (typeof window !== "undefined") {
         if (act === "slide") slideBack = 0.09 * k;
         if (ud.animSlide) ud.animSlide.position.z = slideBack;
         if (act === "pistolDraw") {
-          const rise = THREE.MathUtils.smoothstep(t, 0.0, 0.4);
-          const spin = THREE.MathUtils.smoothstep(t, 0.05, 0.75);
-          const settle = THREE.MathUtils.smoothstep(t, 0.75, 1.0);
-          offY = THREE.MathUtils.lerp(-0.45, 0.08, rise) - 0.08 * settle;
-          rotZ = spin * Math.PI * 2;
-          rotX = -0.1 * Math.sin(spin * Math.PI) * (1 - settle);
+          // Quick-draw: rises from hip-right, slight roll snaps to aim
+          const rise   = THREE.MathUtils.smoothstep(t, 0.00, 0.42);
+          const center = THREE.MathUtils.smoothstep(t, 0.10, 0.52);
+          const level  = THREE.MathUtils.smoothstep(t, 0.08, 0.58);
+          const settle = THREE.MathUtils.smoothstep(t, 0.58, 1.00);
+          offY = THREE.MathUtils.lerp(-0.32, 0.04, rise) - 0.04 * settle;
+          offX = THREE.MathUtils.lerp( 0.10, 0.00, center);
+          rotZ = THREE.MathUtils.lerp(-0.36, 0.00, level);
+          rotX = -0.06 * Math.sin(t * Math.PI);
         } else {
           rotX = state.reloading ? 0 : -0.035 * k;
         }
       } else if (wi === 1 || wi === 3) {
         if (act === "auto") rotX = -0.04 * k;
+        if ((wi === 1 && act === "arDraw") || (wi === 3 && act === "smgDraw")) {
+          // AR: slow tactical raise from left hip; SMG: snappy raise from below
+          const riseEnd = wi === 1 ? 0.48 : 0.36;
+          const rise    = THREE.MathUtils.smoothstep(t, 0.00, riseEnd);
+          const lat     = THREE.MathUtils.smoothstep(t, 0.05, 0.52);
+          const tilt    = THREE.MathUtils.smoothstep(t, 0.05, 0.58);
+          const settle  = THREE.MathUtils.smoothstep(t, 0.58, 1.00);
+          offY = THREE.MathUtils.lerp(wi === 1 ? -0.38 : -0.28, 0.04, rise) - 0.04 * settle;
+          offX = THREE.MathUtils.lerp(wi === 1 ? -0.10 :  0.06, 0.00, lat);
+          rotZ = THREE.MathUtils.lerp(wi === 1 ?  0.14 : -0.12, 0.00, tilt);
+          rotX = -0.05 * Math.sin(t * Math.PI);
+        }
       } else if (wi === 2) {
         if (act === "shotgunDraw") {
-          const rise = THREE.MathUtils.smoothstep(t, 0.0, 0.35);
-          const overRot = THREE.MathUtils.smoothstep(t, 0.1, 0.55);
-          const correct = THREE.MathUtils.smoothstep(t, 0.55, 0.80);
-          const settle = THREE.MathUtils.smoothstep(t, 0.80, 1.0);
-          offY = THREE.MathUtils.lerp(-0.55, 0.06, rise) - 0.06 * settle;
-          offX = 0.1 * Math.sin(rise * Math.PI) * (1 - settle);
-          const rawRot = THREE.MathUtils.lerp(Math.PI / 2, -0.15, overRot);
-          rotZ = THREE.MathUtils.lerp(rawRot, 0, correct);
-          rotX = -0.08 * Math.sin(overRot * Math.PI) * (1 - settle);
+          // Pump-rack draw: rises barrel-down then whips level to aim
+          const rise   = THREE.MathUtils.smoothstep(t, 0.00, 0.40);
+          const rack   = THREE.MathUtils.smoothstep(t, 0.30, 0.62);
+          const level  = THREE.MathUtils.smoothstep(t, 0.42, 0.76);
+          const settle = THREE.MathUtils.smoothstep(t, 0.76, 1.00);
+          offY = THREE.MathUtils.lerp(-0.52, 0.05, rise) - 0.05 * settle;
+          offX = THREE.MathUtils.lerp( 0.08, 0.00, THREE.MathUtils.smoothstep(t, 0.05, 0.50));
+          offZ = THREE.MathUtils.lerp(-0.08, 0.00, rack);
+          rotX = THREE.MathUtils.lerp(-0.24, 0.03, level) - 0.03 * settle;
+          rotZ = THREE.MathUtils.lerp( 0.18, 0.00, THREE.MathUtils.smoothstep(t, 0.10, 0.55));
         } else {
           let pumpZ = 0;
           if (act === "pump" && !state.reloading) pumpZ = 0.11 * k;
@@ -12722,7 +12720,17 @@ if (typeof window !== "undefined") {
           rotX = -0.03 * k;
         }
       } else if (wi === 5) {
-        if (act === "bolt" && !state.reloading) {
+        if (act === "amrDraw") {
+          // Heavy sniper: slow deliberate shoulder mount from below-right
+          const rise   = THREE.MathUtils.smoothstep(t, 0.00, 0.60);
+          const center = THREE.MathUtils.smoothstep(t, 0.05, 0.58);
+          const level  = THREE.MathUtils.smoothstep(t, 0.12, 0.65);
+          const settle = THREE.MathUtils.smoothstep(t, 0.65, 1.00);
+          offY = THREE.MathUtils.lerp(-0.62, 0.06, rise) - 0.06 * settle;
+          offX = THREE.MathUtils.lerp( 0.14, 0.00, center);
+          rotZ = THREE.MathUtils.lerp(-0.22, 0.00, level);
+          rotX = THREE.MathUtils.lerp( 0.14, 0.00, THREE.MathUtils.smoothstep(t, 0.10, 0.62));
+        } else if (act === "bolt" && !state.reloading) {
           let boltPull = 0;
           if (t < 0.35) boltPull = 0.22 * (t / 0.35);
           else if (t < 0.65) boltPull = 0.22;
@@ -12730,9 +12738,22 @@ if (typeof window !== "undefined") {
           if (ud.animBolt) ud.animBolt.position.z = boltPull;
           rotX = -0.04 * k;
         }
-      } else if (wi === 4 && rp > 0) {
-        offY = -0.05 * Math.sin(rp * Math.PI);
-        rotZ = -0.25 * Math.sin(rp * Math.PI);
+      } else if (wi === 4) {
+        if (rp > 0) {
+          offY = -0.05 * Math.sin(rp * Math.PI);
+          rotZ = -0.25 * Math.sin(rp * Math.PI);
+        }
+        if (act === "medKitDraw") {
+          // Pull med kit from lower-left (reaching into pack)
+          const rise   = THREE.MathUtils.smoothstep(t, 0.00, 0.50);
+          const slide  = THREE.MathUtils.smoothstep(t, 0.05, 0.55);
+          const level  = THREE.MathUtils.smoothstep(t, 0.15, 0.65);
+          const settle = THREE.MathUtils.smoothstep(t, 0.65, 1.00);
+          offY += THREE.MathUtils.lerp(-0.28, 0.06, rise) - 0.06 * settle;
+          offX  = THREE.MathUtils.lerp(-0.12, 0.00, slide);
+          rotZ += THREE.MathUtils.lerp( 0.28, 0.00, level);
+          rotX  = -0.04 * Math.sin(t * Math.PI);
+        }
       } else if (wi === 7) {
         // Knife system. Two animation layers:
         //   - `swing` group moves BOTH the knife AND the arm rigidly (used for chops/thrust,
@@ -12868,6 +12889,30 @@ if (typeof window !== "undefined") {
         }
       }
 
+      if (wi === 6) {
+        if (act === "dartDraw") {
+          // Dart gun: rises from below with a quick flip to ready position
+          const rise   = THREE.MathUtils.smoothstep(t, 0.00, 0.44);
+          const flip   = THREE.MathUtils.smoothstep(t, 0.05, 0.50);
+          const center = THREE.MathUtils.smoothstep(t, 0.08, 0.50);
+          const settle = THREE.MathUtils.smoothstep(t, 0.50, 1.00);
+          offY = THREE.MathUtils.lerp(-0.34, 0.05, rise) - 0.05 * settle;
+          offX = THREE.MathUtils.lerp( 0.08, 0.00, center);
+          rotZ = THREE.MathUtils.lerp(-0.70, 0.00, flip);
+          rotX = -0.05 * Math.sin(t * Math.PI);
+        }
+      }
+      if (wi === 8) {
+        if (act === "devDraw") {
+          // Dev gun: slams down from above — dramatic power-weapon reveal
+          const slam   = THREE.MathUtils.smoothstep(t, 0.00, 0.38);
+          const settle = THREE.MathUtils.smoothstep(t, 0.38, 0.75);
+          offY = THREE.MathUtils.lerp(0.48, -0.06, slam) + 0.06 * settle;
+          rotX = THREE.MathUtils.lerp(-0.32, 0.04, slam) - 0.04 * settle;
+          offX = -0.06 * Math.sin(t * Math.PI * 0.8);
+        }
+      }
+
       return { offX, offY, offZ, rotX, rotZ };
     }
 
@@ -12887,6 +12932,7 @@ if (typeof window !== "undefined") {
       });
       // Knife draw animation: toss into air, spin 2 full rotations around the handle/blade
       // junction, catch back in hand. ~650ms total feels punchy without being fiddly.
+      // ── Weapon draw animations (out of holster / sling / pack) ──────────
       if (state.weaponIndex === 7 && prev !== 7) {
         state.weaponAction = "knifeDraw";
         state.weaponActionDur = 650;
@@ -12895,12 +12941,42 @@ if (typeof window !== "undefined") {
       }
       if (state.weaponIndex === 0 && prev !== 0) {
         state.weaponAction = "pistolDraw";
-        state.weaponActionDur = 550;
+        state.weaponActionDur = 420;  // quick-draw optimized
         state.weaponActionStart = performance.now();
       }
       if (state.weaponIndex === 2 && prev !== 2) {
         state.weaponAction = "shotgunDraw";
-        state.weaponActionDur = 700;
+        state.weaponActionDur = 600;  // pump-rack optimized
+        state.weaponActionStart = performance.now();
+      }
+      if (state.weaponIndex === 1 && prev !== 1) {
+        state.weaponAction = "arDraw";
+        state.weaponActionDur = 480;
+        state.weaponActionStart = performance.now();
+      }
+      if (state.weaponIndex === 3 && prev !== 3) {
+        state.weaponAction = "smgDraw";
+        state.weaponActionDur = 380;
+        state.weaponActionStart = performance.now();
+      }
+      if (state.weaponIndex === 5 && prev !== 5) {
+        state.weaponAction = "amrDraw";
+        state.weaponActionDur = 750;
+        state.weaponActionStart = performance.now();
+      }
+      if (state.weaponIndex === 4 && prev !== 4) {
+        state.weaponAction = "medKitDraw";
+        state.weaponActionDur = 550;
+        state.weaponActionStart = performance.now();
+      }
+      if (state.weaponIndex === 6 && prev !== 6) {
+        state.weaponAction = "dartDraw";
+        state.weaponActionDur = 460;
+        state.weaponActionStart = performance.now();
+      }
+      if (state.weaponIndex === 8 && prev !== 8) {
+        state.weaponAction = "devDraw";
+        state.weaponActionDur = 500;
         state.weaponActionStart = performance.now();
       }
       updateHud();
@@ -14574,7 +14650,7 @@ if (typeof window !== "undefined") {
           reloading: state.reloading,
           ads: !!state.ads,
           pitch: player.pitch,
-          achievement: equippedAchievementId || "",
+          achievement: equippedAchievementIds[0] || "",
         });
       }
     }
