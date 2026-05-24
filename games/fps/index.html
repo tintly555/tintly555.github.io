@@ -1066,8 +1066,8 @@
     <div class="menu-panels-wrap">
     <div id="menuMain" style="display:flex;flex-direction:column;align-items:center;gap:10px;">
       <h1 id="menuGameTitle" data-i18n="gameTitle">Zone No Light</h1>
-      <p id="menuCreditsGame" data-i18n="creditsGame">Game by Tintly555</p>
-      <p id="menuCreditsMusic" data-i18n="creditsMusic">Music by JimmyQrg</p>
+      <p id="menuCreditsGame" data-i18n="creditsGame" style="cursor:pointer;user-select:none;">Game by Tintly555</p>
+      <p id="menuCreditsMusic" data-i18n="creditsMusic" style="cursor:pointer;user-select:none;">Music by JimmyQrg</p>
       <button type="button" id="btnArena" data-i18n="btnZombieArena">Zombie Arena</button>
       <button type="button" id="btnBossFight">BOSS FIGHT</button>
       <button type="button" id="btnTraining" data-i18n="btnTrainingCamp">Training Camp</button>
@@ -9011,6 +9011,7 @@ if (typeof window !== "undefined") {
       { id: "pvp_weak", name: "各位弱爆了", hint: "单挑模式连续击败5名玩家（中途不能死亡）", color: "#88cc88" },
       { id: "pvp_hunter_king", name: "猎手之王", hint: "单挑模式连续击败10名玩家（中途不能死亡）", color: "#ff8844" },
       { id: "undefeated", name: "不败神话", hint: "单挑模式连续击败15名玩家（中途不能死亡）", color: "#ff5050" },
+      { id: "ultimate", name: "终极", hint: "", secret: true, color: "#e040ff" },
     ];
     const achievementsUnlocked = {};
     let equippedAchievementId = null;
@@ -9018,6 +9019,27 @@ if (typeof window !== "undefined") {
     let sessionKillCount = 0;
     let sessionBossKillCount = 0;
     let pvpKillStreak = 0;
+    let eggCreditStep = 0;
+    let eggCreditTimer = 0;
+
+    function isMainMenuVisible() {
+      const menuMainEl = document.getElementById("menuMain");
+      return menuEl.style.display !== "none" && menuMainEl && menuMainEl.style.display !== "none";
+    }
+
+    function tryEasterEggCredit(step) {
+      if (!isMainMenuVisible()) return;
+      const now = performance.now();
+      if (step === 1) {
+        eggCreditStep = 1;
+        eggCreditTimer = now;
+        return;
+      }
+      if (step === 2 && eggCreditStep === 1 && now - eggCreditTimer < 4000) {
+        unlockAchievement("ultimate");
+      }
+      eggCreditStep = 0;
+    }
 
     function persistUnlocks() {
       const data = {
@@ -9137,7 +9159,7 @@ if (typeof window !== "undefined") {
         btn.className = "ach-item" + (achievementsUnlocked[def.id] ? "" : " locked") + (equippedAchievementId === def.id ? " equipped" : "");
         const status = achievementsUnlocked[def.id]
           ? (equippedAchievementId === def.id ? " ✦ 已装备" : " ✓ 已解锁")
-          : " 🔒 未解锁";
+          : def.secret ? " 🔒 ???" : " 🔒 未解锁";
         btn.textContent = `${def.name}${status}`;
         btn.addEventListener("click", () => showAchievementDetail(def.id));
         listEl.appendChild(btn);
@@ -9154,7 +9176,7 @@ if (typeof window !== "undefined") {
       detailEl.style.display = "block";
       nameEl.textContent = def.name;
       nameEl.style.color = def.color;
-      hintEl.textContent = `获得方式：${def.hint}`;
+      hintEl.textContent = def.secret ? "？？？" : `获得方式：${def.hint}`;
       actionsEl.innerHTML = "";
       if (achievementsUnlocked[def.id]) {
         const equipBtn = document.createElement("button");
@@ -16481,6 +16503,9 @@ if (typeof window !== "undefined") {
     }
 
     btnArena.addEventListener("click", () => showMenuPanel("menuArenaMode"));
+
+    document.getElementById("menuCreditsGame").addEventListener("click", () => tryEasterEggCredit(1));
+    document.getElementById("menuCreditsMusic").addEventListener("click", () => tryEasterEggCredit(2));
 
     document.getElementById("btnAchievements").addEventListener("click", () => {
       renderAchievementsPanel();
