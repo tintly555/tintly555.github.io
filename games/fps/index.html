@@ -1095,6 +1095,7 @@
   </div>
   <div id="shadeOverlay" aria-hidden="true"></div>
   <div id="warFilmOverlay" aria-hidden="true"></div>
+  <div id="questHud" style="position:fixed;top:10px;left:14px;z-index:46;pointer-events:none;font-family:var(--game-font-ui);font-size:13px;color:rgba(255,255,255,0.85);text-shadow:0 1px 4px rgba(0,0,0,0.9);line-height:1.5;display:none;"></div>
   <div class="hud" id="hud"></div>
   <div id="trainingScoreboard" aria-live="polite">
     <h3 id="trainingScoreTitle">TRAINING</h3>
@@ -4728,6 +4729,7 @@ if (typeof window !== "undefined") {
     let DEV_GUN_UNLOCKED = false;
     let BOSS_ROUND = 1;
     let BOSS_ROUND_ACTIVE = false;
+    let bossDeathPickupPos = null;
     let BOSS_IS_COOP = false;
     const bossProjectiles = [];
     let started = false;
@@ -5518,6 +5520,7 @@ if (typeof window !== "undefined") {
         spawnHumanoidDissolve(enemy.group, hitPt);
         enemy.group.visible = false;
         state.score += 1;
+        registerEnemyKill(enemy);
         if (enemy.isBoss) checkAllBossesDead(enemy.group.position.clone());
       }
       updateHud();
@@ -8814,7 +8817,7 @@ if (typeof window !== "undefined") {
         meleeBackstabDamage: 200,
       },
       {
-        name: "DEV GUN",
+        name: "天罚之锤",
         fireDelay: 480,
         auto: true,
         pellets: 1,
@@ -8835,6 +8838,98 @@ if (typeof window !== "undefined") {
         adsSpeed: 7.5,
       },
     ];
+
+    const weaponUnlocked = {
+      0: true,   // Pistol — always
+      1: false,  // AR — 60 kills
+      2: false,  // Shotgun — 20 kills
+      3: false,  // SMG — 40 kills
+      4: true,   // Med Kit — always
+      5: false,  // AMR — 1st boss kill
+      6: false,  // Paralysis — 2nd boss kill
+      7: true,   // Knife — always
+      8: false,  // 天罚之锤 — special
+    };
+    let totalKillCount = 0;
+    let bossKillCount = 0;
+
+    const WEAPON_UNLOCK_TABLE = [
+      { idx: 2, kills: 10, bossKills: 0, label: "霰弹枪 (Shotgun)" },
+      { idx: 3, kills: 20, bossKills: 0, label: "冲锋枪 (SMG)" },
+      { idx: 1, kills: 30, bossKills: 0, label: "突击步枪 (AR)" },
+      { idx: 5, kills: 0, bossKills: 1, label: "反器材狙击枪 (AMR)" },
+      { idx: 6, kills: 0, bossKills: 2, label: "麻醉针 (Paralysis Dart)" },
+    ];
+
+    function checkWeaponUnlocks() {
+      for (const entry of WEAPON_UNLOCK_TABLE) {
+        if (weaponUnlocked[entry.idx]) continue;
+        const byKills = entry.kills > 0 && totalKillCount >= entry.kills;
+        const byBoss = entry.bossKills > 0 && bossKillCount >= entry.bossKills;
+        if (byKills || byBoss) {
+          weaponUnlocked[entry.idx] = true;
+          showWeaponUnlockMsg(entry.label);
+          updateQuestHud();
+        }
+      }
+    }
+
+    function showWeaponUnlockMsg(label) {
+      const msg = document.createElement("div");
+      msg.style.cssText = "position:fixed;top:30%;left:50%;transform:translate(-50%,-50%);font-size:32px;font-weight:900;color:#4fd1ff;text-shadow:0 0 20px rgba(79,209,255,0.8),0 0 40px rgba(79,209,255,0.4);letter-spacing:3px;z-index:9999;pointer-events:none;opacity:0;animation:bossVicFadeIn 1s ease forwards;white-space:nowrap;";
+      msg.textContent = `解锁武器: ${label}`;
+      document.body.appendChild(msg);
+      setTimeout(() => {
+        msg.style.animation = "bossVicFadeOut 1.5s ease forwards";
+        setTimeout(() => { if (msg.parentNode) msg.remove(); }, 1600);
+      }, 3000);
+    }
+
+    function trySelectWeapon(idx) {
+      if (weaponUnlocked[idx]) {
+        setWeapon(idx);
+      } else {
+        const pw = prompt("输入密码解锁武器:");
+        if (pw === "2486") {
+          weaponUnlocked[idx] = true;
+          setWeapon(idx);
+          updateQuestHud();
+        }
+      }
+    }
+
+    function registerEnemyKill(enemy) {
+      totalKillCount++;
+      if (enemy.isBoss) bossKillCount++;
+      checkWeaponUnlocks();
+      updateQuestHud();
+    }
+
+    function updateQuestHud() {
+      const el = document.getElementById("questHud");
+      if (!el) return;
+      if (!gameWorldReady || !(isArenaLikeMap(CURRENT_MAP) || isBossArenaMap(CURRENT_MAP))) {
+        el.style.display = "none";
+        return;
+      }
+      el.style.display = "block";
+      let html = '<b style="color:#ffd700;font-size:14px;">— 主线任务 —</b><br>';
+      const tasks = [
+        { label: "霰弹枪", need: `击杀 ${Math.min(totalKillCount, 10)}/10`, done: weaponUnlocked[2], key: "2" },
+        { label: "冲锋枪", need: `击杀 ${Math.min(totalKillCount, 20)}/20`, done: weaponUnlocked[3], key: "3" },
+        { label: "突击步枪", need: `击杀 ${Math.min(totalKillCount, 30)}/30`, done: weaponUnlocked[1], key: "4" },
+        { label: "反器材狙击枪", need: `Boss ${Math.min(bossKillCount, 1)}/1`, done: weaponUnlocked[5], key: "5" },
+        { label: "麻醉针", need: `Boss ${Math.min(bossKillCount, 2)}/2`, done: weaponUnlocked[6], key: "6" },
+      ];
+      for (const t of tasks) {
+        if (t.done) {
+          html += `<span style="color:#4fd1ff;">✓ ${t.label} [${t.key}]</span><br>`;
+        } else {
+          html += `<span style="color:#aaa;">○ ${t.label} — ${t.need}</span><br>`;
+        }
+      }
+      el.innerHTML = html;
+    }
 
     function weaponSoundSkin() {
       const w = weapons[state.weaponIndex];
@@ -8872,7 +8967,7 @@ if (typeof window !== "undefined") {
         ${tr("hudGameTitleLine", "Zone No Light")}<br>
         WASD move | Space jump | R reload<br>
         Mouse aim | RMB zoom | L flashlight | Z beam small/med/wide<br>
-        Weapons: <b>0</b> Knife | 1–4 | <b>5</b> AMR | <b>6</b> Paralysis Dart | <b>7</b> Med Kit (hold <b>F</b> or <b>LMB</b> 10s, +50 HP)<br>
+        Weapons: <b>0</b> Knife | <b>1</b> Pistol | <b>2</b> Shotgun | <b>3</b> SMG | <b>4</b> AR | <b>5</b> AMR | <b>6</b> Dart | <b>7</b> Med Kit<br>
         Map: ${mapLabel}${MULTIPLAYER ? " (MP)" : ""}<br>
         Weapon: ${w.name}<br>
         ${
@@ -8889,7 +8984,7 @@ if (typeof window !== "undefined") {
             : state.weaponIndex === 7
               ? `Melee: front 2-hit kill | <b>backstab 1-hit kill</b><br>`
               : state.weaponIndex === 8
-                ? `<b style="color:#ff4444;">DEV GUN — ∞ ammo | 7500 dmg</b><br>`
+                ? `<b style="color:#ffd700;">天罚之锤 — ∞ | 7500</b><br>`
                 : `Bullets: ${w.ammo} / ${w.magSize}${state.reloading ? "（Refilling...）" : ""}<br>`
         }
         Health: ${Math.max(0, Math.floor(player.health))} / ${player.maxHealth}<br>
@@ -10235,7 +10330,10 @@ if (typeof window !== "undefined") {
       bossVictoryMsgShown = false;
       BOSS_ROUND_ACTIVE = false;
       playBossRoarSfx();
-      if (isFinalBossRound()) DEV_GUN_UNLOCKED = true;
+      if (isFinalBossRound()) {
+        bossDeathPickupPos = pos.clone();
+        bossDeathPickupPos._picked = false;
+      }
 
       const particleCount = Math.round(120 * BOSS_ROUND);
       const spreadMult = 1 + (BOSS_ROUND - 1) * 0.4;
@@ -10340,9 +10438,7 @@ if (typeof window !== "undefined") {
         title.style.cssText = `font-size:64px;font-weight:900;color:${isFinal ? "#ffd700" : rl.color};text-shadow:0 0 30px rgba(255,215,0,0.8),0 0 60px rgba(255,165,0,0.5),0 4px 12px rgba(0,0,0,0.7);letter-spacing:6px;opacity:0;animation:bossVicFadeIn 2s ease forwards;`;
         const sub = document.createElement("div");
         if (isFinal) {
-          sub.innerHTML = DEV_GUN_UNLOCKED
-            ? 'YOU WIN — <span style="color:#ff4444;">DEV GUN UNLOCKED (press 8)</span>'
-            : "YOU WIN";
+          sub.textContent = "YOU WIN";
         } else {
           const nextRl = getBossRoundLabel(BOSS_ROUND + 1);
           sub.innerHTML = `难度: <span style="color:${rl.color};">${rl.name}</span> → 下一关: <span style="color:${nextRl.color};">${nextRl.name}</span>`;
@@ -12388,24 +12484,19 @@ if (typeof window !== "undefined") {
       if (k === " ") keys.space = true;
       if (k === "shift") keys.shift = true;
       if (k === "f" || e.code === "KeyF") keys.f = true;
-      if (k === "1") setWeapon(0);
-      if (k === "2") setWeapon(1);
-      if (k === "3") setWeapon(2);
-      if (k === "4") setWeapon(3);
-      if (k === "5") setWeapon(5);
-      if (k === "6") setWeapon(6);
-      if (k === "7") setWeapon(4);
+      if (k === "1") trySelectWeapon(0);
+      if (k === "2") trySelectWeapon(2);
+      if (k === "3") trySelectWeapon(3);
+      if (k === "4") trySelectWeapon(1);
+      if (k === "5") trySelectWeapon(5);
+      if (k === "6") trySelectWeapon(6);
+      if (k === "7") trySelectWeapon(4);
       if (k === "0") setWeapon(7);
       if (k === "8") {
         if (DEV_GUN_UNLOCKED) {
-          setWeapon(8);
-        } else {
-          const pw = prompt("Enter password:");
-          if (pw === "2486") {
-            DEV_GUN_UNLOCKED = true;
-            setWeapon(8);
-          }
+          weaponUnlocked[8] = true;
         }
+        trySelectWeapon(8);
       }
       if (k === "r") startReload();
       if (k === "v" || e.code === "KeyV") {
@@ -13269,6 +13360,7 @@ if (typeof window !== "undefined") {
           spawnHumanoidDissolve(bestEnemy.group, bp);
           bestEnemy.group.visible = false;
           state.score += 1;
+          registerEnemyKill(bestEnemy);
           triggerHitFeedback(true, false);
           createSparks(bp.clone ? bp.clone() : bp, 0xff5555);
           if (bestEnemy.isBoss) checkAllBossesDead(bestEnemy.group.position.clone());
@@ -13430,6 +13522,53 @@ if (typeof window !== "undefined") {
         const ray = new THREE.Raycaster(rayOrigin, dir, 0.02, 160);
         ray.camera = camera;
 
+        const wallHits = ray.intersectObjects(wallMeshes, false);
+        const wallHit = wallHits.length > 0 ? wallHits[0] : null;
+        const wallDist = wallHit ? wallHit.distance : Infinity;
+
+        if (state.weaponIndex === 8) {
+          const pierceHits = [];
+          for (const enemy of state.enemies) {
+            if (!enemyBlockingHits(enemy)) continue;
+            enemy.group.updateMatrixWorld(true);
+            const hit = enemy.trainingDummy
+              ? humanoidHitAlongRay(ray, enemy.group)
+              : enemyHitAlongRay(ray, enemy);
+            if (hit && hit.t < wallDist) {
+              pierceHits.push({ enemy, t: hit.t, zone: hit.zone });
+            }
+          }
+          pierceHits.sort((a, b) => a.t - b.t);
+          let trailEnd = null;
+          for (const ph of pierceHits) {
+            const bp = new THREE.Vector3().copy(ray.ray.origin).addScaledVector(ray.ray.direction, ph.t);
+            createBlood(bp);
+            triggerHitFeedback(false, ph.zone === "head");
+            applyDamage(ph.enemy, ph.zone, w);
+            if (ph.enemy.hp <= 0 && ph.enemy.alive) {
+              ph.enemy.alive = false;
+              ph.enemy.respawnTimer = 3.0;
+              ph.enemy.dissolveTimer = DISSOLVE_DURATION + 0.12;
+              spawnHumanoidDissolve(ph.enemy.group, bp);
+              ph.enemy.group.visible = false;
+              state.score += 1;
+              registerEnemyKill(ph.enemy);
+              triggerHitFeedback(true, ph.zone === "head");
+              createSparks(bp.clone(), 0xff5555);
+              if (ph.enemy.isBoss) checkAllBossesDead(ph.enemy.group.position.clone());
+            }
+            trailEnd = bp;
+          }
+          if (pierceHits.length === 0 && wallHit) {
+            trailEnd = wallHit.point;
+            createSparks(wallHit.point.clone(), 0xffdd88);
+          } else if (pierceHits.length === 0) {
+            trailEnd = new THREE.Vector3().copy(ray.ray.origin).addScaledVector(ray.ray.direction, 80);
+          }
+          if (trailEnd) createBulletTrail(muzzleStart, trailEnd, w.color);
+          continue;
+        }
+
         let bestEnemy = null;
         let bestEnemyHitT = Infinity;
         let bestEnemyZone = "body";
@@ -13481,12 +13620,8 @@ if (typeof window !== "undefined") {
           }
         }
 
-        const wallHits = ray.intersectObjects(wallMeshes, false);
-        const wallHit = wallHits.length > 0 ? wallHits[0] : null;
-
         const enemyDist = bestEnemy ? bestEnemyHitT : Infinity;
         const rpDist = bestRpId != null ? bestRpHitT : Infinity;
-        const wallDist = wallHit ? wallHit.distance : Infinity;
         const projDist = bestProjIdx >= 0 ? bestProjT : Infinity;
         const closestDist = Math.min(enemyDist, rpDist, wallDist, projDist);
 
@@ -13528,6 +13663,7 @@ if (typeof window !== "undefined") {
               spawnHumanoidDissolve(bestEnemy.group, bp);
               bestEnemy.group.visible = false;
               state.score += 1;
+              registerEnemyKill(bestEnemy);
               triggerHitFeedback(true, bestEnemyZone === "head");
               createSparks(bp.clone(), 0xff5555);
               createSparks(bp.clone(), 0xff8888);
@@ -13547,6 +13683,7 @@ if (typeof window !== "undefined") {
               spawnHumanoidDissolve(bestEnemy.group, bp);
               bestEnemy.group.visible = false;
               state.score += 1;
+              registerEnemyKill(bestEnemy);
               triggerHitFeedback(true, bestEnemyZone === "head");
               createSparks(bp.clone(), 0xff5555);
               createSparks(bp.clone(), 0xff8888);
@@ -14549,8 +14686,26 @@ if (typeof window !== "undefined") {
             if (enemy.summonedBy && enemy.summonedBy.summonCount > 0) {
               enemy.summonedBy.summonCount--;
             }
+            if (enemy.isBoss) {
+              enemy._bossDeathTime = performance.now();
+            }
           }
-          if (enemy.isBoss) continue;
+          if (enemy.isBoss) {
+            if (enemy._bossDeathTime) {
+              const elapsed = (performance.now() - enemy._bossDeathTime) / 1000;
+              if (elapsed >= 5) {
+                for (const m of state.enemies) {
+                  if (m.alive && !m.isBoss && m._summonedByBoss === enemy) {
+                    m.alive = false;
+                    m.group.visible = false;
+                    m.dissolveTimer = DISSOLVE_DURATION + 0.12;
+                    spawnHumanoidDissolve(m.group, m.group.position);
+                  }
+                }
+                enemy._bossDeathTime = null;
+              }
+            }
+            continue;
           enemy.respawnTimer -= dt;
           if (enemy.respawnTimer <= 0) {
             enemy.alive = true;
@@ -14647,6 +14802,7 @@ if (typeof window !== "undefined") {
                   const minion = makeZombie(sx, sz, t);
                   minion.netIndex = state.enemies.length;
                   minion.aware = true;
+                  minion._summonedByBoss = enemy;
                   drawEnemyHp(minion);
                   state.enemies.push(minion);
                 }
@@ -14679,6 +14835,7 @@ if (typeof window !== "undefined") {
               const minion = makeZombie(sx, sz, "normal");
               minion.netIndex = state.enemies.length;
               minion.summonedBy = enemy;
+              minion._summonedByBoss = enemy;
               drawEnemyHp(minion);
               state.enemies.push(minion);
               enemy.summonCount++;
@@ -15439,6 +15596,22 @@ if (typeof window !== "undefined") {
         }
         if (gameWorldReady) updateBossProjectiles(dt);
         if (gameWorldReady) updateBossVictory(dt);
+        if (gameWorldReady && bossDeathPickupPos && !bossDeathPickupPos._picked) {
+          const pdx = player.position.x - bossDeathPickupPos.x;
+          const pdz = player.position.z - bossDeathPickupPos.z;
+          if (pdx * pdx + pdz * pdz < 4) {
+            bossDeathPickupPos._picked = true;
+            DEV_GUN_UNLOCKED = true;
+            const msg = document.createElement("div");
+            msg.style.cssText = "position:fixed;top:35%;left:50%;transform:translate(-50%,-50%);font-size:36px;font-weight:900;color:#ffd700;text-shadow:0 0 20px rgba(255,215,0,0.8),0 0 40px rgba(255,165,0,0.5);letter-spacing:4px;z-index:9999;pointer-events:none;opacity:0;animation:bossVicFadeIn 1s ease forwards;";
+            msg.textContent = "获得 天罚之锤 — 按 8 装备";
+            document.body.appendChild(msg);
+            setTimeout(() => {
+              msg.style.animation = "bossVicFadeOut 1.5s ease forwards";
+              setTimeout(() => { if (msg.parentNode) msg.remove(); }, 1600);
+            }, 4000);
+          }
+        }
         if (gameWorldReady) updateDeathAnim(dt);
         if (gameWorldReady && MULTIPLAYER && ARENA_COOP && ZOMBIE_AUTHORITY && isZombieMap) {
           _zombieSyncAcc += dt;
@@ -15620,6 +15793,15 @@ if (typeof window !== "undefined") {
       stopMenuBackdropLoop();
       pauseMenuBgm();
 
+      totalKillCount = 0;
+      bossKillCount = 0;
+      bossDeathPickupPos = null;
+      for (const k of Object.keys(weaponUnlocked)) weaponUnlocked[k] = false;
+      weaponUnlocked[0] = true;
+      weaponUnlocked[4] = true;
+      weaponUnlocked[7] = true;
+      setWeapon(0);
+
       clearMap();
 
       if (MULTIPLAYER && activeRoomId) {
@@ -15751,6 +15933,7 @@ if (typeof window !== "undefined") {
       } catch (_) {}
       bumpRendererLayoutSync(320);
       setTrainingScoreboardVisible(isTrainingMap(CURRENT_MAP));
+      updateQuestHud();
       if (isTrainingMap(CURRENT_MAP)) updateTrainingScoreboardUI();
       player.spawnProtectUntil = performance.now() + 3000;
       refreshLocalPlayerLightsForCurrentState();
