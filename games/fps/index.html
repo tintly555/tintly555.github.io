@@ -801,16 +801,17 @@
 
     .ach-item {
       font-family: var(--game-font-ui);
-      padding: 10px 14px;
+      padding: 12px 16px;
       border: 2px solid rgba(255, 215, 0, 0.35);
       border-radius: 8px;
       background: rgba(0, 0, 0, 0.45);
       color: #fff;
       cursor: pointer;
-      font-size: 14px;
+      font-size: 13px;
       letter-spacing: 1px;
-      text-align: left;
-      width: 100%;
+      text-align: center;
+      min-width: 108px;
+      flex: 0 1 auto;
       box-sizing: border-box;
     }
     .ach-item:hover {
@@ -818,11 +819,36 @@
     }
     .ach-item.locked {
       border-color: rgba(120, 120, 120, 0.45);
-      color: #aaa;
+      color: #bbb;
     }
     .ach-item.equipped {
       border-color: rgba(79, 209, 255, 0.75);
       box-shadow: 0 0 12px rgba(79, 209, 255, 0.25);
+      color: #fff;
+    }
+    #menuAchievements {
+      max-width: 780px !important;
+      width: 94vw !important;
+    }
+    #achList {
+      display: flex;
+      flex-direction: row;
+      flex-wrap: wrap;
+      justify-content: center;
+      align-content: flex-start;
+      gap: 10px;
+      width: 100%;
+      max-height: 280px;
+      overflow-y: auto;
+      padding: 6px 4px;
+      box-sizing: border-box;
+    }
+    #achDetailStatus {
+      font-family: var(--game-font-ui);
+      font-size: 12px;
+      letter-spacing: 1px;
+      margin-bottom: 10px;
+      opacity: 0.85;
     }
 
     .settings-close {
@@ -1072,15 +1098,16 @@
       <button type="button" id="btnBossFight">BOSS FIGHT</button>
       <button type="button" id="btnTraining" data-i18n="btnTrainingCamp">Training Camp</button>
       <button type="button" id="btnCrossfire" data-i18n="btnCrossfire">Crossfire (PVP)</button>
-      <button type="button" id="btnAchievements">成就</button>
+      <button type="button" id="btnAchievements" data-i18n="btnAchievements">Achievements</button>
       <button type="button" id="btnMenuSettings" data-i18n="menuSettings">SETTINGS</button>
     </div>
-    <div id="menuAchievements" style="display:none;flex-direction:column;align-items:center;gap:10px;max-width:420px;width:92vw;">
-      <h2 style="font-family:var(--game-font-ui);font-size:28px;margin:0 0 8px 0;letter-spacing:3px;color:#ffd700;">成就</h2>
-      <p style="font-family:var(--game-font-ui);font-size:11px;opacity:0.65;margin:0 0 6px 0;text-align:center;">点击成就查看获得方式；已解锁的可装备显示在名字上方。</p>
-      <div id="achList" style="display:flex;flex-direction:column;gap:8px;width:100%;max-height:340px;overflow-y:auto;padding:4px 2px;"></div>
+    <div id="menuAchievements" style="display:none;flex-direction:column;align-items:center;gap:10px;">
+      <h2 id="achMenuTitle" style="font-family:var(--game-font-ui);font-size:28px;margin:0 0 8px 0;letter-spacing:3px;color:#ffd700;">Achievements</h2>
+      <p id="achMenuHint" style="font-family:var(--game-font-ui);font-size:11px;opacity:0.65;margin:0 0 6px 0;text-align:center;">Tap an achievement for details. Equipped achievements show above your name.</p>
+      <div id="achList"></div>
       <div id="achDetail" style="display:none;width:100%;padding:14px 16px;border-radius:10px;background:rgba(0,0,0,0.55);border:1px solid rgba(255,215,0,0.35);box-sizing:border-box;">
-        <div id="achDetailName" style="font-family:var(--game-font-ui);font-size:20px;font-weight:700;color:#ffd700;margin-bottom:8px;"></div>
+        <div id="achDetailName" style="font-family:var(--game-font-ui);font-size:20px;font-weight:700;color:#ffd700;margin-bottom:6px;"></div>
+        <div id="achDetailStatus"></div>
         <div id="achDetailHint" style="font-family:var(--game-font-ui);font-size:13px;line-height:1.5;color:#ddd;margin-bottom:12px;"></div>
         <div id="achDetailActions" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
       </div>
@@ -1340,17 +1367,17 @@
             </div>
           </section>
           <section class="settings-section" id="settingsSectionData">
-            <h2 id="settingsHeadingData">数据</h2>
+            <h2 id="settingsHeadingData">DATA</h2>
             <div class="settings-row" style="flex-direction:column;align-items:flex-start;gap:10px;">
-              <button type="button" class="settings-action-btn" id="btnCreatorUnlock">我是制作者</button>
-              <p style="font-size:11px;opacity:0.65;margin:0;max-width:480px;line-height:1.45;">
-                输入制作者密码后，解锁全部武器（含天罚之锤）。
+              <button type="button" class="settings-action-btn" id="btnCreatorUnlock">I am the creator</button>
+              <p id="settingsCreatorHint" style="font-size:11px;opacity:0.65;margin:0;max-width:480px;line-height:1.45;">
+                Enter the creator password to unlock all weapons.
               </p>
             </div>
             <div class="settings-row" style="flex-direction:column;align-items:flex-start;gap:10px;margin-top:14px;">
-              <button type="button" class="settings-action-btn danger" id="btnDeleteAllData">删除一切数据</button>
-              <p style="font-size:11px;opacity:0.65;margin:0;max-width:480px;line-height:1.45;">
-                清除本机所有武器解锁进度与击杀记录，不可恢复。
+              <button type="button" class="settings-action-btn danger" id="btnDeleteAllData">Delete all data</button>
+              <p id="settingsDeleteHint" style="font-size:11px;opacity:0.65;margin:0;max-width:480px;line-height:1.45;">
+                Clears all unlock progress and kill records on this device. Cannot be undone.
               </p>
             </div>
           </section>
@@ -2290,7 +2317,7 @@ if (typeof window !== "undefined") {
 </script>
   <script type="module">
     import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.182.0/build/three.module.js";
-    import { GAME_I18N, LANGUAGE_OPTIONS as LANG_META, translate as translateGame } from "./translation.js";
+    import { GAME_I18N, LANGUAGE_OPTIONS as LANG_META, translate as translateGame } from "./translate.js";
 
     const app = document.getElementById("app");
     const hud = document.getElementById("hud");
@@ -4652,6 +4679,27 @@ if (typeof window !== "undefined") {
       const pSkip = document.getElementById("skipClickToPlayHint");
       if (lSkip) lSkip.textContent = tr("settingsSkipClickLabel", lSkip.textContent);
       if (pSkip) pSkip.textContent = tr("settingsSkipClickHint", pSkip.textContent);
+      const btnAch = document.getElementById("btnAchievements");
+      if (btnAch) btnAch.textContent = tr("btnAchievements", btnAch.textContent);
+      const achTitle = document.getElementById("achMenuTitle");
+      const achHint = document.getElementById("achMenuHint");
+      if (achTitle) achTitle.textContent = tr("achTitle", achTitle.textContent);
+      if (achHint) achHint.textContent = tr("achPanelHint", achHint.textContent);
+      const btnAchBack = document.getElementById("btnAchBack");
+      if (btnAchBack) btnAchBack.textContent = tr("btnBack", btnAchBack.textContent);
+      const hData = document.getElementById("settingsHeadingData");
+      const btnCreator = document.getElementById("btnCreatorUnlock");
+      const pCreator = document.getElementById("settingsCreatorHint");
+      const btnDelete = document.getElementById("btnDeleteAllData");
+      const pDelete = document.getElementById("settingsDeleteHint");
+      if (hData) hData.textContent = tr("settingsHeadingData", hData.textContent);
+      if (btnCreator) btnCreator.textContent = tr("btnCreatorUnlock", btnCreator.textContent);
+      if (pCreator) pCreator.textContent = tr("settingsCreatorHint", pCreator.textContent);
+      if (btnDelete) btnDelete.textContent = tr("btnDeleteAllData", btnDelete.textContent);
+      if (pDelete) pDelete.textContent = tr("settingsDeleteHint", pDelete.textContent);
+      try {
+        renderAchievementsPanel();
+      } catch (_) {}
       try {
         refreshFpsHelpForMap();
       } catch (_) {}
@@ -5769,7 +5817,7 @@ if (typeof window !== "undefined") {
         ctx.font = "bold 18px Audiowide, Arial";
         ctx.textBaseline = "middle";
         ctx.fillStyle = achDef.color || "#ffd700";
-        ctx.fillText(achDef.name.slice(0, 12), w * 0.5, 18);
+        ctx.fillText(achName(achDef).slice(0, 12), w * 0.5, 18);
         ctx.font = "bold 24px Audiowide, Arial";
         ctx.fillStyle = "#fff";
         ctx.fillText((name || "Player").slice(0, 16), w * 0.5, 50);
@@ -8981,10 +9029,6 @@ if (typeof window !== "undefined") {
           totalKillCount = data.totalKillCount || 0;
           bossKillCount = data.bossKillCount || 0;
           if (data.devGunUnlocked) DEV_GUN_UNLOCKED = true;
-          if (data.creatorUnlocked) {
-            CREATOR_UNLOCKED = true;
-            unlockAllWeapons();
-          }
           if (data.achievementsUnlocked) {
             for (const [k, v] of Object.entries(data.achievementsUnlocked)) {
               if (v) achievementsUnlocked[k] = true;
@@ -8994,6 +9038,14 @@ if (typeof window !== "undefined") {
           equippedAchievementId = data.equippedAchievementId || null;
           if (equippedAchievementId === "light") equippedAchievementId = "light_liberator";
           totalTrainingDummyKills = data.totalTrainingDummyKills || 0;
+          if (data.creatorUnlocked) {
+            CREATOR_UNLOCKED = true;
+            unlockAllWeapons();
+            if (!achievementsUnlocked.creator) {
+              achievementsUnlocked.creator = true;
+              persistUnlocks();
+            }
+          }
         }
       } catch {
         resetUnlockProgress();
@@ -9002,16 +9054,17 @@ if (typeof window !== "undefined") {
     }
 
     const ACHIEVEMENT_DEFS = [
-      { id: "what_is_this", name: "这是什么", hint: "击杀第一只激素僵尸", color: "#b8b8ff" },
-      { id: "monster_hunter", name: "怪物猎人", hint: "单局击杀200只僵尸", color: "#ff8844" },
-      { id: "strong_one", name: "强者", hint: "单人模式单局击败3只激素僵尸", color: "#ff6622" },
-      { id: "elite_hunter", name: "高级猎手", hint: "多人模式单局击败3只激素僵尸", color: "#cc44ff" },
-      { id: "light_liberator", name: "光明·解放者", hint: "击败地狱级激素僵尸", color: "#ffd700" },
-      { id: "trainer", name: "训练者", hint: "累计击杀1000个训练傀儡", color: "#4fd1ff" },
-      { id: "pvp_weak", name: "各位弱爆了", hint: "单挑模式连续击败5名玩家（中途不能死亡）", color: "#88cc88" },
-      { id: "pvp_hunter_king", name: "猎手之王", hint: "单挑模式连续击败10名玩家（中途不能死亡）", color: "#ff8844" },
-      { id: "undefeated", name: "不败神话", hint: "单挑模式连续击败15名玩家（中途不能死亡）", color: "#ff5050" },
-      { id: "ultimate", name: "终极", hint: "", secret: true, color: "#e040ff" },
+      { id: "what_is_this", nameKey: "achWhatIsThis", hintKey: "achWhatIsThisHint", color: "#b8b8ff" },
+      { id: "monster_hunter", nameKey: "achMonsterHunter", hintKey: "achMonsterHunterHint", color: "#ff8844" },
+      { id: "strong_one", nameKey: "achStrongOne", hintKey: "achStrongOneHint", color: "#ff6622" },
+      { id: "elite_hunter", nameKey: "achEliteHunter", hintKey: "achEliteHunterHint", color: "#cc44ff" },
+      { id: "light_liberator", nameKey: "achLightLiberator", hintKey: "achLightLiberatorHint", color: "#ffd700" },
+      { id: "trainer", nameKey: "achTrainer", hintKey: "achTrainerHint", color: "#4fd1ff" },
+      { id: "pvp_weak", nameKey: "achPvpWeak", hintKey: "achPvpWeakHint", color: "#88cc88" },
+      { id: "pvp_hunter_king", nameKey: "achPvpHunterKing", hintKey: "achPvpHunterKingHint", color: "#ff8844" },
+      { id: "undefeated", nameKey: "achUndefeated", hintKey: "achUndefeatedHint", color: "#ff5050" },
+      { id: "creator", nameKey: "achCreator", hintKey: "achCreatorHint", color: "#4fd1ff" },
+      { id: "ultimate", nameKey: "achUltimate", hintKey: "", secret: true, color: "#e040ff" },
     ];
     const achievementsUnlocked = {};
     let equippedAchievementId = null;
@@ -9058,6 +9111,15 @@ if (typeof window !== "undefined") {
       localStorage.setItem(UNLOCK_STORAGE_KEY, JSON.stringify(data));
     }
 
+    function achName(def) {
+      return tr(def.nameKey, def.nameKey);
+    }
+
+    function achHint(def) {
+      if (def.secret) return tr("achSecret", "???");
+      return tr(def.hintKey, "");
+    }
+
     function getAchievementDef(id) {
       return ACHIEVEMENT_DEFS.find(a => a.id === id) || null;
     }
@@ -9077,13 +9139,13 @@ if (typeof window !== "undefined") {
       if (!def) return;
       achievementsUnlocked[id] = true;
       persistUnlocks();
-      showAchievementUnlockMsg(def.name);
+      showAchievementUnlockMsg(achName(def));
     }
 
     function showAchievementUnlockMsg(name) {
       const msg = document.createElement("div");
       msg.style.cssText = "position:fixed;top:22%;left:50%;transform:translate(-50%,-50%);font-size:30px;font-weight:900;color:#ffd700;text-shadow:0 0 20px rgba(255,215,0,0.8),0 0 40px rgba(255,165,0,0.4);letter-spacing:3px;z-index:9999;pointer-events:none;opacity:0;animation:bossVicFadeIn 1s ease forwards;white-space:nowrap;";
-      msg.textContent = `解锁成就: ${name}`;
+      msg.textContent = `${tr("achUnlockMsg", "Achievement unlocked:")} ${name}`;
       document.body.appendChild(msg);
       setTimeout(() => {
         msg.style.animation = "bossVicFadeOut 1.5s ease forwards";
@@ -9157,10 +9219,7 @@ if (typeof window !== "undefined") {
         const btn = document.createElement("button");
         btn.type = "button";
         btn.className = "ach-item" + (achievementsUnlocked[def.id] ? "" : " locked") + (equippedAchievementId === def.id ? " equipped" : "");
-        const status = achievementsUnlocked[def.id]
-          ? (equippedAchievementId === def.id ? " ✦ 已装备" : " ✓ 已解锁")
-          : def.secret ? " 🔒 ???" : " 🔒 未解锁";
-        btn.textContent = `${def.name}${status}`;
+        btn.textContent = achName(def);
         btn.addEventListener("click", () => showAchievementDetail(def.id));
         listEl.appendChild(btn);
       }
@@ -9170,31 +9229,36 @@ if (typeof window !== "undefined") {
       const def = getAchievementDef(id);
       const detailEl = document.getElementById("achDetail");
       const nameEl = document.getElementById("achDetailName");
+      const statusEl = document.getElementById("achDetailStatus");
       const hintEl = document.getElementById("achDetailHint");
       const actionsEl = document.getElementById("achDetailActions");
-      if (!def || !detailEl || !nameEl || !hintEl || !actionsEl) return;
+      if (!def || !detailEl || !nameEl || !statusEl || !hintEl || !actionsEl) return;
       detailEl.style.display = "block";
-      nameEl.textContent = def.name;
+      nameEl.textContent = achName(def);
       nameEl.style.color = def.color;
-      hintEl.textContent = def.secret ? "？？？" : `获得方式：${def.hint}`;
+      hintEl.textContent = def.secret ? tr("achSecret", "???") : `${tr("achUnlockHow", "How to unlock:")}${achHint(def)}`;
       actionsEl.innerHTML = "";
-      if (achievementsUnlocked[def.id]) {
+      const unlocked = !!achievementsUnlocked[def.id];
+      const equipped = equippedAchievementId === def.id;
+      if (unlocked) {
+        statusEl.textContent = equipped ? tr("achEquipped", "Equipped") : tr("achUnlocked", "Unlocked");
+        statusEl.style.color = equipped ? "#4fd1ff" : "#88dd88";
         const equipBtn = document.createElement("button");
         equipBtn.type = "button";
         equipBtn.className = "settings-action-btn";
-        equipBtn.textContent = equippedAchievementId === def.id ? "已装备" : "装备成就";
-        equipBtn.disabled = equippedAchievementId === def.id;
+        equipBtn.textContent = equipped ? tr("achEquippedBtn", "Currently equipped") : tr("achEquip", "Equip");
+        equipBtn.disabled = equipped;
         equipBtn.addEventListener("click", () => {
           equipAchievement(def.id);
           renderAchievementsPanel();
           showAchievementDetail(def.id);
         });
         actionsEl.appendChild(equipBtn);
-        if (equippedAchievementId === def.id) {
+        if (equipped) {
           const unequipBtn = document.createElement("button");
           unequipBtn.type = "button";
           unequipBtn.className = "settings-action-btn";
-          unequipBtn.textContent = "卸下";
+          unequipBtn.textContent = tr("achUnequip", "Remove");
           unequipBtn.addEventListener("click", () => {
             equipAchievement(null);
             renderAchievementsPanel();
@@ -9202,6 +9266,9 @@ if (typeof window !== "undefined") {
           });
           actionsEl.appendChild(unequipBtn);
         }
+      } else {
+        statusEl.textContent = tr("achLocked", "Locked");
+        statusEl.style.color = "#aaa";
       }
     }
 
@@ -9216,20 +9283,21 @@ if (typeof window !== "undefined") {
 
     function tryCreatorUnlock() {
       if (CREATOR_UNLOCKED) {
-        alert("制作者模式已解锁。");
+        alert(tr("creatorAlreadyUnlocked", "Creator mode is already unlocked."));
         return;
       }
-      const pw = prompt("输入制作者密码:");
+      const pw = prompt(tr("creatorPromptPassword", "Enter creator password:"));
       if (pw !== "tintly555jimmyqrg") {
-        if (pw !== null) alert("密码错误。");
+        if (pw !== null) alert(tr("creatorWrongPassword", "Wrong password."));
         return;
       }
       CREATOR_UNLOCKED = true;
       unlockAllWeapons();
+      unlockAchievement("creator");
       persistUnlocks();
       updateQuestHud();
       updateHud();
-      alert("制作者模式已解锁，全部武器可用。");
+      alert(tr("creatorUnlockedMsg", "Creator mode unlocked. All weapons available."));
     }
 
     loadUnlocks();
@@ -16721,9 +16789,9 @@ if (typeof window !== "undefined") {
     btnCloseSettings.addEventListener("click", () => closeSettingsModal());
     document.getElementById("btnCreatorUnlock").addEventListener("click", () => tryCreatorUnlock());
     document.getElementById("btnDeleteAllData").addEventListener("click", () => {
-      if (!confirm("确定删除一切数据？武器解锁进度和击杀记录将被清除，不可恢复。")) return;
+      if (!confirm(tr("deleteDataConfirm", "Delete all data? Unlock progress and kill records will be cleared. This cannot be undone."))) return;
       deleteAllGameData();
-      alert("所有数据已删除。");
+      alert(tr("deleteDataDone", "All data deleted."));
     });
     settingsModal.addEventListener("click", (e) => {
       if (e.target === settingsModal) closeSettingsModal();
