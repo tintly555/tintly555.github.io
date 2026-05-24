@@ -1095,7 +1095,7 @@
   </div>
   <div id="shadeOverlay" aria-hidden="true"></div>
   <div id="warFilmOverlay" aria-hidden="true"></div>
-  <div id="questHud" style="position:fixed;top:10px;left:14px;z-index:46;pointer-events:none;font-family:var(--game-font-ui);font-size:13px;color:rgba(255,255,255,0.85);text-shadow:0 1px 4px rgba(0,0,0,0.9);line-height:1.5;display:none;"></div>
+  <div id="questHud" style="position:fixed;bottom:60px;left:14px;z-index:46;pointer-events:none;font-family:var(--game-font-ui);font-size:13px;color:rgba(255,255,255,0.85);text-shadow:0 1px 4px rgba(0,0,0,0.9);line-height:1.5;display:none;background:rgba(0,0,0,0.35);padding:6px 12px;border-radius:6px;"></div>
   <div class="hud" id="hud"></div>
   <div id="trainingScoreboard" aria-live="polite">
     <h3 id="trainingScoreTitle">TRAINING</h3>
@@ -8548,7 +8548,7 @@ if (typeof window !== "undefined") {
       score: 0,
       flashTimer: 0,
       recoil: 0,
-      weaponIndex: 1,
+      weaponIndex: 0,
       lastShot: 0,
       spreadBloom: 0,
       enemies: [],
@@ -8905,10 +8905,17 @@ if (typeof window !== "undefined") {
       updateQuestHud();
     }
 
+    let questHudVisible = false;
+
+    function toggleQuestHud() {
+      questHudVisible = !questHudVisible;
+      updateQuestHud();
+    }
+
     function updateQuestHud() {
       const el = document.getElementById("questHud");
       if (!el) return;
-      if (!gameWorldReady || !(isArenaLikeMap(CURRENT_MAP) || isBossArenaMap(CURRENT_MAP))) {
+      if (!questHudVisible || !gameWorldReady || !(isArenaLikeMap(CURRENT_MAP) || isBossArenaMap(CURRENT_MAP))) {
         el.style.display = "none";
         return;
       }
@@ -11392,12 +11399,14 @@ if (typeof window !== "undefined") {
         root.userData.muzzleNode = muzzleNode;
 
       } else if (type === 2) {
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.14, 0.15, 0.26), mWoodD, 0, 0, 0.5);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.12, 0.09, 0.14), mWoodD, 0, -0.055, 0.38);
+        addMeshPart(gunGroup, new THREE.BoxGeometry(0.12, 0.13, 0.26), mWoodD, 0, 0, 0.5);
+        addMeshPart(gunGroup, new THREE.BoxGeometry(0.10, 0.08, 0.14), mWoodD, 0, -0.055, 0.38);
         addMeshPart(gunGroup, new THREE.BoxGeometry(0.08, 0.035, 0.05), mBlack, 0, -0.055, 0.12);
         const breakGrp = new THREE.Group();
         breakGrp.position.set(0, 0.03, 0.22);
-        addMeshPart(breakGrp, new THREE.BoxGeometry(0.17, 0.15, 0.48), mLight, 0, 0, -0.1);
+        addMeshPart(breakGrp, new THREE.BoxGeometry(0.11, 0.10, 0.20), mLight, 0, 0.01, 0.04);
+        addMeshPart(breakGrp, new THREE.BoxGeometry(0.10, 0.08, 0.16), mMetal, 0, -0.01, -0.12);
+        addMeshPart(breakGrp, new THREE.BoxGeometry(0.06, 0.06, 0.10), mDark, 0, 0.04, -0.02);
         const barrelGrp = new THREE.Group();
         barrelGrp.position.set(0, 0.01, -0.3);
         addMeshPart(barrelGrp, new THREE.CylinderGeometry(0.042, 0.046, 0.52, 12), mMetal, 0, 0, -0.18, barrelZ, 0, 0);
@@ -12227,14 +12236,32 @@ if (typeof window !== "undefined") {
         let slideBack = 0;
         if (act === "slide") slideBack = 0.09 * k;
         if (ud.animSlide) ud.animSlide.position.z = slideBack;
-        rotX = state.reloading ? 0 : -0.035 * k;
+        if (act === "pistolDraw") {
+          const spin = THREE.MathUtils.smoothstep(t, 0.0, 0.7);
+          const settle = THREE.MathUtils.smoothstep(t, 0.7, 1.0);
+          offY = -0.3 * (1 - spin) + 0.05 * Math.sin(spin * Math.PI);
+          rotZ = spin * Math.PI * 2 * (1 - settle * 0.02);
+          rotX = -0.15 * (1 - settle);
+        } else {
+          rotX = state.reloading ? 0 : -0.035 * k;
+        }
       } else if (wi === 1 || wi === 3) {
         if (act === "auto") rotX = -0.04 * k;
       } else if (wi === 2) {
-        let pumpZ = 0;
-        if (act === "pump" && !state.reloading) pumpZ = 0.11 * k;
-        if (ud.animPump) ud.animPump.position.z = pumpZ;
-        rotX = -0.03 * k;
+        if (act === "shotgunDraw") {
+          const toss = THREE.MathUtils.smoothstep(t, 0.0, 0.35);
+          const flip = THREE.MathUtils.smoothstep(t, 0.15, 0.65);
+          const settle = THREE.MathUtils.smoothstep(t, 0.6, 1.0);
+          offY = -0.35 * (1 - toss) + 0.12 * Math.sin(toss * Math.PI);
+          offX = 0.15 * Math.sin(toss * Math.PI) * (1 - settle);
+          rotZ = (1 - flip) * (Math.PI / 2) + flip * 0;
+          rotX = -0.2 * Math.sin(flip * Math.PI) * (1 - settle);
+        } else {
+          let pumpZ = 0;
+          if (act === "pump" && !state.reloading) pumpZ = 0.11 * k;
+          if (ud.animPump) ud.animPump.position.z = pumpZ;
+          rotX = -0.03 * k;
+        }
       } else if (wi === 5) {
         if (act === "bolt" && !state.reloading) {
           let boltPull = 0;
@@ -12407,6 +12434,16 @@ if (typeof window !== "undefined") {
         state.weaponActionStart = performance.now();
         state.knifeComboIdx = 0;
       }
+      if (state.weaponIndex === 0 && prev !== 0) {
+        state.weaponAction = "pistolDraw";
+        state.weaponActionDur = 550;
+        state.weaponActionStart = performance.now();
+      }
+      if (state.weaponIndex === 2 && prev !== 2) {
+        state.weaponAction = "shotgunDraw";
+        state.weaponActionDur = 700;
+        state.weaponActionStart = performance.now();
+      }
       updateHud();
     }
 
@@ -12499,6 +12536,7 @@ if (typeof window !== "undefined") {
         trySelectWeapon(8);
       }
       if (k === "r") startReload();
+      if (k === "m") toggleQuestHud();
       if (k === "v" || e.code === "KeyV") {
         keys.v = true;
         if (canFireWithoutMouse() && state.weaponIndex !== 4) tryShoot();
