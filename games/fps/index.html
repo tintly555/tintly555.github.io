@@ -1014,15 +1014,26 @@
   <canvas id="menuWallBackdrop" aria-hidden="true"></canvas>
   <div id="menu" class="menu">
     <div class="menu-panels-wrap">
-    <div id="menuMain" style="display:flex;flex-direction:column;align-items:center;gap:10px;">
+    <div id="menuLogin" style="display:flex;flex-direction:column;align-items:center;gap:12px;">
+      <h1 style="font-family:var(--game-font-ui);font-size:36px;letter-spacing:4px;margin:0 0 8px 0;">Zone No Light</h1>
+      <p style="font-family:var(--game-font-ui);font-size:13px;opacity:0.7;margin:0;">登录 / 注册账号</p>
+      <input id="loginUser" type="text" placeholder="用户名" autocomplete="username" style="font-family:var(--game-font-ui);padding:10px 18px;border:2px solid #4fd1ff;border-radius:8px;background:rgba(0,0,0,0.5);color:#fff;font-size:15px;width:220px;text-align:center;outline:none;">
+      <input id="loginPass" type="password" placeholder="密码" autocomplete="current-password" style="font-family:var(--game-font-ui);padding:10px 18px;border:2px solid #4fd1ff;border-radius:8px;background:rgba(0,0,0,0.5);color:#fff;font-size:15px;width:220px;text-align:center;outline:none;">
+      <p id="loginError" style="color:#ff4444;font-size:13px;margin:0;display:none;font-family:var(--game-font-ui);">密码错误</p>
+      <button type="button" id="btnLogin" style="font-family:var(--game-font-ui);padding:10px 40px;border:2px solid #4fd1ff;border-radius:8px;background:rgba(79,209,255,0.18);color:#fff;cursor:pointer;font-size:16px;letter-spacing:2px;">登录 / 注册</button>
+      <p id="loginHint" style="font-family:var(--game-font-ui);font-size:11px;opacity:0.5;margin:4px 0 0 0;max-width:260px;text-align:center;">新用户名将自动注册</p>
+    </div>
+    <div id="menuMain" style="display:none;flex-direction:column;align-items:center;gap:10px;">
       <h1 id="menuGameTitle" data-i18n="gameTitle">Zone No Light</h1>
       <p id="menuCreditsGame" data-i18n="creditsGame">Game by Tintly555</p>
       <p id="menuCreditsMusic" data-i18n="creditsMusic">Music by JimmyQrg</p>
+      <p id="menuAccountInfo" style="font-family:var(--game-font-ui);font-size:12px;opacity:0.6;margin:0;"></p>
       <button type="button" id="btnArena" data-i18n="btnZombieArena">Zombie Arena</button>
       <button type="button" id="btnBossFight">BOSS FIGHT</button>
       <button type="button" id="btnTraining" data-i18n="btnTrainingCamp">Training Camp</button>
       <button type="button" id="btnCrossfire" data-i18n="btnCrossfire">Crossfire (PVP)</button>
       <button type="button" id="btnMenuSettings" data-i18n="menuSettings">SETTINGS</button>
+      <button type="button" id="btnLogout" style="font-family:var(--game-font-ui);padding:6px 16px;border:1px solid #888;border-radius:6px;background:transparent;color:#aaa;cursor:pointer;font-size:11px;margin-top:4px;">切换账号</button>
     </div>
     <div id="menuArenaMode" style="display:none;flex-direction:column;align-items:center;gap:10px;">
       <h2 id="menuZombieArenaHeading" style="font-family:var(--game-font-ui);font-size:28px;margin:0 0 14px 0;letter-spacing:3px;" data-i18n="zombieArenaTitle">ZOMBIE ARENA</h2>
@@ -8841,9 +8852,9 @@ if (typeof window !== "undefined") {
 
     const weaponUnlocked = {
       0: true,   // Pistol — always
-      1: false,  // AR — 60 kills
-      2: false,  // Shotgun — 20 kills
-      3: false,  // SMG — 40 kills
+      1: false,  // AR — 30 kills
+      2: false,  // Shotgun — 10 kills
+      3: false,  // SMG — 20 kills
       4: true,   // Med Kit — always
       5: false,  // AMR — 1st boss kill
       6: false,  // Paralysis — 2nd boss kill
@@ -8852,6 +8863,87 @@ if (typeof window !== "undefined") {
     };
     let totalKillCount = 0;
     let bossKillCount = 0;
+
+    let currentAccount = null;
+    const ACCOUNT_STORAGE_KEY = "fps_accounts";
+
+    function getAllAccounts() {
+      try {
+        return JSON.parse(localStorage.getItem(ACCOUNT_STORAGE_KEY) || "{}");
+      } catch { return {}; }
+    }
+
+    function saveAllAccounts(accounts) {
+      localStorage.setItem(ACCOUNT_STORAGE_KEY, JSON.stringify(accounts));
+    }
+
+    function getAccountData() {
+      if (!currentAccount) return null;
+      const accounts = getAllAccounts();
+      return accounts[currentAccount] || null;
+    }
+
+    function saveAccountData(data) {
+      if (!currentAccount) return;
+      const accounts = getAllAccounts();
+      accounts[currentAccount] = data;
+      saveAllAccounts(accounts);
+    }
+
+    function loginAccount(username, password) {
+      const accounts = getAllAccounts();
+      if (accounts[username]) {
+        if (accounts[username].password !== password) return false;
+        currentAccount = username;
+        loadAccountUnlocks();
+        return true;
+      }
+      accounts[username] = {
+        password,
+        weaponUnlocked: { 0: true, 4: true, 7: true },
+        totalKillCount: 0,
+        bossKillCount: 0,
+        devGunUnlocked: false,
+      };
+      saveAllAccounts(accounts);
+      currentAccount = username;
+      loadAccountUnlocks();
+      return true;
+    }
+
+    function loadAccountUnlocks() {
+      const data = getAccountData();
+      for (const k of Object.keys(weaponUnlocked)) weaponUnlocked[k] = false;
+      weaponUnlocked[0] = true;
+      weaponUnlocked[4] = true;
+      weaponUnlocked[7] = true;
+      if (data) {
+        if (data.weaponUnlocked) {
+          for (const [k, v] of Object.entries(data.weaponUnlocked)) {
+            if (v) weaponUnlocked[parseInt(k)] = true;
+          }
+        }
+        totalKillCount = data.totalKillCount || 0;
+        bossKillCount = data.bossKillCount || 0;
+        if (data.devGunUnlocked) DEV_GUN_UNLOCKED = true;
+      } else {
+        totalKillCount = 0;
+        bossKillCount = 0;
+      }
+    }
+
+    function persistAccountUnlocks() {
+      if (!currentAccount) return;
+      const data = getAccountData() || {};
+      data.weaponUnlocked = {};
+      for (const [k, v] of Object.entries(weaponUnlocked)) {
+        if (v) data.weaponUnlocked[k] = true;
+      }
+      data.totalKillCount = totalKillCount;
+      data.bossKillCount = bossKillCount;
+      data.devGunUnlocked = DEV_GUN_UNLOCKED;
+      saveAccountData(data);
+    }
 
     const WEAPON_UNLOCK_TABLE = [
       { idx: 2, kills: 10, bossKills: 0, label: "霰弹枪 (Shotgun)" },
@@ -8862,6 +8954,7 @@ if (typeof window !== "undefined") {
     ];
 
     function checkWeaponUnlocks() {
+      let changed = false;
       for (const entry of WEAPON_UNLOCK_TABLE) {
         if (weaponUnlocked[entry.idx]) continue;
         const byKills = entry.kills > 0 && totalKillCount >= entry.kills;
@@ -8870,8 +8963,10 @@ if (typeof window !== "undefined") {
           weaponUnlocked[entry.idx] = true;
           showWeaponUnlockMsg(entry.label);
           updateQuestHud();
+          changed = true;
         }
       }
+      if (changed) persistAccountUnlocks();
     }
 
     function showWeaponUnlockMsg(label) {
@@ -8893,6 +8988,7 @@ if (typeof window !== "undefined") {
         if (pw === "2486") {
           weaponUnlocked[idx] = true;
           setWeapon(idx);
+          persistAccountUnlocks();
           updateQuestHud();
         }
       }
@@ -8902,6 +8998,7 @@ if (typeof window !== "undefined") {
       totalKillCount++;
       if (enemy.isBoss) bossKillCount++;
       checkWeaponUnlocks();
+      persistAccountUnlocks();
       updateQuestHud();
     }
 
@@ -12237,11 +12334,12 @@ if (typeof window !== "undefined") {
         if (act === "slide") slideBack = 0.09 * k;
         if (ud.animSlide) ud.animSlide.position.z = slideBack;
         if (act === "pistolDraw") {
-          const spin = THREE.MathUtils.smoothstep(t, 0.0, 0.7);
-          const settle = THREE.MathUtils.smoothstep(t, 0.7, 1.0);
-          offY = -0.3 * (1 - spin) + 0.05 * Math.sin(spin * Math.PI);
-          rotZ = spin * Math.PI * 2 * (1 - settle * 0.02);
-          rotX = -0.15 * (1 - settle);
+          const rise = THREE.MathUtils.smoothstep(t, 0.0, 0.4);
+          const spin = THREE.MathUtils.smoothstep(t, 0.05, 0.75);
+          const settle = THREE.MathUtils.smoothstep(t, 0.75, 1.0);
+          offY = THREE.MathUtils.lerp(-0.45, 0.08, rise) - 0.08 * settle;
+          rotZ = spin * Math.PI * 2;
+          rotX = -0.1 * Math.sin(spin * Math.PI) * (1 - settle);
         } else {
           rotX = state.reloading ? 0 : -0.035 * k;
         }
@@ -12249,13 +12347,15 @@ if (typeof window !== "undefined") {
         if (act === "auto") rotX = -0.04 * k;
       } else if (wi === 2) {
         if (act === "shotgunDraw") {
-          const toss = THREE.MathUtils.smoothstep(t, 0.0, 0.35);
-          const flip = THREE.MathUtils.smoothstep(t, 0.15, 0.65);
-          const settle = THREE.MathUtils.smoothstep(t, 0.6, 1.0);
-          offY = -0.35 * (1 - toss) + 0.12 * Math.sin(toss * Math.PI);
-          offX = 0.15 * Math.sin(toss * Math.PI) * (1 - settle);
-          rotZ = (1 - flip) * (Math.PI / 2) + flip * 0;
-          rotX = -0.2 * Math.sin(flip * Math.PI) * (1 - settle);
+          const rise = THREE.MathUtils.smoothstep(t, 0.0, 0.35);
+          const overRot = THREE.MathUtils.smoothstep(t, 0.1, 0.55);
+          const correct = THREE.MathUtils.smoothstep(t, 0.55, 0.80);
+          const settle = THREE.MathUtils.smoothstep(t, 0.80, 1.0);
+          offY = THREE.MathUtils.lerp(-0.55, 0.06, rise) - 0.06 * settle;
+          offX = 0.1 * Math.sin(rise * Math.PI) * (1 - settle);
+          const rawRot = THREE.MathUtils.lerp(Math.PI / 2, -0.15, overRot);
+          rotZ = THREE.MathUtils.lerp(rawRot, 0, correct);
+          rotX = -0.08 * Math.sin(overRot * Math.PI) * (1 - settle);
         } else {
           let pumpZ = 0;
           if (act === "pump" && !state.reloading) pumpZ = 0.11 * k;
@@ -12529,10 +12629,9 @@ if (typeof window !== "undefined") {
       if (k === "6") trySelectWeapon(6);
       if (k === "7") trySelectWeapon(4);
       if (k === "0") setWeapon(7);
-      if (k === "8") {
-        if (DEV_GUN_UNLOCKED) {
-          weaponUnlocked[8] = true;
-        }
+      if (k === "/" || e.code === "Slash") {
+        e.preventDefault();
+        if (DEV_GUN_UNLOCKED) weaponUnlocked[8] = true;
         trySelectWeapon(8);
       }
       if (k === "r") startReload();
@@ -15641,9 +15740,10 @@ if (typeof window !== "undefined") {
           if (pdx * pdx + pdz * pdz < 4) {
             bossDeathPickupPos._picked = true;
             DEV_GUN_UNLOCKED = true;
+            persistAccountUnlocks();
             const msg = document.createElement("div");
             msg.style.cssText = "position:fixed;top:35%;left:50%;transform:translate(-50%,-50%);font-size:36px;font-weight:900;color:#ffd700;text-shadow:0 0 20px rgba(255,215,0,0.8),0 0 40px rgba(255,165,0,0.5);letter-spacing:4px;z-index:9999;pointer-events:none;opacity:0;animation:bossVicFadeIn 1s ease forwards;";
-            msg.textContent = "获得 天罚之锤 — 按 8 装备";
+            msg.textContent = "获得 天罚之锤 — 按 / 装备";
             document.body.appendChild(msg);
             setTimeout(() => {
               msg.style.animation = "bossVicFadeOut 1.5s ease forwards";
@@ -15832,13 +15932,8 @@ if (typeof window !== "undefined") {
       stopMenuBackdropLoop();
       pauseMenuBgm();
 
-      totalKillCount = 0;
-      bossKillCount = 0;
       bossDeathPickupPos = null;
-      for (const k of Object.keys(weaponUnlocked)) weaponUnlocked[k] = false;
-      weaponUnlocked[0] = true;
-      weaponUnlocked[4] = true;
-      weaponUnlocked[7] = true;
+      loadAccountUnlocks();
       setWeapon(0);
 
       clearMap();
@@ -16041,7 +16136,8 @@ if (typeof window !== "undefined") {
     }
 
     function showMenuPanel(id) {
-      for (const p of [menuMain, menuArenaMode, menuBossMode, menuBossDifficulty, menuTrainingMode, menuPvpMaps, menuLobby, menuJoinCode]) p.style.display = "none";
+      const loginPanel = document.getElementById("menuLogin");
+      for (const p of [loginPanel, menuMain, menuArenaMode, menuBossMode, menuBossDifficulty, menuTrainingMode, menuPvpMaps, menuLobby, menuJoinCode]) p.style.display = "none";
       clearLobbyErr();
       document.getElementById(id).style.display = "flex";
     }
@@ -16070,6 +16166,30 @@ if (typeof window !== "undefined") {
       nameInput.focus();
       nameModal._pendingMap = mapName;
     }
+
+    document.getElementById("btnLogin").addEventListener("click", () => {
+      const user = document.getElementById("loginUser").value.trim();
+      const pass = document.getElementById("loginPass").value;
+      const errEl = document.getElementById("loginError");
+      if (!user || !pass) { errEl.textContent = "请输入用户名和密码"; errEl.style.display = "block"; return; }
+      const ok = loginAccount(user, pass);
+      if (!ok) { errEl.textContent = "密码错误"; errEl.style.display = "block"; return; }
+      errEl.style.display = "none";
+      document.getElementById("menuLogin").style.display = "none";
+      document.getElementById("menuMain").style.display = "flex";
+      document.getElementById("menuAccountInfo").textContent = "账号: " + currentAccount;
+    });
+    document.getElementById("loginPass").addEventListener("keydown", e => {
+      if (e.key === "Enter") document.getElementById("btnLogin").click();
+    });
+    document.getElementById("btnLogout").addEventListener("click", () => {
+      currentAccount = null;
+      document.getElementById("menuMain").style.display = "none";
+      document.getElementById("menuLogin").style.display = "flex";
+      document.getElementById("loginUser").value = "";
+      document.getElementById("loginPass").value = "";
+      document.getElementById("loginError").style.display = "none";
+    });
 
     btnArena.addEventListener("click", () => showMenuPanel("menuArenaMode"));
     btnArenaSingle.addEventListener("click", () => startGame("arena", false));
