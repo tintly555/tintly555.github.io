@@ -8738,8 +8738,6 @@ if (typeof window !== "undefined") {
       lastShellEject: 0,
       reloadStartAmmo: 0,
       slowUntil: 0,
-      speedBoostUntil: 0,
-      speedBoostCooldownEnd: 0,
       dashCooldownEnd: 0,
       projectiles: [],
       knifeComboIdx: 0,
@@ -9463,8 +9461,7 @@ if (typeof window !== "undefined") {
         WASD move | Space jump | R reload<br>
         Mouse aim | RMB zoom | L flashlight | Z beam small/med/wide<br>
         Weapons: <b>0</b> Knife | <b>1</b> Pistol | <b>2</b> Shotgun | <b>3</b> SMG | <b>4</b> AR | <b>5</b> AMR | <b>6</b> Dart | <b>7</b> Med Kit<br>
-        ${(function(){ const nowH=performance.now(); if(nowH<state.speedBoostUntil) return '<b style="color:#a0ffb0;">⚡ SPEED BOOST active: '+Math.ceil((state.speedBoostUntil-nowH)/1000)+'s</b><br>'; if(nowH<state.speedBoostCooldownEnd) return '<span style="color:#888;">Q speed boost cooldown: '+Math.ceil((state.speedBoostCooldownEnd-nowH)/1000)+'s</span><br>'; return '<span style="opacity:0.7;">Q: Speed Boost (ready)</span><br>'; })()}
-        Map: ${mapLabel}${MULTIPLAYER ? " (MP)" : ""}<br>
+Map: ${mapLabel}${MULTIPLAYER ? " (MP)" : ""}<br>
         Weapon: ${w.name}<br>
         ${
           state.weaponIndex === 4
@@ -11098,6 +11095,38 @@ if (typeof window !== "undefined") {
       whoosh.stop(now + 0.25);
     }
 
+    function playDashSound() {
+      if (audioCtx.state === "suspended") void audioCtx.resume();
+      const now = audioCtx.currentTime;
+      const noise = audioCtx.createBufferSource();
+      noise.buffer = getGunNoiseBuffer(0.18);
+      const bp = audioCtx.createBiquadFilter();
+      bp.type = "bandpass";
+      bp.frequency.setValueAtTime(3200, now);
+      bp.frequency.exponentialRampToValueAtTime(600, now + 0.13);
+      bp.Q.setValueAtTime(0.5, now);
+      const g = audioCtx.createGain();
+      g.gain.setValueAtTime(0.0001, now);
+      g.gain.linearRampToValueAtTime(0.55, now + 0.012);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + 0.16);
+      noise.connect(bp);
+      bp.connect(g);
+      g.connect(audioSfx);
+      noise.start(now);
+      noise.stop(now + 0.2);
+      const osc = audioCtx.createOscillator();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(180, now);
+      osc.frequency.exponentialRampToValueAtTime(60, now + 0.12);
+      const og = audioCtx.createGain();
+      og.gain.setValueAtTime(0.18, now);
+      og.gain.exponentialRampToValueAtTime(0.0001, now + 0.12);
+      osc.connect(og);
+      og.connect(audioSfx);
+      osc.start(now);
+      osc.stop(now + 0.15);
+    }
+
     function playKnifeHitSound() {
       if (audioCtx.state === "suspended") void audioCtx.resume();
       const now = audioCtx.currentTime;
@@ -12356,10 +12385,6 @@ if (typeof window !== "undefined") {
       applyMedKitRingVisual(0);
     }
 
-    function getPlayerMoveSpeedMult() {
-      if (performance.now() < state.speedBoostUntil) return 2.0;
-      return 1;
-    }
 
     function startWeaponFireAnim() {
       const wi = state.weaponIndex;
@@ -13151,29 +13176,24 @@ if (typeof window !== "undefined") {
         trySelectWeapon(8);
       }
       if (k === "r") startReload();
-      if ((k === "q" || e.code === "KeyQ") && started && !paused && player.health > 0 && gameWorldReady && menuEl.style.display === "none" && !chatOpen && !settingsModalOpen) {
-        const nowQ = performance.now();
-        if (nowQ >= state.speedBoostCooldownEnd && nowQ >= state.speedBoostUntil) {
-          state.speedBoostUntil = nowQ + 5000;
-          state.speedBoostCooldownEnd = nowQ + 15000;
-          showCombatFeedback("⚡ SPEED BOOST", "#a0ffb0", 0.5);
-          e.preventDefault();
-        }
-      }
+
       if ((k === "c" || e.code === "KeyC") && started && !paused && player.health > 0 && gameWorldReady && menuEl.style.display === "none" && !chatOpen && !settingsModalOpen) {
         const nowC = performance.now();
         if (nowC >= state.dashCooldownEnd) {
-          // Horizontal: always full 8 units in yaw direction — no pitch dependency
-          const fwd = new THREE.Vector3(0, 0, -1).applyAxisAngle(new THREE.Vector3(0, 1, 0), player.yaw);
-          const dashTarget = player.position.clone().add(fwd.clone().multiplyScalar(8.0));
+          const DASH_DIST = 8.0;
+          const cp = Math.cos(player.pitch);
+          const sp = Math.sin(player.pitch);
+          const dx = -Math.sin(player.yaw) * cp * DASH_DIST;
+          const dy = sp * DASH_DIST;
+          const dz = -Math.cos(player.yaw) * cp * DASH_DIST;
+          const dashTarget = new THREE.Vector3(player.position.x + dx, player.position.y, player.position.z + dz);
           const resolved = resolveWallSliding(dashTarget);
           player.position.x = resolved.x;
           player.position.z = resolved.z;
-          const pitch = player.pitch;
-          if (pitch > 0.08) {
-            player.velocityY = 13.0; // clears all covers (boss 2m, pvp pillar 3.2m)
-            player.onGround = false;
-          }
+          player.position.y = Math.max(1.65, player.position.y + dy);
+          player.velocityY = sp * 10;
+          if (Math.abs(dy) > 0.05) player.onGround = false;
+          playDashSound();
           state.dashCooldownEnd = nowC + 350;
           state.camShake = Math.max(state.camShake, 0.06);
           e.preventDefault();
@@ -14714,7 +14734,7 @@ if (typeof window !== "undefined") {
       }
 
       if (move.lengthSq() > 0) {
-        move.normalize().multiplyScalar(player.speed * getPlayerMoveSpeedMult() * dt);
+        move.normalize().multiplyScalar(player.speed * dt);
         const next = player.position.clone().add(new THREE.Vector3(move.x, 0, move.z));
         const resolved = resolveWallSliding(next);
         player.position.x = resolved.x;
