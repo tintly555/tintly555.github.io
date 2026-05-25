@@ -1162,7 +1162,7 @@
       <button type="button" id="btnTrainingBack" style="position:fixed;top:14px;left:14px;background:none;border:none;cursor:pointer;padding:6px;opacity:0.85;transition:opacity 0.15s;z-index:105;" onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='0.85'"><svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
     </div>
     <div id="menuPvpMaps" style="display:none;flex-direction:column;align-items:center;gap:14px;position:relative;padding-top:20px;">
-      <h2 style="font-family:var(--game-font-ui);font-size:24px;margin:0 0 4px 0;letter-spacing:2px;" data-i18n="pvpCreateMapTitle">CREATE ROOM — SELECT MAP</h2>
+      <h2 style="font-family:var(--game-font-ui);font-size:24px;margin:0 0 4px 0;letter-spacing:2px;">SELECT MAP</h2>
       <div style="display:flex;gap:16px;justify-content:center;flex-wrap:wrap;">
         <button type="button" id="btnPvpMapClassic" style="display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px 12px;background:rgba(20,28,44,0.88);border:2px solid #4fd1ff;border-radius:10px;cursor:pointer;transition:border-color .2s,transform .15s;" onmouseenter="this.style.borderColor='#fff';this.style.transform='scale(1.04)'" onmouseleave="this.style.borderColor='#4fd1ff';this.style.transform='scale(1)'">
           <canvas id="pvpPreviewClassic" width="220" height="130" style="border-radius:6px;background:#1a2233;"></canvas>
@@ -17053,22 +17053,24 @@ Map: ${mapLabel}${MULTIPLAYER ? " (MP)" : ""}<br>
     btnTrainingBack.addEventListener("click", () => showMenuPanel("menuMain"));
 
     btnCrossfire.addEventListener("click", () => {
-      showLobby("crossfire", tr("lobbyCrossfire", "PVP"));
+      pendingLobbyMode = "crossfire";
+      drawPvpMapPreviews();
+      showMenuPanel("menuPvpMaps");
     });
 
     btnPvpMapClassic.addEventListener("click", () => {
       PENDING_PVP_MAP = "crossfire";
-      _doPvpCreateRoom();
+      showLobby("crossfire", tr("lobbyCrossfire", "PVP"));
     });
     btnPvpMapGrid.addEventListener("click", () => {
       PENDING_PVP_MAP = "crossfire_grid";
-      _doPvpCreateRoom();
+      showLobby("crossfire", tr("lobbyCrossfire", "PVP"));
     });
     document.getElementById("btnPvpMapBright").addEventListener("click", () => {
       PENDING_PVP_MAP = "pvp_bright";
-      _doPvpCreateRoom();
+      showLobby("crossfire", tr("lobbyCrossfire", "PVP"));
     });
-    btnPvpMapBack.addEventListener("click", () => showMenuPanel("menuLobby"));
+    btnPvpMapBack.addEventListener("click", () => showMenuPanel("menuStart"));
 
     function _doPvpCreateRoom() {
       clearLobbyErr();
@@ -17116,11 +17118,6 @@ Map: ${mapLabel}${MULTIPLAYER ? " (MP)" : ""}<br>
       clearLobbyErr();
       if (!pendingLobbyMode) {
         showLobbyErr(tr("lobbyPickModeFirst", "Choose CO-OP or a PVP map first."));
-        return;
-      }
-      if (pendingLobbyMode === "crossfire") {
-        drawPvpMapPreviews();
-        showMenuPanel("menuPvpMaps");
         return;
       }
       socket.emit("createRoom", pendingLobbyMode, (res) => {
