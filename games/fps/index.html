@@ -8739,6 +8739,7 @@ if (typeof window !== "undefined") {
       reloadStartAmmo: 0,
       slowUntil: 0,
       dashCooldownEnd: 0,
+      dashDisabledUntil: 0,
       projectiles: [],
       knifeComboIdx: 0,
       lastKnifeSwing: 0,
@@ -13179,7 +13180,9 @@ Map: ${mapLabel}${MULTIPLAYER ? " (MP)" : ""}<br>
 
       if ((k === "c" || e.code === "KeyC") && started && !paused && player.health > 0 && gameWorldReady && menuEl.style.display === "none" && !chatOpen && !settingsModalOpen) {
         const nowC = performance.now();
-        if (nowC >= state.dashCooldownEnd) {
+        if (nowC < state.dashDisabledUntil) {
+          showCombatFeedback("DASH LOCKED " + Math.ceil((state.dashDisabledUntil - nowC) / 1000) + "s", "#ff4422", 0.25);
+        } else if (nowC >= state.dashCooldownEnd) {
           const DASH_DIST = 8.0;
           const cp = Math.cos(player.pitch);
           const sp = Math.sin(player.pitch);
@@ -15998,6 +16001,29 @@ Map: ${mapLabel}${MULTIPLAYER ? " (MP)" : ""}<br>
               if (pow > 0.7 && !enemy._smashShook) {
                 enemy._smashShook = true;
                 state.camShake = Math.max(state.camShake || 0, 1.0);
+                if (player.health > 0) {
+                  const bx = enemy.group.position.x, bz = enemy.group.position.z;
+                  const pdx = player.position.x - bx, pdz = player.position.z - bz;
+                  if (Math.hypot(pdx, pdz) < 14) {
+                    state.dashDisabledUntil = performance.now() + 20000;
+                    if (player.onGround) {
+                      const norm = Math.hypot(pdx, pdz) > 0.01 ? 1 / Math.hypot(pdx, pdz) : 1;
+                      const kbTarget = new THREE.Vector3(
+                        player.position.x + pdx * norm * 3.5,
+                        player.position.y,
+                        player.position.z + pdz * norm * 3.5
+                      );
+                      const kbRes = resolveWallSliding(kbTarget);
+                      player.position.x = kbRes.x;
+                      player.position.z = kbRes.z;
+                      showCombatFeedback("⚠ DASH DISABLED 20s", "#ff6644", 0.8);
+                    } else {
+                      player.velocityY = -22;
+                      player.onGround = false;
+                      showCombatFeedback("⚠ CRASH! DASH DISABLED 20s", "#ff4422", 0.8);
+                    }
+                  }
+                }
               }
             } else if (t < 0.56) {
               // Ground impact hold with tremor
