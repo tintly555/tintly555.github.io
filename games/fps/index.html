@@ -581,8 +581,17 @@
       opacity: 0.8;
     }
 
-    /* Main menu: textured buttons only */
-    .menu button {
+    /* Main menu: textured buttons only (excludes floating icon buttons) */
+    .menu-float-icon {
+      position: fixed;
+      background: none !important;
+      background-image: none !important;
+      border: none !important;
+      box-shadow: none !important;
+      width: auto !important;
+      padding: 8px !important;
+    }
+    .menu button:not(.menu-float-icon) {
       box-sizing: border-box;
       width: 220px;
       padding: 14px 18px;
@@ -603,7 +612,7 @@
       box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.12);
       transition: filter 0.15s, border-color 0.15s;
     }
-    .menu button:hover {
+    .menu button:not(.menu-float-icon):hover {
       filter: brightness(1.07);
       border-color: rgba(255, 255, 255, 0.34);
     }
@@ -1094,14 +1103,21 @@
       <h1 id="menuGameTitle" data-i18n="gameTitle">Zone No Light</h1>
       <p id="menuCreditsGame" data-i18n="creditsGame" style="cursor:pointer;user-select:none;">Game by Tintly555</p>
       <p id="menuCreditsMusic" data-i18n="creditsMusic" style="cursor:pointer;user-select:none;">Music by JimmyQrg</p>
+      <button type="button" id="btnStart">START</button>
+    </div>
+    <!-- Floating settings gear — top-right, only visible in menu -->
+    <button type="button" id="btnMenuSettings" class="menu-float-icon" title="Settings" style="position:fixed;top:16px;right:16px;z-index:102;background:none;border:none;cursor:pointer;padding:8px;opacity:0.82;transition:opacity 0.15s;" onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='0.82'"><svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.88)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+    <!-- Floating achievements trophy — bottom-right, only visible in menu -->
+    <button type="button" id="btnAchievements" class="menu-float-icon" title="Achievements" style="position:fixed;bottom:16px;right:16px;z-index:102;background:none;border:none;cursor:pointer;padding:8px;opacity:0.82;transition:opacity 0.15s;" onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='0.82'"><svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="rgba(255,215,0,0.9)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2z"/></svg></button>
+    <!-- START submenu: Zombie Arena | Boss Fight | Crossfire | Training Camp -->
+    <div id="menuStart" style="display:none;flex-direction:column;align-items:center;gap:10px;position:relative;padding-top:20px;">
+      <button type="button" id="btnStartBack" style="position:absolute;top:10px;left:10px;background:none;border:none;cursor:pointer;padding:6px;opacity:0.8;transition:opacity 0.15s;z-index:2;" onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='0.8'"><svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
       <button type="button" id="btnArena" data-i18n="btnZombieArena">Zombie Arena</button>
       <button type="button" id="btnBossFight">BOSS FIGHT</button>
       <button type="button" id="btnTraining" data-i18n="btnTrainingCamp">Training Camp</button>
       <button type="button" id="btnCrossfire" data-i18n="btnCrossfire">Crossfire (PVP)</button>
-      <button type="button" id="btnAchievements" data-i18n="btnAchievements">Achievements</button>
-      <button type="button" id="btnMenuSettings" data-i18n="menuSettings">SETTINGS</button>
     </div>
-    <div id="menuAchievements" style="display:none;flex-direction:column;align-items:center;gap:10px;">
+    <div id="menuAchievements" style="display:none;flex-direction:column;align-items:center;gap:10px;position:relative;padding-top:20px;">
       <h2 id="achMenuTitle" style="font-family:var(--game-font-ui);font-size:28px;margin:0 0 8px 0;letter-spacing:3px;color:#ffd700;">Achievements</h2>
       <p id="achMenuHint" style="font-family:var(--game-font-ui);font-size:11px;opacity:0.65;margin:0 0 6px 0;text-align:center;">Tap an achievement for details. Equipped achievements show above your name.</p>
       <div id="achList"></div>
@@ -1111,22 +1127,22 @@
         <div id="achDetailHint" style="font-family:var(--game-font-ui);font-size:13px;line-height:1.5;color:#ddd;margin-bottom:12px;"></div>
         <div id="achDetailActions" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
       </div>
-      <button type="button" id="btnAchBack" style="font-family:var(--game-font-ui);padding:8px 20px;border:2px solid #888;border-radius:8px;background:transparent;color:#fff;cursor:pointer;font-size:13px;margin-top:4px;">← BACK</button>
+      <button type="button" id="btnAchBack" style="position:absolute;top:10px;left:10px;background:none;border:none;cursor:pointer;padding:6px;opacity:0.8;transition:opacity 0.15s;z-index:2;" onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='0.8'"><svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
     </div>
-    <div id="menuArenaMode" style="display:none;flex-direction:column;align-items:center;gap:10px;">
+    <div id="menuArenaMode" style="display:none;flex-direction:column;align-items:center;gap:10px;position:relative;padding-top:20px;">
       <h2 id="menuZombieArenaHeading" style="font-family:var(--game-font-ui);font-size:28px;margin:0 0 14px 0;letter-spacing:3px;" data-i18n="zombieArenaTitle">ZOMBIE ARENA</h2>
       <button type="button" id="btnArenaSingle" data-i18n="btnSingleplayer">SINGLEPLAYER</button>
       <button type="button" id="btnArenaCoop" data-i18n="btnCoopMode">CO-OP MODE</button>
-      <button type="button" id="btnArenaBack" data-i18n="btnBack">← BACK</button>
+      <button type="button" id="btnArenaBack" style="position:absolute;top:10px;left:10px;background:none;border:none;cursor:pointer;padding:6px;opacity:0.8;transition:opacity 0.15s;z-index:2;" onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='0.8'"><svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
     </div>
-    <div id="menuBossMode" style="display:none;flex-direction:column;align-items:center;gap:10px;">
+    <div id="menuBossMode" style="display:none;flex-direction:column;align-items:center;gap:10px;position:relative;padding-top:20px;">
       <h2 style="font-family:var(--game-font-ui);font-size:28px;margin:0 0 14px 0;letter-spacing:3px;">BOSS FIGHT</h2>
       <p style="font-family:var(--game-font-ui);font-size:12px;opacity:0.78;margin:0 0 8px 0;max-width:320px;text-align:center;line-height:1.45;">Fight the Hormone Zombie (激素僵尸) — a hulking boss that switches between Tank, Speed, and Gunner modes.</p>
       <button type="button" id="btnBossSingle" style="font-family:var(--game-font-ui);padding:10px 30px;border:2px solid #4fd1ff;border-radius:8px;background:rgba(79,209,255,0.18);color:#fff;cursor:pointer;font-size:15px;letter-spacing:1px;">SINGLEPLAYER</button>
       <button type="button" id="btnBossCoop" style="font-family:var(--game-font-ui);padding:10px 30px;border:2px solid #4fd1ff;border-radius:8px;background:rgba(79,209,255,0.18);color:#fff;cursor:pointer;font-size:15px;letter-spacing:1px;">CO-OP MODE</button>
-      <button type="button" id="btnBossBack" style="font-family:var(--game-font-ui);padding:8px 20px;border:2px solid #888;border-radius:8px;background:transparent;color:#fff;cursor:pointer;font-size:13px;">← BACK</button>
+      <button type="button" id="btnBossBack" style="position:absolute;top:10px;left:10px;background:none;border:none;cursor:pointer;padding:6px;opacity:0.8;transition:opacity 0.15s;z-index:2;" onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='0.8'"><svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
     </div>
-    <div id="menuBossDifficulty" style="display:none;flex-direction:column;align-items:center;gap:10px;">
+    <div id="menuBossDifficulty" style="display:none;flex-direction:column;align-items:center;gap:10px;position:relative;padding-top:20px;">
       <h2 style="font-family:var(--game-font-ui);font-size:24px;margin:0 0 10px 0;letter-spacing:2px;">SELECT DIFFICULTY</h2>
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px;">
         <span style="font-family:var(--game-font-ui);font-size:13px;letter-spacing:1px;">BOSSES:</span>
@@ -1136,16 +1152,16 @@
       </div>
       <button type="button" id="btnBossHell" style="font-family:var(--game-font-ui);padding:8px 22px;border:2px solid #ff2244;border-radius:6px;background:rgba(255,34,68,0.22);color:#ff4466;cursor:pointer;font-size:14px;letter-spacing:1px;">HELL MODE</button>
       <button type="button" id="btnBossStartDiff" style="font-family:var(--game-font-ui);padding:10px 30px;border:2px solid #4fd1ff;border-radius:8px;background:rgba(79,209,255,0.18);color:#fff;cursor:pointer;font-size:15px;letter-spacing:1px;">START</button>
-      <button type="button" id="btnBossDiffBack" style="font-family:var(--game-font-ui);padding:8px 20px;border:2px solid #888;border-radius:8px;background:transparent;color:#fff;cursor:pointer;font-size:13px;">← BACK</button>
+      <button type="button" id="btnBossDiffBack" style="position:absolute;top:10px;left:10px;background:none;border:none;cursor:pointer;padding:6px;opacity:0.8;transition:opacity 0.15s;z-index:2;" onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='0.8'"><svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
     </div>
-    <div id="menuTrainingMode" style="display:none;flex-direction:column;align-items:center;gap:10px;">
+    <div id="menuTrainingMode" style="display:none;flex-direction:column;align-items:center;gap:10px;position:relative;padding-top:20px;">
       <h2 id="menuTrainingHeading" style="font-family:var(--game-font-ui);font-size:28px;margin:0 0 14px 0;letter-spacing:3px;" data-i18n="trainingCampTitle">TRAINING CAMP</h2>
       <p id="menuTrainingDesc" style="font-family:var(--game-font-ui);font-size:12px;opacity:0.78;margin:0 0 8px 0;max-width:320px;text-align:center;line-height:1.45;" data-i18n="trainingCampDesc">Shoot moving player-model dummies. Head / body / leg hits score differently.</p>
       <button type="button" id="btnTrainingSingle" data-i18n="btnSingleplayer">SINGLEPLAYER</button>
       <button type="button" id="btnTrainingCoop" data-i18n="btnCoopMode">CO-OP MODE</button>
-      <button type="button" id="btnTrainingBack" data-i18n="btnBack">← BACK</button>
+      <button type="button" id="btnTrainingBack" style="position:absolute;top:10px;left:10px;background:none;border:none;cursor:pointer;padding:6px;opacity:0.8;transition:opacity 0.15s;z-index:2;" onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='0.8'"><svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
     </div>
-    <div id="menuPvpMaps" style="display:none;flex-direction:column;align-items:center;gap:14px;">
+    <div id="menuPvpMaps" style="display:none;flex-direction:column;align-items:center;gap:14px;position:relative;padding-top:20px;">
       <h2 style="font-family:var(--game-font-ui);font-size:24px;margin:0 0 4px 0;letter-spacing:2px;" data-i18n="pvpCreateMapTitle">CREATE ROOM — SELECT MAP</h2>
       <div style="display:flex;gap:16px;justify-content:center;flex-wrap:wrap;">
         <button type="button" id="btnPvpMapClassic" style="display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px 12px;background:rgba(20,28,44,0.88);border:2px solid #4fd1ff;border-radius:10px;cursor:pointer;transition:border-color .2s,transform .15s;" onmouseenter="this.style.borderColor='#fff';this.style.transform='scale(1.04)'" onmouseleave="this.style.borderColor='#4fd1ff';this.style.transform='scale(1)'">
@@ -1157,22 +1173,22 @@
           <span style="font-family:var(--game-font-ui);font-size:13px;letter-spacing:1px;color:#e8ecf2;" data-i18n="pvpMapGrid">GRID KILLHOUSE</span>
         </button>
       </div>
-      <button type="button" id="btnPvpMapBack" data-i18n="btnBack" style="margin-top:4px;">← BACK</button>
+      <button type="button" id="btnPvpMapBack" style="position:absolute;top:10px;left:10px;background:none;border:none;cursor:pointer;padding:6px;opacity:0.8;transition:opacity 0.15s;z-index:2;" onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='0.8'"><svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
     </div>
-    <div id="menuLobby" style="display:none;flex-direction:column;align-items:center;gap:10px;">
+    <div id="menuLobby" style="display:none;flex-direction:column;align-items:center;gap:10px;position:relative;padding-top:20px;">
       <h2 id="lobbyTitle" style="font-family:var(--game-font-ui);font-size:24px;margin:0 0 10px 0;letter-spacing:2px;">MULTIPLAYER</h2>
       <p id="lobbyError" style="font-family:var(--game-font-ui);color:#e53e3e;font-size:13px;margin:0 0 4px 0;min-height:18px;max-width:320px;text-align:center;line-height:1.35;"></p>
       <button type="button" id="btnQuickplay" data-i18n="btnQuickPlay">QUICK PLAY</button>
       <button type="button" id="btnCreateRoom" data-i18n="btnCreateRoom">CREATE A ROOM</button>
       <button type="button" id="btnJoinCode" data-i18n="btnJoinViaCode">JOIN VIA CODE</button>
-      <button type="button" id="btnLobbyBack" data-i18n="btnBack">← BACK</button>
+      <button type="button" id="btnLobbyBack" style="position:absolute;top:10px;left:10px;background:none;border:none;cursor:pointer;padding:6px;opacity:0.8;transition:opacity 0.15s;z-index:2;" onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='0.8'"><svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
     </div>
-    <div id="menuJoinCode" style="display:none;flex-direction:column;align-items:center;gap:10px;">
+    <div id="menuJoinCode" style="display:none;flex-direction:column;align-items:center;gap:10px;position:relative;padding-top:20px;">
       <h2 style="font-family:var(--game-font-ui);font-size:24px;margin:0 0 6px 0;letter-spacing:2px;" data-i18n="joinViaCodeTitle">JOIN VIA CODE</h2>
       <input id="codeInput" type="text" maxlength="10" placeholder="ROOM CODE" data-i18n-placeholder="roomCodePlaceholder" style="font-family:var(--game-font-ui);width:180px;padding:10px 14px;font-size:18px;border:2px solid #4fd1ff;border-radius:8px;background:#0d111b;color:#fff;outline:none;text-align:center;text-transform:uppercase;letter-spacing:4px;">
       <p id="codeError" style="font-family:var(--game-font-ui);color:#e53e3e;font-size:13px;margin:4px 0 0 0;min-height:18px;"></p>
       <button type="button" id="btnCodeJoin" data-i18n="btnJoin">JOIN</button>
-      <button type="button" id="btnCodeBack" data-i18n="btnBack">← BACK</button>
+      <button type="button" id="btnCodeBack" style="position:absolute;top:10px;left:10px;background:none;border:none;cursor:pointer;padding:6px;opacity:0.8;transition:opacity 0.15s;z-index:2;" onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='0.8'"><svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
     </div>
     </div>
   </div>
@@ -4597,7 +4613,7 @@ if (typeof window !== "undefined") {
       if (menuTrainingDesc) menuTrainingDesc.textContent = tr("trainingCampDesc", menuTrainingDesc.textContent);
       if (btnTrainingSingle) btnTrainingSingle.textContent = tr("btnSingleplayer", btnTrainingSingle.textContent);
       if (btnTrainingCoop) btnTrainingCoop.textContent = tr("btnCoopMode", btnTrainingCoop.textContent);
-      if (btnTrainingBack) btnTrainingBack.textContent = tr("btnBack", btnTrainingBack.textContent);
+      /* btnTrainingBack is now an SVG back icon — no text update needed */
       const trainingScoreTitle = document.getElementById("trainingScoreTitle");
       if (trainingScoreTitle) trainingScoreTitle.textContent = tr("trainingScoreTitle", trainingScoreTitle.textContent);
       const lblMap = {
@@ -4617,24 +4633,24 @@ if (typeof window !== "undefined") {
       const menuSettingsBtn = document.getElementById("btnMenuSettings");
       const pvpTitle = document.querySelector("#menuPvpMaps h2");
       const pvpDesc = document.querySelector("#menuPvpMaps p");
-      if (menuSettingsBtn) menuSettingsBtn.textContent = tr("menuSettings", "SETTINGS");
+      /* btnMenuSettings is now a gear SVG icon — no text update needed */
       if (pvpTitle) pvpTitle.textContent = tr("pvpMapTitle", pvpTitle.textContent);
       if (pvpDesc) pvpDesc.textContent = tr("pvpMapDesc", pvpDesc.textContent);
       if (btnArenaSingle) btnArenaSingle.textContent = tr("btnSingleplayer", btnArenaSingle.textContent);
       if (btnArenaCoop) btnArenaCoop.textContent = tr("btnCoopMode", btnArenaCoop.textContent);
-      if (btnArenaBack) btnArenaBack.textContent = tr("btnBack", btnArenaBack.textContent);
+      /* btnArenaBack is now an SVG back icon — no text update needed */
       if (btnPvpMapClassic) btnPvpMapClassic.textContent = tr("pvpMapClassic", btnPvpMapClassic.textContent);
       if (btnPvpMapGrid) btnPvpMapGrid.textContent = tr("pvpMapGrid", btnPvpMapGrid.textContent);
       if (btnPvpMapBack) btnPvpMapBack.textContent = tr("pvpMapBack", btnPvpMapBack.textContent);
       if (btnQuickplay) btnQuickplay.textContent = tr("btnQuickPlay", btnQuickplay.textContent);
       if (btnCreateRoom) btnCreateRoom.textContent = tr("btnCreateRoom", btnCreateRoom.textContent);
       if (btnJoinCode) btnJoinCode.textContent = tr("btnJoinViaCode", btnJoinCode.textContent);
-      if (btnLobbyBack) btnLobbyBack.textContent = tr("btnBack", btnLobbyBack.textContent);
+      /* btnLobbyBack is now an SVG back icon — no text update needed */
       const joinTitle = document.querySelector("#menuJoinCode h2");
       if (joinTitle) joinTitle.textContent = tr("joinViaCodeTitle", joinTitle.textContent);
       if (codeInput) codeInput.placeholder = tr("roomCodePlaceholder", codeInput.placeholder || "ROOM CODE");
       if (btnCodeJoin) btnCodeJoin.textContent = tr("btnJoin", btnCodeJoin.textContent);
-      if (btnCodeBack) btnCodeBack.textContent = tr("btnBack", btnCodeBack.textContent);
+      /* btnCodeBack is now an SVG back icon — no text update needed */
       const fpsChat = document.getElementById("fpsChatHint");
       const fpsLight = document.getElementById("fpsHintFlash");
       const fpsZoom = document.getElementById("fpsHintZoom");
@@ -4680,13 +4696,13 @@ if (typeof window !== "undefined") {
       if (lSkip) lSkip.textContent = tr("settingsSkipClickLabel", lSkip.textContent);
       if (pSkip) pSkip.textContent = tr("settingsSkipClickHint", pSkip.textContent);
       const btnAch = document.getElementById("btnAchievements");
-      if (btnAch) btnAch.textContent = tr("btnAchievements", btnAch.textContent);
+      /* btnAchievements is now a trophy SVG icon — no text update needed */
       const achTitle = document.getElementById("achMenuTitle");
       const achHint = document.getElementById("achMenuHint");
       if (achTitle) achTitle.textContent = tr("achTitle", achTitle.textContent);
       if (achHint) achHint.textContent = tr("achPanelHint", achHint.textContent);
       const btnAchBack = document.getElementById("btnAchBack");
-      if (btnAchBack) btnAchBack.textContent = tr("btnBack", btnAchBack.textContent);
+      /* btnAchBack is now an SVG back icon — no text update needed */
       const hData = document.getElementById("settingsHeadingData");
       const btnCreator = document.getElementById("btnCreatorUnlock");
       const pCreator = document.getElementById("settingsCreatorHint");
@@ -8722,6 +8738,8 @@ if (typeof window !== "undefined") {
       lastShellEject: 0,
       reloadStartAmmo: 0,
       slowUntil: 0,
+      speedBoostUntil: 0,
+      speedBoostCooldownEnd: 0,
       projectiles: [],
       knifeComboIdx: 0,
       lastKnifeSwing: 0,
@@ -8923,7 +8941,7 @@ if (typeof window !== "undefined") {
         color: 0x6bd4ff,
         magSize: 3,
         ammo: 3,
-        reloadTime: 3650,
+        reloadTime: 2400,
         soundBase: 540,
         soundSkin: "revengeClassic",
         adsFov: 60,
@@ -9444,6 +9462,7 @@ if (typeof window !== "undefined") {
         WASD move | Space jump | R reload<br>
         Mouse aim | RMB zoom | L flashlight | Z beam small/med/wide<br>
         Weapons: <b>0</b> Knife | <b>1</b> Pistol | <b>2</b> Shotgun | <b>3</b> SMG | <b>4</b> AR | <b>5</b> AMR | <b>6</b> Dart | <b>7</b> Med Kit<br>
+        ${(function(){ const nowH=performance.now(); if(nowH<state.speedBoostUntil) return '<b style="color:#a0ffb0;">⚡ SPEED BOOST active: '+Math.ceil((state.speedBoostUntil-nowH)/1000)+'s</b><br>'; if(nowH<state.speedBoostCooldownEnd) return '<span style="color:#888;">Q speed boost cooldown: '+Math.ceil((state.speedBoostCooldownEnd-nowH)/1000)+'s</span><br>'; return '<span style="opacity:0.7;">Q: Speed Boost (ready)</span><br>'; })()}
         Map: ${mapLabel}${MULTIPLAYER ? " (MP)" : ""}<br>
         Weapon: ${w.name}<br>
         ${
@@ -12337,6 +12356,7 @@ if (typeof window !== "undefined") {
     }
 
     function getPlayerMoveSpeedMult() {
+      if (performance.now() < state.speedBoostUntil) return 2.0;
       return 1;
     }
 
@@ -12646,15 +12666,21 @@ if (typeof window !== "undefined") {
           }
         }
       } else if (wi === 6) {
-        // Blind dart: loader needle fetched off-screen, then pushed into muzzle.
+        // Paralysis Dart: sequential per-dart loading animation.
+        // dartsToLoad = how many darts we are actually loading this reload.
+        const dartsToLoad = Math.max(1, w.magSize - state.reloadStartAmmo);
+        const segLen = 1 / dartsToLoad;
+        const dartIdx = Math.min(dartsToLoad - 1, Math.floor(p / segLen));
+        const lp = (p - dartIdx * segLen) / segLen; // 0..1 within this dart's segment
+
         const dart = ud.animDart;
         const fetchPos = ud.dartFetchPos;
         const insertPos = ud.dartInsertPos;
         if (dart && fetchPos && insertPos) {
-          const appear = reloadPhase(p, 0.18, 0.32);
-          const push = reloadPhase(p, 0.32, 0.80);
-          const seat = reloadPhase(p, 0.80, 0.92);
-          if (p < 0.18 || p > 0.95) {
+          const appear = reloadPhase(lp, 0.10, 0.28);
+          const push   = reloadPhase(lp, 0.28, 0.78);
+          const seat   = reloadPhase(lp, 0.78, 0.92);
+          if (lp < 0.10 || lp > 0.94) {
             dart.visible = false;
           } else {
             dart.visible = true;
@@ -12662,10 +12688,8 @@ if (typeof window !== "undefined") {
             const sy = fetchPos.y + (insertPos.y - fetchPos.y) * push;
             const sz = fetchPos.z + (insertPos.z - fetchPos.z) * push;
             dart.position.set(sx, sy, sz);
-            // Rotation: hand brings dart in tilted, gradually aligns horizontal with barrel.
             const tilt = 0.55 * (1 - push);
             dart.rotation.set(tilt, 0, tilt * 0.4);
-            // Scale up while appearing, scale to 1 while pushed, shrink while seating in.
             const scale = appear * (1 - seat * 0.6) || 0.01;
             dart.scale.setScalar(Math.max(0.05, scale));
           }
@@ -13126,6 +13150,15 @@ if (typeof window !== "undefined") {
         trySelectWeapon(8);
       }
       if (k === "r") startReload();
+      if ((k === "q" || e.code === "KeyQ") && started && !paused && player.health > 0 && gameWorldReady && menuEl.style.display === "none" && !chatOpen && !settingsModalOpen) {
+        const nowQ = performance.now();
+        if (nowQ >= state.speedBoostCooldownEnd && nowQ >= state.speedBoostUntil) {
+          state.speedBoostUntil = nowQ + 5000;
+          state.speedBoostCooldownEnd = nowQ + 15000;
+          showCombatFeedback("⚡ SPEED BOOST", "#a0ffb0", 0.5);
+          e.preventDefault();
+        }
+      }
       if (k === "m") toggleQuestHud();
       if (k === "v" || e.code === "KeyV") {
         keys.v = true;
@@ -15571,10 +15604,11 @@ if (typeof window !== "undefined") {
 
             let dirX = 0, dirZ = 0;
             const flow = getFlowDirection(enemy.group.position.x, enemy.group.position.z);
+
+            // Boss 和普通僵尸统一做真实 LOS 检测，不再强制 losClear=true
+            // Boss 每帧检测（普通僵尸每 2 帧一次即可）
             let losClear = enemy._lastLosClear;
-            if (enemy.isBoss) {
-              losClear = true;
-            } else if (losClear === undefined || (visFrameCounter + ei) % 2 === 0) {
+            if (losClear === undefined || (enemy.isBoss ? true : (visFrameCounter + ei) % 2 === 0)) {
               losClear = clearLosToTarget(
                 enemy.group.position.x,
                 enemy.group.position.z,
@@ -15585,7 +15619,46 @@ if (typeof window !== "undefined") {
               enemy._lastLosClear = losClear;
             }
 
-            if (losClear && dLen > 0.02) {
+            // Boss 卡死检测：每 0.5s 采样一次位移，连续 3 次位移 < 0.3m 则判定卡死
+            if (enemy.isBoss) {
+              if (enemy._stuckSampleTimer === undefined) {
+                enemy._stuckSampleTimer = 0;
+                enemy._stuckSampleX = enemy.group.position.x;
+                enemy._stuckSampleZ = enemy.group.position.z;
+                enemy._stuckCount = 0;
+                enemy._stuckSideDir = 0;
+              }
+              enemy._stuckSampleTimer += dt;
+              if (enemy._stuckSampleTimer >= 0.5) {
+                enemy._stuckSampleTimer = 0;
+                const sdx = enemy.group.position.x - enemy._stuckSampleX;
+                const sdz = enemy.group.position.z - enemy._stuckSampleZ;
+                enemy._stuckSampleX = enemy.group.position.x;
+                enemy._stuckSampleZ = enemy.group.position.z;
+                if (sdx * sdx + sdz * sdz < 0.09) { // < 0.3m
+                  enemy._stuckCount = Math.min(6, (enemy._stuckCount || 0) + 1);
+                  if (enemy._stuckCount >= 3 && !enemy._stuckSideDir) {
+                    enemy._stuckSideDir = Math.random() < 0.5 ? 1 : -1;
+                    enemy._stuckEscapeTimer = 1.5 + Math.random();
+                  }
+                } else {
+                  enemy._stuckCount = 0;
+                  enemy._stuckSideDir = 0;
+                }
+              }
+              if (enemy._stuckSideDir && enemy._stuckEscapeTimer > 0) {
+                enemy._stuckEscapeTimer -= dt;
+                if (enemy._stuckEscapeTimer <= 0) enemy._stuckSideDir = 0;
+              }
+            }
+
+            if (enemy.isBoss && enemy._stuckSideDir && dLen > 0.02) {
+              // 卡死时向侧面逃脱，同时保留少量朝玩家方向的分量
+              const perpX = -dz / dLen * enemy._stuckSideDir;
+              const perpZ =  dx / dLen * enemy._stuckSideDir;
+              dirX = perpX * 0.8 + (dx / dLen) * 0.2;
+              dirZ = perpZ * 0.8 + (dz / dLen) * 0.2;
+            } else if (losClear && dLen > 0.02) {
               dirX = dx / dLen;
               dirZ = dz / dLen;
             } else if (flow) {
@@ -16464,6 +16537,8 @@ if (typeof window !== "undefined") {
       state.camShake = 0;
       ensureAmbientWindLoop();
       menuEl.style.display = "none";
+      const _gearBtn = document.getElementById("btnMenuSettings"); if(_gearBtn) _gearBtn.style.display="none";
+      const _trophyBtn = document.getElementById("btnAchievements"); if(_trophyBtn) _trophyBtn.style.display="none";
       setGameActiveUi(true);
       bumpRendererLayoutSync(280);
       stopMenuBackdropLoop();
@@ -16649,6 +16724,8 @@ if (typeof window !== "undefined") {
       gameBootOverlay.style.display = "none";
       gameBootOverlay.setAttribute("aria-busy", "false");
       menuEl.style.display = "flex";
+      { const gb = document.getElementById("btnMenuSettings"); if(gb) gb.style.display=""; }
+      { const tb = document.getElementById("btnAchievements"); if(tb) tb.style.display=""; }
       showMenuPanel("menuMain");
       menuBgmPeakSessionMax = 1e-6;
       menuBackdropLightSmooth = 0;
@@ -16678,7 +16755,8 @@ if (typeof window !== "undefined") {
 
     function showMenuPanel(id) {
       const menuAchievements = document.getElementById("menuAchievements");
-      for (const p of [menuMain, menuAchievements, menuArenaMode, menuBossMode, menuBossDifficulty, menuTrainingMode, menuPvpMaps, menuLobby, menuJoinCode]) p.style.display = "none";
+      const menuStart = document.getElementById("menuStart");
+      for (const p of [menuMain, menuStart, menuAchievements, menuArenaMode, menuBossMode, menuBossDifficulty, menuTrainingMode, menuPvpMaps, menuLobby, menuJoinCode]) p.style.display = "none";
       clearLobbyErr();
       document.getElementById(id).style.display = "flex";
     }
@@ -16708,6 +16786,9 @@ if (typeof window !== "undefined") {
       nameModal._pendingMap = mapName;
     }
 
+    document.getElementById("btnStart").addEventListener("click", () => showMenuPanel("menuStart"));
+    document.getElementById("btnStartBack").addEventListener("click", () => showMenuPanel("menuMain"));
+
     btnArena.addEventListener("click", () => showMenuPanel("menuArenaMode"));
 
     document.getElementById("menuCreditsGame").addEventListener("click", () => tryEasterEggCredit(1));
@@ -16720,7 +16801,7 @@ if (typeof window !== "undefined") {
     document.getElementById("btnAchBack").addEventListener("click", () => showMenuPanel("menuMain"));
     btnArenaSingle.addEventListener("click", () => startGame("arena", false));
     btnArenaCoop.addEventListener("click", () => showLobby("arena-coop", tr("lobbyArenaCoop", "ARENA CO-OP")));
-    btnArenaBack.addEventListener("click", () => showMenuPanel("menuMain"));
+    btnArenaBack.addEventListener("click", () => showMenuPanel("menuStart"));
 
     btnBossFight.addEventListener("click", () => showMenuPanel("menuBossMode"));
 
@@ -16752,7 +16833,7 @@ if (typeof window !== "undefined") {
       showMenuPanel("menuBossDifficulty");
     });
 
-    btnBossBack.addEventListener("click", () => showMenuPanel("menuMain"));
+    btnBossBack.addEventListener("click", () => showMenuPanel("menuStart"));
 
     document.getElementById("btnBossDiffBack").addEventListener("click", () => showMenuPanel("menuBossMode"));
 
@@ -16793,7 +16874,7 @@ if (typeof window !== "undefined") {
     btnTrainingCoop.addEventListener("click", () =>
       showLobby("training-coop", tr("lobbyTrainingCoop", "TRAINING CAMP — CO-OP"))
     );
-    btnTrainingBack.addEventListener("click", () => showMenuPanel("menuMain"));
+    btnTrainingBack.addEventListener("click", () => showMenuPanel("menuStart"));
 
     btnCrossfire.addEventListener("click", () => {
       showLobby("crossfire", tr("lobbyCrossfire", "CROSSFIRE (PVP)"));
@@ -16912,7 +16993,7 @@ if (typeof window !== "undefined") {
 
     btnCodeBack.addEventListener("click", () => showMenuPanel("menuLobby"));
     btnLobbyBack.addEventListener("click", () => {
-      if (pendingLobbyMode === "crossfire") showMenuPanel("menuMain");
+      if (pendingLobbyMode === "crossfire") showMenuPanel("menuStart");
       else if (pendingLobbyMode === "training-coop") showMenuPanel("menuTrainingMode");
       else if (pendingLobbyMode === "boss-coop") showMenuPanel("menuBossDifficulty");
       else showMenuPanel("menuArenaMode");
