@@ -1116,7 +1116,6 @@
       <button type="button" id="btnArena" data-i18n="btnZombieArena">Zombie Arena</button>
       <button type="button" id="btnBossFight">BOSS FIGHT</button>
       <button type="button" id="btnCrossfire" data-i18n="btnCrossfire">PVP</button>
-      <button type="button" id="btnBrightDuel">BRIGHT DUEL</button>
     </div>
     <div id="menuAchievements" style="display:none;flex-direction:column;align-items:center;gap:10px;position:relative;padding-top:20px;">
       <h2 id="achMenuTitle" style="font-family:var(--game-font-ui);font-size:28px;margin:0 0 8px 0;letter-spacing:3px;color:#ffd700;">Achievements</h2>
@@ -1172,6 +1171,10 @@
         <button type="button" id="btnPvpMapGrid" style="display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px 12px;background:rgba(20,28,44,0.88);border:2px solid #4fd1ff;border-radius:10px;cursor:pointer;transition:border-color .2s,transform .15s;" onmouseenter="this.style.borderColor='#fff';this.style.transform='scale(1.04)'" onmouseleave="this.style.borderColor='#4fd1ff';this.style.transform='scale(1)'">
           <canvas id="pvpPreviewGrid" width="220" height="130" style="border-radius:6px;background:#1a2233;"></canvas>
           <span style="font-family:var(--game-font-ui);font-size:13px;letter-spacing:1px;color:#e8ecf2;" data-i18n="pvpMapGrid">GRID KILLHOUSE</span>
+        </button>
+        <button type="button" id="btnPvpMapBright" style="display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px 12px;background:rgba(20,28,44,0.88);border:2px solid #4fd1ff;border-radius:10px;cursor:pointer;transition:border-color .2s,transform .15s;" onmouseenter="this.style.borderColor='#fff';this.style.transform='scale(1.04)'" onmouseleave="this.style.borderColor='#4fd1ff';this.style.transform='scale(1)'">
+          <canvas id="pvpPreviewBright" width="220" height="130" style="border-radius:6px;background:#c8d8e8;"></canvas>
+          <span style="font-family:var(--game-font-ui);font-size:13px;letter-spacing:1px;color:#e8ecf2;">BRIGHT ARENA</span>
         </button>
       </div>
       <button type="button" id="btnPvpMapBack" style="position:fixed;top:14px;left:14px;background:none;border:none;cursor:pointer;padding:6px;opacity:0.85;transition:opacity 0.15s;z-index:105;" onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='0.85'"><svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
@@ -2374,7 +2377,6 @@ if (typeof window !== "undefined") {
     const lobbyError = document.getElementById("lobbyError");
     const btnArena = document.getElementById("btnArena");
     const btnCrossfire = document.getElementById("btnCrossfire");
-    const btnBrightDuel = document.getElementById("btnBrightDuel");
     const btnTraining = document.getElementById("btnTraining");
     const menuTrainingMode = document.getElementById("menuTrainingMode");
     const btnTrainingSingle = document.getElementById("btnTrainingSingle");
@@ -4749,10 +4751,14 @@ if (typeof window !== "undefined") {
         { x: -26, z: 26 }, { x: 26, z: -26 },
       ],
       pvp_bright: [
-        { x: 0, z: 16 }, { x: 0, z: -16 },
-        { x: 16, z: 0 }, { x: -16, z: 0 },
-        { x: 13, z: 13 }, { x: -13, z: -13 },
-        { x: 13, z: -13 }, { x: -13, z: 13 },
+        { x: 0, z: 34 }, { x: 0, z: -34 },
+        { x: 34, z: 0 }, { x: -34, z: 0 },
+        { x: 28, z: 28 }, { x: -28, z: -28 },
+        { x: 28, z: -28 }, { x: -28, z: 28 },
+        { x: 18, z: 36 }, { x: -18, z: -36 },
+        { x: 36, z: 18 }, { x: -36, z: -18 },
+        { x: 38, z: 38 }, { x: -38, z: -38 },
+        { x: -38, z: 38 }, { x: 38, z: -38 },
       ],
     };
     let _lastPvpSpawnIdx = -1;
@@ -4835,7 +4841,7 @@ if (typeof window !== "undefined") {
       }
     }
     function isPvpCrossfireMap(m) {
-      return m === "crossfire" || m === "crossfire_grid";
+      return m === "crossfire" || m === "crossfire_grid" || m === "pvp_bright";
     }
     function isTrainingMap(m) {
       return m === "training";
@@ -8370,10 +8376,10 @@ if (typeof window !== "undefined") {
 
     function buildMapPvpBright() {
       clearPvpMapLights();
-      const half = 20;
-      const H = 5.0;
-      const PH = 3.2;
-      const thick = 0.8;
+      const half = 42;
+      const H = 5.5;
+      const PH = 3.4;
+      const thick = 1.0;
       const col = 0x8a9ab0;
 
       addWallBox(half * 2, H, thick, 0, H / 2, -half);
@@ -8381,25 +8387,28 @@ if (typeof window !== "undefined") {
       addWallBox(thick, H, half * 2, -half, H / 2, 0);
       addWallBox(thick, H, half * 2,  half, H / 2, 0);
 
-      // Corner pillars (wide)
-      for (const [px, pz] of [[-12,-12],[12,-12],[-12,12],[12,12]])
-        addWallBox(1.4, PH, 1.4, px, PH / 2, pz, col);
-      // Axis-mid pillars
-      for (const [px, pz] of [[-17,0],[17,0],[0,-17],[0,17]])
-        addWallBox(1.0, PH, 1.0, px, PH / 2, pz, col);
-      // Inner pillars
-      for (const [px, pz] of [[-6,-6],[6,-6],[-6,6],[6,6]])
-        addWallBox(1.2, PH, 1.2, px, PH / 2, pz, col);
-      // Off-axis fillers
-      for (const [px, pz] of [[-15,-7],[15,7],[7,-15],[-7,15]])
-        addWallBox(1.0, PH, 1.0, px, PH / 2, pz, col);
+      // Corner pillars
+      for (const [px, pz] of [[-26,-26],[26,-26],[-26,26],[26,26]])
+        addWallBox(2.8, PH, 2.8, px, PH / 2, pz, col);
+      // Mid-ring pillars
+      for (const [px, pz] of [[-36,0],[36,0],[0,-36],[0,36]])
+        addWallBox(2.2, PH, 2.2, px, PH / 2, pz, col);
+      // Inner corner pillars
+      for (const [px, pz] of [[-14,-14],[14,-14],[-14,14],[14,14]])
+        addWallBox(2.4, PH, 2.4, px, PH / 2, pz, col);
+      // Off-axis pillars
+      for (const [px, pz] of [[-32,-14],[32,14],[14,-32],[-14,32]])
+        addWallBox(2.0, PH, 2.0, px, PH / 2, pz, col);
+      // Center cluster
+      for (const [px, pz] of [[-5,0],[5,0],[0,-5],[0,5]])
+        addWallBox(2.0, PH, 2.0, px, PH / 2, pz, col);
 
-      const amb = new THREE.AmbientLight(0xd8e8f5, 3.0);
+      const amb = new THREE.AmbientLight(0xd8e8f5, 3.2);
       scene.add(amb); pvpMapLights.push(amb);
-      const hemi = new THREE.HemisphereLight(0xeef6ff, 0x887766, 5.2);
+      const hemi = new THREE.HemisphereLight(0xeef6ff, 0x887766, 5.5);
       scene.add(hemi); pvpMapLights.push(hemi);
-      const sun = new THREE.DirectionalLight(0xfff8e8, 12.0);
-      sun.position.set(20, 50, 15); sun.castShadow = false;
+      const sun = new THREE.DirectionalLight(0xfff8e8, 13.0);
+      sun.position.set(20, 55, 15); sun.castShadow = false;
       scene.add(sun); pvpMapLights.push(sun);
     }
 
@@ -12011,7 +12020,7 @@ Map: ${mapLabel}${MULTIPLAYER ? " (MP)" : ""}<br>
         root.userData.animReloadShell = shellIns;
 
         gunGroup.position.set(0.23, -0.2, -0.82);
-        adsOffset.set(-0.175, 0.105, 0.24);
+        adsOffset.set(-0.23, 0.11, 0.28);
 
         const muzzleNode = new THREE.Object3D();
         muzzleNode.position.set(0, 0.05, -0.46);
@@ -13410,13 +13419,7 @@ Map: ${mapLabel}${MULTIPLAYER ? " (MP)" : ""}<br>
         player.position.set(sp.x, 1.65, sp.z);
         player.yaw = Math.random() * Math.PI * 2;
         floor.visible = true;
-        ceiling.visible = CURRENT_MAP !== "crossfire_grid";
-      } else if (CURRENT_MAP === "pvp_bright") {
-        const sp = pickPvpSpawn(CURRENT_MAP);
-        player.position.set(sp.x, 1.65, sp.z);
-        player.yaw = Math.random() * Math.PI * 2;
-        floor.visible = true;
-        ceiling.visible = false;
+        ceiling.visible = CURRENT_MAP === "crossfire";
       } else if (isBossArenaMap(CURRENT_MAP)) {
         player.position.set(0, 1.65, 40);
         player.yaw = Math.PI;
@@ -14357,8 +14360,7 @@ Map: ${mapLabel}${MULTIPLAYER ? " (MP)" : ""}<br>
             (w.spreadBase + state.spreadBloom) * spreadMultiplier * movingPenalty * adsPenalty;
         }
         const dir = getWeaponDirection(totalSpread);
-        const rayOrigin =
-          state.weaponIndex === 2 ? muzzleStart : camera.position;
+        const rayOrigin = camera.position;
         const ray = new THREE.Raycaster(rayOrigin, dir, 0.02, 160);
         ray.camera = camera;
 
@@ -16738,13 +16740,7 @@ Map: ${mapLabel}${MULTIPLAYER ? " (MP)" : ""}<br>
         player.position.set(sp.x, 1.65, sp.z);
         player.yaw = Math.random() * Math.PI * 2;
         floor.visible = true;
-        ceiling.visible = CURRENT_MAP !== "crossfire_grid";
-      } else if (CURRENT_MAP === "pvp_bright") {
-        const sp = pickPvpSpawn(CURRENT_MAP);
-        player.position.set(sp.x, 1.65, sp.z);
-        player.yaw = Math.random() * Math.PI * 2;
-        floor.visible = true;
-        ceiling.visible = false;
+        ceiling.visible = CURRENT_MAP === "crossfire";
       } else if (isBossArenaMap(CURRENT_MAP)) {
         player.position.set(0, 1.65, 40);
         player.yaw = Math.PI;
@@ -17060,16 +17056,16 @@ Map: ${mapLabel}${MULTIPLAYER ? " (MP)" : ""}<br>
       showLobby("crossfire", tr("lobbyCrossfire", "PVP"));
     });
 
-    btnBrightDuel.addEventListener("click", () => {
-      startGame("pvp_bright", false, false, false);
-    });
-
     btnPvpMapClassic.addEventListener("click", () => {
       PENDING_PVP_MAP = "crossfire";
       _doPvpCreateRoom();
     });
     btnPvpMapGrid.addEventListener("click", () => {
       PENDING_PVP_MAP = "crossfire_grid";
+      _doPvpCreateRoom();
+    });
+    document.getElementById("btnPvpMapBright").addEventListener("click", () => {
+      PENDING_PVP_MAP = "pvp_bright";
       _doPvpCreateRoom();
     });
     btnPvpMapBack.addEventListener("click", () => showMenuPanel("menuLobby"));
@@ -17099,7 +17095,8 @@ Map: ${mapLabel}${MULTIPLAYER ? " (MP)" : ""}<br>
         return;
       }
       if (pendingLobbyMode === "crossfire") {
-        PENDING_PVP_MAP = Math.random() < 0.5 ? "crossfire" : "crossfire_grid";
+        const _pvpMaps = ["crossfire", "crossfire_grid", "pvp_bright"];
+        PENDING_PVP_MAP = _pvpMaps[Math.floor(Math.random() * _pvpMaps.length)];
       }
       socket.emit("quickplay", pendingLobbyMode, (res) => {
         if (res == null) {
