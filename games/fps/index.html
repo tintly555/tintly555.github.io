@@ -1116,6 +1116,7 @@
       <button type="button" id="btnArena" data-i18n="btnZombieArena">Zombie Arena</button>
       <button type="button" id="btnBossFight">BOSS FIGHT</button>
       <button type="button" id="btnCrossfire" data-i18n="btnCrossfire">PVP</button>
+      <button type="button" id="btnBrightDuel">BRIGHT DUEL</button>
     </div>
     <div id="menuAchievements" style="display:none;flex-direction:column;align-items:center;gap:10px;position:relative;padding-top:20px;">
       <h2 id="achMenuTitle" style="font-family:var(--game-font-ui);font-size:28px;margin:0 0 8px 0;letter-spacing:3px;color:#ffd700;">Achievements</h2>
@@ -1171,10 +1172,6 @@
         <button type="button" id="btnPvpMapGrid" style="display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px 12px;background:rgba(20,28,44,0.88);border:2px solid #4fd1ff;border-radius:10px;cursor:pointer;transition:border-color .2s,transform .15s;" onmouseenter="this.style.borderColor='#fff';this.style.transform='scale(1.04)'" onmouseleave="this.style.borderColor='#4fd1ff';this.style.transform='scale(1)'">
           <canvas id="pvpPreviewGrid" width="220" height="130" style="border-radius:6px;background:#1a2233;"></canvas>
           <span style="font-family:var(--game-font-ui);font-size:13px;letter-spacing:1px;color:#e8ecf2;" data-i18n="pvpMapGrid">GRID KILLHOUSE</span>
-        </button>
-        <button type="button" id="btnPvpMapBright" style="display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px 12px;background:rgba(20,28,44,0.88);border:2px solid #4fd1ff;border-radius:10px;cursor:pointer;transition:border-color .2s,transform .15s;" onmouseenter="this.style.borderColor='#fff';this.style.transform='scale(1.04)'" onmouseleave="this.style.borderColor='#4fd1ff';this.style.transform='scale(1)'">
-          <canvas id="pvpPreviewBright" width="220" height="130" style="border-radius:6px;background:#c8d8e8;"></canvas>
-          <span style="font-family:var(--game-font-ui);font-size:13px;letter-spacing:1px;color:#e8ecf2;">BRIGHT ARENA</span>
         </button>
       </div>
       <button type="button" id="btnPvpMapBack" style="position:fixed;top:14px;left:14px;background:none;border:none;cursor:pointer;padding:6px;opacity:0.85;transition:opacity 0.15s;z-index:105;" onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='0.85'"><svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
@@ -4841,7 +4838,7 @@ if (typeof window !== "undefined") {
       }
     }
     function isPvpCrossfireMap(m) {
-      return m === "crossfire" || m === "crossfire_grid" || m === "pvp_bright";
+      return m === "crossfire" || m === "crossfire_grid";
     }
     function isTrainingMap(m) {
       return m === "training";
@@ -9561,9 +9558,12 @@ Map: ${mapLabel}${MULTIPLAYER ? " (MP)" : ""}<br>
     const _playerWallSphere = new THREE.Sphere();
 
     function collidesWithWalls(pos) {
-      _playerWallSphere.center.set(pos.x, 1.0, pos.z);
       _playerWallSphere.radius = player.radius;
+      const pBottom = player.position.y - 1.65;
+      const pTop = player.position.y;
       for (const box of wallBoxes) {
+        if (pBottom >= box.max.y || pTop <= box.min.y) continue;
+        _playerWallSphere.center.set(pos.x, (box.min.y + box.max.y) * 0.5, pos.z);
         if (box.intersectsSphere(_playerWallSphere)) return true;
       }
       return false;
@@ -13420,6 +13420,11 @@ Map: ${mapLabel}${MULTIPLAYER ? " (MP)" : ""}<br>
         player.yaw = Math.random() * Math.PI * 2;
         floor.visible = true;
         ceiling.visible = CURRENT_MAP === "crossfire";
+      } else if (CURRENT_MAP === "pvp_bright") {
+        player.position.set(0, 1.65, 36);
+        player.yaw = Math.PI;
+        floor.visible = true;
+        ceiling.visible = false;
       } else if (isBossArenaMap(CURRENT_MAP)) {
         player.position.set(0, 1.65, 40);
         player.yaw = Math.PI;
@@ -16741,6 +16746,11 @@ Map: ${mapLabel}${MULTIPLAYER ? " (MP)" : ""}<br>
         player.yaw = Math.random() * Math.PI * 2;
         floor.visible = true;
         ceiling.visible = CURRENT_MAP === "crossfire";
+      } else if (CURRENT_MAP === "pvp_bright") {
+        player.position.set(0, 1.65, 36);
+        player.yaw = Math.PI;
+        floor.visible = true;
+        ceiling.visible = false;
       } else if (isBossArenaMap(CURRENT_MAP)) {
         player.position.set(0, 1.65, 40);
         player.yaw = Math.PI;
@@ -17066,9 +17076,8 @@ Map: ${mapLabel}${MULTIPLAYER ? " (MP)" : ""}<br>
       PENDING_PVP_MAP = "crossfire_grid";
       showLobby("crossfire", tr("lobbyCrossfire", "PVP"));
     });
-    document.getElementById("btnPvpMapBright").addEventListener("click", () => {
-      PENDING_PVP_MAP = "pvp_bright";
-      showLobby("crossfire", tr("lobbyCrossfire", "PVP"));
+    document.getElementById("btnBrightDuel").addEventListener("click", () => {
+      startGame("pvp_bright", false, false, false);
     });
     btnPvpMapBack.addEventListener("click", () => showMenuPanel("menuStart"));
 
@@ -17097,8 +17106,7 @@ Map: ${mapLabel}${MULTIPLAYER ? " (MP)" : ""}<br>
         return;
       }
       if (pendingLobbyMode === "crossfire") {
-        const _pvpMaps = ["crossfire", "crossfire_grid", "pvp_bright"];
-        PENDING_PVP_MAP = _pvpMaps[Math.floor(Math.random() * _pvpMaps.length)];
+        PENDING_PVP_MAP = Math.random() < 0.5 ? "crossfire" : "crossfire_grid";
       }
       socket.emit("quickplay", pendingLobbyMode, (res) => {
         if (res == null) {
