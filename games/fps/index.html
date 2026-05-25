@@ -1116,6 +1116,7 @@
       <button type="button" id="btnArena" data-i18n="btnZombieArena">Zombie Arena</button>
       <button type="button" id="btnBossFight">BOSS FIGHT</button>
       <button type="button" id="btnCrossfire" data-i18n="btnCrossfire">PVP</button>
+      <button type="button" id="btnBrightDuel">BRIGHT DUEL</button>
     </div>
     <div id="menuAchievements" style="display:none;flex-direction:column;align-items:center;gap:10px;position:relative;padding-top:20px;">
       <h2 id="achMenuTitle" style="font-family:var(--game-font-ui);font-size:28px;margin:0 0 8px 0;letter-spacing:3px;color:#ffd700;">Achievements</h2>
@@ -2373,6 +2374,7 @@ if (typeof window !== "undefined") {
     const lobbyError = document.getElementById("lobbyError");
     const btnArena = document.getElementById("btnArena");
     const btnCrossfire = document.getElementById("btnCrossfire");
+    const btnBrightDuel = document.getElementById("btnBrightDuel");
     const btnTraining = document.getElementById("btnTraining");
     const menuTrainingMode = document.getElementById("menuTrainingMode");
     const btnTrainingSingle = document.getElementById("btnTrainingSingle");
@@ -4746,6 +4748,12 @@ if (typeof window !== "undefined") {
         { x: 26, z: 26 }, { x: -26, z: -26 },
         { x: -26, z: 26 }, { x: 26, z: -26 },
       ],
+      pvp_bright: [
+        { x: 0, z: 16 }, { x: 0, z: -16 },
+        { x: 16, z: 0 }, { x: -16, z: 0 },
+        { x: 13, z: 13 }, { x: -13, z: -13 },
+        { x: 13, z: -13 }, { x: -13, z: 13 },
+      ],
     };
     let _lastPvpSpawnIdx = -1;
     function pickPvpSpawn(mapName) {
@@ -4839,7 +4847,7 @@ if (typeof window !== "undefined") {
       return m === "boss_arena";
     }
     function isBrightIndoorMap(m) {
-      return m === "crossfire_grid" || m === "training";
+      return m === "crossfire_grid" || m === "training" || m === "pvp_bright";
     }
     let TRAINING_COOP = false;
     const TRAINING_POINTS = { head: 100, body: 50, leg: 25 };
@@ -8360,6 +8368,41 @@ if (typeof window !== "undefined") {
       ceiling.visible = false;
     }
 
+    function buildMapPvpBright() {
+      clearPvpMapLights();
+      const half = 20;
+      const H = 5.0;
+      const PH = 3.2;
+      const thick = 0.8;
+      const col = 0x8a9ab0;
+
+      addWallBox(half * 2, H, thick, 0, H / 2, -half);
+      addWallBox(half * 2, H, thick, 0, H / 2,  half);
+      addWallBox(thick, H, half * 2, -half, H / 2, 0);
+      addWallBox(thick, H, half * 2,  half, H / 2, 0);
+
+      // Corner pillars (wide)
+      for (const [px, pz] of [[-12,-12],[12,-12],[-12,12],[12,12]])
+        addWallBox(1.4, PH, 1.4, px, PH / 2, pz, col);
+      // Axis-mid pillars
+      for (const [px, pz] of [[-17,0],[17,0],[0,-17],[0,17]])
+        addWallBox(1.0, PH, 1.0, px, PH / 2, pz, col);
+      // Inner pillars
+      for (const [px, pz] of [[-6,-6],[6,-6],[-6,6],[6,6]])
+        addWallBox(1.2, PH, 1.2, px, PH / 2, pz, col);
+      // Off-axis fillers
+      for (const [px, pz] of [[-15,-7],[15,7],[7,-15],[-7,15]])
+        addWallBox(1.0, PH, 1.0, px, PH / 2, pz, col);
+
+      const amb = new THREE.AmbientLight(0xd8e8f5, 3.0);
+      scene.add(amb); pvpMapLights.push(amb);
+      const hemi = new THREE.HemisphereLight(0xeef6ff, 0x887766, 5.2);
+      scene.add(hemi); pvpMapLights.push(hemi);
+      const sun = new THREE.DirectionalLight(0xfff8e8, 12.0);
+      sun.position.set(20, 50, 15); sun.castShadow = false;
+      scene.add(sun); pvpMapLights.push(sun);
+    }
+
     function buildMapBossArena() {
       clearPvpMapLights();
       const H = 6;
@@ -8572,6 +8615,7 @@ if (typeof window !== "undefined") {
       boss_arena: buildMapBossArena,
       crossfire: buildMapCrossfire,
       crossfire_grid: buildMapCrossfireGrid,
+      pvp_bright: buildMapPvpBright,
       training: buildMapTraining,
     };
 
@@ -13184,18 +13228,25 @@ Map: ${mapLabel}${MULTIPLAYER ? " (MP)" : ""}<br>
           showCombatFeedback("DASH LOCKED " + Math.ceil((state.dashDisabledUntil - nowC) / 1000) + "s", "#ff4422", 0.25);
         } else if (nowC >= state.dashCooldownEnd) {
           const DASH_DIST = 8.0;
+          const DASH_STEPS = 20;
           const cp = Math.cos(player.pitch);
           const sp = Math.sin(player.pitch);
-          const dx = -Math.sin(player.yaw) * cp * DASH_DIST;
-          const dy = sp * DASH_DIST;
-          const dz = -Math.cos(player.yaw) * cp * DASH_DIST;
-          const dashTarget = new THREE.Vector3(player.position.x + dx, player.position.y, player.position.z + dz);
-          const resolved = resolveWallSliding(dashTarget);
-          player.position.x = resolved.x;
-          player.position.z = resolved.z;
-          player.position.y = Math.max(1.65, player.position.y + dy);
+          const stepX = -Math.sin(player.yaw) * cp * DASH_DIST / DASH_STEPS;
+          const stepZ = -Math.cos(player.yaw) * cp * DASH_DIST / DASH_STEPS;
+          const totalDY = sp * DASH_DIST;
+          let stepsOk = 0;
+          const testPos = new THREE.Vector3();
+          for (let i = 1; i <= DASH_STEPS; i++) {
+            testPos.set(player.position.x + stepX * i, 1.0, player.position.z + stepZ * i);
+            if (collidesWithWalls(testPos)) break;
+            stepsOk = i;
+          }
+          player.position.x += stepX * stepsOk;
+          player.position.z += stepZ * stepsOk;
+          const fracDone = stepsOk / DASH_STEPS;
+          player.position.y = Math.max(1.65, player.position.y + totalDY * fracDone);
           player.velocityY = sp * 10;
-          if (Math.abs(dy) > 0.05) player.onGround = false;
+          if (Math.abs(totalDY * fracDone) > 0.05) player.onGround = false;
           playDashSound();
           state.dashCooldownEnd = nowC + 350;
           state.camShake = Math.max(state.camShake, 0.06);
@@ -13360,6 +13411,12 @@ Map: ${mapLabel}${MULTIPLAYER ? " (MP)" : ""}<br>
         player.yaw = Math.random() * Math.PI * 2;
         floor.visible = true;
         ceiling.visible = CURRENT_MAP !== "crossfire_grid";
+      } else if (CURRENT_MAP === "pvp_bright") {
+        const sp = pickPvpSpawn(CURRENT_MAP);
+        player.position.set(sp.x, 1.65, sp.z);
+        player.yaw = Math.random() * Math.PI * 2;
+        floor.visible = true;
+        ceiling.visible = false;
       } else if (isBossArenaMap(CURRENT_MAP)) {
         player.position.set(0, 1.65, 40);
         player.yaw = Math.PI;
@@ -16682,6 +16739,12 @@ Map: ${mapLabel}${MULTIPLAYER ? " (MP)" : ""}<br>
         player.yaw = Math.random() * Math.PI * 2;
         floor.visible = true;
         ceiling.visible = CURRENT_MAP !== "crossfire_grid";
+      } else if (CURRENT_MAP === "pvp_bright") {
+        const sp = pickPvpSpawn(CURRENT_MAP);
+        player.position.set(sp.x, 1.65, sp.z);
+        player.yaw = Math.random() * Math.PI * 2;
+        floor.visible = true;
+        ceiling.visible = false;
       } else if (isBossArenaMap(CURRENT_MAP)) {
         player.position.set(0, 1.65, 40);
         player.yaw = Math.PI;
@@ -16926,13 +16989,13 @@ Map: ${mapLabel}${MULTIPLAYER ? " (MP)" : ""}<br>
       BOSS_IS_COOP = false;
       BOSS_HELL_MODE = false;
       BOSS_FIGHT_COUNT = 1;
-      // Reset all difficulty button highlights
       for (const b of document.querySelectorAll(".bossDiffBtn")) b.style.background = "transparent";
       const first = document.querySelector(".bossDiffBtn[data-boss-count='1']");
       if (first) first.style.background = "rgba(79,209,255,0.25)";
       const hellBtn = document.getElementById("btnBossHell");
       hellBtn.style.background = "rgba(255,34,68,0.22)";
       hellBtn.style.borderColor = "#ff2244";
+      hellBtn.style.display = "none";
       showMenuPanel("menuBossDifficulty");
     });
 
@@ -16940,13 +17003,13 @@ Map: ${mapLabel}${MULTIPLAYER ? " (MP)" : ""}<br>
       BOSS_IS_COOP = true;
       BOSS_HELL_MODE = false;
       BOSS_FIGHT_COUNT = 1;
-      // Reset all difficulty button highlights
       for (const b of document.querySelectorAll(".bossDiffBtn")) b.style.background = "transparent";
       const first = document.querySelector(".bossDiffBtn[data-boss-count='1']");
       if (first) first.style.background = "rgba(79,209,255,0.25)";
       const hellBtn = document.getElementById("btnBossHell");
       hellBtn.style.background = "rgba(255,34,68,0.22)";
       hellBtn.style.borderColor = "#ff2244";
+      hellBtn.style.display = "";
       showMenuPanel("menuBossDifficulty");
     });
 
@@ -16995,6 +17058,10 @@ Map: ${mapLabel}${MULTIPLAYER ? " (MP)" : ""}<br>
 
     btnCrossfire.addEventListener("click", () => {
       showLobby("crossfire", tr("lobbyCrossfire", "PVP"));
+    });
+
+    btnBrightDuel.addEventListener("click", () => {
+      startGame("pvp_bright", false, false, false);
     });
 
     btnPvpMapClassic.addEventListener("click", () => {
