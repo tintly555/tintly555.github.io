@@ -13163,20 +13163,17 @@ if (typeof window !== "undefined") {
       if ((k === "c" || e.code === "KeyC") && started && !paused && player.health > 0 && gameWorldReady && menuEl.style.display === "none" && !chatOpen && !settingsModalOpen) {
         const nowC = performance.now();
         if (nowC >= state.dashCooldownEnd) {
-          const DASH_DIST = 3.5;
-          const pitch = player.pitch; // negative = looking up in THREE.js
-          // Horizontal component = cos(pitch), vertical height target = sin(|pitch|) * DASH_DIST when looking up
-          const horizFactor = Math.cos(pitch);                         // 1 when horizontal, 0 when straight up/down
-          const upwardH     = DASH_DIST * Math.max(0, -Math.sin(pitch)); // height to reach (0 if looking down)
-          // Direction = aim direction (yaw only for horizontal)
+          // Horizontal: always full 8 units in yaw direction — no pitch dependency
           const fwd = new THREE.Vector3(0, 0, -1).applyAxisAngle(new THREE.Vector3(0, 1, 0), player.yaw);
-          const dashTarget = player.position.clone().add(fwd.clone().multiplyScalar(DASH_DIST * Math.abs(horizFactor)));
+          const dashTarget = player.position.clone().add(fwd.clone().multiplyScalar(8.0));
           const resolved = resolveWallSliding(dashTarget);
           player.position.x = resolved.x;
           player.position.z = resolved.z;
-          // Vertical: exact velocity to reach upwardH (kinematic: v = sqrt(2 * g * h))
-          if (upwardH > 0.05) {
-            player.velocityY = Math.sqrt(2 * 14 * upwardH);
+          // Vertical: any upward look (pitch < -0.08 rad ≈ 5°) gives a fixed strong boost —
+          // no precise angle needed, just roughly look up and you fly
+          const pitch = player.pitch;
+          if (pitch < -0.08) {
+            player.velocityY = 13.0; // clears all covers (boss 2m, pvp pillar 3.2m)
             player.onGround = false;
           }
           state.dashCooldownEnd = nowC + 350;
@@ -16208,8 +16205,15 @@ if (typeof window !== "undefined") {
             rp.visY = rp.y ?? 1.65;
             rp.visYaw = rp.yaw + Math.PI;
           }
-          rp.visX += (rp.x - rp.visX) * k;
-          rp.visZ += (rp.z - rp.visZ) * k;
+          const dxRp = rp.x - rp.visX;
+          const dzRp = rp.z - rp.visZ;
+          if (Math.hypot(dxRp, dzRp) > 5) {
+            rp.visX = rp.x;
+            rp.visZ = rp.z;
+          } else {
+            rp.visX += dxRp * k;
+            rp.visZ += dzRp * k;
+          }
           rp.visY = (rp.visY || 1.65) + ((rp.y ?? 1.65) - (rp.visY || 1.65)) * Math.min(1, k * 2.2);
           rp.visYaw = dampAngle(rp.visYaw, rp.yaw + Math.PI, dt, 18);
           // Lift group off ground when airborne (rp.y=1.65 = floor level)
