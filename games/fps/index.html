@@ -13169,10 +13169,8 @@ if (typeof window !== "undefined") {
           const resolved = resolveWallSliding(dashTarget);
           player.position.x = resolved.x;
           player.position.z = resolved.z;
-          // Vertical: any upward look (pitch < -0.08 rad ≈ 5°) gives a fixed strong boost —
-          // no precise angle needed, just roughly look up and you fly
           const pitch = player.pitch;
-          if (pitch < -0.08) {
+          if (pitch > 0.08) {
             player.velocityY = 13.0; // clears all covers (boss 2m, pvp pillar 3.2m)
             player.onGround = false;
           }
