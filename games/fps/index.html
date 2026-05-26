@@ -1116,7 +1116,6 @@
       <button type="button" id="btnArena" data-i18n="btnZombieArena">Zombie Arena</button>
       <button type="button" id="btnBossFight">BOSS FIGHT</button>
       <button type="button" id="btnCrossfire" data-i18n="btnCrossfire">PVP</button>
-      <button type="button" id="btnBrightDuel">BRIGHT DUEL</button>
     </div>
     <div id="menuAchievements" style="display:none;flex-direction:column;align-items:center;gap:10px;position:relative;padding-top:20px;">
       <h2 id="achMenuTitle" style="font-family:var(--game-font-ui);font-size:28px;margin:0 0 8px 0;letter-spacing:3px;color:#ffd700;">Achievements</h2>
@@ -10173,7 +10172,9 @@ Map: ${mapLabel}${MULTIPLAYER ? " (MP)" : ""}<br>
         summonCount: 0,
         summonTriggered: false,
         bossAnimState: "idle",
-        bossAnimTimer: 0
+        bossAnimTimer: 0,
+        bossQuakeCooldownTimer: 6,
+        _quakeShook: false
       };
     }
 
@@ -12821,26 +12822,22 @@ Map: ${mapLabel}${MULTIPLAYER ? " (MP)" : ""}<br>
         if (act === "slide") slideBack = 0.09 * k;
         if (ud.animSlide) ud.animSlide.position.z = slideBack;
         if (act === "pistolDraw") {
-          // 旋转出枪：从右侧伸手，枪旋转270°（rotZ）后定位，手臂随枪一同运动
-          const spinEnd = 0.62;
-          if (t < spinEnd) {
-            const u    = t / spinEnd;
-            const ease = THREE.MathUtils.smoothstep(u, 0.0, 1.0);
-            rotZ = THREE.MathUtils.lerp(Math.PI * 1.5, 0.0, ease);  // 270° 旋转切入
-            offX = THREE.MathUtils.lerp(0.18, 0.00, ease);
-            offY = THREE.MathUtils.lerp(-0.24, 0.02, ease);
+          // 转枪切枪：从右下飞入，正向全旋转360°后稳住
+          if (t < 0.55) {
+            const u = THREE.MathUtils.smoothstep(t / 0.55, 0, 1);
+            rotX = THREE.MathUtils.lerp(Math.PI * 2, 0, u);   // 正向翻转一整圈
+            offX = THREE.MathUtils.lerp(0.20, 0.00, u);
+            offY = THREE.MathUtils.lerp(-0.30, 0.03, u);
+            rotZ = THREE.MathUtils.lerp(0.35, 0.0, u);        // 入场侧倾收回
           } else {
-            const u      = (t - spinEnd) / (1.0 - spinEnd);
-            const settle = THREE.MathUtils.smoothstep(u, 0.0, 1.0);
-            offY = THREE.MathUtils.lerp(0.02, 0.00, settle);
-            rotZ = 0;
-            offX = 0;
+            const u = THREE.MathUtils.smoothstep((t - 0.55) / 0.45, 0, 1);
+            offY = THREE.MathUtils.lerp(0.03, 0.00, u);       // 微弹稳定
+            rotX = 0; rotZ = 0; offX = 0;
           }
-          // 手臂跟随：从右侧横移进入持枪位
           if (ud.viewArmR && ud.armRBasePos && ud.armRBaseRot) {
-            const armSlide = THREE.MathUtils.smoothstep(t, 0.00, 0.60);
-            const armDx = THREE.MathUtils.lerp(0.12, 0.00, armSlide);
-            setViewHandPose(ud.viewArmR, ud.armRBasePos, ud.armRBaseRot, armDx, 0, 0, 0, 0, 0);
+            const armSlide = THREE.MathUtils.smoothstep(t, 0.00, 0.55);
+            setViewHandPose(ud.viewArmR, ud.armRBasePos, ud.armRBaseRot,
+              THREE.MathUtils.lerp(0.14, 0, armSlide), 0, 0, 0, 0, 0);
           }
         } else {
           rotX = state.reloading ? 0 : -0.035 * k;
@@ -15855,6 +15852,9 @@ Map: ${mapLabel}${MULTIPLAYER ? " (MP)" : ""}<br>
             enemy.rangedLosAcquireTimer = 0;
           }
 
+          if (enemy.isBoss && enemy.bossQuakeCooldownTimer !== undefined) {
+            enemy.bossQuakeCooldownTimer -= dt;
+          }
           if (!enemy.ranged) {
             if (dist < (enemy.isBoss ? 3.5 : 2.05) && enemy.attackCooldownTimer <= 0) {
               enemy.attackCooldownTimer = enemy.attackCooldown;
@@ -15863,6 +15863,17 @@ Map: ${mapLabel}${MULTIPLAYER ? " (MP)" : ""}<br>
                 enemy.bossAnimTimer = 0;
               }
               applyCoopZombieDamageToTarget(enemy);
+            } else if (
+              enemy.isBoss &&
+              enemy.bossMode !== "gunner" &&
+              enemy.bossAnimState === "idle" &&
+              dist >= 4 && dist <= 18 &&
+              enemy.bossQuakeCooldownTimer <= 0
+            ) {
+              enemy.bossAnimState = "quaking";
+              enemy.bossAnimTimer = 0;
+              enemy._quakeShook = false;
+              enemy.bossQuakeCooldownTimer = enemy.isHellBoss ? 8 : 12;
             }
           } else if (
             enemy.ranged &&
@@ -16125,6 +16136,98 @@ Map: ${mapLabel}${MULTIPLAYER ? " (MP)" : ""}<br>
             }
           }
         }
+
+          if (!bossAnimOverride && enemy.bossAnimState === "quaking") {
+            bossAnimOverride = true;
+            const dur = 1.5;
+            const t = Math.min(enemy.bossAnimTimer / dur, 1);
+            if (t < 0.4) {
+              // 蓄力：双臂举高，身体微微跳起
+              const s = t / 0.4; const sm = s * s * (3 - 2 * s);
+              enemy.leftArmRoot.rotation.x  = THREE.MathUtils.lerp(-0.10, -3.0, sm);
+              enemy.rightArmRoot.rotation.x = THREE.MathUtils.lerp(-0.10, -3.0, sm);
+              enemy.leftArmRoot.rotation.z  = THREE.MathUtils.lerp(-0.50, -0.20, sm);
+              enemy.rightArmRoot.rotation.z = THREE.MathUtils.lerp( 0.50,  0.20, sm);
+              lfa.rotation.x = THREE.MathUtils.lerp(ELBOW_REST, 0.30, sm);
+              rfa.rotation.x = THREE.MathUtils.lerp(ELBOW_REST, 0.30, sm);
+              enemy.torsoRoot.rotation.x = THREE.MathUtils.lerp(HUNCH, HUNCH - 0.45, sm);
+              enemy.group.position.y = THREE.MathUtils.lerp(BOSS_BASE_Y, BOSS_BASE_Y + 0.45, sm);
+            } else if (t < 0.55) {
+              // 砸下：极速下砸
+              const pow = 1 - Math.pow(1 - (t - 0.4) / 0.15, 4);
+              enemy.leftArmRoot.rotation.x  = THREE.MathUtils.lerp(-3.0, 1.0, pow);
+              enemy.rightArmRoot.rotation.x = THREE.MathUtils.lerp(-3.0, 1.0, pow);
+              enemy.leftArmRoot.rotation.z  = THREE.MathUtils.lerp(-0.20, -0.05, pow);
+              enemy.rightArmRoot.rotation.z = THREE.MathUtils.lerp( 0.20,  0.05, pow);
+              lfa.rotation.x = THREE.MathUtils.lerp(0.30, -1.8, pow);
+              rfa.rotation.x = THREE.MathUtils.lerp(0.30, -1.8, pow);
+              enemy.torsoRoot.rotation.x = THREE.MathUtils.lerp(HUNCH - 0.45, HUNCH + 0.7, pow);
+              enemy.group.position.y = THREE.MathUtils.lerp(BOSS_BASE_Y + 0.45, BOSS_BASE_Y - 0.15, pow);
+              if (pow > 0.75 && !enemy._quakeShook) {
+                enemy._quakeShook = true;
+                state.camShake = Math.max(state.camShake || 0, 1.4);
+                // 震地音效
+                if (audioCtx && audioSfx) {
+                  const now2 = audioCtx.currentTime;
+                  const nb = audioCtx.createBuffer(1, Math.floor(audioCtx.sampleRate * 0.35), audioCtx.sampleRate);
+                  const nd = nb.getChannelData(0);
+                  for (let qi = 0; qi < nd.length; qi++) nd[qi] = Math.random() * 2 - 1;
+                  const ns = audioCtx.createBufferSource(); ns.buffer = nb;
+                  const lp = audioCtx.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.setValueAtTime(180, now2); lp.frequency.exponentialRampToValueAtTime(40, now2 + 0.3);
+                  const gg = audioCtx.createGain(); gg.gain.setValueAtTime(0.0001, now2); gg.gain.linearRampToValueAtTime(1.1, now2 + 0.02); gg.gain.exponentialRampToValueAtTime(0.0001, now2 + 0.32);
+                  ns.connect(lp); lp.connect(gg); gg.connect(audioSfx); ns.start(now2); ns.stop(now2 + 0.36);
+                  const osc2 = audioCtx.createOscillator(); osc2.type = "sine"; osc2.frequency.setValueAtTime(60, now2); osc2.frequency.exponentialRampToValueAtTime(18, now2 + 0.4);
+                  const og2 = audioCtx.createGain(); og2.gain.setValueAtTime(0.6, now2); og2.gain.exponentialRampToValueAtTime(0.0001, now2 + 0.4);
+                  osc2.connect(og2); og2.connect(audioSfx); osc2.start(now2); osc2.stop(now2 + 0.45);
+                }
+                // 击退 + 封锁 dash
+                if (player.health > 0) {
+                  const bx = enemy.group.position.x, bz = enemy.group.position.z;
+                  const pdx = player.position.x - bx, pdz = player.position.z - bz;
+                  const dist2 = Math.hypot(pdx, pdz);
+                  state.dashDisabledUntil = performance.now() + 20000;
+                  if (player.onGround) {
+                    const norm = dist2 > 0.01 ? 1 / dist2 : 1;
+                    const kbT = new THREE.Vector3(player.position.x + pdx * norm * 4, player.position.y, player.position.z + pdz * norm * 4);
+                    const kbR = resolveWallSliding(kbT);
+                    player.position.x = kbR.x; player.position.z = kbR.z;
+                    showCombatFeedback("⚠ DASH DISABLED 20s", "#ff6644", 0.8);
+                  } else {
+                    player.velocityY = -22; player.onGround = false;
+                    showCombatFeedback("⚠ CRASH! DASH DISABLED 20s", "#ff4422", 0.8);
+                  }
+                }
+              }
+            } else if (t < 0.7) {
+              // 落地颤抖
+              const hold = (t - 0.55) / 0.15;
+              const tremor = Math.sin(hold * 28) * 0.08 * (1 - hold);
+              enemy.leftArmRoot.rotation.x  = 1.0 + tremor;
+              enemy.rightArmRoot.rotation.x = 1.0 + tremor;
+              lfa.rotation.x = -1.8; rfa.rotation.x = -1.8;
+              enemy.torsoRoot.rotation.x = HUNCH + 0.7 + tremor * 2;
+              enemy.group.position.y = BOSS_BASE_Y - 0.15 + tremor;
+              state.camShake = Math.max(state.camShake || 0, 0.35 * (1 - hold));
+            } else {
+              // 恢复
+              const s = 1 - Math.pow(1 - (t - 0.7) / 0.3, 2);
+              enemy.leftArmRoot.rotation.x  = THREE.MathUtils.lerp(1.0, -0.10, s);
+              enemy.rightArmRoot.rotation.x = THREE.MathUtils.lerp(1.0, -0.10, s);
+              enemy.leftArmRoot.rotation.z  = THREE.MathUtils.lerp(-0.05, -0.50, s);
+              enemy.rightArmRoot.rotation.z = THREE.MathUtils.lerp( 0.05,  0.50, s);
+              lfa.rotation.x = THREE.MathUtils.lerp(-1.8, ELBOW_REST, s);
+              rfa.rotation.x = THREE.MathUtils.lerp(-1.8, ELBOW_REST, s);
+              enemy.torsoRoot.rotation.x = THREE.MathUtils.lerp(HUNCH + 0.7, HUNCH, s);
+              enemy.group.position.y = THREE.MathUtils.lerp(BOSS_BASE_Y - 0.15, BOSS_BASE_Y, s);
+            }
+            if (t >= 1) {
+              enemy.bossAnimState = "idle";
+              enemy.bossAnimTimer = 0;
+              enemy._quakeShook = false;
+              enemy.torsoRoot.rotation.x = HUNCH;
+              enemy.group.position.y = BOSS_BASE_Y;
+            }
+          }
 
         if (!bossAnimOverride && enemy.isBoss) {
           const lfa = enemy.leftForearmRoot;
@@ -17076,9 +17179,7 @@ Map: ${mapLabel}${MULTIPLAYER ? " (MP)" : ""}<br>
       PENDING_PVP_MAP = "crossfire_grid";
       showLobby("crossfire", tr("lobbyCrossfire", "PVP"));
     });
-    document.getElementById("btnBrightDuel").addEventListener("click", () => {
-      startGame("pvp_bright", false, false, false);
-    });
+
     btnPvpMapBack.addEventListener("click", () => showMenuPanel("menuStart"));
 
     function _doPvpCreateRoom() {
