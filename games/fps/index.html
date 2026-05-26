@@ -12822,22 +12822,22 @@ Map: ${mapLabel}${MULTIPLAYER ? " (MP)" : ""}<br>
         if (act === "slide") slideBack = 0.09 * k;
         if (ud.animSlide) ud.animSlide.position.z = slideBack;
         if (act === "pistolDraw") {
-          // 转枪切枪：从右下飞入，正向全旋转360°后稳住
-          if (t < 0.55) {
-            const u = THREE.MathUtils.smoothstep(t / 0.55, 0, 1);
-            rotX = THREE.MathUtils.lerp(Math.PI * 2, 0, u);   // 正向翻转一整圈
-            offX = THREE.MathUtils.lerp(0.20, 0.00, u);
-            offY = THREE.MathUtils.lerp(-0.30, 0.03, u);
-            rotZ = THREE.MathUtils.lerp(0.35, 0.0, u);        // 入场侧倾收回
+          // 转枪切枪：从右侧飞入，正向翻转360°后稳住（较慢，起始位置居中）
+          if (t < 0.60) {
+            const u = THREE.MathUtils.smoothstep(t / 0.60, 0, 1);
+            rotX = THREE.MathUtils.lerp(Math.PI * 2, 0, u);
+            offX = THREE.MathUtils.lerp(0.18, 0.00, u);
+            offY = THREE.MathUtils.lerp(-0.14, 0.02, u);
+            rotZ = THREE.MathUtils.lerp(0.28, 0.0, u);
           } else {
-            const u = THREE.MathUtils.smoothstep((t - 0.55) / 0.45, 0, 1);
-            offY = THREE.MathUtils.lerp(0.03, 0.00, u);       // 微弹稳定
+            const u = THREE.MathUtils.smoothstep((t - 0.60) / 0.40, 0, 1);
+            offY = THREE.MathUtils.lerp(0.02, 0.00, u);
             rotX = 0; rotZ = 0; offX = 0;
           }
           if (ud.viewArmR && ud.armRBasePos && ud.armRBaseRot) {
-            const armSlide = THREE.MathUtils.smoothstep(t, 0.00, 0.55);
+            const armSlide = THREE.MathUtils.smoothstep(t, 0.00, 0.58);
             setViewHandPose(ud.viewArmR, ud.armRBasePos, ud.armRBaseRot,
-              THREE.MathUtils.lerp(0.14, 0, armSlide), 0, 0, 0, 0, 0);
+              THREE.MathUtils.lerp(0.12, 0, armSlide), 0, 0, 0, 0, 0);
           }
         } else {
           rotX = state.reloading ? 0 : -0.035 * k;
@@ -12858,17 +12858,30 @@ Map: ${mapLabel}${MULTIPLAYER ? " (MP)" : ""}<br>
         }
       } else if (wi === 2) {
         if (act === "shotgunDraw") {
-          // 喷子：从屏幕底部横向抛出，空中旋转270°后抓住复位
-          // Phase 1 (0.00–0.28)：横向抛出上升
-          // Phase 2 (0.22–0.72)：空中旋转270°（rotZ: +3π/2 → 0）
-          // Phase 3 (0.70–1.00)：抓住复位稳定
-          const toss   = THREE.MathUtils.smoothstep(t, 0.00, 0.28);
-          const spin   = THREE.MathUtils.smoothstep(t, 0.22, 0.72);
-          const settle = THREE.MathUtils.smoothstep(t, 0.70, 1.00);
-          offX = THREE.MathUtils.lerp(0.32, 0.00, THREE.MathUtils.smoothstep(t, 0.00, 0.55));
-          offY = THREE.MathUtils.lerp(-0.68, 0.04, toss) - 0.04 * settle;
-          rotZ = THREE.MathUtils.lerp(Math.PI * 1.5, 0.00, spin);  // 270° 旋转
-          rotX = -0.04 * Math.sin(settle * Math.PI);
+          // 喷子：双抛接——底部抛起旋转接住，再次小抛旋转接住稳定
+          if (t < 0.30) {
+            // 第一次抛：从底部飞起，正向翻转360°
+            const u = THREE.MathUtils.smoothstep(t / 0.30, 0, 1);
+            offY = THREE.MathUtils.lerp(-0.62, 0.10, u);
+            rotX = THREE.MathUtils.lerp(Math.PI * 2, 0, u);
+            offX = THREE.MathUtils.lerp(0.18, 0.00, u);
+            rotZ = THREE.MathUtils.lerp(0.20, 0.00, u);
+          } else if (t < 0.46) {
+            // 第一次接：落下稳住瞬间
+            const u = THREE.MathUtils.smoothstep((t - 0.30) / 0.16, 0, 1);
+            offY = THREE.MathUtils.lerp(0.10, 0.00, u);
+            rotX = 0; offX = 0; rotZ = 0;
+          } else if (t < 0.74) {
+            // 第二次抛：小弧度再抛，半圈旋转
+            const u = THREE.MathUtils.smoothstep((t - 0.46) / 0.28, 0, 1);
+            offY = Math.sin(u * Math.PI) * 0.09;
+            rotX = THREE.MathUtils.lerp(Math.PI, 0, u);
+          } else {
+            // 第二次接：落稳成正常持枪
+            const u = THREE.MathUtils.smoothstep((t - 0.74) / 0.26, 0, 1);
+            offY = THREE.MathUtils.lerp(0.03, 0.00, u);
+            rotX = 0; rotZ = 0; offX = 0;
+          }
         } else {
           let pumpZ = 0;
           if (act === "pump" && !state.reloading) pumpZ = 0.11 * k;
@@ -13060,13 +13073,21 @@ Map: ${mapLabel}${MULTIPLAYER ? " (MP)" : ""}<br>
       }
       if (wi === 8) {
         if (act === "devDraw") {
-          // ～～～：从右下整体弧形入场，无 rotX，枪身整体联动不分离
-          const swing  = THREE.MathUtils.smoothstep(t, 0.00, 0.52);
-          const level  = THREE.MathUtils.smoothstep(t, 0.08, 0.56);
-          const settle = THREE.MathUtils.smoothstep(t, 0.56, 1.00);
-          offY = THREE.MathUtils.lerp(-0.38, 0.05, swing) - 0.05 * settle;
-          offX = THREE.MathUtils.lerp( 0.22, 0.00, swing);
-          rotZ = THREE.MathUtils.lerp( 0.44, 0.00, level);
+          // ～～～：从左下大弧度托枪入场，rotX前倾后挺直，带轻微过冲回弹
+          if (t < 0.58) {
+            const u = THREE.MathUtils.smoothstep(t / 0.58, 0, 1);
+            offY = THREE.MathUtils.lerp(-0.52, 0.06, u);
+            offX = THREE.MathUtils.lerp(-0.24, 0.00, u);
+            rotX = THREE.MathUtils.lerp( 0.55, 0.00, u);   // 枪口从朝下转到平端
+            rotZ = THREE.MathUtils.lerp(-0.38, 0.00, u);   // 入场侧倾
+          } else {
+            // 过冲 + 回弹
+            const u = THREE.MathUtils.smoothstep((t - 0.58) / 0.42, 0, 1);
+            const bounce = Math.sin(u * Math.PI) * 0.025;
+            offY = THREE.MathUtils.lerp(0.06, 0.00, u) + bounce;
+            rotX = -bounce * 0.8;
+            offX = 0; rotZ = 0;
+          }
         }
       }
 
@@ -13098,12 +13119,12 @@ Map: ${mapLabel}${MULTIPLAYER ? " (MP)" : ""}<br>
       }
       if (state.weaponIndex === 0 && prev !== 0) {
         state.weaponAction = "pistolDraw";
-        state.weaponActionDur = 620;  // 旋转出枪动画时长
+        state.weaponActionDur = 950;
         state.weaponActionStart = performance.now();
       }
       if (state.weaponIndex === 2 && prev !== 2) {
         state.weaponAction = "shotgunDraw";
-        state.weaponActionDur = 780;  // 横向抛出旋转270°入场
+        state.weaponActionDur = 1050;
         state.weaponActionStart = performance.now();
       }
       if (state.weaponIndex === 1 && prev !== 1) {
@@ -13133,7 +13154,7 @@ Map: ${mapLabel}${MULTIPLAYER ? " (MP)" : ""}<br>
       }
       if (state.weaponIndex === 8 && prev !== 8) {
         state.weaponAction = "devDraw";
-        state.weaponActionDur = 500;
+        state.weaponActionDur = 820;
         state.weaponActionStart = performance.now();
       }
       updateHud();
