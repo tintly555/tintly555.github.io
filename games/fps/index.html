@@ -15,13 +15,13 @@
         window.__FPS_UI_LAYER_PATHS__ = [
           {
             menuBg: "game-ui/game-ui-menu-background.png",
-            btnTex: "game-ui/game-ui-button-texture.png",
-            settingsBg: "game-ui/game-ui-settings-panel-bg.png",
+            btnTex: "game-ui/button.png",
+            settingsBg: "game-ui/settings-bg.png",
           },
           {
             menuBg: "background.png",
-            btnTex: "game-ui-button-texture.png",
-            settingsBg: "game-ui-settings-panel-bg.png",
+            btnTex: "button.png",
+            settingsBg: "settings-bg.png",
           },
         ];
       } catch (e) {}
@@ -162,8 +162,8 @@
         if (!L0) {
           L0 = {
             menuBg: "game-ui/game-ui-menu-background.png",
-            btnTex: "game-ui/game-ui-button-texture.png",
-            settingsBg: "game-ui/game-ui-settings-panel-bg.png",
+            btnTex: "game-ui/button.png",
+            settingsBg: "game-ui/settings-bg.png",
           };
         }
         el.style.setProperty(
@@ -194,8 +194,8 @@
   <style>
     :root {
       --game-ui-menu-bg: url("game-ui/game-ui-menu-background.png");
-      --game-ui-btn-texture: url("game-ui/game-ui-button-texture.png");
-      --game-ui-settings-bg: url("game-ui/game-ui-settings-panel-bg.png");
+      --game-ui-btn-texture: url("game-ui/button.png");
+      --game-ui-settings-bg: url("game-ui/settings-bg.png");
       --game-font-ui: "Audiowide", "Noto Sans", "Noto Sans SC", "Noto Sans TC", "Noto Sans JP", "Noto Sans KR", "Noto Sans Arabic", "Noto Sans Devanagari", ui-sans-serif, system-ui, sans-serif;
     }
 
@@ -365,7 +365,7 @@
       transition: opacity 0.1s ease;
     }
 
-    /* AMR (6): full-screen scope overlay — swap file game-ui/amr-scope-overlay.png|.svg */
+    /* AMR (6): full-screen scope overlay — swap file game-ui/amr-scope.png|.svg */
     .amr-scope-overlay {
       position: fixed;
       inset: 0;
@@ -926,8 +926,8 @@
             : [
                 {
                   menuBg: "game-ui/game-ui-menu-background.png",
-                  btnTex: "game-ui/game-ui-button-texture.png",
-                  settingsBg: "game-ui/game-ui-settings-panel-bg.png",
+                  btnTex: "game-ui/button.png",
+                  settingsBg: "game-ui/settings-bg.png",
                 },
               ];
         var root = document.documentElement;
@@ -5259,8 +5259,8 @@
         : [
             {
               menuBg: "game-ui/game-ui-menu-background.png",
-              btnTex: "game-ui/game-ui-button-texture.png",
-              settingsBg: "game-ui/game-ui-settings-panel-bg.png",
+              btnTex: "game-ui/button.png",
+              settingsBg: "game-ui/settings-bg.png",
             },
           ]);
 
@@ -6828,10 +6828,10 @@
 
 
     const AMR_SCOPE_OVERLAY_PATHS = [
-      "game-ui/amr-scope-overlay.png",
-      "game-ui/amr-scope-overlay.svg",
-      "amr-scope-overlay.png",
-      "amr-scope-overlay.svg",
+      "game-ui/amr-scope.png",
+      "game-ui/amr-scope.svg",
+      "amr-scope.png",
+      "amr-scope.svg",
     ];
     const AMR_SCOPE_OVERLAY_INLINE =
       "data:image/svg+xml," +
@@ -7135,6 +7135,7 @@
         skinColor = 0x6888a0; skinDark = 0x3f5367; shirtColor = 0x384858;
         pantsColor = 0x2a3540; woundColor = 0x6a4444; eyeColor = 0x80c0ff;
         hp = 180; speed = 1.05; attackDamage = 14; attackCooldown = 0.70;
+        leapChargeDistance = 9.0; leapSpeed = 3.5; leapCooldown = 4.5; leapChargeTime = 0.38; leapDuration = 0.35;
       }
 
       const matSkin = new THREE.MeshStandardMaterial({ color: skinColor, roughness: 0.95, metalness: 0 });
@@ -7369,7 +7370,18 @@
         targetId: null,
         retargetTimer: 0,
         moveYaw: 0,
-        rangedLosAcquireTimer: 0
+        rangedLosAcquireTimer: 0,
+        leapCharging: false,
+        leapActive: false,
+        leapTimer: 0,
+        leapCooldownTimer: 0,
+        leapChargeTimer: 0,
+        _leapDir: null,
+        leapChargeDistance: type === "tank" ? 9.0 : 0,
+        leapSpeed: type === "tank" ? 3.5 : 0,
+        leapCooldown: type === "tank" ? 4.5 : 0,
+        leapChargeTime: type === "tank" ? 0.38 : 0,
+        leapDuration: type === "tank" ? 0.35 : 0
       };
     }
 
@@ -7399,6 +7411,8 @@
     audioMaster.connect(audioCtx.destination);
 
     let menuBgmAudio = null;
+    let bossBgmAudio = null;
+    let bossBgmActive = false;
 
     function applyAudioVolumes() {
       audioMaster.gain.value = gameSettings.masterVolume;
@@ -7593,6 +7607,98 @@
       } catch (_) {}
     });
 
+    /** Boss music: loop boss.mp3 while any tank is alive. */
+    function getBossBgmUrlCandidates() {
+      const here = (() => {
+        try { return window.location.origin; } catch (_) { return ""; }
+      })();
+      const fromBase = [];
+      for (const base of getGameAssetBaseCandidates()) {
+        try { fromBase.push(new URL("boss.mp3", normalizeGameAssetBase(base)).href); } catch (_) {}
+      }
+      const same = [], other = [];
+      for (const u of fromBase) {
+        try {
+          if (here && new URL(u).origin === here) same.push(u);
+          else other.push(u);
+        } catch (_) { other.push(u); }
+      }
+      const tail = [];
+      try { tail.push(new URL("boss.mp3", pageDirFromLocation()).href); } catch (_) {}
+      try { tail.push(new URL("boss.mp3", window.location.href).href); } catch (_) {}
+      tail.push("boss.mp3");
+      return [...new Set([...same, ...other, ...tail])];
+    }
+
+    function ensureBossBgmAudio() {
+      if (bossBgmAudio) return;
+      const urls = getBossBgmUrlCandidates();
+      bossBgmAudio = new Audio();
+      bossBgmAudio.loop = true;
+      bossBgmAudio.preload = "auto";
+      bossBgmAudio.volume = THREE.MathUtils.clamp(
+        gameSettings.masterVolume * gameSettings.musicVolume, 0, 1
+      );
+      let urlIdx = 0;
+      function applySrcAt(idx) {
+        if (idx >= urls.length) return;
+        const u = urls[idx];
+        try {
+          const abs = new URL(u, window.location.href || "http://localhost/");
+          const filePage = window.location.protocol === "file:";
+          const fileAsset = abs.protocol === "file:";
+          const needCors = !filePage && !fileAsset && abs.origin && window.location.origin && abs.origin !== window.location.origin;
+          if (needCors) bossBgmAudio.crossOrigin = "anonymous";
+          else bossBgmAudio.removeAttribute("crossOrigin");
+        } catch (_) {
+          try { bossBgmAudio.removeAttribute("crossOrigin"); } catch (e2) {}
+        }
+        bossBgmAudio.src = u;
+        try { bossBgmAudio.load(); } catch (_) {}
+      }
+      bossBgmAudio.addEventListener("canplaythrough", () => {
+        if (bossBgmActive) {
+          bossBgmAudio.volume = THREE.MathUtils.clamp(
+            gameSettings.masterVolume * gameSettings.musicVolume, 0, 1
+          );
+          bossBgmAudio.play().catch(() => {});
+        }
+      });
+      bossBgmAudio.addEventListener("error", () => {
+        urlIdx++;
+        if (urlIdx < urls.length) applySrcAt(urlIdx);
+      });
+      applySrcAt(0);
+    }
+
+    function updateBossBgmState() {
+      if (!gameWorldReady) {
+        if (bossBgmActive) {
+          bossBgmActive = false;
+          try { bossBgmAudio.pause(); } catch (_) {}
+        }
+        return;
+      }
+      let anyTankAlive = false;
+      for (let ei = 0; ei < state.enemies.length; ei++) {
+        const e = state.enemies[ei];
+        if (e.alive && e.type === "tank") { anyTankAlive = true; break; }
+      }
+      if (anyTankAlive && !bossBgmActive) {
+        bossBgmActive = true;
+        ensureBossBgmAudio();
+        if (bossBgmAudio.readyState >= 2) {
+          bossBgmAudio.volume = THREE.MathUtils.clamp(
+            gameSettings.masterVolume * gameSettings.musicVolume, 0, 1
+          );
+          bossBgmAudio.play().catch(() => {});
+        }
+      } else if (!anyTankAlive && bossBgmActive) {
+        bossBgmActive = false;
+        try { bossBgmAudio.pause(); } catch (_) {}
+      }
+    }
+
     audioCtx.onstatechange = () => {
       if (audioCtx.state !== "running") return;
       try {
@@ -7731,6 +7837,58 @@
       delay.connect(fb);
       fb.connect(delay);
       fb.gain.exponentialRampToValueAtTime(0.0001, now + 1.35);
+    }
+
+    /** Boss leap: low thud + ground rumble + whoosh. */
+    function playBossLeapSound() {
+      if (audioCtx.state === "suspended") void audioCtx.resume();
+      const now = audioCtx.currentTime;
+
+      const thud = audioCtx.createOscillator();
+      thud.type = "sine";
+      thud.frequency.setValueAtTime(65, now);
+      thud.frequency.exponentialRampToValueAtTime(28, now + 0.28);
+      const thudG = audioCtx.createGain();
+      thudG.gain.setValueAtTime(0.0001, now);
+      thudG.gain.exponentialRampToValueAtTime(1.2, now + 0.03);
+      thudG.gain.exponentialRampToValueAtTime(0.0001, now + 0.32);
+      thud.connect(thudG);
+      thudG.connect(audioSfx);
+      thud.start(now);
+      thud.stop(now + 0.35);
+
+      const rumble = audioCtx.createBufferSource();
+      rumble.buffer = getGunNoiseBuffer(0.30);
+      const rumbleLp = audioCtx.createBiquadFilter();
+      rumbleLp.type = "lowpass";
+      rumbleLp.frequency.setValueAtTime(180, now);
+      rumbleLp.frequency.exponentialRampToValueAtTime(60, now + 0.25);
+      const rumbleG = audioCtx.createGain();
+      rumbleG.gain.setValueAtTime(0.0001, now);
+      rumbleG.gain.exponentialRampToValueAtTime(0.85, now + 0.015);
+      rumbleG.gain.exponentialRampToValueAtTime(0.0001, now + 0.30);
+      rumble.connect(rumbleLp);
+      rumbleLp.connect(rumbleG);
+      rumbleG.connect(audioSfx);
+      rumble.start(now);
+      rumble.stop(now + 0.32);
+
+      const whoosh = audioCtx.createBufferSource();
+      whoosh.buffer = getGunNoiseBuffer(0.22);
+      const whooshBp = audioCtx.createBiquadFilter();
+      whooshBp.type = "bandpass";
+      whooshBp.frequency.setValueAtTime(800, now);
+      whooshBp.frequency.exponentialRampToValueAtTime(250, now + 0.18);
+      whooshBp.Q.setValueAtTime(0.8, now);
+      const whooshG = audioCtx.createGain();
+      whooshG.gain.setValueAtTime(0.0001, now + 0.04);
+      whooshG.gain.exponentialRampToValueAtTime(0.55, now + 0.08);
+      whooshG.gain.exponentialRampToValueAtTime(0.0001, now + 0.24);
+      whoosh.connect(whooshBp);
+      whooshBp.connect(whooshG);
+      whooshG.connect(audioSfx);
+      whoosh.start(now + 0.04);
+      whoosh.stop(now + 0.26);
     }
 
     /** Layered tactical gunshots: bright crack + body + mechanical tail + short room echo. */
@@ -10424,6 +10582,7 @@
           enemy.hiddenTimer = 0;
         }
       }
+      updateBossBgmState();
     }
 
     function applyZombieSyncPayload(data) {
@@ -10533,6 +10692,11 @@
             enemy.armRV = -0.2;
             enemy.legLV = 0;
             enemy.legRV = 0;
+            enemy.leapCharging = false;
+            enemy.leapActive = false;
+            enemy.leapTimer = 0;
+            enemy.leapCooldownTimer = 0;
+            enemy.leapChargeTimer = 0;
             drawEnemyHp(enemy);
           }
           continue;
@@ -10627,8 +10791,46 @@
               }
             }
             enemy.moveYaw = Math.atan2(dx, dz);
-            enemy.walkTime += dt * (enemy.type === "fast" ? 12 : 8);
-            enemy.moving = true;
+
+            if (enemy.type === "tank") {
+              if (enemy.leapActive) {
+                const inv = 1 / Math.sqrt(dx * dx + dz * dz);
+                enemy.group.position.x += enemy._leapDir.x * enemy.leapSpeed * dt;
+                enemy.group.position.z += enemy._leapDir.z * enemy.leapSpeed * dt;
+                enemy.leapTimer -= dt;
+                enemy.walkTime += dt * 16;
+                enemy.moving = true;
+                if (enemy.leapTimer <= 0) {
+                  enemy.leapActive = false;
+                  enemy.leapCooldownTimer = enemy.leapCooldown;
+                }
+              } else if (enemy.leapCharging) {
+                enemy.leapChargeTimer += dt;
+                enemy.moving = false;
+                if (enemy.leapChargeTimer >= enemy.leapChargeTime) {
+                  enemy.leapActive = true;
+                  enemy.leapCharging = false;
+                  enemy.leapTimer = enemy.leapDuration;
+                  const inv = 1 / Math.sqrt(dx * dx + dz * dz);
+                  enemy._leapDir = { x: dx * inv, z: dz * inv };
+                  playBossLeapSound();
+                }
+              } else if (enemy.leapCooldownTimer > 0) {
+                enemy.leapCooldownTimer -= dt;
+                enemy.walkTime += dt * (enemy.type === "fast" ? 12 : 8);
+                enemy.moving = true;
+              } else if (dist < enemy.leapChargeDistance && dist > 2.0) {
+                enemy.leapCharging = true;
+                enemy.leapChargeTimer = 0;
+                enemy.moving = false;
+              } else {
+                enemy.walkTime += dt * (enemy.type === "fast" ? 12 : 8);
+                enemy.moving = true;
+              }
+            } else {
+              enemy.walkTime += dt * (enemy.type === "fast" ? 12 : 8);
+              enemy.moving = true;
+            }
           } else {
             enemy.moving = false;
           }
