@@ -3,7 +3,7 @@
   Deploy / GitHub Pages: https://tintly555.github.io/games/fps/ — multiplayer relay + static prefix set below.
   Self-hosted same tree: open game-self-hosted.html (empty game-multiplayer-origin, empty game-static-prefix).
   Crossfire = PVP; Arena = PVE / co-op vs zombies.
-  Build: zone-no-light-v30 (paralysis dart fix + combat knife)
+  Build: zone-no-light-v32 (knife sound extend, health bar polish, needle hand model, AMR spread, boost knife x2, 404 fallback) — based on v87 mapsync
 -->
 <!--
   Swap Med Kit and AMR weapon positions (4↔5) and improve lighting 让AMR和Swap Med Kit没法使用，所以退回merge versions
@@ -173,18 +173,21 @@
             settingsBg: "game-ui/game-ui-settings-panel-bg.png",
           };
         }
-        el.style.setProperty(
-          "--game-ui-menu-bg",
-          'url("' + new URL(L0.menuBg, R).href + '")'
-        );
-        el.style.setProperty(
-          "--game-ui-btn-texture",
-          'url("' + new URL(L0.btnTex, R).href + '")'
-        );
-        el.style.setProperty(
-          "--game-ui-settings-bg",
-          'url("' + new URL(L0.settingsBg, R).href + '")'
-        );
+        // Probe each PNG with an Image() before overwriting the CSS var; if 404, keep the inline
+        // SVG/gradient fallback baked into :root. Avoids visible console errors on deploys where
+        // game-ui/*.png isn't shipped.
+        function _probeAndSet(varName, relPath) {
+          try {
+            var href = new URL(relPath, R).href;
+            var img = new Image();
+            img.onload  = function () { el.style.setProperty(varName, 'url("' + href + '")'); };
+            img.onerror = function () { /* keep :root inline fallback */ };
+            img.src = href;
+          } catch (eP) {}
+        }
+        _probeAndSet("--game-ui-menu-bg",     L0.menuBg);
+        _probeAndSet("--game-ui-btn-texture", L0.btnTex);
+        _probeAndSet("--game-ui-settings-bg", L0.settingsBg);
         try {
           var curMouse = new URL("mouse.png", R).href;
           el.style.setProperty("--game-cursor-default", 'url("' + curMouse + '") 0 0, auto');
@@ -200,9 +203,10 @@
   <link href="https://fonts.googleapis.com/css2?family=Audiowide&family=Noto+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Noto+Sans+SC:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;600;700&family=Noto+Sans+KR:wght@400;500;600;700&family=Noto+Sans+Arabic:wght@400;500;600;700&family=Noto+Sans+Devanagari:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     :root {
-      --game-ui-menu-bg: url("game-ui/game-ui-menu-background.png");
+      /* Inline gradient fallback — used when game-ui/*-background.png 404s on the deploy host. */
+      --game-ui-menu-bg: linear-gradient(180deg,#1a1d24 0%,#0e1014 50%,#05070a 100%);
       --game-ui-btn-texture: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%22400%22%20height%3D%2260%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22g%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%220%22%20y2%3D%221%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%235a6070%22/%3E%3Cstop%20offset%3D%2218%25%22%20stop-color%3D%22%233c4250%22/%3E%3Cstop%20offset%3D%2250%25%22%20stop-color%3D%22%232e3340%22/%3E%3Cstop%20offset%3D%2282%25%22%20stop-color%3D%22%233c4250%22/%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%23252830%22/%3E%3C/linearGradient%3E%3ClinearGradient%20id%3D%22h%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%220%22%20y2%3D%221%22%3E%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23fff%22%20stop-opacity%3D%220.18%22/%3E%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%23000%22%20stop-opacity%3D%220.22%22/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect%20width%3D%22400%22%20height%3D%2260%22%20fill%3D%22url%28%23g%29%22/%3E%3Crect%20width%3D%22400%22%20height%3D%2260%22%20fill%3D%22url%28%23h%29%22/%3E%3Crect%20width%3D%22398%22%20height%3D%2258%22%20x%3D%221%22%20y%3D%221%22%20fill%3D%22none%22%20stroke%3D%22rgba%28255%2C255%2C255%2C0.09%29%22%20stroke-width%3D%221%22/%3E%3C/svg%3E");
-      --game-ui-settings-bg: url("game-ui/game-ui-settings-panel-bg.png");
+      --game-ui-settings-bg: linear-gradient(180deg, rgba(30,34,44,0.95) 0%, rgba(14,16,22,0.95) 100%);
       --game-font-ui: "Audiowide", "Noto Sans", "Noto Sans SC", "Noto Sans TC", "Noto Sans JP", "Noto Sans KR", "Noto Sans Arabic", "Noto Sans Devanagari", ui-sans-serif, system-ui, sans-serif;
     }
 
@@ -9291,9 +9295,9 @@ if (typeof window !== "undefined") {
         fireDelay: 1260,
         auto: false,
         pellets: 1,
-        spreadBase: 0.074,
+        spreadBase: 0.058,
         spreadBloomAdd: 0.014,
-        spreadBloomMax: 0.115,
+        spreadBloomMax: 0.098,
         recover: 0.032,
         recoil: 0.2,
         damageHead: 220,
@@ -12045,38 +12049,36 @@ Map: ${mapLabel}${MULTIPLAYER ? " (MP)" : ""}<br>
     }
 
     function playKnifeHitSound() {
+      // Hit = extended swing whoosh tail (continuation of the swing arc) + soft impact thump.
+      // No metallic clang — feels like the blade carrying through the target.
       if (audioCtx.state === "suspended") void audioCtx.resume();
       const now = audioCtx.currentTime;
+      // Whoosh tail: longer, downward sweep — extends the swing wind
+      const whoosh = audioCtx.createBufferSource();
+      whoosh.buffer = getGunNoiseBuffer(0.42);
+      const bp = audioCtx.createBiquadFilter();
+      bp.type = "bandpass";
+      bp.frequency.setValueAtTime(2200, now);
+      bp.frequency.exponentialRampToValueAtTime(480, now + 0.38);
+      bp.Q.setValueAtTime(0.55, now);
+      const wG = audioCtx.createGain();
+      wG.gain.setValueAtTime(0.0001, now);
+      wG.gain.linearRampToValueAtTime(0.34, now + 0.03);
+      wG.gain.setValueAtTime(0.34, now + 0.06);
+      wG.gain.exponentialRampToValueAtTime(0.0001, now + 0.40);
+      whoosh.connect(bp); bp.connect(wG); wG.connect(audioSfx);
+      whoosh.start(now); whoosh.stop(now + 0.45);
+      // Impact thump: brief low punch marking contact (no clang)
       const thud = audioCtx.createBufferSource();
-      thud.buffer = getGunNoiseBuffer(0.12);
+      thud.buffer = getGunNoiseBuffer(0.08);
       const lp = audioCtx.createBiquadFilter();
-      lp.type = "lowpass";
-      lp.frequency.setValueAtTime(600, now);
-      const thudG = audioCtx.createGain();
-      thudG.gain.setValueAtTime(0.0001, now);
-      thudG.gain.exponentialRampToValueAtTime(0.45, now + 0.008);
-      thudG.gain.exponentialRampToValueAtTime(0.0001, now + 0.13);
-      thud.connect(lp);
-      lp.connect(thudG);
-      thudG.connect(audioSfx);
-      thud.start(now);
-      thud.stop(now + 0.16);
-      const clang = audioCtx.createOscillator();
-      clang.type = "triangle";
-      clang.frequency.setValueAtTime(2400, now);
-      clang.frequency.exponentialRampToValueAtTime(800, now + 0.06);
-      const clangG = audioCtx.createGain();
-      clangG.gain.setValueAtTime(0.0001, now);
-      clangG.gain.exponentialRampToValueAtTime(0.12, now + 0.004);
-      clangG.gain.exponentialRampToValueAtTime(0.0001, now + 0.08);
-      const hp = audioCtx.createBiquadFilter();
-      hp.type = "highpass";
-      hp.frequency.value = 500;
-      clang.connect(hp);
-      hp.connect(clangG);
-      clangG.connect(audioSfx);
-      clang.start(now);
-      clang.stop(now + 0.10);
+      lp.type = "lowpass"; lp.frequency.setValueAtTime(420, now);
+      const tG = audioCtx.createGain();
+      tG.gain.setValueAtTime(0.0001, now);
+      tG.gain.linearRampToValueAtTime(0.28, now + 0.006);
+      tG.gain.exponentialRampToValueAtTime(0.0001, now + 0.09);
+      thud.connect(lp); lp.connect(tG); tG.connect(audioSfx);
+      thud.start(now); thud.stop(now + 0.10);
     }
 
     function playDissolveBurstSound() {
@@ -12738,35 +12740,52 @@ Map: ${mapLabel}${MULTIPLAYER ? " (MP)" : ""}<br>
           setViewHandPose(ud.viewArmL, lp, lr, 0, 0.03 * pull, 0.06 * pull, 0, 0, 0);
         }
       } else if (wi === 6) {
-        // Left hand: dips off-screen, reaches up + forward to muzzle, pushes, retracts.
+        // Left hand: dips off-screen, reaches up + forward to muzzle, pushes dart, seats, retracts.
+        // Added wrist rotation across phases so the hand reads as gripping/pushing a dart, not
+        // just sliding through space.
         const fetch = reloadPhase(p, 0, 0.18);
         const lift = reloadPhase(p, 0.18, 0.32);
         const push = reloadPhase(p, 0.32, 0.80);
         const seat = reloadPhase(p, 0.80, 0.95);
         const retract = reloadPhase(p, 0.92, 1);
         let dx = 0, dy = 0, dz = 0;
+        let rx = 0, ry = 0, rz = 0;
         if (fetch > 0 && fetch < 1) {
           dy = -0.10 * fetch;
           dz = 0.02 * fetch;
+          rz = 0.35 * fetch;       // wrist rolls inward to "grab" a dart
+          rx = 0.20 * fetch;
         } else if (lift > 0 && lift < 1) {
           dy = -0.10 + 0.16 * lift;
           dz = 0.02 - 0.10 * lift;
           dx = 0.04 * lift;
+          rz = 0.35 - 0.30 * lift; // wrist rotates to point dart at muzzle
+          rx = 0.20 - 0.15 * lift;
+          ry = 0.10 * lift;
         } else if (push > 0 && push < 1) {
           dy = 0.06;
           dz = -0.08 - 0.06 * push;
           dx = 0.04;
+          rz = 0.05;
+          rx = 0.05 + 0.08 * Math.sin(push * Math.PI); // slight wrist flex during the push
+          ry = 0.10;
         } else if (seat > 0 && seat < 1) {
           dy = 0.06 - 0.04 * seat;
           dz = -0.14 + 0.04 * seat;
           dx = 0.04 - 0.02 * seat;
+          rz = 0.05 * (1 - seat);
+          rx = 0.13 * (1 - seat);
+          ry = 0.10 * (1 - seat);
         }
         if (retract > 0) {
           dx *= (1 - retract);
           dy *= (1 - retract);
           dz *= (1 - retract);
+          rx *= (1 - retract);
+          ry *= (1 - retract);
+          rz *= (1 - retract);
         }
-        setViewHandPose(ud.viewArmL, lp, lr, dx, dy, dz, 0, 0, 0);
+        setViewHandPose(ud.viewArmL, lp, lr, dx, dy, dz, rx, ry, rz);
       }
 
       syncHandMagProxy(ud, magInHand, ud.animMag);
@@ -13008,13 +13027,32 @@ Map: ${mapLabel}${MULTIPLAYER ? " (MP)" : ""}<br>
       addMeshPart(syr, new THREE.ConeGeometry(0.003,0.014,6), mNeedle, 0,0,-0.247, -Math.PI/2,0,0);
       // Plunger (animated group — moves along +Z = pushing)
       const animPlunger = new THREE.Group();
+      const mGlove = new THREE.MeshStandardMaterial({ color:0x2b271e, roughness:0.86, metalness:0.05 });
+      const mSleeve = new THREE.MeshStandardMaterial({ color:0x4a4a3a, roughness:0.82, metalness:0.08 });
       // plunger head disk
       addMeshPart(animPlunger, new THREE.CylinderGeometry(0.015,0.015,0.007,10), mPlunger, 0,0,0, Math.PI/2,0,0);
       // plunger rod
       addMeshPart(animPlunger, new THREE.CylinderGeometry(0.004,0.004,0.19,6), mPlunger, 0,0,-0.095, Math.PI/2,0,0);
+      // thumb pad sitting on top of plunger head (rides the push)
+      addMeshPart(animPlunger, new THREE.BoxGeometry(0.018,0.014,0.018), mGlove, 0,0.020,0);
       animPlunger.position.z = 0.125; // start: plunger pulled back
       syr.add(animPlunger);
       root.userData.animPlunger = animPlunger;
+
+      // Hand gripping the barrel + forearm trailing back behind it.
+      // Attached under syr so it follows the syringe through the whole inject sweep.
+      const handGrp = new THREE.Group();
+      addMeshPart(handGrp, new THREE.BoxGeometry(0.050,0.028,0.078), mGlove, 0,-0.026,0);         // palm
+      for (let _fi = 0; _fi < 4; _fi++) {                                                         // four curled fingers
+        addMeshPart(handGrp, new THREE.BoxGeometry(0.012,0.010,0.022), mGlove,
+                    -0.018 + _fi*0.011, 0.020, -0.010 + _fi*0.003);
+      }
+      addMeshPart(handGrp, new THREE.BoxGeometry(0.016,0.014,0.024), mGlove, 0.026,0.006,-0.004); // thumb knuckle
+      addMeshPart(handGrp, new THREE.BoxGeometry(0.060,0.074,0.22), mSleeve, 0,-0.018,0.150);     // forearm
+      handGrp.position.set(0, 0, 0.048);                                                          // grip near back flange
+      syr.add(handGrp);
+      root.userData.animHand = handGrp;
+
       // Place in lower-right of view (right hand)
       syr.position.set(0.21, -0.24, -0.56);
       syr.rotation.set(-0.18, -0.14, 0.22);
