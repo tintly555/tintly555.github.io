@@ -3,7 +3,7 @@
   Deploy / GitHub Pages: https://tintly555.github.io/games/fps/ — multiplayer relay + static prefix set below.
   Self-hosted same tree: open game-self-hosted.html (empty game-multiplayer-origin, empty game-static-prefix).
   Crossfire = PVP; Arena = PVE / co-op vs zombies.
-  Build: zone-no-light-v92 (HUD strings routed through tr() + achievements use real keys with EN/ZH/ZH-Hant translations in translation.js + wall edge clip fix: corner re-check ONLY, no substepping — keep sprint feel intact; keeps v90 translation.js path + v89 boss co-op sync)
+  Build: zone-no-light-v93 (use real translation.js keys — achievements show user's real names "这是什么/怪物猎人/强者/高级猎手/光明·解放者/训练者/各位弱爆了/猎手之王/不败神话/终极/创作者"; menu/Boss/PVP buttons get data-i18n; zombie arena maze ceiling now spans full chunk — no more sky gap at chunk seams; wall corner re-check kept, NO substepping)
 -->
 <!--
   Swap Med Kit and AMR weapon positions (4↔5) and improve lighting 让AMR和Swap Med Kit没法使用，所以退回merge versions
@@ -1323,11 +1323,11 @@
       <button type="button" id="btnStartBack" class="menu-float-icon" style="position:fixed;top:14px;left:14px;background:none;border:none;cursor:pointer;padding:6px;opacity:0.85;transition:opacity 0.15s;z-index:105;" onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='0.85'"><svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
       <h2 style="font-family:var(--game-font-ui);font-size:20px;letter-spacing:2px;margin:0 0 4px 0;opacity:0.85;">CHOOSE A MODE TO PLAY</h2>
       <button type="button" id="btnArena" data-i18n="btnZombieArena">Zombie Arena</button>
-      <button type="button" id="btnBossFight">BOSS FIGHT</button>
+      <button type="button" id="btnBossFight" data-i18n="btnBossFight">BOSS FIGHT</button>
       <button type="button" id="btnCrossfire" data-i18n="btnCrossfire">PVP</button>
     </div>
     <div id="menuAchievements" style="display:none;flex-direction:column;align-items:center;gap:10px;position:relative;padding-top:20px;">
-      <h2 id="achMenuTitle" data-i18n="achPanelTitle" style="font-family:var(--game-font-ui);font-size:28px;margin:0 0 8px 0;letter-spacing:3px;color:#ffd700;">Achievements</h2>
+      <h2 id="achMenuTitle" data-i18n="achTitle" style="font-family:var(--game-font-ui);font-size:28px;margin:0 0 8px 0;letter-spacing:3px;color:#ffd700;">Achievements</h2>
       <p id="achMenuHint" data-i18n="achPanelHint" style="font-family:var(--game-font-ui);font-size:11px;opacity:0.65;margin:0 0 6px 0;text-align:center;">Tap an achievement for details. Equipped achievements show above your name.</p>
       <div id="achList"></div>
       <div id="achDetail" style="display:none;width:100%;padding:14px 16px;border-radius:10px;background:rgba(0,0,0,0.55);border:1px solid rgba(255,215,0,0.35);box-sizing:border-box;">
@@ -1345,22 +1345,22 @@
       <button type="button" id="btnArenaBack" class="menu-float-icon" style="position:fixed;top:14px;left:14px;background:none;border:none;cursor:pointer;padding:6px;opacity:0.85;transition:opacity 0.15s;z-index:105;" onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='0.85'"><svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
     </div>
     <div id="menuBossMode" style="display:none;flex-direction:column;align-items:center;gap:10px;position:relative;padding-top:20px;">
-      <h2 style="font-family:var(--game-font-ui);font-size:28px;margin:0 0 14px 0;letter-spacing:3px;">BOSS FIGHT</h2>
-      <p style="font-family:var(--game-font-ui);font-size:12px;opacity:0.78;margin:0 0 8px 0;max-width:320px;text-align:center;line-height:1.45;">Fight the Hormone Zombie (激素僵尸) — a hulking boss that switches between Tank, Speed, and Gunner modes.</p>
-      <button type="button" id="btnBossSingle" style="font-family:var(--game-font-ui);padding:10px 30px;border:2px solid #4fd1ff;border-radius:8px;background:rgba(79,209,255,0.18);color:#fff;cursor:pointer;font-size:15px;letter-spacing:1px;">SINGLEPLAYER</button>
-      <button type="button" id="btnBossCoop" style="font-family:var(--game-font-ui);padding:10px 30px;border:2px solid #4fd1ff;border-radius:8px;background:rgba(79,209,255,0.18);color:#fff;cursor:pointer;font-size:15px;letter-spacing:1px;">CO-OP MODE</button>
+      <h2 data-i18n="bossFightTitle" style="font-family:var(--game-font-ui);font-size:28px;margin:0 0 14px 0;letter-spacing:3px;">BOSS FIGHT</h2>
+      <p data-i18n="bossFightDesc" style="font-family:var(--game-font-ui);font-size:12px;opacity:0.78;margin:0 0 8px 0;max-width:320px;text-align:center;line-height:1.45;">Fight the Hormone Zombie (激素僵尸) — a hulking boss that switches between Tank, Speed, and Gunner modes.</p>
+      <button type="button" id="btnBossSingle" data-i18n="btnSingleplayer" style="font-family:var(--game-font-ui);padding:10px 30px;border:2px solid #4fd1ff;border-radius:8px;background:rgba(79,209,255,0.18);color:#fff;cursor:pointer;font-size:15px;letter-spacing:1px;">SINGLEPLAYER</button>
+      <button type="button" id="btnBossCoop" data-i18n="btnCoopMode" style="font-family:var(--game-font-ui);padding:10px 30px;border:2px solid #4fd1ff;border-radius:8px;background:rgba(79,209,255,0.18);color:#fff;cursor:pointer;font-size:15px;letter-spacing:1px;">CO-OP MODE</button>
       <button type="button" id="btnBossBack" class="menu-float-icon" style="position:fixed;top:14px;left:14px;background:none;border:none;cursor:pointer;padding:6px;opacity:0.85;transition:opacity 0.15s;z-index:105;" onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='0.85'"><svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
     </div>
     <div id="menuBossDifficulty" style="display:none;flex-direction:column;align-items:center;gap:10px;position:relative;padding-top:20px;">
-      <h2 style="font-family:var(--game-font-ui);font-size:24px;margin:0 0 10px 0;letter-spacing:2px;">SELECT DIFFICULTY</h2>
+      <h2 data-i18n="selectDifficulty" style="font-family:var(--game-font-ui);font-size:24px;margin:0 0 10px 0;letter-spacing:2px;">SELECT DIFFICULTY</h2>
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px;">
-        <span style="font-family:var(--game-font-ui);font-size:13px;letter-spacing:1px;">BOSSES:</span>
+        <span data-i18n="bossesLabel" style="font-family:var(--game-font-ui);font-size:13px;letter-spacing:1px;">BOSSES:</span>
         <button type="button" class="bossDiffBtn" data-boss-count="1" style="font-family:var(--game-font-ui);padding:6px 14px;border:2px solid #4fd1ff;border-radius:6px;background:rgba(79,209,255,0.25);color:#fff;cursor:pointer;font-size:14px;">1</button>
         <button type="button" class="bossDiffBtn" data-boss-count="2" style="font-family:var(--game-font-ui);padding:6px 14px;border:2px solid #4fd1ff;border-radius:6px;background:transparent;color:#fff;cursor:pointer;font-size:14px;">2</button>
         <button type="button" class="bossDiffBtn" data-boss-count="3" style="font-family:var(--game-font-ui);padding:6px 14px;border:2px solid #4fd1ff;border-radius:6px;background:transparent;color:#fff;cursor:pointer;font-size:14px;">3</button>
       </div>
-      <button type="button" id="btnBossHell" style="font-family:var(--game-font-ui);padding:8px 22px;border:2px solid #ff2244;border-radius:6px;background:rgba(255,34,68,0.22);color:#ff4466;cursor:pointer;font-size:14px;letter-spacing:1px;">HELL MODE</button>
-      <button type="button" id="btnBossStartDiff" style="font-family:var(--game-font-ui);padding:10px 30px;border:2px solid #4fd1ff;border-radius:8px;background:rgba(79,209,255,0.18);color:#fff;cursor:pointer;font-size:15px;letter-spacing:1px;">START</button>
+      <button type="button" id="btnBossHell" data-i18n="hellMode" style="font-family:var(--game-font-ui);padding:8px 22px;border:2px solid #ff2244;border-radius:6px;background:rgba(255,34,68,0.22);color:#ff4466;cursor:pointer;font-size:14px;letter-spacing:1px;">HELL MODE</button>
+      <button type="button" id="btnBossStartDiff" data-i18n="btnStart" style="font-family:var(--game-font-ui);padding:10px 30px;border:2px solid #4fd1ff;border-radius:8px;background:rgba(79,209,255,0.18);color:#fff;cursor:pointer;font-size:15px;letter-spacing:1px;">START</button>
       <button type="button" id="btnBossDiffBack" class="menu-float-icon" style="position:fixed;top:14px;left:14px;background:none;border:none;cursor:pointer;padding:6px;opacity:0.85;transition:opacity 0.15s;z-index:105;" onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='0.85'"><svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
     </div>
     <div id="menuTrainingMode" style="display:none;flex-direction:column;align-items:center;gap:10px;position:relative;padding-top:20px;">
@@ -1371,7 +1371,7 @@
       <button type="button" id="btnTrainingBack" class="menu-float-icon" style="position:fixed;top:14px;left:14px;background:none;border:none;cursor:pointer;padding:6px;opacity:0.85;transition:opacity 0.15s;z-index:105;" onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='0.85'"><svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
     </div>
     <div id="menuPvpMaps" style="display:none;flex-direction:column;align-items:center;gap:14px;position:relative;padding-top:20px;">
-      <h2 style="font-family:var(--game-font-ui);font-size:24px;margin:0 0 4px 0;letter-spacing:2px;">SELECT MAP</h2>
+      <h2 data-i18n="selectMap" style="font-family:var(--game-font-ui);font-size:24px;margin:0 0 4px 0;letter-spacing:2px;">SELECT MAP</h2>
       <div style="display:flex;gap:16px;justify-content:center;flex-wrap:wrap;">
         <button type="button" id="btnPvpMapClassic" style="display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px 12px;background:rgba(20,28,44,0.88);border:2px solid #4fd1ff;border-radius:10px;cursor:pointer;transition:border-color .2s,transform .15s;" onmouseenter="this.style.borderColor='#fff';this.style.transform='scale(1.04)'" onmouseleave="this.style.borderColor='#4fd1ff';this.style.transform='scale(1)'">
           <canvas id="pvpPreviewClassic" width="220" height="130" style="border-radius:6px;background:#1a2233;"></canvas>
@@ -8120,8 +8120,10 @@ if (typeof window !== "undefined") {
         tint: 0x666670,
       });
 
+      // v93: ceiling plane now spans the full chunk (no 0.02 inset). Previously each chunk
+      // had a 0.04u gap to its neighbor, letting the sky show through arena (zombie map).
       const ceilPl = new THREE.Mesh(
-        new THREE.PlaneGeometry(MAZE_CHUNK_WORLD - 0.02, MAZE_CHUNK_WORLD - 0.02),
+        new THREE.PlaneGeometry(MAZE_CHUNK_WORLD, MAZE_CHUNK_WORLD),
         makeWallMaterial(
           MAZE_CHUNK_WORLD / FLOOR_CEILING_METERS_PER_REPEAT,
           MAZE_CHUNK_WORLD / FLOOR_CEILING_METERS_PER_REPEAT,
@@ -9478,21 +9480,21 @@ if (typeof window !== "undefined") {
       }
     }
 
-    // v91: English defaults baked in (nameEn/hintEn). tr() pulls localized strings from
-    // translation.js when present; otherwise these are shown so users never see "achWhatIsThis"
-    // raw key names.
+    // v93: reverted my made-up English/Chinese fallbacks. translation.js (translation.txt) already
+    // has the real localized names ("这是什么/怪物猎人/强者/高级猎手/光明·解放者/训练者/各位弱爆了/
+    // 猎手之王/不败神话/终极/创作者") in en + zh + zh-Hant. tr() pulls them straight.
     const ACHIEVEMENT_DEFS = [
-      { id: "what_is_this",    nameKey: "achWhatIsThis",    hintKey: "achWhatIsThisHint",    nameEn: "What is this?",        hintEn: "Open the game for the first time.",                                     color: "#b8b8ff" },
-      { id: "monster_hunter",  nameKey: "achMonsterHunter", hintKey: "achMonsterHunterHint", nameEn: "Monster Hunter",       hintEn: "Kill 100 zombies in the Arena.",                                        color: "#ff8844" },
-      { id: "strong_one",      nameKey: "achStrongOne",     hintKey: "achStrongOneHint",     nameEn: "Strong One",           hintEn: "Defeat the Hormone Zombie boss.",                                       color: "#ff6622" },
-      { id: "elite_hunter",    nameKey: "achEliteHunter",   hintKey: "achEliteHunterHint",   nameEn: "Elite Hunter",         hintEn: "Defeat 3 bosses in one Boss Fight run.",                                color: "#cc44ff" },
-      { id: "light_liberator", nameKey: "achLightLiberator",hintKey: "achLightLiberatorHint",nameEn: "Light Liberator",      hintEn: "Beat Hell Mode in the Boss Fight.",                                     color: "#ffd700" },
-      { id: "trainer",         nameKey: "achTrainer",       hintKey: "achTrainerHint",       nameEn: "Trainer",              hintEn: "Score 500 points at the Training Camp.",                                color: "#4fd1ff" },
-      { id: "pvp_weak",        nameKey: "achPvpWeak",       hintKey: "achPvpWeakHint",       nameEn: "Just a Warm-up",       hintEn: "Get your first PVP kill.",                                              color: "#88cc88" },
-      { id: "pvp_hunter_king", nameKey: "achPvpHunterKing", hintKey: "achPvpHunterKingHint", nameEn: "PVP Hunter King",      hintEn: "Reach a 10-kill streak in PVP without dying.",                          color: "#ff8844" },
-      { id: "undefeated",      nameKey: "achUndefeated",    hintKey: "achUndefeatedHint",    nameEn: "Undefeated",           hintEn: "Win a PVP match without taking damage.",                                color: "#ff5050" },
-      { id: "creator",         nameKey: "achCreator",       hintKey: "achCreatorHint",       nameEn: "Creator",              hintEn: "Unlock the developer weapon.",                                          color: "#4fd1ff" },
-      { id: "ultimate",        nameKey: "achUltimate",      hintKey: "",                     nameEn: "???",                  hintEn: "",                                                                       secret: true, color: "#e040ff" },
+      { id: "what_is_this",    nameKey: "achWhatIsThis",     hintKey: "achWhatIsThisHint",     color: "#b8b8ff" },
+      { id: "monster_hunter",  nameKey: "achMonsterHunter",  hintKey: "achMonsterHunterHint",  color: "#ff8844" },
+      { id: "strong_one",      nameKey: "achStrongOne",      hintKey: "achStrongOneHint",      color: "#ff6622" },
+      { id: "elite_hunter",    nameKey: "achEliteHunter",    hintKey: "achEliteHunterHint",    color: "#cc44ff" },
+      { id: "light_liberator", nameKey: "achLightLiberator", hintKey: "achLightLiberatorHint", color: "#ffd700" },
+      { id: "trainer",         nameKey: "achTrainer",        hintKey: "achTrainerHint",        color: "#4fd1ff" },
+      { id: "pvp_weak",        nameKey: "achPvpWeak",        hintKey: "achPvpWeakHint",        color: "#88cc88" },
+      { id: "pvp_hunter_king", nameKey: "achPvpHunterKing",  hintKey: "achPvpHunterKingHint",  color: "#ff8844" },
+      { id: "undefeated",      nameKey: "achUndefeated",     hintKey: "achUndefeatedHint",     color: "#ff5050" },
+      { id: "creator",         nameKey: "achCreator",        hintKey: "achCreatorHint",        color: "#4fd1ff" },
+      { id: "ultimate",        nameKey: "achUltimate",       hintKey: "",                      secret: true, color: "#e040ff" },
     ];
     const achievementsUnlocked = {};
     let equippedAchievementIds = [];
@@ -9540,13 +9542,12 @@ if (typeof window !== "undefined") {
     }
 
     function achName(def) {
-      // v91: prefer localized → fall back to English label, never the raw i18n key name.
-      return tr(def.nameKey, def.nameEn || def.nameKey);
+      return tr(def.nameKey, def.nameKey);
     }
 
     function achHint(def) {
       if (def.secret) return tr("achSecret", "???");
-      return tr(def.hintKey, def.hintEn || "");
+      return tr(def.hintKey, "");
     }
 
     function getAchievementDef(id) {
