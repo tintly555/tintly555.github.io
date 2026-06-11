@@ -3,7 +3,7 @@
   Deploy / GitHub Pages: https://tintly555.github.io/games/fps/ — multiplayer relay + static prefix set below.
   Self-hosted same tree: open game-self-hosted.html (empty game-multiplayer-origin, empty game-static-prefix).
   Crossfire = PVP; Arena = PVE / co-op vs zombies.
-  Build: zone-no-light-v32 (knife sound extend, health bar polish, needle hand model, AMR spread, boost knife x2, 404 fallback) — based on v87 mapsync
+  Build: zone-no-light-v89 (boss co-op sync fix: zombieDamaged typo + boss_arena handler + knife/devgun emit + missing-boss spawn from sync + hell flag — on top of v88 i18n-fallback / needle hand / knife sound / AMR spread / pistol twirl raise)
 -->
 <!--
   Swap Med Kit and AMR weapon positions (4↔5) and improve lighting 让AMR和Swap Med Kit没法使用，所以退回merge versions
@@ -5986,7 +5986,9 @@ if (typeof window !== "undefined") {
     });
 
     socket.on("zombieDamaged", (data) => {
-      if (!MULTIPLAYER || !ARENA_COOP || CURRENT_MAP !== "arena") return;
+      // v33: previously rejected boss_arena, breaking boss co-op damage from joiners.
+      if (!MULTIPLAYER || !ARENA_COOP) return;
+      if (!(isArenaLikeMap(CURRENT_MAP) || isBossArenaMap(CURRENT_MAP))) return;
       if (!ZOMBIE_AUTHORITY || !data) return;
       if (data.by === socket.id) return;
       const ei = data.ei | 0;
@@ -14665,11 +14667,18 @@ Map: ${mapLabel}${MULTIPLAYER ? " (MP)" : ""}<br>
       }
       pierceHits.sort((a, b) => a.t - b.t);
       let trailEnd = null;
+      const coopArena = MULTIPLAYER && ARENA_COOP &&
+        (isArenaLikeMap(CURRENT_MAP) || isBossArenaMap(CURRENT_MAP));
       for (const ph of pierceHits) {
         const bp = _ehHitWorld.copy(ray.ray.origin).addScaledVector(ray.ray.direction, ph.t);
         createBlood(bp);
         triggerHitFeedback(false, ph.zone === "head");
         applyDamage(ph.enemy, ph.zone, w);
+        // v33: dev-gun pierce in co-op also reports to host so HP actually decreases.
+        if (coopArena && !ZOMBIE_AUTHORITY) {
+          const ei = ph.enemy.netIndex ?? state.enemies.indexOf(ph.enemy);
+          socket.emit("zombieDamaged", { ei, zone: ph.zone, weaponIndex: state.weaponIndex });
+        }
         if (ph.enemy.hp <= 0 && ph.enemy.alive) {
           ph.enemy.alive = false;
           ph.enemy.respawnTimer = 3.0;
@@ -15426,6 +15435,17 @@ Map: ${mapLabel}${MULTIPLAYER ? " (MP)" : ""}<br>
           createSparks(bp.clone ? bp.clone() : bp, 0xff5555);
           if (bestEnemy.isBoss) checkAllBossesDead(bestEnemy.group.position.clone());
         }
+        // v33: report knife damage to host so co-op boss/zombie HP actually decreases.
+        // Bullet path (tryShoot) already does this; the knife path was the missing link.
+        if (MULTIPLAYER && ARENA_COOP && !ZOMBIE_AUTHORITY &&
+            (isArenaLikeMap(CURRENT_MAP) || isBossArenaMap(CURRENT_MAP))) {
+          const ei = bestEnemy.netIndex ?? state.enemies.indexOf(bestEnemy);
+          socket.emit("zombieDamaged", {
+            ei,
+            zone: bestEnemyZone,
+            weaponIndex: state.weaponIndex,
+          });
+        }
       }
     }
 
@@ -15690,7 +15710,9 @@ Map: ${mapLabel}${MULTIPLAYER ? " (MP)" : ""}<br>
               createSparks(bp.clone(), 0xff8888);
               if (bestEnemy.isBoss) checkAllBossesDead(bestEnemy.group.position.clone());
             }
-            socket.emit("zombieDamage", {
+            // v33: was "zombieDamage" (missing the final 'd') — listener is "zombieDamaged",
+            // so joiner damage to bosses/zombies was silently dropped server-side. Fixed.
+            socket.emit("zombieDamaged", {
               ei,
               zone: bestEnemyZone,
               weaponIndex: state.weaponIndex,
@@ -16589,10 +16611,30 @@ Map: ${mapLabel}${MULTIPLAYER ? " (MP)" : ""}<br>
       if (!gameWorldReady) return;
       if (!data || !Array.isArray(data.zombies)) return;
       if (typeof data.score === "number") state.score = data.score;
+      // v33: spawn missing bosses on demand. Host may have BOSS_FIGHT_COUNT > joiner's local default
+      // (1/2/3) or HELL mode; the joiner previously dropped sync rows for unknown netIndex, leaving
+      // bosses invisible. Now we materialize them from the sync payload itself.
+      const isBossMap = isBossArenaMap(CURRENT_MAP);
       for (const z of data.zombies) {
         const ei = z.i | 0;
-        if (ei < 0 || ei >= state.enemies.length) continue;
+        if (ei < 0) continue;
+        if (ei >= state.enemies.length) {
+          if (isBossMap && z.bm != null && typeof z.x === "number" && typeof z.z === "number") {
+            const isHell = !!z.hell;
+            const newBoss = makeHormoneZombie(z.x, z.z, isHell);
+            newBoss.netIndex = ei;
+            // Pad state.enemies up to ei so future indexed access works (sparse-safe).
+            while (state.enemies.length < ei) {
+              state.enemies.push({ alive: false, hp: 0, group: new THREE.Group(), netIndex: state.enemies.length, isBoss: false, _placeholder: true });
+            }
+            state.enemies.push(newBoss);
+            drawEnemyHp(newBoss);
+          } else {
+            continue;
+          }
+        }
         const e = state.enemies[ei];
+        if (!e || e._placeholder) continue;
         if (typeof z.x === "number") e.group.position.x = z.x;
         if (typeof z.z === "number") e.group.position.z = z.z;
         if (typeof z.y === "number") {
@@ -17956,7 +17998,12 @@ Map: ${mapLabel}${MULTIPLAYER ? " (MP)" : ""}<br>
                   a: e.alive ? 1 : 0,
                   rt: e.respawnTimer,
                 };
-                if (e.isBoss) zd.bm = e.bossMode;
+                // v33: include boss-specific identity so joiners can spawn missing bosses
+                // (BOSS_FIGHT_COUNT / HELL mode aren't synced via the lobby).
+                if (e.isBoss) {
+                  zd.bm = e.bossMode;
+                  zd.hell = !!e.isHellBoss;
+                }
                 return zd;
               }),
             });
