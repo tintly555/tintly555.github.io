@@ -2254,6 +2254,292 @@ const BTN_ZH_HANT = {
   selectMap: "選擇地圖"
 };
 
+// Other 15 locales — full translations (no English fallback).
+const HUD_ES = {
+  hudHelpMove:    "WASD mover | Espacio saltar | R recargar",
+  hudHelpAim:     "Ratón apuntar | Clic der. zoom | L linterna | Z haz pequeño/med/ancho",
+  hudHelpWeapons: "Armas: <b>0</b> Cuchillo | <b>1</b> Pistola | <b>2</b> Escopeta | <b>3</b> SMG | <b>4</b> AR | <b>5</b> AMR | <b>6</b> Dardo | <b>7</b> Botiquín",
+  hudMap: "Mapa", hudWeapon: "Arma", hudHealth: "Vida", hudScore: "Puntaje",
+  hudBullets: "Balas", hudRoom: "Sala", hudMpTag: " (MP)",
+  hudRefilling: "Recargando…", hudMedKit: "Botiquín",
+  hudMedKitHold: "mantén <b>F</b> o <b>clic izq.</b> 10s (+50 PV)",
+  hudUse: "uso", hudUses: "usos",
+  hudHealthFull: "vida llena", hudUsedUp: "agotado", hudReleaseKey: "suelta tecla/ratón",
+  hudMeleeLine: "Cuerpo a cuerpo: 2 golpes frontales | <b>puñalada por la espalda 1 golpe</b>"
+};
+const BTN_ES = {
+  btnBossFight: "JEFE FINAL", bossFightTitle: "JEFE FINAL",
+  bossFightDesc: "Combate al Zombi Hormonal — un jefe enorme que alterna entre los modos Tanque, Velocidad y Tirador.",
+  selectDifficulty: "DIFICULTAD", bossesLabel: "JEFES:", hellMode: "MODO INFIERNO",
+  btnStart: "INICIAR", selectMap: "ELIGE MAPA"
+};
+
+const HUD_HI = {
+  hudHelpMove:    "WASD चलें | Space कूदें | R रीलोड",
+  hudHelpAim:     "माउस निशाना | RMB ज़ूम | L टॉर्च | Z बीम छोटा/मध्यम/चौड़ा",
+  hudHelpWeapons: "हथियार: <b>0</b> चाकू | <b>1</b> पिस्तौल | <b>2</b> शॉटगन | <b>3</b> SMG | <b>4</b> AR | <b>5</b> AMR | <b>6</b> डार्ट | <b>7</b> मेड किट",
+  hudMap: "मानचित्र", hudWeapon: "हथियार", hudHealth: "स्वास्थ्य", hudScore: "स्कोर",
+  hudBullets: "गोलियाँ", hudRoom: "कमरा", hudMpTag: " (MP)",
+  hudRefilling: "भर रहा है…", hudMedKit: "मेड किट",
+  hudMedKitHold: "<b>F</b> या <b>LMB</b> 10s दबाकर रखें (+50 HP)",
+  hudUse: "उपयोग", hudUses: "उपयोग",
+  hudHealthFull: "पूर्ण स्वास्थ्य", hudUsedUp: "समाप्त", hudReleaseKey: "कुंजी/माउस छोड़ें",
+  hudMeleeLine: "क्लोज़ कॉम्बैट: सामने 2 वार में किल | <b>पीठ में 1 वार में किल</b>"
+};
+const BTN_HI = {
+  btnBossFight: "बॉस फाइट", bossFightTitle: "बॉस फाइट",
+  bossFightDesc: "हार्मोन ज़ोम्बी से लड़ें — एक विशाल बॉस जो टैंक, स्पीड और गनर मोड के बीच बदलता है।",
+  selectDifficulty: "कठिनाई चुनें", bossesLabel: "बॉस:", hellMode: "नरक मोड",
+  btnStart: "शुरू", selectMap: "मैप चुनें"
+};
+
+const HUD_AR = {
+  hudHelpMove:    "WASD للحركة | Space للقفز | R لإعادة التعبئة",
+  hudHelpAim:     "الفأرة للتصويب | الزر الأيمن للتكبير | L للمصباح | Z لشعاع المصباح صغير/متوسط/واسع",
+  hudHelpWeapons: "الأسلحة: <b>0</b> سكين | <b>1</b> مسدس | <b>2</b> بندقية | <b>3</b> SMG | <b>4</b> AR | <b>5</b> AMR | <b>6</b> سهم | <b>7</b> إسعافات",
+  hudMap: "الخريطة", hudWeapon: "السلاح", hudHealth: "الصحة", hudScore: "النقاط",
+  hudBullets: "الذخيرة", hudRoom: "الغرفة", hudMpTag: " (MP)",
+  hudRefilling: "جارٍ التعبئة…", hudMedKit: "إسعافات",
+  hudMedKitHold: "اضغط <b>F</b> أو <b>الزر الأيسر</b> 10ث (+50 صحة)",
+  hudUse: "استخدام", hudUses: "استخدامات",
+  hudHealthFull: "صحة كاملة", hudUsedUp: "انتهى", hudReleaseKey: "أفلت الزر/الفأرة",
+  hudMeleeLine: "اشتباك: من الأمام ضربتان للقتل | <b>طعنة الظهر ضربة واحدة</b>"
+};
+const BTN_AR = {
+  btnBossFight: "معركة الزعيم", bossFightTitle: "معركة الزعيم",
+  bossFightDesc: "حارب الزومبي الهرموني — زعيم ضخم يتنقل بين أوضاع الدبابة والسرعة والمسلح.",
+  selectDifficulty: "اختر الصعوبة", bossesLabel: "الزعماء:", hellMode: "وضع الجحيم",
+  btnStart: "ابدأ", selectMap: "اختر الخريطة"
+};
+
+const HUD_FR = {
+  hudHelpMove:    "WASD se déplacer | Espace sauter | R recharger",
+  hudHelpAim:     "Souris viser | Clic droit zoom | L lampe | Z faisceau petit/moy/large",
+  hudHelpWeapons: "Armes: <b>0</b> Couteau | <b>1</b> Pistolet | <b>2</b> Fusil | <b>3</b> SMG | <b>4</b> AR | <b>5</b> AMR | <b>6</b> Fléchette | <b>7</b> Trousse",
+  hudMap: "Carte", hudWeapon: "Arme", hudHealth: "Santé", hudScore: "Score",
+  hudBullets: "Balles", hudRoom: "Salle", hudMpTag: " (MP)",
+  hudRefilling: "Recharge…", hudMedKit: "Trousse",
+  hudMedKitHold: "maintenir <b>F</b> ou <b>clic G</b> 10s (+50 PV)",
+  hudUse: "usage", hudUses: "usages",
+  hudHealthFull: "santé pleine", hudUsedUp: "épuisé", hudReleaseKey: "relâcher touche/souris",
+  hudMeleeLine: "Mêlée: face 2 coups | <b>dans le dos 1 coup</b>"
+};
+const BTN_FR = {
+  btnBossFight: "COMBAT DE BOSS", bossFightTitle: "COMBAT DE BOSS",
+  bossFightDesc: "Affrontez le Zombie Hormonal — un boss massif qui alterne entre les modes Tank, Vitesse et Tireur.",
+  selectDifficulty: "DIFFICULTÉ", bossesLabel: "BOSS:", hellMode: "MODE ENFER",
+  btnStart: "DÉMARRER", selectMap: "CHOISIR CARTE"
+};
+
+const HUD_PT = {
+  hudHelpMove:    "WASD mover | Espaço pular | R recarregar",
+  hudHelpAim:     "Mouse mirar | Botão dir. zoom | L lanterna | Z facho pequeno/méd/largo",
+  hudHelpWeapons: "Armas: <b>0</b> Faca | <b>1</b> Pistola | <b>2</b> Shotgun | <b>3</b> SMG | <b>4</b> AR | <b>5</b> AMR | <b>6</b> Dardo | <b>7</b> Kit Médico",
+  hudMap: "Mapa", hudWeapon: "Arma", hudHealth: "Vida", hudScore: "Pontos",
+  hudBullets: "Balas", hudRoom: "Sala", hudMpTag: " (MP)",
+  hudRefilling: "Recarregando…", hudMedKit: "Kit Médico",
+  hudMedKitHold: "segure <b>F</b> ou <b>BME</b> 10s (+50 HP)",
+  hudUse: "uso", hudUses: "usos",
+  hudHealthFull: "vida cheia", hudUsedUp: "esgotado", hudReleaseKey: "solte tecla/mouse",
+  hudMeleeLine: "Corpo a corpo: 2 golpes frontais | <b>punhalada nas costas 1 golpe</b>"
+};
+const BTN_PT = {
+  btnBossFight: "LUTA DE CHEFE", bossFightTitle: "LUTA DE CHEFE",
+  bossFightDesc: "Lute contra o Zumbi Hormonal — um chefe gigante que alterna entre os modos Tanque, Velocidade e Atirador.",
+  selectDifficulty: "DIFICULDADE", bossesLabel: "CHEFES:", hellMode: "MODO INFERNO",
+  btnStart: "INICIAR", selectMap: "ESCOLHER MAPA"
+};
+
+const HUD_RU = {
+  hudHelpMove:    "WASD движение | Пробел прыжок | R перезарядка",
+  hudHelpAim:     "Мышь прицел | ПКМ зум | L фонарь | Z луч малый/сред/широкий",
+  hudHelpWeapons: "Оружие: <b>0</b> Нож | <b>1</b> Пистолет | <b>2</b> Дробовик | <b>3</b> SMG | <b>4</b> AR | <b>5</b> AMR | <b>6</b> Дротик | <b>7</b> Аптечка",
+  hudMap: "Карта", hudWeapon: "Оружие", hudHealth: "Здоровье", hudScore: "Очки",
+  hudBullets: "Патроны", hudRoom: "Комната", hudMpTag: " (MP)",
+  hudRefilling: "Перезарядка…", hudMedKit: "Аптечка",
+  hudMedKitHold: "удерживай <b>F</b> или <b>ЛКМ</b> 10с (+50 HP)",
+  hudUse: "исп.", hudUses: "исп.",
+  hudHealthFull: "здоровье полно", hudUsedUp: "израсходовано", hudReleaseKey: "отпусти клавишу/мышь",
+  hudMeleeLine: "Ближний бой: спереди 2 удара | <b>в спину 1 удар</b>"
+};
+const BTN_RU = {
+  btnBossFight: "БОЙ С БОССОМ", bossFightTitle: "БОЙ С БОССОМ",
+  bossFightDesc: "Сразитесь с Гормональным Зомби — огромным боссом, переключающимся между режимами Танк, Скорость и Стрелок.",
+  selectDifficulty: "СЛОЖНОСТЬ", bossesLabel: "БОССЫ:", hellMode: "АДСКИЙ РЕЖИМ",
+  btnStart: "СТАРТ", selectMap: "ВЫБРАТЬ КАРТУ"
+};
+
+const HUD_JA = {
+  hudHelpMove:    "WASD 移動 | スペース ジャンプ | R リロード",
+  hudHelpAim:     "マウス エイム | 右クリック ズーム | L ライト | Z 光斑 小/中/大",
+  hudHelpWeapons: "武器: <b>0</b> ナイフ | <b>1</b> 拳銃 | <b>2</b> ショットガン | <b>3</b> SMG | <b>4</b> AR | <b>5</b> AMR | <b>6</b> ダート | <b>7</b> 救急箱",
+  hudMap: "マップ", hudWeapon: "武器", hudHealth: "体力", hudScore: "スコア",
+  hudBullets: "弾薬", hudRoom: "ルーム", hudMpTag: "（MP）",
+  hudRefilling: "リロード中…", hudMedKit: "救急箱",
+  hudMedKitHold: "<b>F</b> または <b>左クリック</b> を 10秒長押し（+50 HP）",
+  hudUse: "回", hudUses: "回",
+  hudHealthFull: "体力満タン", hudUsedUp: "使い切り", hudReleaseKey: "キー/マウスを離す",
+  hudMeleeLine: "近接: 正面 2 撃キル | <b>背後 1 撃キル</b>"
+};
+const BTN_JA = {
+  btnBossFight: "ボス戦", bossFightTitle: "ボス戦",
+  bossFightDesc: "ホルモンゾンビと戦え — タンク／スピード／ガンナーの3形態を切り替える巨大ボス。",
+  selectDifficulty: "難易度選択", bossesLabel: "ボス数：", hellMode: "ヘルモード",
+  btnStart: "スタート", selectMap: "マップ選択"
+};
+
+const HUD_DE = {
+  hudHelpMove:    "WASD bewegen | Leertaste springen | R nachladen",
+  hudHelpAim:     "Maus zielen | Rechtsklick Zoom | L Taschenlampe | Z Strahl klein/mittel/breit",
+  hudHelpWeapons: "Waffen: <b>0</b> Messer | <b>1</b> Pistole | <b>2</b> Schrotflinte | <b>3</b> SMG | <b>4</b> AR | <b>5</b> AMR | <b>6</b> Pfeil | <b>7</b> Med-Kit",
+  hudMap: "Karte", hudWeapon: "Waffe", hudHealth: "Leben", hudScore: "Punkte",
+  hudBullets: "Munition", hudRoom: "Raum", hudMpTag: " (MP)",
+  hudRefilling: "Nachladen…", hudMedKit: "Med-Kit",
+  hudMedKitHold: "<b>F</b> oder <b>Linksklick</b> 10s halten (+50 HP)",
+  hudUse: "Anwendung", hudUses: "Anwendungen",
+  hudHealthFull: "Leben voll", hudUsedUp: "leer", hudReleaseKey: "Taste/Maus loslassen",
+  hudMeleeLine: "Nahkampf: von vorn 2 Treffer | <b>von hinten 1 Treffer</b>"
+};
+const BTN_DE = {
+  btnBossFight: "BOSS-KAMPF", bossFightTitle: "BOSS-KAMPF",
+  bossFightDesc: "Bekämpfe den Hormon-Zombie — ein gewaltiger Boss, der zwischen Tank-, Speed- und Schützenmodus wechselt.",
+  selectDifficulty: "SCHWIERIGKEIT", bossesLabel: "BOSSE:", hellMode: "HÖLLENMODUS",
+  btnStart: "START", selectMap: "KARTE WÄHLEN"
+};
+
+const HUD_KO = {
+  hudHelpMove:    "WASD 이동 | 스페이스 점프 | R 재장전",
+  hudHelpAim:     "마우스 조준 | 우클릭 줌 | L 손전등 | Z 빔 소/중/대",
+  hudHelpWeapons: "무기: <b>0</b> 칼 | <b>1</b> 권총 | <b>2</b> 샷건 | <b>3</b> SMG | <b>4</b> AR | <b>5</b> AMR | <b>6</b> 다트 | <b>7</b> 구급상자",
+  hudMap: "맵", hudWeapon: "무기", hudHealth: "체력", hudScore: "점수",
+  hudBullets: "탄약", hudRoom: "방", hudMpTag: "（MP）",
+  hudRefilling: "재장전 중…", hudMedKit: "구급상자",
+  hudMedKitHold: "<b>F</b> 또는 <b>좌클릭</b> 10초 길게 누르기 (+50 HP)",
+  hudUse: "회", hudUses: "회",
+  hudHealthFull: "체력 가득", hudUsedUp: "다 씀", hudReleaseKey: "키/마우스 떼기",
+  hudMeleeLine: "근접: 정면 2 타 킬 | <b>등 뒤 1 타 킬</b>"
+};
+const BTN_KO = {
+  btnBossFight: "보스전", bossFightTitle: "보스전",
+  bossFightDesc: "호르몬 좀비와 싸우세요 — 탱크 / 스피드 / 거너 모드를 오가는 거대한 보스.",
+  selectDifficulty: "난이도 선택", bossesLabel: "보스:", hellMode: "헬 모드",
+  btnStart: "시작", selectMap: "맵 선택"
+};
+
+const HUD_IT = {
+  hudHelpMove:    "WASD movimento | Spazio salto | R ricarica",
+  hudHelpAim:     "Mouse mira | Click dest. zoom | L torcia | Z fascio piccolo/medio/ampio",
+  hudHelpWeapons: "Armi: <b>0</b> Coltello | <b>1</b> Pistola | <b>2</b> Fucile | <b>3</b> SMG | <b>4</b> AR | <b>5</b> AMR | <b>6</b> Dardo | <b>7</b> Kit Medico",
+  hudMap: "Mappa", hudWeapon: "Arma", hudHealth: "Vita", hudScore: "Punteggio",
+  hudBullets: "Munizioni", hudRoom: "Stanza", hudMpTag: " (MP)",
+  hudRefilling: "Ricarica…", hudMedKit: "Kit Medico",
+  hudMedKitHold: "tieni <b>F</b> o <b>click sin.</b> 10s (+50 PV)",
+  hudUse: "uso", hudUses: "usi",
+  hudHealthFull: "vita piena", hudUsedUp: "esaurito", hudReleaseKey: "rilascia tasto/mouse",
+  hudMeleeLine: "Mischia: frontale 2 colpi | <b>pugnalata alle spalle 1 colpo</b>"
+};
+const BTN_IT = {
+  btnBossFight: "SCONTRO BOSS", bossFightTitle: "SCONTRO BOSS",
+  bossFightDesc: "Affronta lo Zombi Ormonale — un boss enorme che alterna le modalità Tank, Velocità e Tiratore.",
+  selectDifficulty: "DIFFICOLTÀ", bossesLabel: "BOSS:", hellMode: "MODALITÀ INFERNO",
+  btnStart: "AVVIA", selectMap: "SCEGLI MAPPA"
+};
+
+const HUD_NL = {
+  hudHelpMove:    "WASD bewegen | Spatie springen | R herladen",
+  hudHelpAim:     "Muis richten | Rechtsklik zoom | L zaklamp | Z bundel klein/midden/breed",
+  hudHelpWeapons: "Wapens: <b>0</b> Mes | <b>1</b> Pistool | <b>2</b> Shotgun | <b>3</b> SMG | <b>4</b> AR | <b>5</b> AMR | <b>6</b> Dart | <b>7</b> Med Kit",
+  hudMap: "Map", hudWeapon: "Wapen", hudHealth: "Leven", hudScore: "Score",
+  hudBullets: "Kogels", hudRoom: "Kamer", hudMpTag: " (MP)",
+  hudRefilling: "Herladen…", hudMedKit: "Med Kit",
+  hudMedKitHold: "houd <b>F</b> of <b>LMB</b> 10s (+50 HP)",
+  hudUse: "gebruik", hudUses: "gebruiken",
+  hudHealthFull: "leven vol", hudUsedUp: "op", hudReleaseKey: "laat toets/muis los",
+  hudMeleeLine: "Melee: van voren 2 hits | <b>messteek in de rug 1 hit</b>"
+};
+const BTN_NL = {
+  btnBossFight: "BAASGEVECHT", bossFightTitle: "BAASGEVECHT",
+  bossFightDesc: "Vecht tegen de Hormoonzombie — een reusachtige baas die wisselt tussen Tank-, Speed- en Schuttermodus.",
+  selectDifficulty: "MOEILIJKHEID", bossesLabel: "BAZEN:", hellMode: "HEL-MODUS",
+  btnStart: "START", selectMap: "KIES MAP"
+};
+
+const HUD_PL = {
+  hudHelpMove:    "WASD ruch | Spacja skok | R przeładuj",
+  hudHelpAim:     "Mysz cel | PPM zoom | L latarka | Z wiązka mała/śr/szer",
+  hudHelpWeapons: "Broń: <b>0</b> Nóż | <b>1</b> Pistolet | <b>2</b> Strzelba | <b>3</b> SMG | <b>4</b> AR | <b>5</b> AMR | <b>6</b> Strzałka | <b>7</b> Apteczka",
+  hudMap: "Mapa", hudWeapon: "Broń", hudHealth: "Zdrowie", hudScore: "Punkty",
+  hudBullets: "Naboje", hudRoom: "Pokój", hudMpTag: " (MP)",
+  hudRefilling: "Ładowanie…", hudMedKit: "Apteczka",
+  hudMedKitHold: "przytrzymaj <b>F</b> lub <b>LPM</b> 10s (+50 HP)",
+  hudUse: "użycie", hudUses: "użycia",
+  hudHealthFull: "pełne zdrowie", hudUsedUp: "zużyte", hudReleaseKey: "puść klawisz/mysz",
+  hudMeleeLine: "Walka wręcz: z przodu 2 ciosy | <b>w plecy 1 cios</b>"
+};
+const BTN_PL = {
+  btnBossFight: "WALKA Z BOSSEM", bossFightTitle: "WALKA Z BOSSEM",
+  bossFightDesc: "Walcz z Hormonalnym Zombie — potężnym bossem, który przełącza się między trybami Tank, Speed i Strzelec.",
+  selectDifficulty: "POZIOM TRUDNOŚCI", bossesLabel: "BOSSOWIE:", hellMode: "TRYB PIEKŁA",
+  btnStart: "START", selectMap: "WYBIERZ MAPĘ"
+};
+
+const HUD_TR = {
+  hudHelpMove:    "WASD hareket | Boşluk zıpla | R doldur",
+  hudHelpAim:     "Fare nişan | Sağ tık yakınlaştır | L el feneri | Z huzme küçük/orta/geniş",
+  hudHelpWeapons: "Silahlar: <b>0</b> Bıçak | <b>1</b> Tabanca | <b>2</b> Pompalı | <b>3</b> SMG | <b>4</b> AR | <b>5</b> AMR | <b>6</b> Dart | <b>7</b> Med Kit",
+  hudMap: "Harita", hudWeapon: "Silah", hudHealth: "Can", hudScore: "Skor",
+  hudBullets: "Mermi", hudRoom: "Oda", hudMpTag: " (MP)",
+  hudRefilling: "Doluyor…", hudMedKit: "Med Kit",
+  hudMedKitHold: "<b>F</b> veya <b>sol tık</b> 10sn basılı tut (+50 HP)",
+  hudUse: "kullanım", hudUses: "kullanım",
+  hudHealthFull: "can dolu", hudUsedUp: "tükendi", hudReleaseKey: "tuşu/fareyi bırak",
+  hudMeleeLine: "Yakın dövüş: önden 2 vuruşta ölüm | <b>arkadan 1 vuruşta ölüm</b>"
+};
+const BTN_TR = {
+  btnBossFight: "BOSS DÖVÜŞÜ", bossFightTitle: "BOSS DÖVÜŞÜ",
+  bossFightDesc: "Hormon Zombi ile savaş — Tank, Hız ve Nişancı modları arasında geçiş yapan dev bir boss.",
+  selectDifficulty: "ZORLUK", bossesLabel: "BOSSLAR:", hellMode: "CEHENNEM MODU",
+  btnStart: "BAŞLA", selectMap: "HARİTA SEÇ"
+};
+
+const HUD_VI = {
+  hudHelpMove:    "WASD di chuyển | Space nhảy | R nạp đạn",
+  hudHelpAim:     "Chuột ngắm | Chuột phải zoom | L đèn pin | Z chùm nhỏ/vừa/rộng",
+  hudHelpWeapons: "Vũ khí: <b>0</b> Dao | <b>1</b> Súng lục | <b>2</b> Shotgun | <b>3</b> SMG | <b>4</b> AR | <b>5</b> AMR | <b>6</b> Phi tiêu | <b>7</b> Hộp cứu thương",
+  hudMap: "Bản đồ", hudWeapon: "Vũ khí", hudHealth: "Máu", hudScore: "Điểm",
+  hudBullets: "Đạn", hudRoom: "Phòng", hudMpTag: " (MP)",
+  hudRefilling: "Đang nạp…", hudMedKit: "Hộp cứu thương",
+  hudMedKitHold: "giữ <b>F</b> hoặc <b>chuột trái</b> 10s (+50 HP)",
+  hudUse: "lần", hudUses: "lần",
+  hudHealthFull: "máu đầy", hudUsedUp: "hết", hudReleaseKey: "thả phím/chuột",
+  hudMeleeLine: "Cận chiến: trực diện 2 đòn | <b>đâm sau lưng 1 đòn</b>"
+};
+const BTN_VI = {
+  btnBossFight: "ĐẤU BOSS", bossFightTitle: "ĐẤU BOSS",
+  bossFightDesc: "Chiến đấu với Zombie Hormone — một boss khổng lồ chuyển đổi giữa các chế độ Tăng giáp, Tốc độ và Súng máy.",
+  selectDifficulty: "CHỌN ĐỘ KHÓ", bossesLabel: "SỐ BOSS:", hellMode: "CHẾ ĐỘ ĐỊA NGỤC",
+  btnStart: "BẮT ĐẦU", selectMap: "CHỌN MAP"
+};
+
+const HUD_ID = {
+  hudHelpMove:    "WASD gerak | Space lompat | R isi ulang",
+  hudHelpAim:     "Mouse bidik | Klik kanan zoom | L senter | Z sorot kecil/sedang/lebar",
+  hudHelpWeapons: "Senjata: <b>0</b> Pisau | <b>1</b> Pistol | <b>2</b> Shotgun | <b>3</b> SMG | <b>4</b> AR | <b>5</b> AMR | <b>6</b> Panah | <b>7</b> Kit Medis",
+  hudMap: "Peta", hudWeapon: "Senjata", hudHealth: "Nyawa", hudScore: "Skor",
+  hudBullets: "Peluru", hudRoom: "Ruang", hudMpTag: " (MP)",
+  hudRefilling: "Mengisi…", hudMedKit: "Kit Medis",
+  hudMedKitHold: "tahan <b>F</b> atau <b>klik kiri</b> 10d (+50 HP)",
+  hudUse: "pakai", hudUses: "pakai",
+  hudHealthFull: "nyawa penuh", hudUsedUp: "habis", hudReleaseKey: "lepas tombol/mouse",
+  hudMeleeLine: "Melee: depan 2 pukulan | <b>tikam belakang 1 pukulan</b>"
+};
+const BTN_ID = {
+  btnBossFight: "PERTARUNGAN BOS", bossFightTitle: "PERTARUNGAN BOS",
+  bossFightDesc: "Lawan Zombi Hormon — bos raksasa yang berganti antara mode Tank, Kecepatan, dan Penembak.",
+  selectDifficulty: "PILIH KESULITAN", bossesLabel: "BOS:", hellMode: "MODE NERAKA",
+  btnStart: "MULAI", selectMap: "PILIH PETA"
+};
+
 // Merge into each language dict. Existing user-translated keys are NOT overwritten — these are
 // only added if missing (so manual edits in the dicts above always win).
 function _addIfMissing(target, extras) {
@@ -2261,12 +2547,24 @@ function _addIfMissing(target, extras) {
     if (target[k] == null || target[k] === "") target[k] = extras[k];
   }
 }
-_addIfMissing(GAME_I18N.en,        HUD_EN);
-_addIfMissing(GAME_I18N.zh,        HUD_ZH);
-_addIfMissing(GAME_I18N["zh-Hant"], HUD_ZH_HANT);
-_addIfMissing(GAME_I18N.en,        BTN_EN);
-_addIfMissing(GAME_I18N.zh,        BTN_ZH);
-_addIfMissing(GAME_I18N["zh-Hant"], BTN_ZH_HANT);
+_addIfMissing(GAME_I18N.en,        HUD_EN);          _addIfMissing(GAME_I18N.en,        BTN_EN);
+_addIfMissing(GAME_I18N.zh,        HUD_ZH);          _addIfMissing(GAME_I18N.zh,        BTN_ZH);
+_addIfMissing(GAME_I18N["zh-Hant"], HUD_ZH_HANT);    _addIfMissing(GAME_I18N["zh-Hant"], BTN_ZH_HANT);
+_addIfMissing(GAME_I18N.es,        HUD_ES);          _addIfMissing(GAME_I18N.es,        BTN_ES);
+_addIfMissing(GAME_I18N.hi,        HUD_HI);          _addIfMissing(GAME_I18N.hi,        BTN_HI);
+_addIfMissing(GAME_I18N.ar,        HUD_AR);          _addIfMissing(GAME_I18N.ar,        BTN_AR);
+_addIfMissing(GAME_I18N.fr,        HUD_FR);          _addIfMissing(GAME_I18N.fr,        BTN_FR);
+_addIfMissing(GAME_I18N.pt,        HUD_PT);          _addIfMissing(GAME_I18N.pt,        BTN_PT);
+_addIfMissing(GAME_I18N.ru,        HUD_RU);          _addIfMissing(GAME_I18N.ru,        BTN_RU);
+_addIfMissing(GAME_I18N.ja,        HUD_JA);          _addIfMissing(GAME_I18N.ja,        BTN_JA);
+_addIfMissing(GAME_I18N.de,        HUD_DE);          _addIfMissing(GAME_I18N.de,        BTN_DE);
+_addIfMissing(GAME_I18N.ko,        HUD_KO);          _addIfMissing(GAME_I18N.ko,        BTN_KO);
+_addIfMissing(GAME_I18N.it,        HUD_IT);          _addIfMissing(GAME_I18N.it,        BTN_IT);
+_addIfMissing(GAME_I18N.nl,        HUD_NL);          _addIfMissing(GAME_I18N.nl,        BTN_NL);
+_addIfMissing(GAME_I18N.pl,        HUD_PL);          _addIfMissing(GAME_I18N.pl,        BTN_PL);
+_addIfMissing(GAME_I18N.tr,        HUD_TR);          _addIfMissing(GAME_I18N.tr,        BTN_TR);
+_addIfMissing(GAME_I18N.vi,        HUD_VI);          _addIfMissing(GAME_I18N.vi,        BTN_VI);
+_addIfMissing(GAME_I18N.id,        HUD_ID);          _addIfMissing(GAME_I18N.id,        BTN_ID);
 
 export function translate(lang, key, fallback = "") {
   const code = GAME_I18N[lang] ? lang : "en";
