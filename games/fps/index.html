@@ -2628,7 +2628,25 @@ if (typeof window !== "undefined") {
 </script>
   <script type="module">
     import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.182.0/build/three.module.js";
-    import { GAME_I18N, LANGUAGE_OPTIONS as LANG_META, translate as translateGame } from "./translate.js";
+    // Dynamic import with inline fallback. translate.js is shipped only with the full deploy; when
+    // the host is missing it (e.g. embedded copies), a static `import` would 404 and abort the entire
+    // module, leaving the Start button unresponsive. Top-level await keeps the rest of the file
+    // unchanged — by the time any code below runs, the bindings are assigned.
+    let GAME_I18N, LANG_META, translateGame;
+    try {
+      const _i18n = await import("./translate.js");
+      GAME_I18N     = _i18n.GAME_I18N;
+      LANG_META     = _i18n.LANGUAGE_OPTIONS;
+      translateGame = _i18n.translate;
+    } catch (_e) {
+      console.warn("[zone-no-light] translate.js missing — using minimal inline i18n stub", _e);
+      LANG_META = [
+        { code: "en", native: "English" },
+        { code: "zh", native: "中文" },
+      ];
+      GAME_I18N = { en: {}, zh: {} };
+      translateGame = function (_lang, _key, fallback) { return fallback != null ? fallback : _key; };
+    }
 
     const app = document.getElementById("app");
     const hud = document.getElementById("hud");
@@ -13778,16 +13796,19 @@ Map: ${mapLabel}${MULTIPLAYER ? " (MP)" : ""}<br>
         if (act === "slide") slideBack = 0.09 * k;
         if (ud.animSlide) ud.animSlide.position.z = slideBack;
         if (act === "pistolDraw") {
-          // 转枪切枪：从右侧飞入，正向翻转360°后稳住（较慢，起始位置居中）
+          // 转枪切枪：从右侧飞入，正向翻转360°后稳住。整条弧线抬高到视野中段，
+          // 避免旋转阶段被 HUD/枪管挡住。
           if (t < 0.60) {
             const u = THREE.MathUtils.smoothstep(t / 0.60, 0, 1);
             rotX = THREE.MathUtils.lerp(Math.PI * 2, 0, u);
             offX = THREE.MathUtils.lerp(0.18, 0.00, u);
-            offY = THREE.MathUtils.lerp(-0.14, 0.02, u);
+            // raised: enters mid-frame instead of from below; peaks slightly above resting pose so
+            // the full spin is visible, then settles back down in the second phase.
+            offY = THREE.MathUtils.lerp(0.02, 0.12, u);
             rotZ = THREE.MathUtils.lerp(0.28, 0.0, u);
           } else {
             const u = THREE.MathUtils.smoothstep((t - 0.60) / 0.40, 0, 1);
-            offY = THREE.MathUtils.lerp(0.02, 0.00, u);
+            offY = THREE.MathUtils.lerp(0.12, 0.00, u);
             rotX = 0; rotZ = 0; offX = 0;
           }
           if (ud.viewArmR && ud.armRBasePos && ud.armRBaseRot) {
