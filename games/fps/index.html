@@ -1,9 +1,9 @@
-、<!DOCTYPE html>
+<!DOCTYPE html>
 <!--
   Deploy / GitHub Pages: https://tintly555.github.io/games/fps/ — multiplayer relay + static prefix set below.
   Self-hosted same tree: open game-self-hosted.html (empty game-multiplayer-origin, empty game-static-prefix).
   Crossfire = PVP; Arena = PVE / co-op vs zombies.
-  Build: zone-no-light-v94 (all 18 languages now have full hud* + btn* translations — es/hi/ar/fr/pt/ru/ja/de/ko/it/nl/pl/tr/vi/id no longer fall back to English; on top of v93: real achievement keys, button data-i18n, zombie arena ceiling seam fix, wall corner re-check)
+  Build: zone-no-light-v95 (declarative [data-i18n] sweep — fixes 42 dead i18n markers that never translated; pause/death/name modal/data/hotbar tabs + dev-gun pickup all i18n; 18 languages get btnResume/Restart/Quit/Join/pausedTitle/deathTitle/etc; hardcoded Chinese "获得～～～" removed)
 -->
 <!--
   Swap Med Kit and AMR weapon positions (4↔5) and improve lighting 让AMR和Swap Med Kit没法使用，所以退回merge versions
@@ -1311,7 +1311,7 @@
       <h1 id="menuGameTitle" data-i18n="gameTitle">Zone No Light</h1>
       <p id="menuCreditsGame" data-i18n="creditsGame" style="cursor:pointer;user-select:none;">Game by Tintly555</p>
       <p id="menuCreditsMusic" style="cursor:pointer;user-select:none;">Music by JimmyQrg</p>
-      <button type="button" id="btnStart">START</button>
+      <button type="button" id="btnStart" data-i18n="btnStart">START</button>
       <button type="button" id="btnTraining" data-i18n="btnTrainingCamp">Training Camp</button>
     </div>
     <!-- Floating settings gear — top-right, only visible in menu -->
@@ -1479,19 +1479,19 @@
   <div id="deathOverlay" style="position:fixed;inset:0;z-index:50;pointer-events:none;display:none;">
     <div id="deathFade" style="position:absolute;inset:0;background:rgba(0,0,0,0);transition:none;"></div>
     <div id="deathUI" style="position:absolute;inset:0;display:none;flex-direction:column;justify-content:center;align-items:center;gap:14px;pointer-events:auto;">
-      <h1 id="deathTitle" style="font-family:'Audiowide',sans-serif;font-size:52px;margin:0 0 6px 0;color:#e53e3e;text-shadow:0 0 30px rgba(229,62,62,0.5);letter-spacing:4px;">DEFEAT</h1>
+      <h1 id="deathTitle" data-i18n="deathTitle" style="font-family:'Audiowide',sans-serif;font-size:52px;margin:0 0 6px 0;color:#e53e3e;text-shadow:0 0 30px rgba(229,62,62,0.5);letter-spacing:4px;">DEFEAT</h1>
       <p id="deathScore" style="font-family:'Audiowide',sans-serif;font-size:16px;margin:0 0 18px 0;opacity:0.8;">Score: 0</p>
-      <button type="button" class="overlay-btn" id="btnDeathRestart">RESTART</button>
-      <button type="button" class="overlay-btn overlay-btn-accent" id="btnDeathSettings">SETTINGS</button>
-      <button type="button" class="overlay-btn" id="btnDeathQuit">QUIT</button>
+      <button type="button" class="overlay-btn" id="btnDeathRestart" data-i18n="btnRestart">RESTART</button>
+      <button type="button" class="overlay-btn overlay-btn-accent" id="btnDeathSettings" data-i18n="btnSettings">SETTINGS</button>
+      <button type="button" class="overlay-btn" id="btnDeathQuit" data-i18n="btnQuit">QUIT</button>
     </div>
   </div>
   <div id="pauseOverlay" style="position:fixed;inset:0;z-index:55;display:none;flex-direction:column;justify-content:center;align-items:center;gap:14px;background:rgba(0,0,0,0.5);">
-    <h1 style="font-family:'Audiowide',sans-serif;font-size:48px;margin:0 0 10px 0;color:#fff;letter-spacing:4px;">PAUSED</h1>
-    <button type="button" class="overlay-btn" id="btnResume">RESUME</button>
-    <button type="button" class="overlay-btn overlay-btn-accent" id="btnPauseSettings">SETTINGS</button>
-    <button type="button" class="overlay-btn" id="btnPauseRestart" style="display:none;">RESTART</button>
-    <button type="button" class="overlay-btn" id="btnPauseQuit">QUIT</button>
+    <h1 data-i18n="pausedTitle" style="font-family:'Audiowide',sans-serif;font-size:48px;margin:0 0 10px 0;color:#fff;letter-spacing:4px;">PAUSED</h1>
+    <button type="button" class="overlay-btn" id="btnResume" data-i18n="btnResume">RESUME</button>
+    <button type="button" class="overlay-btn overlay-btn-accent" id="btnPauseSettings" data-i18n="btnSettings">SETTINGS</button>
+    <button type="button" class="overlay-btn" id="btnPauseRestart" data-i18n="btnRestart" style="display:none;">RESTART</button>
+    <button type="button" class="overlay-btn" id="btnPauseQuit" data-i18n="btnQuit">QUIT</button>
   </div>
   <div id="chatBox" style="position:fixed;bottom:10px;left:10px;z-index:40;pointer-events:none;font-family:'Audiowide',sans-serif;display:flex;flex-direction:column;justify-content:flex-end;">
     <div id="chatMessages" style="display:flex;flex-direction:column;gap:2px;margin-bottom:6px;overflow:hidden;"></div>
@@ -1502,10 +1502,10 @@
   <div id="hitDirContainer" style="position:fixed;inset:0;z-index:35;pointer-events:none;display:flex;justify-content:center;align-items:center;"></div>
   <div id="nameModal" style="position:fixed;inset:0;z-index:110;display:none;justify-content:center;align-items:center;background:rgba(0,0,0,0.7);">
     <div style="background:#1a2236;border-radius:14px;padding:32px 38px;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.5);">
-      <h2 style="font-family:'Audiowide',sans-serif;margin:0 0 16px 0;font-size:22px;">ENTER YOUR NAME</h2>
-      <input id="nameInput" type="text" maxlength="16" placeholder="Player" style="font-family:'Audiowide',sans-serif;width:200px;padding:10px 14px;font-size:16px;border:2px solid #4fd1ff;border-radius:8px;background:#0d111b;color:#fff;outline:none;text-align:center;">
+      <h2 data-i18n="enterYourName" style="font-family:'Audiowide',sans-serif;margin:0 0 16px 0;font-size:22px;">ENTER YOUR NAME</h2>
+      <input id="nameInput" type="text" maxlength="16" placeholder="Player" data-i18n-placeholder="playerPlaceholder" style="font-family:'Audiowide',sans-serif;width:200px;padding:10px 14px;font-size:16px;border:2px solid #4fd1ff;border-radius:8px;background:#0d111b;color:#fff;outline:none;text-align:center;">
       <br>
-      <button class="overlay-btn" type="button" id="btnNameOk" style="margin-top:16px;">JOIN</button>
+      <button class="overlay-btn" type="button" id="btnNameOk" data-i18n="btnJoin" style="margin-top:16px;">JOIN</button>
     </div>
   </div>
 
@@ -1516,8 +1516,8 @@
         <button type="button" class="settings-tab" id="settingsTabControls" data-scroll-target="settingsSectionControls">CONTROLS</button>
         <button type="button" class="settings-tab" id="settingsTabGraphics" data-scroll-target="settingsSectionGraphics">GRAPHICS</button>
         <button type="button" class="settings-tab" id="settingsTabLanguage" data-scroll-target="settingsSectionLanguage">LANGUAGE</button>
-        <button type="button" class="settings-tab" id="settingsTabData" data-scroll-target="settingsSectionData">DATA</button>
-        <button type="button" class="settings-tab" id="settingsTabHotbar" data-scroll-target="settingsSectionHotbar">HOTBAR</button>
+        <button type="button" class="settings-tab" id="settingsTabData" data-i18n="settingsTabData" data-scroll-target="settingsSectionData">DATA</button>
+        <button type="button" class="settings-tab" id="settingsTabHotbar" data-i18n="settingsTabHotbar" data-scroll-target="settingsSectionHotbar">HOTBAR</button>
       </aside>
       <div class="settings-modal-inner-wrap">
         <button type="button" class="settings-close" id="btnCloseSettings" title="Close">×</button>
@@ -5030,6 +5030,33 @@ if (typeof window !== "undefined") {
       if (pCreator) pCreator.textContent = tr("settingsCreatorHint", pCreator.textContent);
       if (btnDelete) btnDelete.textContent = tr("btnDeleteAllData", btnDelete.textContent);
       if (pDelete) pDelete.textContent = tr("settingsDeleteHint", pDelete.textContent);
+      // v95: declarative i18n sweep — every element with data-i18n gets translated automatically.
+      // Previously ~42 elements were marked with data-i18n but NOTHING ever read them, so they
+      // stayed in whatever language was hardcoded in the HTML. This single pass fixes the bulk of
+      // "buttons aren't translated" complaints (BOSS FIGHT, HELL MODE, START, SELECT DIFFICULTY, ...).
+      try {
+        for (const el of document.querySelectorAll("[data-i18n]")) {
+          const key = el.dataset.i18n;
+          if (key) {
+            const translated = tr(key, "");
+            if (translated) el.textContent = translated;
+          }
+        }
+        for (const el of document.querySelectorAll("[data-i18n-placeholder]")) {
+          const key = el.dataset.i18nPlaceholder;
+          if (key) {
+            const translated = tr(key, "");
+            if (translated) el.placeholder = translated;
+          }
+        }
+        for (const el of document.querySelectorAll("[data-i18n-aria-label]")) {
+          const key = el.dataset.i18nAriaLabel;
+          if (key) {
+            const translated = tr(key, "");
+            if (translated) el.setAttribute("aria-label", translated);
+          }
+        }
+      } catch (_) {}
       try {
         renderAchievementsPanel();
       } catch (_) {}
@@ -9696,7 +9723,7 @@ if (typeof window !== "undefined") {
           const equipBtn = document.createElement("button");
           equipBtn.type = "button";
           equipBtn.className = "settings-action-btn";
-          equipBtn.textContent = _isFull ? "Full (5/5)" : tr("achEquip", "Equip");
+          equipBtn.textContent = _isFull ? tr("achSlotsFull", "Full (5/5)") : tr("achEquip", "Equip");
           equipBtn.disabled = _isFull;
           equipBtn.addEventListener("click", () => {
             equipAchievement(def.id);
@@ -18008,7 +18035,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
             persistUnlocks();
             const msg = document.createElement("div");
             msg.style.cssText = "position:fixed;top:35%;left:50%;transform:translate(-50%,-50%);font-size:36px;font-weight:900;color:#ffd700;text-shadow:0 0 20px rgba(255,215,0,0.8),0 0 40px rgba(255,165,0,0.5);letter-spacing:4px;z-index:9999;pointer-events:none;opacity:0;animation:bossVicFadeIn 1s ease forwards;";
-            msg.textContent = "获得 ～～～ — 按 / 装备";
+            msg.textContent = tr("devGunPickup", "Got ～～～ — press / to equip");
             document.body.appendChild(msg);
             setTimeout(() => {
               msg.style.animation = "bossVicFadeOut 1.5s ease forwards";
