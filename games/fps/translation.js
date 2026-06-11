@@ -2223,15 +2223,59 @@ const HUD_ZH_HANT = {
   hudMeleeLine: "近戰：正面 2 刀擊殺 | <b>背刺 1 刀擊殺</b>"
 };
 
+// v95: btn_extras shared across all 18 langs — pause / death / name modal / data+hotbar tabs /
+// dev-gun pickup line. EN values are also baked into every dict so non-translated locales fall
+// back gracefully.
+const BTN_EXTRAS_EN = {
+  btnResume: "RESUME", btnRestart: "RESTART", btnQuit: "QUIT", btnJoin: "JOIN",
+  pausedTitle: "PAUSED", deathTitle: "DEFEAT",
+  enterYourName: "ENTER YOUR NAME", playerPlaceholder: "Player",
+  settingsTabData: "DATA", settingsTabHotbar: "HOTBAR",
+  devGunPickup: "Got ～～～ — press / to equip",
+  achSlotsFull: "Full (5/5)"
+};
+const BTN_EXTRAS_ZH = {
+  btnResume: "继续", btnRestart: "重新开始", btnQuit: "退出", btnJoin: "加入",
+  pausedTitle: "已暂停", deathTitle: "失败",
+  enterYourName: "输入昵称", playerPlaceholder: "玩家",
+  settingsTabData: "数据", settingsTabHotbar: "热键栏",
+  devGunPickup: "获得 ～～～ — 按 / 装备",
+  achSlotsFull: "已满（5/5）"
+};
+const BTN_EXTRAS_ZH_HANT = {
+  btnResume: "繼續", btnRestart: "重新開始", btnQuit: "離開", btnJoin: "加入",
+  pausedTitle: "已暫停", deathTitle: "失敗",
+  enterYourName: "輸入暱稱", playerPlaceholder: "玩家",
+  settingsTabData: "資料", settingsTabHotbar: "熱鍵列",
+  devGunPickup: "獲得 ～～～ — 按 / 裝備",
+  achSlotsFull: "已滿（5/5）"
+};
+const BTN_EXTRAS_ES = { btnResume: "REANUDAR", btnRestart: "REINICIAR", btnQuit: "SALIR", btnJoin: "UNIRSE", pausedTitle: "PAUSADO", deathTitle: "DERROTA", enterYourName: "INGRESA TU NOMBRE", playerPlaceholder: "Jugador", settingsTabData: "DATOS", settingsTabHotbar: "BARRA", devGunPickup: "Obtenido ～～～ — pulsa / para equipar" };
+const BTN_EXTRAS_HI = { btnResume: "जारी रखें", btnRestart: "पुनः शुरू", btnQuit: "बाहर", btnJoin: "जॉइन", pausedTitle: "रुका", deathTitle: "हार", enterYourName: "नाम दर्ज करें", playerPlaceholder: "खिलाड़ी", settingsTabData: "डेटा", settingsTabHotbar: "हॉटबार", devGunPickup: "मिला ～～～ — / दबाकर लगाएँ" };
+const BTN_EXTRAS_AR = { btnResume: "استئناف", btnRestart: "إعادة", btnQuit: "خروج", btnJoin: "انضم", pausedTitle: "متوقف", deathTitle: "هزيمة", enterYourName: "أدخل اسمك", playerPlaceholder: "لاعب", settingsTabData: "البيانات", settingsTabHotbar: "الشريط", devGunPickup: "حصلت على ～～～ — اضغط / للتجهيز" };
+const BTN_EXTRAS_FR = { btnResume: "REPRENDRE", btnRestart: "REDÉMARRER", btnQuit: "QUITTER", btnJoin: "REJOINDRE", pausedTitle: "EN PAUSE", deathTitle: "DÉFAITE", enterYourName: "ENTREZ VOTRE NOM", playerPlaceholder: "Joueur", settingsTabData: "DONNÉES", settingsTabHotbar: "BARRE", devGunPickup: "Obtenu ～～～ — appuyez sur / pour équiper" };
+const BTN_EXTRAS_PT = { btnResume: "CONTINUAR", btnRestart: "REINICIAR", btnQuit: "SAIR", btnJoin: "ENTRAR", pausedTitle: "PAUSADO", deathTitle: "DERROTA", enterYourName: "DIGITE SEU NOME", playerPlaceholder: "Jogador", settingsTabData: "DADOS", settingsTabHotbar: "BARRA", devGunPickup: "Obtido ～～～ — aperte / para equipar" };
+const BTN_EXTRAS_RU = { btnResume: "ПРОДОЛЖИТЬ", btnRestart: "РЕСТАРТ", btnQuit: "ВЫЙТИ", btnJoin: "ВОЙТИ", pausedTitle: "ПАУЗА", deathTitle: "ПОРАЖЕНИЕ", enterYourName: "ВВЕДИТЕ ИМЯ", playerPlaceholder: "Игрок", settingsTabData: "ДАННЫЕ", settingsTabHotbar: "ПАНЕЛЬ", devGunPickup: "Получено ～～～ — нажмите /, чтобы экипировать" };
+const BTN_EXTRAS_JA = { btnResume: "再開", btnRestart: "リスタート", btnQuit: "終了", btnJoin: "参加", pausedTitle: "ポーズ", deathTitle: "敗北", enterYourName: "名前を入力", playerPlaceholder: "プレイヤー", settingsTabData: "データ", settingsTabHotbar: "ホットバー", devGunPickup: "～～～ を入手 — / で装備" };
+const BTN_EXTRAS_DE = { btnResume: "FORTSETZEN", btnRestart: "NEU STARTEN", btnQuit: "BEENDEN", btnJoin: "BEITRETEN", pausedTitle: "PAUSIERT", deathTitle: "NIEDERLAGE", enterYourName: "NAMEN EINGEBEN", playerPlaceholder: "Spieler", settingsTabData: "DATEN", settingsTabHotbar: "LEISTE", devGunPickup: "～～～ erhalten — / zum Ausrüsten drücken" };
+const BTN_EXTRAS_KO = { btnResume: "재개", btnRestart: "다시 시작", btnQuit: "종료", btnJoin: "참가", pausedTitle: "일시정지", deathTitle: "패배", enterYourName: "이름 입력", playerPlaceholder: "플레이어", settingsTabData: "데이터", settingsTabHotbar: "단축바", devGunPickup: "～～～ 획득 — / 키로 장착" };
+const BTN_EXTRAS_IT = { btnResume: "RIPRENDI", btnRestart: "RIAVVIA", btnQuit: "ESCI", btnJoin: "ENTRA", pausedTitle: "IN PAUSA", deathTitle: "SCONFITTA", enterYourName: "INSERISCI IL NOME", playerPlaceholder: "Giocatore", settingsTabData: "DATI", settingsTabHotbar: "BARRA", devGunPickup: "Ottenuto ～～～ — premi / per equipaggiare" };
+const BTN_EXTRAS_NL = { btnResume: "HERVATTEN", btnRestart: "OPNIEUW", btnQuit: "STOPPEN", btnJoin: "JOIN", pausedTitle: "GEPAUZEERD", deathTitle: "VERSLAGEN", enterYourName: "VOER NAAM IN", playerPlaceholder: "Speler", settingsTabData: "DATA", settingsTabHotbar: "BALK", devGunPickup: "～～～ verkregen — druk op / om uit te rusten" };
+const BTN_EXTRAS_PL = { btnResume: "WZNÓW", btnRestart: "OD NOWA", btnQuit: "WYJDŹ", btnJoin: "DOŁĄCZ", pausedTitle: "PAUZA", deathTitle: "PORAŻKA", enterYourName: "WPROWADŹ IMIĘ", playerPlaceholder: "Gracz", settingsTabData: "DANE", settingsTabHotbar: "PASEK", devGunPickup: "Zdobyto ～～～ — naciśnij /, aby założyć" };
+const BTN_EXTRAS_TR = { btnResume: "DEVAM", btnRestart: "YENİDEN BAŞLAT", btnQuit: "ÇIK", btnJoin: "KATIL", pausedTitle: "DURAKLATILDI", deathTitle: "YENİLDİN", enterYourName: "ADINIZI GİRİN", playerPlaceholder: "Oyuncu", settingsTabData: "VERİ", settingsTabHotbar: "ÇUBUK", devGunPickup: "～～～ alındı — donatmak için / tuşuna bas" };
+const BTN_EXTRAS_VI = { btnResume: "TIẾP TỤC", btnRestart: "CHƠI LẠI", btnQuit: "THOÁT", btnJoin: "THAM GIA", pausedTitle: "TẠM DỪNG", deathTitle: "THẤT BẠI", enterYourName: "NHẬP TÊN", playerPlaceholder: "Người chơi", settingsTabData: "DỮ LIỆU", settingsTabHotbar: "THANH PHÍM", devGunPickup: "Nhận được ～～～ — nhấn / để trang bị" };
+const BTN_EXTRAS_ID = { btnResume: "LANJUTKAN", btnRestart: "MULAI ULANG", btnQuit: "KELUAR", btnJoin: "GABUNG", pausedTitle: "DIJEDA", deathTitle: "KEKALAHAN", enterYourName: "MASUKKAN NAMA", playerPlaceholder: "Pemain", settingsTabData: "DATA", settingsTabHotbar: "BILAH", devGunPickup: "Mendapat ～～～ — tekan / untuk memakai" };
+
 const BTN_EN = {
   btnBossFight: "BOSS FIGHT",
   bossFightTitle: "BOSS FIGHT",
-  bossFightDesc: "Fight the Hormone Zombie (Hormone Zombie) — a hulking boss that switches between Tank, Speed, and Gunner modes.",
+  bossFightDesc: "Fight the Hormone Zombie — a hulking boss that switches between Tank, Speed, and Gunner modes.",
   selectDifficulty: "SELECT DIFFICULTY",
   bossesLabel: "BOSSES:",
   hellMode: "HELL MODE",
   btnStart: "START",
-  selectMap: "SELECT MAP"
+  selectMap: "SELECT MAP",
+  ...BTN_EXTRAS_EN
 };
 const BTN_ZH = {
   btnBossFight: "Boss战",
@@ -2241,7 +2285,8 @@ const BTN_ZH = {
   bossesLabel: "Boss 数量：",
   hellMode: "地狱模式",
   btnStart: "开始",
-  selectMap: "选择地图"
+  selectMap: "选择地图",
+  ...BTN_EXTRAS_ZH
 };
 const BTN_ZH_HANT = {
   btnBossFight: "Boss戰",
@@ -2251,7 +2296,8 @@ const BTN_ZH_HANT = {
   bossesLabel: "Boss 數量：",
   hellMode: "地獄模式",
   btnStart: "開始",
-  selectMap: "選擇地圖"
+  selectMap: "選擇地圖",
+  ...BTN_EXTRAS_ZH_HANT
 };
 
 // Other 15 locales — full translations (no English fallback).
@@ -2272,7 +2318,7 @@ const BTN_ES = {
   bossFightDesc: "Combate al Zombi Hormonal — un jefe enorme que alterna entre los modos Tanque, Velocidad y Tirador.",
   selectDifficulty: "DIFICULTAD", bossesLabel: "JEFES:", hellMode: "MODO INFIERNO",
   btnStart: "INICIAR", selectMap: "ELIGE MAPA"
-};
+, ...BTN_EXTRAS_ES };
 
 const HUD_HI = {
   hudHelpMove:    "WASD चलें | Space कूदें | R रीलोड",
@@ -2291,7 +2337,7 @@ const BTN_HI = {
   bossFightDesc: "हार्मोन ज़ोम्बी से लड़ें — एक विशाल बॉस जो टैंक, स्पीड और गनर मोड के बीच बदलता है।",
   selectDifficulty: "कठिनाई चुनें", bossesLabel: "बॉस:", hellMode: "नरक मोड",
   btnStart: "शुरू", selectMap: "मैप चुनें"
-};
+, ...BTN_EXTRAS_HI };
 
 const HUD_AR = {
   hudHelpMove:    "WASD للحركة | Space للقفز | R لإعادة التعبئة",
@@ -2310,7 +2356,7 @@ const BTN_AR = {
   bossFightDesc: "حارب الزومبي الهرموني — زعيم ضخم يتنقل بين أوضاع الدبابة والسرعة والمسلح.",
   selectDifficulty: "اختر الصعوبة", bossesLabel: "الزعماء:", hellMode: "وضع الجحيم",
   btnStart: "ابدأ", selectMap: "اختر الخريطة"
-};
+, ...BTN_EXTRAS_AR };
 
 const HUD_FR = {
   hudHelpMove:    "WASD se déplacer | Espace sauter | R recharger",
@@ -2329,7 +2375,7 @@ const BTN_FR = {
   bossFightDesc: "Affrontez le Zombie Hormonal — un boss massif qui alterne entre les modes Tank, Vitesse et Tireur.",
   selectDifficulty: "DIFFICULTÉ", bossesLabel: "BOSS:", hellMode: "MODE ENFER",
   btnStart: "DÉMARRER", selectMap: "CHOISIR CARTE"
-};
+, ...BTN_EXTRAS_FR };
 
 const HUD_PT = {
   hudHelpMove:    "WASD mover | Espaço pular | R recarregar",
@@ -2348,7 +2394,7 @@ const BTN_PT = {
   bossFightDesc: "Lute contra o Zumbi Hormonal — um chefe gigante que alterna entre os modos Tanque, Velocidade e Atirador.",
   selectDifficulty: "DIFICULDADE", bossesLabel: "CHEFES:", hellMode: "MODO INFERNO",
   btnStart: "INICIAR", selectMap: "ESCOLHER MAPA"
-};
+, ...BTN_EXTRAS_PT };
 
 const HUD_RU = {
   hudHelpMove:    "WASD движение | Пробел прыжок | R перезарядка",
@@ -2367,7 +2413,7 @@ const BTN_RU = {
   bossFightDesc: "Сразитесь с Гормональным Зомби — огромным боссом, переключающимся между режимами Танк, Скорость и Стрелок.",
   selectDifficulty: "СЛОЖНОСТЬ", bossesLabel: "БОССЫ:", hellMode: "АДСКИЙ РЕЖИМ",
   btnStart: "СТАРТ", selectMap: "ВЫБРАТЬ КАРТУ"
-};
+, ...BTN_EXTRAS_RU };
 
 const HUD_JA = {
   hudHelpMove:    "WASD 移動 | スペース ジャンプ | R リロード",
@@ -2386,7 +2432,7 @@ const BTN_JA = {
   bossFightDesc: "ホルモンゾンビと戦え — タンク／スピード／ガンナーの3形態を切り替える巨大ボス。",
   selectDifficulty: "難易度選択", bossesLabel: "ボス数：", hellMode: "ヘルモード",
   btnStart: "スタート", selectMap: "マップ選択"
-};
+, ...BTN_EXTRAS_JA };
 
 const HUD_DE = {
   hudHelpMove:    "WASD bewegen | Leertaste springen | R nachladen",
@@ -2405,7 +2451,7 @@ const BTN_DE = {
   bossFightDesc: "Bekämpfe den Hormon-Zombie — ein gewaltiger Boss, der zwischen Tank-, Speed- und Schützenmodus wechselt.",
   selectDifficulty: "SCHWIERIGKEIT", bossesLabel: "BOSSE:", hellMode: "HÖLLENMODUS",
   btnStart: "START", selectMap: "KARTE WÄHLEN"
-};
+, ...BTN_EXTRAS_DE };
 
 const HUD_KO = {
   hudHelpMove:    "WASD 이동 | 스페이스 점프 | R 재장전",
@@ -2424,7 +2470,7 @@ const BTN_KO = {
   bossFightDesc: "호르몬 좀비와 싸우세요 — 탱크 / 스피드 / 거너 모드를 오가는 거대한 보스.",
   selectDifficulty: "난이도 선택", bossesLabel: "보스:", hellMode: "헬 모드",
   btnStart: "시작", selectMap: "맵 선택"
-};
+, ...BTN_EXTRAS_KO };
 
 const HUD_IT = {
   hudHelpMove:    "WASD movimento | Spazio salto | R ricarica",
@@ -2443,7 +2489,7 @@ const BTN_IT = {
   bossFightDesc: "Affronta lo Zombi Ormonale — un boss enorme che alterna le modalità Tank, Velocità e Tiratore.",
   selectDifficulty: "DIFFICOLTÀ", bossesLabel: "BOSS:", hellMode: "MODALITÀ INFERNO",
   btnStart: "AVVIA", selectMap: "SCEGLI MAPPA"
-};
+, ...BTN_EXTRAS_IT };
 
 const HUD_NL = {
   hudHelpMove:    "WASD bewegen | Spatie springen | R herladen",
@@ -2462,7 +2508,7 @@ const BTN_NL = {
   bossFightDesc: "Vecht tegen de Hormoonzombie — een reusachtige baas die wisselt tussen Tank-, Speed- en Schuttermodus.",
   selectDifficulty: "MOEILIJKHEID", bossesLabel: "BAZEN:", hellMode: "HEL-MODUS",
   btnStart: "START", selectMap: "KIES MAP"
-};
+, ...BTN_EXTRAS_NL };
 
 const HUD_PL = {
   hudHelpMove:    "WASD ruch | Spacja skok | R przeładuj",
@@ -2481,7 +2527,7 @@ const BTN_PL = {
   bossFightDesc: "Walcz z Hormonalnym Zombie — potężnym bossem, który przełącza się między trybami Tank, Speed i Strzelec.",
   selectDifficulty: "POZIOM TRUDNOŚCI", bossesLabel: "BOSSOWIE:", hellMode: "TRYB PIEKŁA",
   btnStart: "START", selectMap: "WYBIERZ MAPĘ"
-};
+, ...BTN_EXTRAS_PL };
 
 const HUD_TR = {
   hudHelpMove:    "WASD hareket | Boşluk zıpla | R doldur",
@@ -2500,7 +2546,7 @@ const BTN_TR = {
   bossFightDesc: "Hormon Zombi ile savaş — Tank, Hız ve Nişancı modları arasında geçiş yapan dev bir boss.",
   selectDifficulty: "ZORLUK", bossesLabel: "BOSSLAR:", hellMode: "CEHENNEM MODU",
   btnStart: "BAŞLA", selectMap: "HARİTA SEÇ"
-};
+, ...BTN_EXTRAS_TR };
 
 const HUD_VI = {
   hudHelpMove:    "WASD di chuyển | Space nhảy | R nạp đạn",
@@ -2519,7 +2565,7 @@ const BTN_VI = {
   bossFightDesc: "Chiến đấu với Zombie Hormone — một boss khổng lồ chuyển đổi giữa các chế độ Tăng giáp, Tốc độ và Súng máy.",
   selectDifficulty: "CHỌN ĐỘ KHÓ", bossesLabel: "SỐ BOSS:", hellMode: "CHẾ ĐỘ ĐỊA NGỤC",
   btnStart: "BẮT ĐẦU", selectMap: "CHỌN MAP"
-};
+, ...BTN_EXTRAS_VI };
 
 const HUD_ID = {
   hudHelpMove:    "WASD gerak | Space lompat | R isi ulang",
@@ -2538,7 +2584,7 @@ const BTN_ID = {
   bossFightDesc: "Lawan Zombi Hormon — bos raksasa yang berganti antara mode Tank, Kecepatan, dan Penembak.",
   selectDifficulty: "PILIH KESULITAN", bossesLabel: "BOS:", hellMode: "MODE NERAKA",
   btnStart: "MULAI", selectMap: "PILIH PETA"
-};
+, ...BTN_EXTRAS_ID };
 
 // Merge into each language dict. Existing user-translated keys are NOT overwritten — these are
 // only added if missing (so manual edits in the dicts above always win).
