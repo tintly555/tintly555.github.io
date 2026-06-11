@@ -3,7 +3,7 @@
   Deploy / GitHub Pages: https://tintly555.github.io/games/fps/ — multiplayer relay + static prefix set below.
   Self-hosted same tree: open game-self-hosted.html (empty game-multiplayer-origin, empty game-static-prefix).
   Crossfire = PVP; Arena = PVE / co-op vs zombies.
-  Build: zone-no-light-v89 (boss co-op sync fix: zombieDamaged typo + boss_arena handler + knife/devgun emit + missing-boss spawn from sync + hell flag — on top of v88 i18n-fallback / needle hand / knife sound / AMR spread / pistol twirl raise)
+  Build: zone-no-light-v90 (import path translate.js → translation.js — actual file name on deploy; eliminates 404 + Start unresponsive; keeps v89 boss co-op sync fixes)
 -->
 <!--
   Swap Med Kit and AMR weapon positions (4↔5) and improve lighting 让AMR和Swap Med Kit没法使用，所以退回merge versions
@@ -2628,18 +2628,17 @@ if (typeof window !== "undefined") {
 </script>
   <script type="module">
     import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.182.0/build/three.module.js";
-    // Dynamic import with inline fallback. translate.js is shipped only with the full deploy; when
-    // the host is missing it (e.g. embedded copies), a static `import` would 404 and abort the entire
-    // module, leaving the Start button unresponsive. Top-level await keeps the rest of the file
-    // unchanged — by the time any code below runs, the bindings are assigned.
+    // The deployed file is translation.js (not translate.js — earlier versions of this HTML had the
+    // wrong path and 404'd, which aborted the whole module and left Start unresponsive). The dynamic
+    // import + catch is kept so a missing/renamed i18n file still lets the menu boot with a minimal stub.
     let GAME_I18N, LANG_META, translateGame;
     try {
-      const _i18n = await import("./translate.js");
+      const _i18n = await import("./translation.js");
       GAME_I18N     = _i18n.GAME_I18N;
       LANG_META     = _i18n.LANGUAGE_OPTIONS;
       translateGame = _i18n.translate;
     } catch (_e) {
-      console.warn("[zone-no-light] translate.js missing — using minimal inline i18n stub", _e);
+      console.warn("[zone-no-light] translation.js missing — using minimal inline i18n stub", _e);
       LANG_META = [
         { code: "en", native: "English" },
         { code: "zh", native: "中文" },
