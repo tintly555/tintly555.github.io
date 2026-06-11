@@ -3,7 +3,7 @@
   Deploy / GitHub Pages: https://tintly555.github.io/games/fps/ — multiplayer relay + static prefix set below.
   Self-hosted same tree: open game-self-hosted.html (empty game-multiplayer-origin, empty game-static-prefix).
   Crossfire = PVP; Arena = PVE / co-op vs zombies.
-  Build: zone-no-light-v90 (import path translate.js → translation.js — actual file name on deploy; eliminates 404 + Start unresponsive; keeps v89 boss co-op sync fixes)
+  Build: zone-no-light-v92 (HUD strings routed through tr() + achievements use real keys with EN/ZH/ZH-Hant translations in translation.js + wall edge clip fix: corner re-check ONLY, no substepping — keep sprint feel intact; keeps v90 translation.js path + v89 boss co-op sync)
 -->
 <!--
   Swap Med Kit and AMR weapon positions (4↔5) and improve lighting 让AMR和Swap Med Kit没法使用，所以退回merge versions
@@ -1327,8 +1327,8 @@
       <button type="button" id="btnCrossfire" data-i18n="btnCrossfire">PVP</button>
     </div>
     <div id="menuAchievements" style="display:none;flex-direction:column;align-items:center;gap:10px;position:relative;padding-top:20px;">
-      <h2 id="achMenuTitle" style="font-family:var(--game-font-ui);font-size:28px;margin:0 0 8px 0;letter-spacing:3px;color:#ffd700;">Achievements</h2>
-      <p id="achMenuHint" style="font-family:var(--game-font-ui);font-size:11px;opacity:0.65;margin:0 0 6px 0;text-align:center;">Tap an achievement for details. Equipped achievements show above your name.</p>
+      <h2 id="achMenuTitle" data-i18n="achPanelTitle" style="font-family:var(--game-font-ui);font-size:28px;margin:0 0 8px 0;letter-spacing:3px;color:#ffd700;">Achievements</h2>
+      <p id="achMenuHint" data-i18n="achPanelHint" style="font-family:var(--game-font-ui);font-size:11px;opacity:0.65;margin:0 0 6px 0;text-align:center;">Tap an achievement for details. Equipped achievements show above your name.</p>
       <div id="achList"></div>
       <div id="achDetail" style="display:none;width:100%;padding:14px 16px;border-radius:10px;background:rgba(0,0,0,0.55);border:1px solid rgba(255,215,0,0.35);box-sizing:border-box;">
         <div id="achDetailName" style="font-family:var(--game-font-ui);font-size:20px;font-weight:700;color:#ffd700;margin-bottom:6px;"></div>
@@ -9478,18 +9478,21 @@ if (typeof window !== "undefined") {
       }
     }
 
+    // v91: English defaults baked in (nameEn/hintEn). tr() pulls localized strings from
+    // translation.js when present; otherwise these are shown so users never see "achWhatIsThis"
+    // raw key names.
     const ACHIEVEMENT_DEFS = [
-      { id: "what_is_this", nameKey: "achWhatIsThis", hintKey: "achWhatIsThisHint", color: "#b8b8ff" },
-      { id: "monster_hunter", nameKey: "achMonsterHunter", hintKey: "achMonsterHunterHint", color: "#ff8844" },
-      { id: "strong_one", nameKey: "achStrongOne", hintKey: "achStrongOneHint", color: "#ff6622" },
-      { id: "elite_hunter", nameKey: "achEliteHunter", hintKey: "achEliteHunterHint", color: "#cc44ff" },
-      { id: "light_liberator", nameKey: "achLightLiberator", hintKey: "achLightLiberatorHint", color: "#ffd700" },
-      { id: "trainer", nameKey: "achTrainer", hintKey: "achTrainerHint", color: "#4fd1ff" },
-      { id: "pvp_weak", nameKey: "achPvpWeak", hintKey: "achPvpWeakHint", color: "#88cc88" },
-      { id: "pvp_hunter_king", nameKey: "achPvpHunterKing", hintKey: "achPvpHunterKingHint", color: "#ff8844" },
-      { id: "undefeated", nameKey: "achUndefeated", hintKey: "achUndefeatedHint", color: "#ff5050" },
-      { id: "creator", nameKey: "achCreator", hintKey: "achCreatorHint", color: "#4fd1ff" },
-      { id: "ultimate", nameKey: "achUltimate", hintKey: "", secret: true, color: "#e040ff" },
+      { id: "what_is_this",    nameKey: "achWhatIsThis",    hintKey: "achWhatIsThisHint",    nameEn: "What is this?",        hintEn: "Open the game for the first time.",                                     color: "#b8b8ff" },
+      { id: "monster_hunter",  nameKey: "achMonsterHunter", hintKey: "achMonsterHunterHint", nameEn: "Monster Hunter",       hintEn: "Kill 100 zombies in the Arena.",                                        color: "#ff8844" },
+      { id: "strong_one",      nameKey: "achStrongOne",     hintKey: "achStrongOneHint",     nameEn: "Strong One",           hintEn: "Defeat the Hormone Zombie boss.",                                       color: "#ff6622" },
+      { id: "elite_hunter",    nameKey: "achEliteHunter",   hintKey: "achEliteHunterHint",   nameEn: "Elite Hunter",         hintEn: "Defeat 3 bosses in one Boss Fight run.",                                color: "#cc44ff" },
+      { id: "light_liberator", nameKey: "achLightLiberator",hintKey: "achLightLiberatorHint",nameEn: "Light Liberator",      hintEn: "Beat Hell Mode in the Boss Fight.",                                     color: "#ffd700" },
+      { id: "trainer",         nameKey: "achTrainer",       hintKey: "achTrainerHint",       nameEn: "Trainer",              hintEn: "Score 500 points at the Training Camp.",                                color: "#4fd1ff" },
+      { id: "pvp_weak",        nameKey: "achPvpWeak",       hintKey: "achPvpWeakHint",       nameEn: "Just a Warm-up",       hintEn: "Get your first PVP kill.",                                              color: "#88cc88" },
+      { id: "pvp_hunter_king", nameKey: "achPvpHunterKing", hintKey: "achPvpHunterKingHint", nameEn: "PVP Hunter King",      hintEn: "Reach a 10-kill streak in PVP without dying.",                          color: "#ff8844" },
+      { id: "undefeated",      nameKey: "achUndefeated",    hintKey: "achUndefeatedHint",    nameEn: "Undefeated",           hintEn: "Win a PVP match without taking damage.",                                color: "#ff5050" },
+      { id: "creator",         nameKey: "achCreator",       hintKey: "achCreatorHint",       nameEn: "Creator",              hintEn: "Unlock the developer weapon.",                                          color: "#4fd1ff" },
+      { id: "ultimate",        nameKey: "achUltimate",      hintKey: "",                     nameEn: "???",                  hintEn: "",                                                                       secret: true, color: "#e040ff" },
     ];
     const achievementsUnlocked = {};
     let equippedAchievementIds = [];
@@ -9537,12 +9540,13 @@ if (typeof window !== "undefined") {
     }
 
     function achName(def) {
-      return tr(def.nameKey, def.nameKey);
+      // v91: prefer localized → fall back to English label, never the raw i18n key name.
+      return tr(def.nameKey, def.nameEn || def.nameKey);
     }
 
     function achHint(def) {
       if (def.secret) return tr("achSecret", "???");
-      return tr(def.hintKey, "");
+      return tr(def.hintKey, def.hintEn || "");
     }
 
     function getAchievementDef(id) {
@@ -9862,33 +9866,49 @@ if (typeof window !== "undefined") {
               : isPvpCrossfireMap(CURRENT_MAP)
                 ? (lang === "zh" ? "PVP - 经典地图" : "PVP - classic")
                 : CURRENT_MAP;
+      // v91: HUD strings routed through tr() with English fallback baked in. Add a `hud*` key to
+      // translation.js for each locale you want; missing keys harmlessly fall back to English.
+      const hudHelpMove   = tr("hudHelpMove",   "WASD move | Space jump | R reload");
+      const hudHelpAim    = tr("hudHelpAim",    "Mouse aim | RMB zoom | L flashlight | Z beam small/med/wide");
+      const hudHelpWeapons= tr("hudHelpWeapons","Weapons: <b>0</b> Knife | <b>1</b> Pistol | <b>2</b> Shotgun | <b>3</b> SMG | <b>4</b> AR | <b>5</b> AMR | <b>6</b> Dart | <b>7</b> Med Kit");
+      const hudMpTag      = tr("hudMpTag",      " (MP)");
+      const hudMapLabel   = tr("hudMap",        "Map");
+      const hudWeaponLbl  = tr("hudWeapon",     "Weapon");
+      const hudHealthLbl  = tr("hudHealth",     "Health");
+      const hudScoreLbl   = tr("hudScore",      "Score");
+      const hudBulletsLbl = tr("hudBullets",    "Bullets");
+      const hudRefilling  = tr("hudRefilling",  "Refilling...");
+      const hudRoomLbl    = tr("hudRoom",       "Room");
+      const roomLineTr    = (MULTIPLAYER && ROOM_CODE) ? `<b style="color:#4fd1ff;">${hudRoomLbl}: ${ROOM_CODE}</b><br>` : "";
+      let weaponLine;
+      if (state.weaponIndex === 4) {
+        const useWord = w.ammo === 1 ? tr("hudUse", "use") : tr("hudUses", "uses");
+        const state4 = player.health >= player.maxHealth
+          ? ` (${tr("hudHealthFull", "health full")})`
+          : w.ammo <= 0
+            ? ` (${tr("hudUsedUp", "used up")})`
+            : state.medKitNeedsRelease
+              ? ` (${tr("hudReleaseKey", "release key/mouse")})`
+              : "";
+        weaponLine = `${tr("hudMedKit", "Med Kit")}: ${w.ammo} ${useWord} — ${tr("hudMedKitHold", "hold <b>F</b> or <b>LMB</b> 10s (+50 HP)")}${state4}<br>`;
+      } else if (state.weaponIndex === 7) {
+        weaponLine = `${tr("hudMeleeLine", "Melee: front 2-hit kill | <b>backstab 1-hit kill</b>")}<br>`;
+      } else if (state.weaponIndex === 8) {
+        weaponLine = `<b style="color:#ffd700;">～～～ — ∞ | 7500</b><br>`;
+      } else {
+        weaponLine = `${hudBulletsLbl}: ${w.ammo} / ${w.magSize}${state.reloading ? `（${hudRefilling}）` : ""}<br>`;
+      }
       hud.innerHTML = `
-        ${roomLine}
+        ${roomLineTr}
         ${tr("hudGameTitleLine", "Zone No Light")}<br>
-        WASD move | Space jump | R reload<br>
-        Mouse aim | RMB zoom | L flashlight | Z beam small/med/wide<br>
-        Weapons: <b>0</b> Knife | <b>1</b> Pistol | <b>2</b> Shotgun | <b>3</b> SMG | <b>4</b> AR | <b>5</b> AMR | <b>6</b> Dart | <b>7</b> Med Kit<br>
-Map: ${mapLabel}${MULTIPLAYER ? " (MP)" : ""}<br>
-        Weapon: ${w.name}<br>
-        ${
-          state.weaponIndex === 4
-            ? `Med Kit: ${w.ammo} use${w.ammo === 1 ? "" : "s"} — hold <b>F</b> or <b>LMB</b> 10s (+50 HP)${
-                player.health >= player.maxHealth
-                  ? " (health full)"
-                  : w.ammo <= 0
-                    ? " (used up)"
-                    : state.medKitNeedsRelease
-                      ? " (release key/mouse)"
-                      : ""
-              }<br>`
-            : state.weaponIndex === 7
-              ? `Melee: front 2-hit kill | <b>backstab 1-hit kill</b><br>`
-              : state.weaponIndex === 8
-                ? `<b style="color:#ffd700;">～～～ — ∞ | 7500</b><br>`
-                : `Bullets: ${w.ammo} / ${w.magSize}${state.reloading ? "（Refilling...）" : ""}<br>`
-        }
-        Health: ${Math.max(0, Math.floor(player.health))} / ${player.maxHealth}<br>
-        ${isTrainingMap(CURRENT_MAP) ? "" : `Score: ${state.score}`}
+        ${hudHelpMove}<br>
+        ${hudHelpAim}<br>
+        ${hudHelpWeapons}<br>
+${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
+        ${hudWeaponLbl}: ${w.name}<br>
+        ${weaponLine}
+        ${hudHealthLbl}: ${Math.max(0, Math.floor(player.health))} / ${player.maxHealth}<br>
+        ${isTrainingMap(CURRENT_MAP) ? "" : `${hudScoreLbl}: ${state.score}`}
       `;
       refreshFpsHelpForMap();
     }
@@ -9938,16 +9958,31 @@ Map: ${mapLabel}${MULTIPLAYER ? " (MP)" : ""}<br>
     }
 
     function resolveWallSliding(nextPos) {
+      // v91: corner re-check only — NO substepping. Substepping shortens effective frame motion
+      // and makes wall-hug dodges feel sluggish, getting you shot more.
+      //
+      // The real bug: independent X / Z axis tests can both be "clear" yet the combined {newX, newZ}
+      // lands inside an outside corner of a wall. Solution: after the two single-axis tests, re-test
+      // the combined position; if still collided, keep only whichever single axis is clear.
       const result = player.position.clone();
 
       const tryX = result.clone();
       tryX.x = nextPos.x;
-      if (!collidesWithWalls(tryX)) result.x = tryX.x;
+      const xClear = !collidesWithWalls(tryX);
+      if (xClear) result.x = tryX.x;
 
       const tryZ = result.clone();
       tryZ.z = nextPos.z;
-      if (!collidesWithWalls(tryZ)) result.z = tryZ.z;
+      const zClear = !collidesWithWalls(tryZ);
+      if (zClear) result.z = tryZ.z;
 
+      if (xClear && zClear && collidesWithWalls(result)) {
+        const onlyX = player.position.clone(); onlyX.x = nextPos.x;
+        if (!collidesWithWalls(onlyX)) return onlyX;
+        const onlyZ = player.position.clone(); onlyZ.z = nextPos.z;
+        if (!collidesWithWalls(onlyZ)) return onlyZ;
+        return player.position.clone();
+      }
       return result;
     }
 
