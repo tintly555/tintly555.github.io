@@ -2,82 +2,31 @@
  * UI strings for Zone No Light / 无光之境 — keys shared across all locales.
  * Fallback: English if a key is missing.
  *
- * Sensitivity / controls copy: edit i18n-controls.json then re-run:
- *   node -e "require('fs');..."  (see repo script) or merge keys into each locale below.
+ * v91: added hud* keys (in-game HUD lines) and ach* keys (achievements panel).
+ *      English entries are the source of truth; zh + zh-Hant filled in; other locales fall back
+ *      to English via the translate() function below. Existing 18-language translations are
+ *      preserved verbatim — the new keys are merged in via the ...HUD_xx / ...ACH_xx spreads
+ *      at the end of each dictionary.
  */
 export const LANGUAGE_OPTIONS = [
-  {
-    "code": "en",
-    "native": "English"
-  },
-  {
-    "code": "zh",
-    "native": "简体中文"
-  },
-  {
-    "code": "zh-Hant",
-    "native": "繁體中文"
-  },
-  {
-    "code": "es",
-    "native": "Español"
-  },
-  {
-    "code": "hi",
-    "native": "हिन्दी"
-  },
-  {
-    "code": "ar",
-    "native": "العربية"
-  },
-  {
-    "code": "fr",
-    "native": "Français"
-  },
-  {
-    "code": "pt",
-    "native": "Português"
-  },
-  {
-    "code": "ru",
-    "native": "Русский"
-  },
-  {
-    "code": "ja",
-    "native": "日本語"
-  },
-  {
-    "code": "de",
-    "native": "Deutsch"
-  },
-  {
-    "code": "ko",
-    "native": "한국어"
-  },
-  {
-    "code": "it",
-    "native": "Italiano"
-  },
-  {
-    "code": "nl",
-    "native": "Nederlands"
-  },
-  {
-    "code": "pl",
-    "native": "Polski"
-  },
-  {
-    "code": "tr",
-    "native": "Türkçe"
-  },
-  {
-    "code": "vi",
-    "native": "Tiếng Việt"
-  },
-  {
-    "code": "id",
-    "native": "Bahasa Indonesia"
-  }
+  { "code": "en",       "native": "English" },
+  { "code": "zh",       "native": "简体中文" },
+  { "code": "zh-Hant",  "native": "繁體中文" },
+  { "code": "es",       "native": "Español" },
+  { "code": "hi",       "native": "हिन्दी" },
+  { "code": "ar",       "native": "العربية" },
+  { "code": "fr",       "native": "Français" },
+  { "code": "pt",       "native": "Português" },
+  { "code": "ru",       "native": "Русский" },
+  { "code": "ja",       "native": "日本語" },
+  { "code": "de",       "native": "Deutsch" },
+  { "code": "ko",       "native": "한국어" },
+  { "code": "it",       "native": "Italiano" },
+  { "code": "nl",       "native": "Nederlands" },
+  { "code": "pl",       "native": "Polski" },
+  { "code": "tr",       "native": "Türkçe" },
+  { "code": "vi",       "native": "Tiếng Việt" },
+  { "code": "id",       "native": "Bahasa Indonesia" }
 ];
 
 export function mergeKeys(base, extra) {
@@ -90,6 +39,127 @@ export function mergeKeys(base, extra) {
   }
   return out;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// New v91 string sets — added to each language's dictionary via spread at the bottom.
+// Keeping them in one block makes future audits easy (one place to grep `hud*` / `ach*`).
+// ─────────────────────────────────────────────────────────────────────────────
+const HUD_EN = {
+  hudHelpMove:    "WASD move | Space jump | R reload",
+  hudHelpAim:     "Mouse aim | RMB zoom | L flashlight | Z beam small/med/wide",
+  hudHelpWeapons: "Weapons: <b>0</b> Knife | <b>1</b> Pistol | <b>2</b> Shotgun | <b>3</b> SMG | <b>4</b> AR | <b>5</b> AMR | <b>6</b> Dart | <b>7</b> Med Kit",
+  hudMap:         "Map",
+  hudWeapon:      "Weapon",
+  hudHealth:      "Health",
+  hudScore:       "Score",
+  hudBullets:     "Bullets",
+  hudRoom:        "Room",
+  hudMpTag:       " (MP)",
+  hudRefilling:   "Refilling...",
+  hudMedKit:      "Med Kit",
+  hudMedKitHold:  "hold <b>F</b> or <b>LMB</b> 10s (+50 HP)",
+  hudUse:         "use",
+  hudUses:        "uses",
+  hudHealthFull:  "health full",
+  hudUsedUp:      "used up",
+  hudReleaseKey:  "release key/mouse",
+  hudMeleeLine:   "Melee: front 2-hit kill | <b>backstab 1-hit kill</b>"
+};
+
+const HUD_ZH = {
+  hudHelpMove:    "WASD 移动 | 空格跳跃 | R 装弹",
+  hudHelpAim:     "鼠标瞄准 | 右键开镜 | L 手电 | Z 光斑 小/中/大",
+  hudHelpWeapons: "武器：<b>0</b> 刀 | <b>1</b> 手枪 | <b>2</b> 喷子 | <b>3</b> 冲锋枪 | <b>4</b> 步枪 | <b>5</b> 大狙 | <b>6</b> 麻醉枪 | <b>7</b> 医疗包",
+  hudMap:         "地图",
+  hudWeapon:      "武器",
+  hudHealth:      "生命",
+  hudScore:       "分数",
+  hudBullets:     "子弹",
+  hudRoom:        "房间",
+  hudMpTag:       "（联机）",
+  hudRefilling:   "装填中…",
+  hudMedKit:      "医疗包",
+  hudMedKitHold:  "长按 <b>F</b> 或 <b>左键</b> 10秒（+50 HP）",
+  hudUse:         "次",
+  hudUses:        "次",
+  hudHealthFull:  "已满血",
+  hudUsedUp:      "已用完",
+  hudReleaseKey:  "请松开按键",
+  hudMeleeLine:   "近战：正面 2 刀击杀 | <b>背刺 1 刀击杀</b>"
+};
+
+const HUD_ZH_HANT = {
+  hudHelpMove:    "WASD 移動 | 空白跳躍 | R 裝彈",
+  hudHelpAim:     "滑鼠瞄準 | 右鍵開鏡 | L 手電筒 | Z 光斑 小/中/大",
+  hudHelpWeapons: "武器：<b>0</b> 刀 | <b>1</b> 手槍 | <b>2</b> 霰彈槍 | <b>3</b> 衝鋒槍 | <b>4</b> 步槍 | <b>5</b> 大狙 | <b>6</b> 麻醉槍 | <b>7</b> 醫療包",
+  hudMap:         "地圖",
+  hudWeapon:      "武器",
+  hudHealth:      "生命",
+  hudScore:       "分數",
+  hudBullets:     "子彈",
+  hudRoom:        "房間",
+  hudMpTag:       "（連線）",
+  hudRefilling:   "裝填中…",
+  hudMedKit:      "醫療包",
+  hudMedKitHold:  "長按 <b>F</b> 或 <b>左鍵</b> 10秒（+50 HP）",
+  hudUse:         "次",
+  hudUses:        "次",
+  hudHealthFull:  "已滿血",
+  hudUsedUp:      "已用完",
+  hudReleaseKey:  "請鬆開按鍵",
+  hudMeleeLine:   "近戰：正面 2 刀擊殺 | <b>背刺 1 刀擊殺</b>"
+};
+
+const ACH_EN = {
+  achPanelTitle:   "Achievements",
+  achPanelHint:    "Tap an achievement for details. Equipped achievements show above your name.",
+  achSecret:       "???",
+  achWhatIsThis:     "What is this?",        achWhatIsThisHint:    "Open the game for the first time.",
+  achMonsterHunter:  "Monster Hunter",       achMonsterHunterHint: "Kill 100 zombies in the Arena.",
+  achStrongOne:      "Strong One",           achStrongOneHint:     "Defeat the Hormone Zombie boss.",
+  achEliteHunter:    "Elite Hunter",         achEliteHunterHint:   "Defeat 3 bosses in one Boss Fight run.",
+  achLightLiberator: "Light Liberator",      achLightLiberatorHint:"Beat Hell Mode in the Boss Fight.",
+  achTrainer:        "Trainer",              achTrainerHint:       "Score 500 points at the Training Camp.",
+  achPvpWeak:        "Just a Warm-up",       achPvpWeakHint:       "Get your first PVP kill.",
+  achPvpHunterKing:  "PVP Hunter King",      achPvpHunterKingHint: "Reach a 10-kill streak in PVP without dying.",
+  achUndefeated:     "Undefeated",           achUndefeatedHint:    "Win a PVP match without taking damage.",
+  achCreator:        "Creator",              achCreatorHint:       "Unlock the developer weapon.",
+  achUltimate:       "???"
+};
+
+const ACH_ZH = {
+  achPanelTitle:   "成就",
+  achPanelHint:    "点击成就查看详情。装备的成就会显示在你的名字上方。",
+  achSecret:       "？？？",
+  achWhatIsThis:     "这是什么？",      achWhatIsThisHint:    "首次打开游戏。",
+  achMonsterHunter:  "怪物猎人",        achMonsterHunterHint: "在丧尸竞技场击杀 100 只丧尸。",
+  achStrongOne:      "强者",            achStrongOneHint:     "击败激素僵尸 Boss。",
+  achEliteHunter:    "精英猎人",        achEliteHunterHint:   "一局 Boss 战中击败 3 个 Boss。",
+  achLightLiberator: "光之解放者",      achLightLiberatorHint:"在 Boss 战中通关地狱难度。",
+  achTrainer:        "训练有素",        achTrainerHint:       "训练营得到 500 分。",
+  achPvpWeak:        "小试牛刀",        achPvpWeakHint:       "完成首次 PVP 击杀。",
+  achPvpHunterKing:  "PVP 猎人之王",    achPvpHunterKingHint: "PVP 中达成 10 杀连续不死。",
+  achUndefeated:     "全身而退",        achUndefeatedHint:    "PVP 中零受伤获胜。",
+  achCreator:        "创造者",          achCreatorHint:       "解锁开发者武器。",
+  achUltimate:       "？？？"
+};
+
+const ACH_ZH_HANT = {
+  achPanelTitle:   "成就",
+  achPanelHint:    "點擊成就查看詳情。已裝備的成就會顯示在你的名字上方。",
+  achSecret:       "？？？",
+  achWhatIsThis:     "這是什麼？",      achWhatIsThisHint:    "首次開啟遊戲。",
+  achMonsterHunter:  "怪物獵人",        achMonsterHunterHint: "在殭屍競技場擊殺 100 隻殭屍。",
+  achStrongOne:      "強者",            achStrongOneHint:     "擊敗激素殭屍 Boss。",
+  achEliteHunter:    "菁英獵人",        achEliteHunterHint:   "一場 Boss 戰中擊敗 3 個 Boss。",
+  achLightLiberator: "光之解放者",      achLightLiberatorHint:"在 Boss 戰中通關地獄難度。",
+  achTrainer:        "訓練有素",        achTrainerHint:       "訓練營取得 500 分。",
+  achPvpWeak:        "小試身手",        achPvpWeakHint:       "完成首次 PVP 擊殺。",
+  achPvpHunterKing:  "PVP 獵人之王",    achPvpHunterKingHint: "PVP 中達成 10 連殺不死。",
+  achUndefeated:     "全身而退",        achUndefeatedHint:    "PVP 中零受傷獲勝。",
+  achCreator:        "創造者",          achCreatorHint:       "解鎖開發者武器。",
+  achUltimate:       "？？？"
+};
 
 export const GAME_I18N = {
   "en": {
@@ -167,7 +237,9 @@ export const GAME_I18N = {
     "masterVol": "Master volume",
     "musicVol": "Music volume",
     "sfxVol": "Sound volume",
-    "languagePickLabel": "Language"
+    "languagePickLabel": "Language",
+    ...HUD_EN,
+    ...ACH_EN
   },
   "zh": {
     "gameTitle": "无光之境",
@@ -244,7 +316,9 @@ export const GAME_I18N = {
     "masterVol": "主音量",
     "musicVol": "音乐音量",
     "sfxVol": "音效音量",
-    "languagePickLabel": "语言"
+    "languagePickLabel": "语言",
+    ...HUD_ZH,
+    ...ACH_ZH
   },
   "zh-Hant": {
     "gameTitle": "無光之境",
@@ -307,7 +381,9 @@ export const GAME_I18N = {
     "masterVol": "主音量",
     "musicVol": "音樂音量",
     "sfxVol": "音效音量",
-    "languagePickLabel": "語言"
+    "languagePickLabel": "語言",
+    ...HUD_ZH_HANT,
+    ...ACH_ZH_HANT
   },
   "es": {
     "gameTitle": "Zone No Light",
@@ -357,7 +433,9 @@ export const GAME_I18N = {
     "lobbyPickModeFirst": "Choose CO-OP or a PVP map first.",
     "enterCodeError": "Enter a code",
     "joinNeedModeFirst": "Go back and pick a mode first.",
-    "settingsControlsH": "CONTROLES"
+    "settingsControlsH": "CONTROLES",
+    ...HUD_EN,
+    ...ACH_EN
   },
   "hi": {
     "gameTitle": "Zone No Light",
@@ -407,7 +485,9 @@ export const GAME_I18N = {
     "lobbyPickModeFirst": "Choose CO-OP or a PVP map first.",
     "enterCodeError": "Enter a code",
     "joinNeedModeFirst": "Go back and pick a mode first.",
-    "settingsControlsH": "नियंत्रण"
+    "settingsControlsH": "नियंत्रण",
+    ...HUD_EN,
+    ...ACH_EN
   },
   "ar": {
     "gameTitle": "Zone No Light",
@@ -457,7 +537,9 @@ export const GAME_I18N = {
     "lobbyPickModeFirst": "Choose CO-OP or a PVP map first.",
     "enterCodeError": "Enter a code",
     "joinNeedModeFirst": "Go back and pick a mode first.",
-    "settingsControlsH": "التحكم"
+    "settingsControlsH": "التحكم",
+    ...HUD_EN,
+    ...ACH_EN
   },
   "fr": {
     "gameTitle": "Zone No Light",
@@ -507,7 +589,9 @@ export const GAME_I18N = {
     "lobbyPickModeFirst": "Choose CO-OP or a PVP map first.",
     "enterCodeError": "Enter a code",
     "joinNeedModeFirst": "Go back and pick a mode first.",
-    "settingsControlsH": "COMMANDES"
+    "settingsControlsH": "COMMANDES",
+    ...HUD_EN,
+    ...ACH_EN
   },
   "pt": {
     "gameTitle": "Zone No Light",
@@ -557,7 +641,9 @@ export const GAME_I18N = {
     "lobbyPickModeFirst": "Choose CO-OP or a PVP map first.",
     "enterCodeError": "Enter a code",
     "joinNeedModeFirst": "Go back and pick a mode first.",
-    "settingsControlsH": "CONTROLES"
+    "settingsControlsH": "CONTROLES",
+    ...HUD_EN,
+    ...ACH_EN
   },
   "ru": {
     "gameTitle": "Zone No Light",
@@ -607,7 +693,9 @@ export const GAME_I18N = {
     "lobbyPickModeFirst": "Choose CO-OP or a PVP map first.",
     "enterCodeError": "Enter a code",
     "joinNeedModeFirst": "Go back and pick a mode first.",
-    "settingsControlsH": "УПРАВЛЕНИЕ"
+    "settingsControlsH": "УПРАВЛЕНИЕ",
+    ...HUD_EN,
+    ...ACH_EN
   },
   "ja": {
     "gameTitle": "Zone No Light",
@@ -657,7 +745,9 @@ export const GAME_I18N = {
     "lobbyPickModeFirst": "Choose CO-OP or a PVP map first.",
     "enterCodeError": "Enter a code",
     "joinNeedModeFirst": "Go back and pick a mode first.",
-    "settingsControlsH": "操作"
+    "settingsControlsH": "操作",
+    ...HUD_EN,
+    ...ACH_EN
   },
   "de": {
     "gameTitle": "Zone No Light",
@@ -707,7 +797,9 @@ export const GAME_I18N = {
     "lobbyPickModeFirst": "Choose CO-OP or a PVP map first.",
     "enterCodeError": "Enter a code",
     "joinNeedModeFirst": "Go back and pick a mode first.",
-    "settingsControlsH": "STEUERUNG"
+    "settingsControlsH": "STEUERUNG",
+    ...HUD_EN,
+    ...ACH_EN
   },
   "ko": {
     "gameTitle": "Zone No Light",
@@ -757,7 +849,9 @@ export const GAME_I18N = {
     "lobbyPickModeFirst": "Choose CO-OP or a PVP map first.",
     "enterCodeError": "Enter a code",
     "joinNeedModeFirst": "Go back and pick a mode first.",
-    "settingsControlsH": "조작"
+    "settingsControlsH": "조작",
+    ...HUD_EN,
+    ...ACH_EN
   },
   "it": {
     "gameTitle": "Zone No Light",
@@ -807,7 +901,9 @@ export const GAME_I18N = {
     "lobbyPickModeFirst": "Choose CO-OP or a PVP map first.",
     "enterCodeError": "Enter a code",
     "joinNeedModeFirst": "Go back and pick a mode first.",
-    "settingsControlsH": "COMANDI"
+    "settingsControlsH": "COMANDI",
+    ...HUD_EN,
+    ...ACH_EN
   },
   "nl": {
     "gameTitle": "Zone No Light",
@@ -857,7 +953,9 @@ export const GAME_I18N = {
     "lobbyPickModeFirst": "Choose CO-OP or a PVP map first.",
     "enterCodeError": "Enter a code",
     "joinNeedModeFirst": "Go back and pick a mode first.",
-    "settingsControlsH": "BESTURING"
+    "settingsControlsH": "BESTURING",
+    ...HUD_EN,
+    ...ACH_EN
   },
   "pl": {
     "gameTitle": "Zone No Light",
@@ -907,7 +1005,9 @@ export const GAME_I18N = {
     "lobbyPickModeFirst": "Choose CO-OP or a PVP map first.",
     "enterCodeError": "Enter a code",
     "joinNeedModeFirst": "Go back and pick a mode first.",
-    "settingsControlsH": "STEROWANIE"
+    "settingsControlsH": "STEROWANIE",
+    ...HUD_EN,
+    ...ACH_EN
   },
   "tr": {
     "gameTitle": "Zone No Light",
@@ -957,7 +1057,9 @@ export const GAME_I18N = {
     "lobbyPickModeFirst": "Choose CO-OP or a PVP map first.",
     "enterCodeError": "Enter a code",
     "joinNeedModeFirst": "Go back and pick a mode first.",
-    "settingsControlsH": "KONTROLLER"
+    "settingsControlsH": "KONTROLLER",
+    ...HUD_EN,
+    ...ACH_EN
   },
   "vi": {
     "gameTitle": "Zone No Light",
@@ -1007,7 +1109,9 @@ export const GAME_I18N = {
     "lobbyPickModeFirst": "Choose CO-OP or a PVP map first.",
     "enterCodeError": "Enter a code",
     "joinNeedModeFirst": "Go back and pick a mode first.",
-    "settingsControlsH": "CONTROLS"
+    "settingsControlsH": "CONTROLS",
+    ...HUD_EN,
+    ...ACH_EN
   },
   "id": {
     "gameTitle": "Zone No Light",
@@ -1057,7 +1161,9 @@ export const GAME_I18N = {
     "lobbyPickModeFirst": "Choose CO-OP or a PVP map first.",
     "enterCodeError": "Enter a code",
     "joinNeedModeFirst": "Go back and pick a mode first.",
-    "settingsControlsH": "CONTROLS"
+    "settingsControlsH": "CONTROLS",
+    ...HUD_EN,
+    ...ACH_EN
   }
 };
 
