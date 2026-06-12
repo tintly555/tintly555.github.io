@@ -3,7 +3,7 @@
   Deploy / GitHub Pages: https://tintly555.github.io/games/fps/ — multiplayer relay + static prefix set below.
   Self-hosted same tree: open game-self-hosted.html (empty game-multiplayer-origin, empty game-static-prefix).
   Crossfire = PVP; Arena = PVE / co-op vs zombies.
-  Build: zone-no-light-v95 (declarative [data-i18n] sweep — fixes 42 dead i18n markers that never translated; pause/death/name modal/data/hotbar tabs + dev-gun pickup all i18n; 18 languages get btnResume/Restart/Quit/Join/pausedTitle/deathTitle/etc; hardcoded Chinese "获得～～～" removed)
+  Build: zone-no-light-v96 (weapon names + map labels go through tr() in 18 langs; settings panel (Audio/Graphics/Quality/Texture/Render/Data/Hotbar) all data-i18n; hotbar Chinese-leak bug fixed; ach* names for 15 langs (was EN-only); placeholder override merges into existing translation.txt without losing user edits; auto rebuild hotbar/invBar on language switch)
 -->
 <!--
   Swap Med Kit and AMR weapon positions (4↔5) and improve lighting 让AMR和Swap Med Kit没法使用，所以退回merge versions
@@ -1321,7 +1321,7 @@
     <!-- START submenu: Zombie Arena | Boss Fight | PVP -->
     <div id="menuStart" style="display:none;flex-direction:column;align-items:center;gap:10px;position:relative;padding-top:20px;">
       <button type="button" id="btnStartBack" class="menu-float-icon" style="position:fixed;top:14px;left:14px;background:none;border:none;cursor:pointer;padding:6px;opacity:0.85;transition:opacity 0.15s;z-index:105;" onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='0.85'"><svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
-      <h2 style="font-family:var(--game-font-ui);font-size:20px;letter-spacing:2px;margin:0 0 4px 0;opacity:0.85;">CHOOSE A MODE TO PLAY</h2>
+      <h2 data-i18n="chooseModeToPlay" style="font-family:var(--game-font-ui);font-size:20px;letter-spacing:2px;margin:0 0 4px 0;opacity:0.85;">CHOOSE A MODE TO PLAY</h2>
       <button type="button" id="btnArena" data-i18n="btnZombieArena">Zombie Arena</button>
       <button type="button" id="btnBossFight" data-i18n="btnBossFight">BOSS FIGHT</button>
       <button type="button" id="btnCrossfire" data-i18n="btnCrossfire">PVP</button>
@@ -1385,7 +1385,7 @@
       <button type="button" id="btnPvpMapBack" class="menu-float-icon" style="position:fixed;top:14px;left:14px;background:none;border:none;cursor:pointer;padding:6px;opacity:0.85;transition:opacity 0.15s;z-index:105;" onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='0.85'"><svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
     </div>
     <div id="menuLobby" style="display:none;flex-direction:column;align-items:center;gap:10px;position:relative;padding-top:20px;">
-      <h2 id="lobbyTitle" style="font-family:var(--game-font-ui);font-size:24px;margin:0 0 10px 0;letter-spacing:2px;">MULTIPLAYER</h2>
+      <h2 id="lobbyTitle" data-i18n="lobbyMultiplayer" style="font-family:var(--game-font-ui);font-size:24px;margin:0 0 10px 0;letter-spacing:2px;">MULTIPLAYER</h2>
       <p id="lobbyError" style="font-family:var(--game-font-ui);color:#e53e3e;font-size:13px;margin:0 0 4px 0;min-height:18px;max-width:320px;text-align:center;line-height:1.35;"></p>
       <button type="button" id="btnQuickplay" data-i18n="btnQuickPlay">QUICK PLAY</button>
       <button type="button" id="btnCreateRoom" data-i18n="btnCreateRoom">CREATE A ROOM</button>
@@ -1423,7 +1423,7 @@
   <div id="questHud" style="position:fixed;bottom:60px;left:14px;z-index:46;pointer-events:none;font-family:var(--game-font-ui);font-size:13px;color:rgba(255,255,255,0.85);text-shadow:0 1px 4px rgba(0,0,0,0.9);line-height:1.5;display:none;background:rgba(0,0,0,0.35);padding:6px 12px;border-radius:6px;"></div>
   <div class="hud" id="hud"></div>
   <div id="trainingScoreboard" aria-live="polite">
-    <h3 id="trainingScoreTitle">TRAINING</h3>
+    <h3 id="trainingScoreTitle" data-i18n="trainingScoreTitle">TRAINING</h3>
     <div class="train-row"><span id="trainingLblYou">You</span><b id="trainYouPts">0</b></div>
     <div id="trainTeamRow" class="train-row"><span id="trainingLblTeam">Team</span><b id="trainTeamPts">0</b></div>
     <div class="train-row"><span id="trainingLblHits">Hits</span><b id="trainYouHits">0</b></div>
@@ -1523,22 +1523,22 @@
         <button type="button" class="settings-close" id="btnCloseSettings" title="Close">×</button>
         <div class="settings-scroll" id="settingsScroll">
           <section class="settings-section" id="settingsSectionAudio">
-            <h2 id="settingsHeadingAudio">AUDIO</h2>
+            <h2 id="settingsHeadingAudio" data-i18n="settingsAudioH">AUDIO</h2>
             <div class="settings-row">
-              <label>Master volume <span class="value-pill" id="lblMasterVol">100%</span></label>
+              <label><span data-i18n="masterVol">Master volume</span> <span class="value-pill" id="lblMasterVol">100%</span></label>
               <input type="range" id="rngMasterVol" min="0" max="100" value="100" />
             </div>
             <div class="settings-row">
-              <label>Music volume <span class="value-pill" id="lblMusicVol">35%</span></label>
+              <label><span data-i18n="musicVol">Music volume</span> <span class="value-pill" id="lblMusicVol">35%</span></label>
               <input type="range" id="rngMusicVol" min="0" max="100" value="35" />
             </div>
             <div class="settings-row">
-              <label>Sound volume <span class="value-pill" id="lblSfxVol">100%</span></label>
+              <label><span data-i18n="sfxVol">Sound volume</span> <span class="value-pill" id="lblSfxVol">100%</span></label>
               <input type="range" id="rngSfxVol" min="0" max="100" value="100" />
             </div>
           </section>
           <section class="settings-section" id="settingsSectionControls">
-            <h2 id="settingsHeadingControls">CONTROLS</h2>
+            <h2 id="settingsHeadingControls" data-i18n="settingsControlsTitle">CONTROLS</h2>
             <div class="settings-row">
               <label><span id="lookSensLabelText">Mouse look sensitivity</span> <span class="value-pill" id="lblLookSens">100%</span></label>
               <input type="range" id="rngLookSens" min="0.1" max="200" step="0.1" value="100" />
@@ -1554,7 +1554,7 @@
               </p>
             </div>
             <div class="settings-row">
-              <label id="skipClickToPlayLabel">Enter and play immediately</label>
+              <label id="skipClickToPlayLabel" data-i18n="settingsSkipClickLabel">Enter and play immediately</label>
               <div class="settings-cycle">
                 <button type="button" class="cycle-arrow" id="btnSkipClickOff" aria-label="Require click">◀</button>
                 <div class="cycle-value" id="skipClickToPlayValue">OFF</div>
@@ -1566,20 +1566,20 @@
             </div>
           </section>
           <section class="settings-section" id="settingsSectionGraphics">
-            <h2 id="settingsHeadingGraphics">GRAPHICS</h2>
+            <h2 id="settingsHeadingGraphics" data-i18n="settingsGraphicsH">GRAPHICS</h2>
             <div class="settings-row">
-              <label>Quality <span class="value-pill">performance / fidelity</span></label>
+              <label><span data-i18n="gfxQualityLabel">Quality</span> <span class="value-pill" data-i18n="gfxQualityPill">performance / fidelity</span></label>
               <div class="settings-cycle">
                 <button type="button" class="cycle-arrow" id="btnQualityPrev" aria-label="Lower quality">◀</button>
                 <div class="cycle-value" id="qualityLabel">REGULAR</div>
                 <button type="button" class="cycle-arrow" id="btnQualityNext" aria-label="Higher quality">▶</button>
               </div>
-              <p style="font-size:11px;opacity:0.65;margin-top:10px;max-width:480px;line-height:1.45;">
+              <p data-i18n="gfxQualityHint" style="font-size:11px;opacity:0.65;margin-top:10px;max-width:480px;line-height:1.45;">
                 Does not change zombie sync or gameplay — rendering only. Brightness is matched across tiers so difficulty stays fair.
               </p>
             </div>
             <div class="settings-row">
-              <label>Texture detail</label>
+              <label data-i18n="gfxTextureLabel">Texture detail</label>
               <div class="settings-cycle">
                 <button type="button" class="cycle-arrow" id="btnTexturePrev" aria-label="Previous">◀</button>
                 <div class="cycle-value" id="textureLabel">ON</div>
@@ -1587,19 +1587,19 @@
               </div>
             </div>
             <div class="settings-row">
-              <label>Render distance</label>
+              <label data-i18n="gfxRenderDistLabel">Render distance</label>
               <div class="settings-cycle">
                 <button type="button" class="cycle-arrow" id="btnRenderDistPrev" aria-label="Shorter render distance">◀</button>
                 <div class="cycle-value" id="renderDistanceLabel">NORMAL</div>
                 <button type="button" class="cycle-arrow" id="btnRenderDistNext" aria-label="Longer render distance">▶</button>
               </div>
-              <p style="font-size:11px;opacity:0.65;margin-top:10px;max-width:480px;line-height:1.45;">
+              <p data-i18n="gfxRenderDistHint" style="font-size:11px;opacity:0.65;margin-top:10px;max-width:480px;line-height:1.45;">
                 Beyond this distance the world fades into darkness (distance fog). Lights dim with the fog. Does not affect gameplay.
               </p>
             </div>
           </section>
           <section class="settings-section" id="settingsSectionLanguage">
-            <h2 id="settingsHeadingLanguage">LANGUAGE</h2>
+            <h2 id="settingsHeadingLanguage" data-i18n="settingsLanguageH">LANGUAGE</h2>
             <div class="settings-row">
               <label id="languageLabel">Game language</label>
               <div class="settings-cycle">
@@ -1613,27 +1613,27 @@
             </div>
           </section>
           <section class="settings-section" id="settingsSectionData">
-            <h2 id="settingsHeadingData">DATA</h2>
+            <h2 id="settingsHeadingData" data-i18n="settingsHeadingData">DATA</h2>
             <div class="settings-row" style="flex-direction:column;align-items:flex-start;gap:10px;">
-              <button type="button" class="settings-action-btn" id="btnCreatorUnlock">I am the creator</button>
-              <p id="settingsCreatorHint" style="font-size:11px;opacity:0.65;margin:0;max-width:480px;line-height:1.45;">
+              <button type="button" class="settings-action-btn" id="btnCreatorUnlock" data-i18n="btnCreatorUnlock">I am the creator</button>
+              <p id="settingsCreatorHint" data-i18n="settingsCreatorHint" style="font-size:11px;opacity:0.65;margin:0;max-width:480px;line-height:1.45;">
                 Enter the creator password to unlock all weapons.
               </p>
             </div>
             <div class="settings-row" style="flex-direction:column;align-items:flex-start;gap:10px;margin-top:14px;">
-              <button type="button" class="settings-action-btn danger" id="btnDeleteAllData">Delete all data</button>
-              <p id="settingsDeleteHint" style="font-size:11px;opacity:0.65;margin:0;max-width:480px;line-height:1.45;">
+              <button type="button" class="settings-action-btn danger" id="btnDeleteAllData" data-i18n="btnDeleteAllData">Delete all data</button>
+              <p id="settingsDeleteHint" data-i18n="settingsDeleteHint" style="font-size:11px;opacity:0.65;margin:0;max-width:480px;line-height:1.45;">
                 Clears all unlock progress and kill records on this device. Cannot be undone.
               </p>
             </div>
           </section>
           <section class="settings-section" id="settingsSectionHotbar">
-            <h2 id="settingsHeadingHotbar">HOTBAR ORDER</h2>
-            <p style="font-size:11px;opacity:0.65;margin:0 0 14px 0;max-width:480px;line-height:1.5;" id="hotbarOrderHint">
+            <h2 id="settingsHeadingHotbar" data-i18n="settingsHeadingHotbar">HOTBAR ORDER</h2>
+            <p data-i18n="hotbarOrderHint" style="font-size:11px;opacity:0.65;margin:0 0 14px 0;max-width:480px;line-height:1.5;" id="hotbarOrderHint">
               Click a slot to select it (glows), then click another to swap. Keys 1–7 and 0 follow the new order.
             </p>
             <div id="hotbarOrderSlots" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px;"></div>
-            <button type="button" class="settings-action-btn" id="btnResetHotbar" style="margin-top:4px;">Reset to default</button>
+            <button type="button" class="settings-action-btn" id="btnResetHotbar" data-i18n="btnResetHotbar" style="margin-top:4px;">Reset to default</button>
           </section>
         </div>
       </div>
@@ -4920,7 +4920,7 @@ if (typeof window !== "undefined") {
       const menuZombieArenaHeading = document.getElementById("menuZombieArenaHeading");
       if (menuGameTitle) menuGameTitle.textContent = tr("gameTitle", menuGameTitle.textContent);
       if (menuCreditsGame) menuCreditsGame.textContent = tr("creditsGame", menuCreditsGame.textContent);
-      if (menuCreditsMusic) menuCreditsMusic.textContent = "Music by " + (gameSettings.language === "zh" ? "J有点死了" : "JimmyQrg");
+      if (menuCreditsMusic) menuCreditsMusic.textContent = tr("musicByPrefix", "Music by ") + tr("musicAuthor", "JimmyQrg");
       if (menuZombieArenaHeading) menuZombieArenaHeading.textContent = tr("zombieArenaTitle", menuZombieArenaHeading.textContent);
       if (btnArena) btnArena.textContent = tr("btnZombieArena", btnArena.textContent);
       if (btnTraining) btnTraining.textContent = tr("btnTrainingCamp", btnTraining.textContent);
@@ -5063,6 +5063,9 @@ if (typeof window !== "undefined") {
       try {
         refreshFpsHelpForMap();
       } catch (_) {}
+      // v96: rebuild hotbar + inv bar so weapon names follow the new language.
+      try { if (typeof _buildHotbarSettings === "function") _buildHotbarSettings(); } catch (_) {}
+      try { if (typeof _buildInvBar === "function") _buildInvBar(); } catch (_) {}
     }
 
     let CURRENT_MAP = "arena";
@@ -9884,15 +9887,15 @@ if (typeof window !== "undefined") {
       const bossRoundInfo = CURRENT_MAP === "boss_arena" ? ` [Round ${BOSS_ROUND}]` : "";
       const mapLabel =
         CURRENT_MAP === "boss_arena"
-          ? (lang === "zh" ? `Boss战 — 激素僵尸${bossRoundInfo}` : `BOSS FIGHT — Hormone Zombie${bossRoundInfo}`)
+          ? `${tr("mapBossArena", "BOSS FIGHT — Hormone Zombie")}${bossRoundInfo}`
           : CURRENT_MAP === "arena"
-          ? (lang === "zh" ? "僵尸竞技场" : "zombie arena")
+          ? tr("mapArena", "zombie arena")
           : isTrainingMap(CURRENT_MAP)
-            ? tr("mapTraining", lang === "zh" ? "训练营" : "training camp")
+            ? tr("mapTraining", "training camp")
             : CURRENT_MAP === "crossfire_grid"
-              ? (lang === "zh" ? "PVP - 新地图" : "PVP - grid map")
+              ? tr("mapPvpGrid", "PVP - grid map")
               : isPvpCrossfireMap(CURRENT_MAP)
-                ? (lang === "zh" ? "PVP - 经典地图" : "PVP - classic")
+                ? tr("mapPvpClassic", "PVP - classic")
                 : CURRENT_MAP;
       // v91: HUD strings routed through tr() with English fallback baked in. Add a `hud*` key to
       // translation.js for each locale you want; missing keys harmlessly fall back to English.
@@ -9933,7 +9936,7 @@ if (typeof window !== "undefined") {
         ${hudHelpAim}<br>
         ${hudHelpWeapons}<br>
 ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
-        ${hudWeaponLbl}: ${w.name}<br>
+        ${hudWeaponLbl}: ${weaponDisplayName(state.weaponIndex)}<br>
         ${weaponLine}
         ${hudHealthLbl}: ${Math.max(0, Math.floor(player.health))} / ${player.maxHealth}<br>
         ${isTrainingMap(CURRENT_MAP) ? "" : `${hudScoreLbl}: ${state.score}`}
@@ -9948,8 +9951,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       if (!elL || !elZ) return;
       const inGame = gameWorldReady && menuEl && menuEl.style.display === "none";
       if (isBrightIndoorMap(CURRENT_MAP) && inGame) {
-        const zh = gameSettings.language === "zh";
-        elL.textContent = zh ? "室外单挑亮图：手电已关（无需照明）" : "Bright duel map — flashlight stays off";
+        elL.textContent = tr("hudBrightDuel", "Bright duel map — flashlight stays off");
         elZ.style.display = "none";
       } else {
         elZ.style.display = "";
@@ -11245,6 +11247,13 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     const INV_CW = 70, INV_CH = 46; // canvas size per slot
     const WEAPON_NAMES_INV  = ["Pistol","AR","Shotgun","SMG","MedKit","AMR","Dart","Knife","???"];
     const WEAPON_NAMES_INV_ZH = ["手枪","突击步枪","霰弹枪","冲锋枪","医疗包","反器材","麻痹镖","匕首","???"];
+    // v96: language-aware lookup — fallback to EN if key missing. Replaces hardcoded zh/en split.
+    const WEAPON_I18N_KEYS = ["weaponPistol","weaponAR","weaponShotgun","weaponSMG","weaponMedKit","weaponAMR","weaponDart","weaponKnife","weaponDev"];
+    function weaponDisplayName(widx) {
+      const k = WEAPON_I18N_KEYS[widx];
+      const fallback = WEAPON_NAMES_INV[widx] || "";
+      return k ? tr(k, fallback) : fallback;
+    }
     const INV_KEY_LABELS = ["1","2","3","4","5","6","7","0","/"];
 
     // ── 2D weapon silhouette drawing ─────────────────────────────────────────
@@ -11361,7 +11370,6 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       _invSlotEls.length = 0;
       _invCanvases.length = 0;
       const order = gameSettings.weaponSlotOrder;
-      const lang = gameSettings.language === "zh";
       // 8 configurable + 1 fixed (～～～)
       const allSlots = [...order, 8];
       allSlots.forEach((widx, slotIdx) => {
@@ -11378,10 +11386,10 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         cnv.width = INV_CW; cnv.height = INV_CH;
         cnv.style.width = INV_CW + "px";
         cnv.style.height = INV_CH + "px";
-        // name
+        // name — v96: tr() so all 18 languages get proper weapon names
         const nameEl = document.createElement("div");
         nameEl.className = "inv-name";
-        nameEl.textContent = (lang ? WEAPON_NAMES_INV_ZH : WEAPON_NAMES_INV)[widx] || "";
+        nameEl.textContent = weaponDisplayName(widx);
         div.appendChild(keyEl);
         div.appendChild(cnv);
         div.appendChild(nameEl);
@@ -11496,14 +11504,13 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       if (!container) return;
       container.innerHTML = "";
       const order = gameSettings.weaponSlotOrder;
-      const lang = gameSettings.language === "zh";
       order.forEach((widx, slotIdx) => {
         const div = document.createElement("div");
         div.className = "hb-order-slot";
         div.dataset.slot = slotIdx;
         const keyEl = document.createElement("div");
         keyEl.className = "hb-order-key";
-        keyEl.textContent = "Key " + INV_KEY_LABELS[slotIdx];
+        keyEl.textContent = tr("hbKeyLabel", "Key") + " " + INV_KEY_LABELS[slotIdx];
         const cnv = document.createElement("canvas");
         cnv.width = 56; cnv.height = 36;
         cnv.style.width = "56px"; cnv.style.height = "36px";
@@ -11511,7 +11518,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         drawWeaponIcon(ctx2, widx, 56, 36);
         const nameEl = document.createElement("div");
         nameEl.className = "hb-order-name";
-        nameEl.textContent = (lang ? WEAPON_NAMES_INV_ZH : WEAPON_NAMES_INV)[widx] || "";
+        nameEl.textContent = weaponDisplayName(widx);
         div.appendChild(keyEl); div.appendChild(cnv); div.appendChild(nameEl);
         div.addEventListener("click", () => {
           if (_hbSelectedSlot === -1) {
