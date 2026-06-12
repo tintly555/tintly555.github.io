@@ -4910,6 +4910,17 @@ if (typeof window !== "undefined") {
       return translateGame(lang, key, fallback);
     }
 
+    // v96: hoisted above updateHud to avoid TDZ on initial load (updateHud runs before the
+    // INVENTORY block lower in the file would have initialized these).
+    const WEAPON_NAMES_INV     = ["Pistol","AR","Shotgun","SMG","MedKit","AMR","Dart","Knife","???"];
+    const WEAPON_NAMES_INV_ZH  = ["手枪","突击步枪","霰弹枪","冲锋枪","医疗包","反器材","麻痹镖","匕首","???"];
+    const WEAPON_I18N_KEYS     = ["weaponPistol","weaponAR","weaponShotgun","weaponSMG","weaponMedKit","weaponAMR","weaponDart","weaponKnife","weaponDev"];
+    function weaponDisplayName(widx) {
+      const k = WEAPON_I18N_KEYS[widx];
+      const fallback = WEAPON_NAMES_INV[widx] || "";
+      return k ? tr(k, fallback) : fallback;
+    }
+
     function applyLanguageUI() {
       try {
         document.title = tr("gameTitle", "Zone No Light");
@@ -11245,15 +11256,8 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     // INVENTORY / HOTBAR
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     const INV_CW = 70, INV_CH = 46; // canvas size per slot
-    const WEAPON_NAMES_INV  = ["Pistol","AR","Shotgun","SMG","MedKit","AMR","Dart","Knife","???"];
-    const WEAPON_NAMES_INV_ZH = ["手枪","突击步枪","霰弹枪","冲锋枪","医疗包","反器材","麻痹镖","匕首","???"];
-    // v96: language-aware lookup — fallback to EN if key missing. Replaces hardcoded zh/en split.
-    const WEAPON_I18N_KEYS = ["weaponPistol","weaponAR","weaponShotgun","weaponSMG","weaponMedKit","weaponAMR","weaponDart","weaponKnife","weaponDev"];
-    function weaponDisplayName(widx) {
-      const k = WEAPON_I18N_KEYS[widx];
-      const fallback = WEAPON_NAMES_INV[widx] || "";
-      return k ? tr(k, fallback) : fallback;
-    }
+    // v96: WEAPON_NAMES_INV / WEAPON_I18N_KEYS / weaponDisplayName moved up to right after tr() so
+    // they are accessible from updateHud (which fires on initial load before this block executes).
     const INV_KEY_LABELS = ["1","2","3","4","5","6","7","0","/"];
 
     // ── 2D weapon silhouette drawing ─────────────────────────────────────────
