@@ -18424,7 +18424,6 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         bossVictoryTimer = 0;
         const oldOvl = document.getElementById("bossVictoryOverlay");
         if (oldOvl) oldOvl.remove();
-        tryPlayBossBgm(BOSS_HELL_MODE);
       } else if (isTrainingMap(CURRENT_MAP)) {
         player.position.set(0, 1.65, 22);
         floor.visible = true;
@@ -18526,6 +18525,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
 
       weaponRoot.visible = true;
       gameWorldReady = true;
+      if (isBossArenaMap(CURRENT_MAP)) tryPlayBossBgm(BOSS_HELL_MODE);
       try {
         renderer.domElement.tabIndex = 0;
       } catch (_) {}
@@ -18674,7 +18674,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       const hellBtn = document.getElementById("btnBossHell");
       hellBtn.style.background = "rgba(255,34,68,0.22)";
       hellBtn.style.borderColor = "#ff2244";
-      hellBtn.style.display = "none";
+      hellBtn.style.display = "";
       showMenuPanel("menuBossDifficulty");
     });
 
