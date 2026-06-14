@@ -624,6 +624,14 @@
       border-color: rgba(255, 255, 255, 0.34);
     }
 
+    /* Explicit texture class for buttons outside .menu or with conflicting inline styles */
+    .btn-texture {
+      background-image: var(--game-ui-btn-texture) !important;
+      background-size: 100% 100% !important;
+      background-repeat: no-repeat !important;
+      background-color: transparent !important;
+    }
+
     /* Pause / death / name modal: frosted flat buttons (no texture) */
     .overlay-btn {
       box-sizing: border-box;
@@ -1347,20 +1355,20 @@
     <div id="menuBossMode" style="display:none;flex-direction:column;align-items:center;gap:10px;position:relative;padding-top:20px;">
       <h2 data-i18n="bossFightTitle" style="font-family:var(--game-font-ui);font-size:28px;margin:0 0 14px 0;letter-spacing:3px;">BOSS FIGHT</h2>
       <p data-i18n="bossFightDesc" style="font-family:var(--game-font-ui);font-size:12px;opacity:0.78;margin:0 0 8px 0;max-width:320px;text-align:center;line-height:1.45;">Fight the Hormone Zombie (激素僵尸) — a hulking boss that switches between Tank, Speed, and Gunner modes.</p>
-      <button type="button" id="btnBossSingle" data-i18n="btnSingleplayer" style="font-family:var(--game-font-ui);padding:10px 30px;border:2px solid #4fd1ff;border-radius:8px;background:rgba(79,209,255,0.18);color:#fff;cursor:pointer;font-size:15px;letter-spacing:1px;">SINGLEPLAYER</button>
-      <button type="button" id="btnBossCoop" data-i18n="btnCoopMode" style="font-family:var(--game-font-ui);padding:10px 30px;border:2px solid #4fd1ff;border-radius:8px;background:rgba(79,209,255,0.18);color:#fff;cursor:pointer;font-size:15px;letter-spacing:1px;">CO-OP MODE</button>
+      <button type="button" id="btnBossSingle" class="btn-texture" data-i18n="btnSingleplayer" style="font-family:var(--game-font-ui);padding:10px 30px;border:2px solid #4fd1ff;border-radius:8px;color:#fff;cursor:pointer;font-size:15px;letter-spacing:1px;">SINGLEPLAYER</button>
+      <button type="button" id="btnBossCoop" class="btn-texture" data-i18n="btnCoopMode" style="font-family:var(--game-font-ui);padding:10px 30px;border:2px solid #4fd1ff;border-radius:8px;color:#fff;cursor:pointer;font-size:15px;letter-spacing:1px;">CO-OP MODE</button>
       <button type="button" id="btnBossBack" class="menu-float-icon" style="position:fixed;top:14px;left:14px;background:none;border:none;cursor:pointer;padding:6px;opacity:0.85;transition:opacity 0.15s;z-index:105;" onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='0.85'"><svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
     </div>
     <div id="menuBossDifficulty" style="display:none;flex-direction:column;align-items:center;gap:10px;position:relative;padding-top:20px;">
       <h2 data-i18n="selectDifficulty" style="font-family:var(--game-font-ui);font-size:24px;margin:0 0 10px 0;letter-spacing:2px;">SELECT DIFFICULTY</h2>
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px;">
         <span data-i18n="bossesLabel" style="font-family:var(--game-font-ui);font-size:13px;letter-spacing:1px;">BOSSES:</span>
-        <button type="button" class="bossDiffBtn" data-boss-count="1" style="font-family:var(--game-font-ui);padding:6px 14px;border:2px solid #4fd1ff;border-radius:6px;background:rgba(79,209,255,0.25);color:#fff;cursor:pointer;font-size:14px;">1</button>
-        <button type="button" class="bossDiffBtn" data-boss-count="2" style="font-family:var(--game-font-ui);padding:6px 14px;border:2px solid #4fd1ff;border-radius:6px;background:transparent;color:#fff;cursor:pointer;font-size:14px;">2</button>
-        <button type="button" class="bossDiffBtn" data-boss-count="3" style="font-family:var(--game-font-ui);padding:6px 14px;border:2px solid #4fd1ff;border-radius:6px;background:transparent;color:#fff;cursor:pointer;font-size:14px;">3</button>
+        <button type="button" class="bossDiffBtn btn-texture" data-boss-count="1" style="font-family:var(--game-font-ui);padding:6px 14px;border:2px solid #4fd1ff;border-radius:6px;color:#fff;cursor:pointer;font-size:14px;">1</button>
+        <button type="button" class="bossDiffBtn btn-texture" data-boss-count="2" style="font-family:var(--game-font-ui);padding:6px 14px;border:2px solid #4fd1ff;border-radius:6px;color:#fff;cursor:pointer;font-size:14px;">2</button>
+        <button type="button" class="bossDiffBtn btn-texture" data-boss-count="3" style="font-family:var(--game-font-ui);padding:6px 14px;border:2px solid #4fd1ff;border-radius:6px;color:#fff;cursor:pointer;font-size:14px;">3</button>
       </div>
-      <button type="button" id="btnBossHell" data-i18n="hellMode" style="font-family:var(--game-font-ui);padding:8px 22px;border:2px solid #ff2244;border-radius:6px;background:rgba(255,34,68,0.22);color:#ff4466;cursor:pointer;font-size:14px;letter-spacing:1px;">HELL MODE</button>
-      <button type="button" id="btnBossStartDiff" data-i18n="btnStart" style="font-family:var(--game-font-ui);padding:10px 30px;border:2px solid #4fd1ff;border-radius:8px;background:rgba(79,209,255,0.18);color:#fff;cursor:pointer;font-size:15px;letter-spacing:1px;">START</button>
+      <button type="button" id="btnBossHell" class="btn-texture" data-i18n="hellMode" style="font-family:var(--game-font-ui);padding:8px 22px;border:2px solid #ff2244;border-radius:6px;color:#ff4466;cursor:pointer;font-size:14px;letter-spacing:1px;">HELL MODE</button>
+      <button type="button" id="btnBossStartDiff" class="btn-texture" data-i18n="btnStart" style="font-family:var(--game-font-ui);padding:10px 30px;border:2px solid #4fd1ff;border-radius:8px;color:#fff;cursor:pointer;font-size:15px;letter-spacing:1px;">START</button>
       <button type="button" id="btnBossDiffBack" class="menu-float-icon" style="position:fixed;top:14px;left:14px;background:none;border:none;cursor:pointer;padding:6px;opacity:0.85;transition:opacity 0.15s;z-index:105;" onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='0.85'"><svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
     </div>
     <div id="menuTrainingMode" style="display:none;flex-direction:column;align-items:center;gap:10px;position:relative;padding-top:20px;">
@@ -1373,11 +1381,11 @@
     <div id="menuPvpMaps" style="display:none;flex-direction:column;align-items:center;gap:14px;position:relative;padding-top:20px;">
       <h2 data-i18n="selectMap" style="font-family:var(--game-font-ui);font-size:24px;margin:0 0 4px 0;letter-spacing:2px;">SELECT MAP</h2>
       <div style="display:flex;gap:16px;justify-content:center;flex-wrap:wrap;">
-        <button type="button" id="btnPvpMapClassic" style="display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px 12px;background:rgba(20,28,44,0.88);border:2px solid #4fd1ff;border-radius:10px;cursor:pointer;transition:border-color .2s,transform .15s;" onmouseenter="this.style.borderColor='#fff';this.style.transform='scale(1.04)'" onmouseleave="this.style.borderColor='#4fd1ff';this.style.transform='scale(1)'">
+        <button type="button" id="btnPvpMapClassic" class="btn-texture" style="display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px 12px;border:2px solid #4fd1ff;border-radius:10px;cursor:pointer;transition:border-color .2s,transform .15s;" onmouseenter="this.style.borderColor='#fff';this.style.transform='scale(1.04)'" onmouseleave="this.style.borderColor='#4fd1ff';this.style.transform='scale(1)'">
           <canvas id="pvpPreviewClassic" width="220" height="130" style="border-radius:6px;background:#1a2233;"></canvas>
           <span style="font-family:var(--game-font-ui);font-size:13px;letter-spacing:1px;color:#e8ecf2;" data-i18n="pvpMapClassic">CLASSIC (ORIGINAL)</span>
         </button>
-        <button type="button" id="btnPvpMapGrid" style="display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px 12px;background:rgba(20,28,44,0.88);border:2px solid #4fd1ff;border-radius:10px;cursor:pointer;transition:border-color .2s,transform .15s;" onmouseenter="this.style.borderColor='#fff';this.style.transform='scale(1.04)'" onmouseleave="this.style.borderColor='#4fd1ff';this.style.transform='scale(1)'">
+        <button type="button" id="btnPvpMapGrid" class="btn-texture" style="display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px 12px;border:2px solid #4fd1ff;border-radius:10px;cursor:pointer;transition:border-color .2s,transform .15s;" onmouseenter="this.style.borderColor='#fff';this.style.transform='scale(1.04)'" onmouseleave="this.style.borderColor='#4fd1ff';this.style.transform='scale(1)'">
           <canvas id="pvpPreviewGrid" width="220" height="130" style="border-radius:6px;background:#1a2233;"></canvas>
           <span style="font-family:var(--game-font-ui);font-size:13px;letter-spacing:1px;color:#e8ecf2;" data-i18n="pvpMapGrid">GRID KILLHOUSE</span>
         </button>
@@ -10640,6 +10648,8 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     }
 
     let menuBgmAudio = null;
+    let bossBgmAudio = null;
+    let bossBgmHellMode = false;
 
     function applyAudioVolumes() {
       audioMaster.gain.value = gameSettings.masterVolume;
@@ -10844,6 +10854,131 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         } catch (_) {}
       } catch (_) {}
     };
+
+    /** Boss fight music: boss.mp3 (normal) or boss-hell.mp3 (hell mode). */
+    function getBossBgmUrlCandidates(hellMode) {
+      const filename = hellMode ? "boss-hell.mp3" : "boss.mp3";
+      const here = (() => {
+        try {
+          return window.location.origin;
+        } catch (_) {
+          return "";
+        }
+      })();
+      const fromBase = [];
+      for (const base of getGameAssetBaseCandidates()) {
+        try {
+          fromBase.push(new URL(filename, normalizeGameAssetBase(base)).href);
+        } catch (_) {}
+      }
+      const same = [];
+      const other = [];
+      for (const u of fromBase) {
+        try {
+          if (here && new URL(u).origin === here) same.push(u);
+          else other.push(u);
+        } catch (_) {
+          other.push(u);
+        }
+      }
+      return [...same, ...other];
+    }
+
+    function shouldPlayBossBgm() {
+      return gameWorldReady && isBossArenaMap(CURRENT_MAP);
+    }
+
+    function syncBossBgmRoutingAndVolumes() {
+      if (!bossBgmAudio || !shouldPlayBossBgm()) return;
+      bossBgmAudio.volume = THREE.MathUtils.clamp(
+        gameSettings.masterVolume * gameSettings.musicVolume,
+        0,
+        1
+      );
+    }
+
+    function tryStartBossBgmPlayback() {
+      if (!bossBgmAudio || !shouldPlayBossBgm()) return;
+      syncBossBgmRoutingAndVolumes();
+      const p = bossBgmAudio.play();
+      if (p && typeof p.catch === "function") p.catch(() => {});
+    }
+
+    function ensureBossBgmAudio(hellMode) {
+      if (bossBgmAudio && bossBgmHellMode === hellMode) return;
+      // Recreate if hell mode changed
+      if (bossBgmAudio) {
+        try { bossBgmAudio.pause(); } catch (_) {}
+        bossBgmAudio.src = "";
+        bossBgmAudio = null;
+      }
+      bossBgmHellMode = hellMode;
+      const urls = getBossBgmUrlCandidates(hellMode);
+      bossBgmAudio = new Audio();
+      bossBgmAudio.loop = true;
+      bossBgmAudio.preload = "auto";
+      bossBgmAudio.setAttribute("playsinline", "");
+      bossBgmAudio.volume = THREE.MathUtils.clamp(
+        gameSettings.masterVolume * gameSettings.musicVolume,
+        0,
+        1
+      );
+      let urlIdx = 0;
+      function applySrcAt(idx) {
+        if (idx >= urls.length) return;
+        const u = urls[idx];
+        try {
+          const loc = window.location;
+          const abs = new URL(u, loc.href || "http://localhost/");
+          const filePage = loc.protocol === "file:";
+          const fileAsset = abs.protocol === "file:";
+          const needCors =
+            !filePage &&
+            !fileAsset &&
+            abs.origin &&
+            loc.origin &&
+            abs.origin !== loc.origin;
+          if (needCors) bossBgmAudio.crossOrigin = "anonymous";
+          else bossBgmAudio.removeAttribute("crossOrigin");
+        } catch (_) {
+          try {
+            bossBgmAudio.removeAttribute("crossOrigin");
+          } catch (e2) {}
+        }
+        bossBgmAudio.src = u;
+        try {
+          bossBgmAudio.load();
+        } catch (_) {}
+      }
+      bossBgmAudio.addEventListener("canplaythrough", () => {
+        syncBossBgmRoutingAndVolumes();
+        tryStartBossBgmPlayback();
+      });
+      bossBgmAudio.addEventListener("canplay", () => {
+        syncBossBgmRoutingAndVolumes();
+        tryStartBossBgmPlayback();
+      });
+      bossBgmAudio.addEventListener("error", () => {
+        urlIdx++;
+        if (urlIdx < urls.length) applySrcAt(urlIdx);
+      });
+      applySrcAt(0);
+    }
+
+    function pauseBossBgm() {
+      if (!bossBgmAudio) return;
+      try {
+        bossBgmAudio.pause();
+      } catch (_) {}
+    }
+
+    function tryPlayBossBgm(hellMode) {
+      if (!shouldPlayBossBgm()) return;
+      ensureBossBgmAudio(hellMode);
+      if (bossBgmAudio.readyState >= 2) {
+        tryStartBossBgmPlayback();
+      }
+    }
 
     let ambientWindNode = null;
     function ensureAmbientWindLoop() {
@@ -18289,6 +18424,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         bossVictoryTimer = 0;
         const oldOvl = document.getElementById("bossVictoryOverlay");
         if (oldOvl) oldOvl.remove();
+        tryPlayBossBgm(BOSS_HELL_MODE);
       } else if (isTrainingMap(CURRENT_MAP)) {
         player.position.set(0, 1.65, 22);
         floor.visible = true;
@@ -18442,6 +18578,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       menuBgmPeakSessionMax = 1e-6;
       menuBackdropLightSmooth = 0;
       startMenuBackdropLoop();
+      pauseBossBgm();
       tryPlayMenuBgm();
       player.health = 100;
       weaponRoot.visible = true;
