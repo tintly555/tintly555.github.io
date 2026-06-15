@@ -1361,7 +1361,7 @@
     </div>
     <div id="menuBossDifficulty" style="display:none;flex-direction:column;align-items:center;gap:10px;position:relative;padding-top:20px;">
       <h2 data-i18n="selectDifficulty" style="font-family:var(--game-font-ui);font-size:24px;margin:0 0 10px 0;letter-spacing:2px;">SELECT DIFFICULTY</h2>
-      <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px;">
+      <div id="bossCountRow" style="display:flex;gap:8px;align-items:center;margin-bottom:4px;transition:opacity 0.15s;">
         <span data-i18n="bossesLabel" style="font-family:var(--game-font-ui);font-size:13px;letter-spacing:1px;">BOSSES:</span>
         <button type="button" class="bossDiffBtn btn-texture" data-boss-count="1" style="font-family:var(--game-font-ui);padding:6px 14px;border:2px solid #4fd1ff;border-radius:6px;color:#fff;cursor:pointer;font-size:14px;">1</button>
         <button type="button" class="bossDiffBtn btn-texture" data-boss-count="2" style="font-family:var(--game-font-ui);padding:6px 14px;border:2px solid #4fd1ff;border-radius:6px;color:#fff;cursor:pointer;font-size:14px;">2</button>
@@ -16938,48 +16938,17 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
 
       visFrameCounter++;
       if ((visFrameCounter % 16) === 0) {
-        if (mazeNavRebuildRow < navRows) {
-          const startRow = mazeNavRebuildRow;
-          const endRow = Math.min(startRow + 6, navRows);
-          for (let r = startRow; r < endRow; r++) {
-            for (let c = 0; c < navCols; c++) {
-              const idx = r * navCols + c;
-              if (navGrid[idx]) continue;
-              let bestD = dist[idx];
-              let bx = 0, bz = 0;
-              for (let dr = -1; dr <= 1; dr++) {
-                const nr = r + dr;
-                if (nr < 0 || nr >= navRows) continue;
-                for (let dc = -1; dc <= 1; dc++) {
-                  if (dr === 0 && dc === 0) continue;
-                  const nc = c + dc;
-                  if (nc < 0 || nc >= navCols) continue;
-                  const nIdx = nr * navCols + nc;
-                  if (navGrid[nIdx]) continue;
-                  if (dr !== 0 && dc !== 0) {
-                    if (navGrid[r * navCols + nc] || navGrid[nr * navCols + c]) continue;
-                  }
-                  if (dist[nIdx] < bestD) {
-                    bestD = dist[nIdx];
-                    bx = dc;
-                    bz = dr;
-                  }
-                }
-              }
-              if (bx !== 0 || bz !== 0) {
-                const len = Math.sqrt(bx * bx + bz * bz);
-                flowDirX[idx] = bx / len;
-                flowDirZ[idx] = bz / len;
-              } else {
-                flowDirX[idx] = 0;
-                flowDirZ[idx] = 0;
-              }
-            }
-          }
-          mazeNavRebuildRow = endRow;
-        } else if (flowPlayerC >= 0 && flowPlayerR >= 0) {
-          rebuildFlowField();
-        }
+        // Rebuild the BFS flow field toward the player. rebuildFlowField()
+        // self-guards: it returns immediately unless the player has moved to a
+        // new nav cell, so this is cheap on most frames.
+        //
+        // NOTE (v97 fix): the previous incremental-rebuild branch here referenced
+        // an out-of-scope `dist` array (ReferenceError thrown every 16th frame →
+        // renderer.render() skipped → the periodic boss-arena stutter), and the
+        // working branch was gated behind `flowPlayerC >= 0`, a value only ever
+        // set *inside* rebuildFlowField — a deadlock that meant the flow field
+        // never built and enemy pathfinding silently did nothing.
+        rebuildFlowField();
       }
 
       for (let ei = 0; ei < state.enemies.length; ei++) {
@@ -18097,7 +18066,13 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           (player.health > 0 ||
             (MULTIPLAYER && ARENA_COOP && ZOMBIE_AUTHORITY && isZombieMap));
         if (runZombieAi) {
-          updateEnemies(dt);
+          // Guard the AI step: an exception here must never abort the frame
+          // before renderer.render() runs, or the game visibly stutters.
+          try {
+            updateEnemies(dt);
+          } catch (eAi) {
+            if (typeof console !== "undefined") console.error("updateEnemies failed", eAi);
+          }
         }
         if (gameWorldReady) updateBossProjectiles(dt);
         if (gameWorldReady) updateBossVictory(dt);
@@ -18671,6 +18646,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       for (const b of document.querySelectorAll(".bossDiffBtn")) b.style.background = "transparent";
       const first = document.querySelector(".bossDiffBtn[data-boss-count='1']");
       if (first) first.style.background = "rgba(79,209,255,0.25)";
+      setBossCountRowEnabled(true);
       const hellBtn = document.getElementById("btnBossHell");
       hellBtn.style.background = "rgba(255,34,68,0.22)";
       hellBtn.style.borderColor = "#ff2244";
@@ -18685,6 +18661,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       for (const b of document.querySelectorAll(".bossDiffBtn")) b.style.background = "transparent";
       const first = document.querySelector(".bossDiffBtn[data-boss-count='1']");
       if (first) first.style.background = "rgba(79,209,255,0.25)";
+      setBossCountRowEnabled(true);
       const hellBtn = document.getElementById("btnBossHell");
       hellBtn.style.background = "rgba(255,34,68,0.22)";
       hellBtn.style.borderColor = "#ff2244";
@@ -18696,12 +18673,36 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
 
     document.getElementById("btnBossDiffBack").addEventListener("click", () => showMenuPanel("menuBossMode"));
 
+    // Hell mode is a standalone mode: it always fights a single boss (that then
+    // summons its own waves), so the 1/2/3 count selector is meaningless and is
+    // greyed out / disabled while hell mode is active.
+    function setBossCountRowEnabled(enabled) {
+      const row = document.getElementById("bossCountRow");
+      if (!row) return;
+      row.style.opacity = enabled ? "1" : "0.35";
+      row.style.pointerEvents = enabled ? "auto" : "none";
+    }
+
     document.getElementById("btnBossHell").addEventListener("click", () => {
-      // Hell mode is a standalone difficulty — deselect 1/2/3, fix count at 1
+      // Hell mode is a standalone difficulty — toggle it on/off. While on, the
+      // 1/2/3 count selector is greyed out (count is fixed at 1). Toggling off
+      // returns to the normal count-based mode.
+      const hellBtn = document.getElementById("btnBossHell");
+      if (BOSS_HELL_MODE) {
+        BOSS_HELL_MODE = false;
+        BOSS_FIGHT_COUNT = 1;
+        setBossCountRowEnabled(true);
+        for (const b of document.querySelectorAll(".bossDiffBtn")) {
+          b.style.background = b.dataset.bossCount === "1" ? "rgba(79,209,255,0.25)" : "transparent";
+        }
+        hellBtn.style.background = "rgba(255,34,68,0.22)";
+        hellBtn.style.borderColor = "#ff2244";
+        return;
+      }
       BOSS_HELL_MODE = true;
       BOSS_FIGHT_COUNT = 1;
       for (const b of document.querySelectorAll(".bossDiffBtn")) b.style.background = "transparent";
-      const hellBtn = document.getElementById("btnBossHell");
+      setBossCountRowEnabled(false);
       hellBtn.style.background = "rgba(255,34,68,0.50)";
       hellBtn.style.borderColor = "#ff6688";
     });
@@ -18718,6 +18719,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       btn.addEventListener("click", () => {
         // Selecting 1/2/3 deactivates hell mode
         BOSS_HELL_MODE = false;
+        setBossCountRowEnabled(true);
         BOSS_FIGHT_COUNT = parseInt(btn.dataset.bossCount, 10) || 1;
         for (const b of document.querySelectorAll(".bossDiffBtn")) {
           b.style.background = b === btn ? "rgba(79,209,255,0.25)" : "transparent";
