@@ -2193,7 +2193,7 @@ const HUD_EN = {
   hudMap: "Map", hudWeapon: "Weapon", hudHealth: "Health", hudScore: "Score",
   hudBullets: "Bullets", hudRoom: "Room", hudMpTag: " (MP)",
   hudRefilling: "Refilling...", hudMedKit: "Med Kit",
-  hudMedKitHold: "hold <b>F</b> or <b>LMB</b> 10s (+50 HP)",
+  hudMedKitHold: "hold <b>F</b> or <b>LMB</b> {d}s (+50 HP)",
   hudUse: "use", hudUses: "uses",
   hudHealthFull: "health full", hudUsedUp: "used up", hudReleaseKey: "release key/mouse",
   hudMeleeLine: "Melee: front 2-hit kill | <b>backstab 1-hit kill</b>"
@@ -2205,7 +2205,7 @@ const HUD_ZH = {
   hudMap: "地图", hudWeapon: "武器", hudHealth: "生命", hudScore: "分数",
   hudBullets: "子弹", hudRoom: "房间", hudMpTag: "（联机）",
   hudRefilling: "装填中…", hudMedKit: "医疗包",
-  hudMedKitHold: "长按 <b>F</b> 或 <b>左键</b> 10秒（+50 HP）",
+  hudMedKitHold: "长按 <b>F</b> 或 <b>左键</b> {d}秒（+50 HP）",
   hudUse: "次", hudUses: "次",
   hudHealthFull: "已满血", hudUsedUp: "已用完", hudReleaseKey: "请松开按键",
   hudMeleeLine: "近战：正面 2 刀击杀 | <b>背刺 1 刀击杀</b>"
@@ -2217,7 +2217,7 @@ const HUD_ZH_HANT = {
   hudMap: "地圖", hudWeapon: "武器", hudHealth: "生命", hudScore: "分數",
   hudBullets: "子彈", hudRoom: "房間", hudMpTag: "（連線）",
   hudRefilling: "裝填中…", hudMedKit: "醫療包",
-  hudMedKitHold: "長按 <b>F</b> 或 <b>左鍵</b> 10秒（+50 HP）",
+  hudMedKitHold: "長按 <b>F</b> 或 <b>左鍵</b> {d}秒（+50 HP）",
   hudUse: "次", hudUses: "次",
   hudHealthFull: "已滿血", hudUsedUp: "已用完", hudReleaseKey: "請鬆開按鍵",
   hudMeleeLine: "近戰：正面 2 刀擊殺 | <b>背刺 1 刀擊殺</b>"
@@ -2376,7 +2376,7 @@ const HUD_ES = {
   hudMap: "Mapa", hudWeapon: "Arma", hudHealth: "Vida", hudScore: "Puntaje",
   hudBullets: "Balas", hudRoom: "Sala", hudMpTag: " (MP)",
   hudRefilling: "Recargando…", hudMedKit: "Botiquín",
-  hudMedKitHold: "mantén <b>F</b> o <b>clic izq.</b> 10s (+50 PV)",
+  hudMedKitHold: "mantén <b>F</b> o <b>clic izq.</b> {d}s (+50 PV)",
   hudUse: "uso", hudUses: "usos",
   hudHealthFull: "vida llena", hudUsedUp: "agotado", hudReleaseKey: "suelta tecla/ratón",
   hudMeleeLine: "Cuerpo a cuerpo: 2 golpes frontales | <b>puñalada por la espalda 1 golpe</b>"
@@ -2395,7 +2395,7 @@ const HUD_HI = {
   hudMap: "मानचित्र", hudWeapon: "हथियार", hudHealth: "स्वास्थ्य", hudScore: "स्कोर",
   hudBullets: "गोलियाँ", hudRoom: "कमरा", hudMpTag: " (MP)",
   hudRefilling: "भर रहा है…", hudMedKit: "मेड किट",
-  hudMedKitHold: "<b>F</b> या <b>LMB</b> 10s दबाकर रखें (+50 HP)",
+  hudMedKitHold: "<b>F</b> या <b>LMB</b> {d}s दबाकर रखें (+50 HP)",
   hudUse: "उपयोग", hudUses: "उपयोग",
   hudHealthFull: "पूर्ण स्वास्थ्य", hudUsedUp: "समाप्त", hudReleaseKey: "कुंजी/माउस छोड़ें",
   hudMeleeLine: "क्लोज़ कॉम्बैट: सामने 2 वार में किल | <b>पीठ में 1 वार में किल</b>"
@@ -2414,7 +2414,7 @@ const HUD_AR = {
   hudMap: "الخريطة", hudWeapon: "السلاح", hudHealth: "الصحة", hudScore: "النقاط",
   hudBullets: "الذخيرة", hudRoom: "الغرفة", hudMpTag: " (MP)",
   hudRefilling: "جارٍ التعبئة…", hudMedKit: "إسعافات",
-  hudMedKitHold: "اضغط <b>F</b> أو <b>الزر الأيسر</b> 10ث (+50 صحة)",
+  hudMedKitHold: "اضغط <b>F</b> أو <b>الزر الأيسر</b> {d}ث (+50 صحة)",
   hudUse: "استخدام", hudUses: "استخدامات",
   hudHealthFull: "صحة كاملة", hudUsedUp: "انتهى", hudReleaseKey: "أفلت الزر/الفأرة",
   hudMeleeLine: "اشتباك: من الأمام ضربتان للقتل | <b>طعنة الظهر ضربة واحدة</b>"
@@ -2433,7 +2433,7 @@ const HUD_FR = {
   hudMap: "Carte", hudWeapon: "Arme", hudHealth: "Santé", hudScore: "Score",
   hudBullets: "Balles", hudRoom: "Salle", hudMpTag: " (MP)",
   hudRefilling: "Recharge…", hudMedKit: "Trousse",
-  hudMedKitHold: "maintenir <b>F</b> ou <b>clic G</b> 10s (+50 PV)",
+  hudMedKitHold: "maintenir <b>F</b> ou <b>clic G</b> {d}s (+50 PV)",
   hudUse: "usage", hudUses: "usages",
   hudHealthFull: "santé pleine", hudUsedUp: "épuisé", hudReleaseKey: "relâcher touche/souris",
   hudMeleeLine: "Mêlée: face 2 coups | <b>dans le dos 1 coup</b>"
@@ -2452,7 +2452,7 @@ const HUD_PT = {
   hudMap: "Mapa", hudWeapon: "Arma", hudHealth: "Vida", hudScore: "Pontos",
   hudBullets: "Balas", hudRoom: "Sala", hudMpTag: " (MP)",
   hudRefilling: "Recarregando…", hudMedKit: "Kit Médico",
-  hudMedKitHold: "segure <b>F</b> ou <b>BME</b> 10s (+50 HP)",
+  hudMedKitHold: "segure <b>F</b> ou <b>BME</b> {d}s (+50 HP)",
   hudUse: "uso", hudUses: "usos",
   hudHealthFull: "vida cheia", hudUsedUp: "esgotado", hudReleaseKey: "solte tecla/mouse",
   hudMeleeLine: "Corpo a corpo: 2 golpes frontais | <b>punhalada nas costas 1 golpe</b>"
@@ -2471,7 +2471,7 @@ const HUD_RU = {
   hudMap: "Карта", hudWeapon: "Оружие", hudHealth: "Здоровье", hudScore: "Очки",
   hudBullets: "Патроны", hudRoom: "Комната", hudMpTag: " (MP)",
   hudRefilling: "Перезарядка…", hudMedKit: "Аптечка",
-  hudMedKitHold: "удерживай <b>F</b> или <b>ЛКМ</b> 10с (+50 HP)",
+  hudMedKitHold: "удерживай <b>F</b> или <b>ЛКМ</b> {d}с (+50 HP)",
   hudUse: "исп.", hudUses: "исп.",
   hudHealthFull: "здоровье полно", hudUsedUp: "израсходовано", hudReleaseKey: "отпусти клавишу/мышь",
   hudMeleeLine: "Ближний бой: спереди 2 удара | <b>в спину 1 удар</b>"
@@ -2490,7 +2490,7 @@ const HUD_JA = {
   hudMap: "マップ", hudWeapon: "武器", hudHealth: "体力", hudScore: "スコア",
   hudBullets: "弾薬", hudRoom: "ルーム", hudMpTag: "（MP）",
   hudRefilling: "リロード中…", hudMedKit: "救急箱",
-  hudMedKitHold: "<b>F</b> または <b>左クリック</b> を 10秒長押し（+50 HP）",
+  hudMedKitHold: "<b>F</b> または <b>左クリック</b> を {d}秒長押し（+50 HP）",
   hudUse: "回", hudUses: "回",
   hudHealthFull: "体力満タン", hudUsedUp: "使い切り", hudReleaseKey: "キー/マウスを離す",
   hudMeleeLine: "近接: 正面 2 撃キル | <b>背後 1 撃キル</b>"
@@ -2509,7 +2509,7 @@ const HUD_DE = {
   hudMap: "Karte", hudWeapon: "Waffe", hudHealth: "Leben", hudScore: "Punkte",
   hudBullets: "Munition", hudRoom: "Raum", hudMpTag: " (MP)",
   hudRefilling: "Nachladen…", hudMedKit: "Med-Kit",
-  hudMedKitHold: "<b>F</b> oder <b>Linksklick</b> 10s halten (+50 HP)",
+  hudMedKitHold: "<b>F</b> oder <b>Linksklick</b> {d}s halten (+50 HP)",
   hudUse: "Anwendung", hudUses: "Anwendungen",
   hudHealthFull: "Leben voll", hudUsedUp: "leer", hudReleaseKey: "Taste/Maus loslassen",
   hudMeleeLine: "Nahkampf: von vorn 2 Treffer | <b>von hinten 1 Treffer</b>"
@@ -2528,7 +2528,7 @@ const HUD_KO = {
   hudMap: "맵", hudWeapon: "무기", hudHealth: "체력", hudScore: "점수",
   hudBullets: "탄약", hudRoom: "방", hudMpTag: "（MP）",
   hudRefilling: "재장전 중…", hudMedKit: "구급상자",
-  hudMedKitHold: "<b>F</b> 또는 <b>좌클릭</b> 10초 길게 누르기 (+50 HP)",
+  hudMedKitHold: "<b>F</b> 또는 <b>좌클릭</b> {d}초 길게 누르기 (+50 HP)",
   hudUse: "회", hudUses: "회",
   hudHealthFull: "체력 가득", hudUsedUp: "다 씀", hudReleaseKey: "키/마우스 떼기",
   hudMeleeLine: "근접: 정면 2 타 킬 | <b>등 뒤 1 타 킬</b>"
@@ -2547,7 +2547,7 @@ const HUD_IT = {
   hudMap: "Mappa", hudWeapon: "Arma", hudHealth: "Vita", hudScore: "Punteggio",
   hudBullets: "Munizioni", hudRoom: "Stanza", hudMpTag: " (MP)",
   hudRefilling: "Ricarica…", hudMedKit: "Kit Medico",
-  hudMedKitHold: "tieni <b>F</b> o <b>click sin.</b> 10s (+50 PV)",
+  hudMedKitHold: "tieni <b>F</b> o <b>click sin.</b> {d}s (+50 PV)",
   hudUse: "uso", hudUses: "usi",
   hudHealthFull: "vita piena", hudUsedUp: "esaurito", hudReleaseKey: "rilascia tasto/mouse",
   hudMeleeLine: "Mischia: frontale 2 colpi | <b>pugnalata alle spalle 1 colpo</b>"
@@ -2566,7 +2566,7 @@ const HUD_NL = {
   hudMap: "Map", hudWeapon: "Wapen", hudHealth: "Leven", hudScore: "Score",
   hudBullets: "Kogels", hudRoom: "Kamer", hudMpTag: " (MP)",
   hudRefilling: "Herladen…", hudMedKit: "Med Kit",
-  hudMedKitHold: "houd <b>F</b> of <b>LMB</b> 10s (+50 HP)",
+  hudMedKitHold: "houd <b>F</b> of <b>LMB</b> {d}s (+50 HP)",
   hudUse: "gebruik", hudUses: "gebruiken",
   hudHealthFull: "leven vol", hudUsedUp: "op", hudReleaseKey: "laat toets/muis los",
   hudMeleeLine: "Melee: van voren 2 hits | <b>messteek in de rug 1 hit</b>"
@@ -2585,7 +2585,7 @@ const HUD_PL = {
   hudMap: "Mapa", hudWeapon: "Broń", hudHealth: "Zdrowie", hudScore: "Punkty",
   hudBullets: "Naboje", hudRoom: "Pokój", hudMpTag: " (MP)",
   hudRefilling: "Ładowanie…", hudMedKit: "Apteczka",
-  hudMedKitHold: "przytrzymaj <b>F</b> lub <b>LPM</b> 10s (+50 HP)",
+  hudMedKitHold: "przytrzymaj <b>F</b> lub <b>LPM</b> {d}s (+50 HP)",
   hudUse: "użycie", hudUses: "użycia",
   hudHealthFull: "pełne zdrowie", hudUsedUp: "zużyte", hudReleaseKey: "puść klawisz/mysz",
   hudMeleeLine: "Walka wręcz: z przodu 2 ciosy | <b>w plecy 1 cios</b>"
@@ -2604,7 +2604,7 @@ const HUD_TR = {
   hudMap: "Harita", hudWeapon: "Silah", hudHealth: "Can", hudScore: "Skor",
   hudBullets: "Mermi", hudRoom: "Oda", hudMpTag: " (MP)",
   hudRefilling: "Doluyor…", hudMedKit: "Med Kit",
-  hudMedKitHold: "<b>F</b> veya <b>sol tık</b> 10sn basılı tut (+50 HP)",
+  hudMedKitHold: "<b>F</b> veya <b>sol tık</b> {d}sn basılı tut (+50 HP)",
   hudUse: "kullanım", hudUses: "kullanım",
   hudHealthFull: "can dolu", hudUsedUp: "tükendi", hudReleaseKey: "tuşu/fareyi bırak",
   hudMeleeLine: "Yakın dövüş: önden 2 vuruşta ölüm | <b>arkadan 1 vuruşta ölüm</b>"
@@ -2623,7 +2623,7 @@ const HUD_VI = {
   hudMap: "Bản đồ", hudWeapon: "Vũ khí", hudHealth: "Máu", hudScore: "Điểm",
   hudBullets: "Đạn", hudRoom: "Phòng", hudMpTag: " (MP)",
   hudRefilling: "Đang nạp…", hudMedKit: "Hộp cứu thương",
-  hudMedKitHold: "giữ <b>F</b> hoặc <b>chuột trái</b> 10s (+50 HP)",
+  hudMedKitHold: "giữ <b>F</b> hoặc <b>chuột trái</b> {d}s (+50 HP)",
   hudUse: "lần", hudUses: "lần",
   hudHealthFull: "máu đầy", hudUsedUp: "hết", hudReleaseKey: "thả phím/chuột",
   hudMeleeLine: "Cận chiến: trực diện 2 đòn | <b>đâm sau lưng 1 đòn</b>"
@@ -2642,7 +2642,7 @@ const HUD_ID = {
   hudMap: "Peta", hudWeapon: "Senjata", hudHealth: "Nyawa", hudScore: "Skor",
   hudBullets: "Peluru", hudRoom: "Ruang", hudMpTag: " (MP)",
   hudRefilling: "Mengisi…", hudMedKit: "Kit Medis",
-  hudMedKitHold: "tahan <b>F</b> atau <b>klik kiri</b> 10d (+50 HP)",
+  hudMedKitHold: "tahan <b>F</b> atau <b>klik kiri</b> {d}d (+50 HP)",
   hudUse: "pakai", hudUses: "pakai",
   hudHealthFull: "nyawa penuh", hudUsedUp: "habis", hudReleaseKey: "lepas tombol/mouse",
   hudMeleeLine: "Melee: depan 2 pukulan | <b>tikam belakang 1 pukulan</b>"

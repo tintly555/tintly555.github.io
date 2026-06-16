@@ -10707,7 +10707,8 @@ if (typeof window !== "undefined") {
             : state.medKitNeedsRelease
               ? ` (${tr("hudReleaseKey", "release key/mouse")})`
               : "";
-        weaponLine = `${tr("hudMedKit", "Med Kit")}: ${w.ammo} ${useWord} — ${tr("hudMedKitHold", "hold <b>F</b> or <b>LMB</b> 10s (+50 HP)")}${state4}<br>`;
+        const medDur = Math.round(getMedKitHealDuration());
+        weaponLine = `${tr("hudMedKit", "Med Kit")}: ${w.ammo} ${useWord} — ${tr("hudMedKitHold", "hold <b>F</b> or <b>LMB</b> {d}s (+50 HP)").replace("{d}", medDur)}${state4}<br>`;
       } else if (state.weaponIndex === 7) {
         weaponLine = `${tr("hudMeleeLine", "Melee: front 2-hit kill | <b>backstab 1-hit kill</b>")}<br>`;
       } else if (state.weaponIndex === 8) {
@@ -10913,6 +10914,12 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       const eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.07, 0.05), eyeGlowMat);
       eyeL.position.set(-0.10, 0.06, 0.215); headGroup.add(eyeL);
       const eyeR = eyeL.clone(); eyeR.position.x = 0.10; headGroup.add(eyeR);
+      // 2× eye glow: a real point light per eye so the face / gun / floor pick
+      // up the color, not just a brighter pixel on the eye box itself.
+      const eyeLightL = new THREE.PointLight(eyeColor, 2.5, 4);
+      eyeLightL.position.set(-0.10, 0.06, 0.28); headGroup.add(eyeLightL);
+      const eyeLightR = new THREE.PointLight(eyeColor, 2.5, 4);
+      eyeLightR.position.set(0.10, 0.06, 0.28); headGroup.add(eyeLightR);
 
       const brow = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.06, 0.08), matSkinD);
       brow.position.set(0, 0.15, 0.19); headGroup.add(brow);
@@ -11202,12 +11209,16 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       const eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.07, 0.07), eyeGlowMat);
       eyeL.position.set(-0.10, 0.07, 0.22); headGroup.add(eyeL);
       const eyeR = eyeL.clone(); eyeR.position.x = 0.10; headGroup.add(eyeR);
-      if (isHell) {
-        const eyeGlowL = new THREE.PointLight(0xff0000, 2.5, 4);
-        eyeGlowL.position.set(-0.10, 0.07, 0.28); headGroup.add(eyeGlowL);
-        const eyeGlowR = new THREE.PointLight(0xff0000, 2.5, 4);
-        eyeGlowR.position.set(0.10, 0.07, 0.28); headGroup.add(eyeGlowR);
-      }
+      // 2× eye glow on the boss: lights are present in both normal and hell
+      // modes (the previous code only lit hell eyes). Intensity doubled from
+      // 2.5 → 5.0; range extended 4 → 6 so the glow actually reaches the
+      // surrounding fog. Hell keeps its red, normal mode uses the boss's
+      // actual eyeColor (also red for Hormone Zombie but kept parameterized
+      // so the function reads cleanly for any future boss variant).
+      const eyeGlowL = new THREE.PointLight(eyeColor, 5.0, 6);
+      eyeGlowL.position.set(-0.10, 0.07, 0.28); headGroup.add(eyeGlowL);
+      const eyeGlowR = new THREE.PointLight(eyeColor, 5.0, 6);
+      eyeGlowR.position.set(0.10, 0.07, 0.28); headGroup.add(eyeGlowR);
       const fangL = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.08, 0.04), matBone);
       fangL.position.set(-0.07, -0.24, 0.19); headGroup.add(fangL);
       const fangR = fangL.clone(); fangR.position.x = 0.07; headGroup.add(fangR);
@@ -12273,6 +12284,97 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           });
       }
       return knifeSoundLoadPromise;
+    }
+
+    // ── Med pack SFX (medpack.ogg / medpack-5s.ogg / medpack-8s.ogg) ──
+    // 3 separate files for the 3 events:
+    //  - medpack.ogg:    played when the player switches to the med pack weapon
+    //  - medpack-5s.ogg: played when a heal completes in PVP (5s hold)
+    //  - medpack-8s.ogg: played when a heal completes in PVE (8s hold)
+    let medpackSwitchBuffer = null;
+    let medpack5sBuffer = null;
+    let medpack8sBuffer = null;
+    let medpackSwitchLoadPromise = null;
+    let medpack5sLoadPromise = null;
+    let medpack8sLoadPromise = null;
+
+    function getMedpackSoundUrl(filename) {
+      for (const base of getGameAssetBaseCandidates()) {
+        try { return new URL(filename, normalizeGameAssetBase(base)).href; } catch (_) {}
+      }
+      try { return new URL(filename, pageDirFromLocation()).href; } catch (_) { return filename; }
+    }
+
+    function ensureMedpackSwitchBuffer() {
+      if (medpackSwitchBuffer) return Promise.resolve();
+      if (!medpackSwitchLoadPromise) {
+        medpackSwitchLoadPromise = fetch(getMedpackSoundUrl("medpack.ogg"))
+          .then((res) => { if (!res.ok) throw new Error("medpack fetch"); return res.arrayBuffer(); })
+          .then((arr) => audioCtx.decodeAudioData(arr.slice(0)))
+          .then((buf) => { medpackSwitchBuffer = buf; })
+          .catch(() => { medpackSwitchLoadPromise = null; });
+      }
+      return medpackSwitchLoadPromise;
+    }
+    function ensureMedpack5sBuffer() {
+      if (medpack5sBuffer) return Promise.resolve();
+      if (!medpack5sLoadPromise) {
+        medpack5sLoadPromise = fetch(getMedpackSoundUrl("medpack-5s.ogg"))
+          .then((res) => { if (!res.ok) throw new Error("medpack-5s fetch"); return res.arrayBuffer(); })
+          .then((arr) => audioCtx.decodeAudioData(arr.slice(0)))
+          .then((buf) => { medpack5sBuffer = buf; })
+          .catch(() => { medpack5sLoadPromise = null; });
+      }
+      return medpack5sLoadPromise;
+    }
+    function ensureMedpack8sBuffer() {
+      if (medpack8sBuffer) return Promise.resolve();
+      if (!medpack8sLoadPromise) {
+        medpack8sLoadPromise = fetch(getMedpackSoundUrl("medpack-8s.ogg"))
+          .then((res) => { if (!res.ok) throw new Error("medpack-8s fetch"); return res.arrayBuffer(); })
+          .then((arr) => audioCtx.decodeAudioData(arr.slice(0)))
+          .then((buf) => { medpack8sBuffer = buf; })
+          .catch(() => { medpack8sLoadPromise = null; });
+      }
+      return medpack8sLoadPromise;
+    }
+
+    function _playMedpackOgg(buf, gain = 0.9) {
+      try {
+        const bs = audioCtx.createBufferSource();
+        bs.buffer = buf;
+        const g = audioCtx.createGain();
+        g.gain.value = gain;
+        bs.connect(g);
+        g.connect(audioSfx);
+        bs.start();
+      } catch (_) {}
+    }
+
+    function playMedPackSwitchSound() {
+      if (audioCtx.state === "suspended") void audioCtx.resume();
+      if (medpackSwitchBuffer) {
+        _playMedpackOgg(medpackSwitchBuffer, 0.9);
+        return;
+      }
+      void ensureMedpackSwitchBuffer().then(() => {
+        if (medpackSwitchBuffer) _playMedpackOgg(medpackSwitchBuffer, 0.9);
+      });
+    }
+    function playMedPackHealSound(durationSec) {
+      if (audioCtx.state === "suspended") void audioCtx.resume();
+      // Pick the right OGG by the current mode's heal duration.
+      const is5 = Math.round(durationSec) === 5;
+      const buf = is5 ? medpack5sBuffer : medpack8sBuffer;
+      const loader = is5 ? ensureMedpack5sBuffer : ensureMedpack8sBuffer;
+      if (buf) {
+        _playMedpackOgg(buf, 0.95);
+        return;
+      }
+      void loader().then(() => {
+        const ready = is5 ? medpack5sBuffer : medpack8sBuffer;
+        if (ready) _playMedpackOgg(ready, 0.95);
+      });
     }
 
     function getDashSoundUrl() {
@@ -13613,10 +13715,10 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     }
 
     function playMedKitHealCompleteSound() {
-      if (audioCtx.state === "suspended") void audioCtx.resume();
-      if (typeof GunSFX !== "undefined" && GunSFX.medKitComplete) {
-        GunSFX.medKitComplete();
-      }
+      // Pick the right OGG by the current mode's heal duration (5s PVP,
+      // 8s PVE). getMedKitHealDuration() is the same source of truth that
+      // drives the actual hold time, so the audio always matches the gameplay.
+      playMedPackHealSound(getMedKitHealDuration());
     }
 
     function triggerHitFeedback(isKill = false, headshot = false) {
@@ -14645,6 +14747,16 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     });
 
     const MED_KIT_HEAL_DURATION = 2.5;
+    /**
+     * Player-facing hold time to complete a med-kit heal, in seconds.
+     * 8s in PVE (zombie arena + boss arena) where the player has cover and
+     * can afford a longer heal; 5s in PVP where the player is exposed and a
+     * fast heal is critical for survival. Driven by the per-mode predicates
+     * already used elsewhere in the file.
+     */
+    function getMedKitHealDuration() {
+      return isPvpCrossfireMap(CURRENT_MAP) ? 5 : 8;
+    }
     const MED_KIT_RING_LEN = 2 * Math.PI * 44;
     const MED_KIT_DEFILL_DURATION = 0.18;
 
@@ -15359,6 +15471,10 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       state.reloading = false;
       state.reloadEnd = 0;
       if (prev === 4 || index === 4) resetMedKitChargeState();
+      // Switching TO the med pack (not re-selecting, not leaving) plays the
+      // medpack.ogg pickup/equip cue. Re-selecting it shouldn't re-fire the
+      // sound; leaving it shouldn't either.
+      if (prev !== 4 && index === 4) playMedPackSwitchSound();
       state.weaponAction = null;
       clearShellCasings();
       weaponModels.forEach((w, i) => {
@@ -17098,7 +17214,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       const wantsHold = isMedKitInputHeld() && canHeal && !state.medKitNeedsRelease;
 
       if (wantsHold) {
-        state.medKitHealProgress += dt / MED_KIT_HEAL_DURATION;
+        state.medKitHealProgress += dt / getMedKitHealDuration();
         if (state.medKitHealProgress >= 1) {
           player.health = Math.min(player.maxHealth, player.health + 50);
           wMed.ammo = Math.max(0, wMed.ammo - 1);
@@ -18060,6 +18176,11 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
 
     function updateEnemies(dt) {
       if (!gameWorldReady) return;
+      // Zombies must not move or attack until the player is officially in the
+      // game (they've clicked "click anywhere" → pointer-locked, or have the
+      // skip-click-to-play setting on). The world is loaded and ready before
+      // the click hint is dismissed, so gameWorldReady alone isn't enough.
+      if (!controlsInputReady()) return;
       if (player.health > 0 && player.health < player.maxHealth) {
         player.regenTimer += dt;
         if (player.regenTimer >= 5.0) {
