@@ -11603,6 +11603,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     let bossBgmAudio = null;
     let bossBgmHellMode = false;
     let arenaBgmAudio = null;
+    let pvpBgmAudio = null;
     let arena19hz = null; // { osc, gain } — 19 Hz sine routed to audioMusic, started with arena BGM
 
     function applyAudioVolumes() {
@@ -11838,6 +11839,40 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       return [...same, ...other];
     }
 
+    /**
+     * PVP BGM (crossfire / crossfire_grid / pvp_bright). Mirrors the arena BGM
+     * pipeline: a looped <audio> element, lazy-loaded with candidate URLs across
+     * the same asset bases, gated by isPvpCrossfireMap(CURRENT_MAP) and
+     * gameWorldReady. Volume = master × music.
+     */
+    function getPvpBgmUrlCandidates() {
+      const filename = "media/pvp.mp3";
+      const here = (() => {
+        try {
+          return window.location.origin;
+        } catch (_) {
+          return "";
+        }
+      })();
+      const fromBase = [];
+      for (const base of getGameAssetBaseCandidates()) {
+        try {
+          fromBase.push(new URL(filename, normalizeGameAssetBase(base)).href);
+        } catch (_) {}
+      }
+      const same = [];
+      const other = [];
+      for (const u of fromBase) {
+        try {
+          if (here && new URL(u).origin === here) same.push(u);
+          else other.push(u);
+        } catch (_) {
+          other.push(u);
+        }
+      }
+      return [...same, ...other];
+    }
+
     function shouldPlayArenaBgm() {
       return gameWorldReady && isArenaLikeMap(CURRENT_MAP);
     }
@@ -11977,6 +12012,89 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       ensureArenaBgmAudio();
       if (arenaBgmAudio.readyState >= 2) {
         tryStartArenaBgmPlayback();
+      }
+    }
+
+    function shouldPlayPvpBgm() {
+      return gameWorldReady && isPvpCrossfireMap(CURRENT_MAP);
+    }
+
+    function syncPvpBgmRoutingAndVolumes() {
+      if (!pvpBgmAudio || !shouldPlayPvpBgm()) return;
+      pvpBgmAudio.volume = THREE.MathUtils.clamp(
+        gameSettings.masterVolume * gameSettings.musicVolume,
+        0,
+        1
+      );
+    }
+
+    function tryStartPvpBgmPlayback() {
+      if (!pvpBgmAudio || !shouldPlayPvpBgm()) return;
+      syncPvpBgmRoutingAndVolumes();
+      const p = pvpBgmAudio.play();
+      if (p && typeof p.catch === "function") p.catch(() => {});
+    }
+
+    function ensurePvpBgmAudio() {
+      if (pvpBgmAudio) return;
+      const urls = getPvpBgmUrlCandidates();
+      pvpBgmAudio = new Audio();
+      pvpBgmAudio.loop = true;
+      pvpBgmAudio.preload = "auto";
+      pvpBgmAudio.setAttribute("playsinline", "");
+      pvpBgmAudio.volume = THREE.MathUtils.clamp(
+        gameSettings.masterVolume * gameSettings.musicVolume,
+        0,
+        1
+      );
+      let urlIdx = 0;
+      function applySrcAt(idx) {
+        if (idx >= urls.length) return;
+        const u = urls[idx];
+        try {
+          const loc = window.location;
+          const abs = new URL(u, loc.href || "http://localhost/");
+          const filePage = loc.protocol === "file:";
+          const fileAsset = abs.protocol === "file:";
+          const needCors =
+            !filePage &&
+            !fileAsset &&
+            abs.origin &&
+            loc.origin &&
+            abs.origin !== loc.origin;
+          if (needCors) pvpBgmAudio.crossOrigin = "anonymous";
+          else pvpBgmAudio.removeAttribute("crossOrigin");
+        } catch (_) {
+          try { pvpBgmAudio.removeAttribute("crossOrigin"); } catch (e2) {}
+        }
+        pvpBgmAudio.src = u;
+        try { pvpBgmAudio.load(); } catch (_) {}
+      }
+      pvpBgmAudio.addEventListener("canplaythrough", () => {
+        syncPvpBgmRoutingAndVolumes();
+        tryStartPvpBgmPlayback();
+      });
+      pvpBgmAudio.addEventListener("canplay", () => {
+        syncPvpBgmRoutingAndVolumes();
+        tryStartPvpBgmPlayback();
+      });
+      pvpBgmAudio.addEventListener("error", () => {
+        urlIdx++;
+        if (urlIdx < urls.length) applySrcAt(urlIdx);
+      });
+      applySrcAt(0);
+    }
+
+    function pausePvpBgm() {
+      if (!pvpBgmAudio) return;
+      try { pvpBgmAudio.pause(); } catch (_) {}
+    }
+
+    function tryPlayPvpBgm() {
+      if (!shouldPlayPvpBgm()) return;
+      ensurePvpBgmAudio();
+      if (pvpBgmAudio.readyState >= 2) {
+        tryStartPvpBgmPlayback();
       }
     }
 
@@ -20354,6 +20472,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       gameWorldReady = true;
       if (isBossArenaMap(CURRENT_MAP)) tryPlayBossBgm(BOSS_HELL_MODE);
       else if (isArenaLikeMap(CURRENT_MAP)) tryPlayArenaBgm();
+      else if (isPvpCrossfireMap(CURRENT_MAP)) tryPlayPvpBgm();
       try {
         renderer.domElement.tabIndex = 0;
       } catch (_) {}
@@ -20408,6 +20527,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       startMenuBackdropLoop();
       pauseBossBgm();
       pauseArenaBgm();
+      pausePvpBgm();
       tryPlayMenuBgm();
       player.health = 100;
       weaponRoot.visible = true;
