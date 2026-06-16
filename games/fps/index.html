@@ -11623,6 +11623,19 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           1
         );
       }
+      // Per-BGM <audio> elements don't route through audioMusic, so their .volume
+      // has to be updated explicitly whenever a slider moves (otherwise the slider
+      // only affects WebAudio-routed sounds and the playing BGM stays at its old
+      // level). Sync every existing BGM element unconditionally — .volume is read
+      // on play(), so it's safe to set on a paused element.
+      const musicLevel = THREE.MathUtils.clamp(
+        gameSettings.masterVolume * gameSettings.musicVolume,
+        0,
+        1
+      );
+      if (arenaBgmAudio) arenaBgmAudio.volume = musicLevel;
+      if (bossBgmAudio) bossBgmAudio.volume = musicLevel;
+      if (pvpBgmAudio) pvpBgmAudio.volume = musicLevel;
     }
     applyAudioVolumes();
 
@@ -16062,6 +16075,9 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         state.weaponActionDur = 650;
         state.weaponActionStart = performance.now();
         // 切刀音效沿用挥刀声，只把尾音拉长，听起来更像抽刀入手。
+        // Stack three layers (knife.ogg ×3) for a denser "shing" on the draw.
+        playKnifeSwingSound(0.46, 0.32);
+        playKnifeSwingSound(0.46, 0.32);
         playKnifeSwingSound(0.46, 0.32);
         state.knifeComboIdx = 0;
       }
