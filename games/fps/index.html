@@ -10651,6 +10651,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     let bossBgmAudio = null;
     let bossBgmHellMode = false;
     let arenaBgmAudio = null;
+    let arena19hz = null; // { osc, gain } — 19 Hz sine routed to audioMusic, started with arena BGM
 
     function applyAudioVolumes() {
       audioMaster.gain.value = gameSettings.masterVolume;
@@ -10901,8 +10902,53 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     function tryStartArenaBgmPlayback() {
       if (!arenaBgmAudio || !shouldPlayArenaBgm()) return;
       syncArenaBgmRoutingAndVolumes();
+      startArena19HzTone();
       const p = arenaBgmAudio.play();
       if (p && typeof p.catch === "function") p.catch(() => {});
+    }
+
+    /**
+     * 19 Hz continuous sine on the music bus while Zombie Arena is active.
+     * 19 Hz sits at the edge of human hearing — on speakers/headphones that can
+     * reproduce it you get a pressure/rumble; on most consumer gear it's near-silent.
+     * Routed through audioMusic so it follows the music volume slider.
+     */
+    function startArena19HzTone() {
+      if (arena19hz) return;
+      if (audioCtx.state === "suspended") {
+        try { void audioCtx.resume(); } catch (_) {}
+      }
+      // Platform-tuned sub-bass frequency: Mac → 19 Hz, Windows → 20 Hz, other → 30 Hz.
+      const plat = (() => {
+        try {
+          const p = String(navigator.platform || "");
+          const ua = String(navigator.userAgent || "");
+          if (/Mac|iPhone|iPad|iPod/i.test(p) || /Mac OS X/i.test(ua)) return "mac";
+          if (/Win/i.test(p) || /Windows/i.test(ua)) return "win";
+          return "other";
+        } catch (_) {
+          return "other";
+        }
+      })();
+      const freq = plat === "mac" ? 19 : plat === "win" ? 20 : 25;
+      const osc = audioCtx.createOscillator();
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      const gain = audioCtx.createGain();
+      // Modest level — audioMusic bus gain already accounts for the music slider.
+      gain.gain.value = 0.15;
+      osc.connect(gain);
+      gain.connect(audioMusic);
+      try { osc.start(); } catch (_) {}
+      arena19hz = { osc, gain };
+    }
+
+    function stopArena19HzTone() {
+      if (!arena19hz) return;
+      try { arena19hz.osc.stop(); } catch (_) {}
+      try { arena19hz.osc.disconnect(); } catch (_) {}
+      try { arena19hz.gain.disconnect(); } catch (_) {}
+      arena19hz = null;
     }
 
     function ensureArenaBgmAudio() {
@@ -10960,6 +11006,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     }
 
     function pauseArenaBgm() {
+      stopArena19HzTone();
       if (!arenaBgmAudio) return;
       try {
         arenaBgmAudio.pause();
