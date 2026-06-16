@@ -21,14 +21,14 @@
       try {
         window.__FPS_UI_LAYER_PATHS__ = [
           {
-            menuBg: "game-ui/game-ui-menu-background.png",
-            btnTex: "game-ui/game-ui-button-texture.png",
-            settingsBg: "game-ui/game-ui-settings-panel-bg.png",
+            menuBg: "images/background.png",
+            btnTex: "images/button.png",
+            settingsBg: "images/modal-bg.png",
           },
           {
-            menuBg: "background.png",
-            btnTex: "game-ui-button-texture.png",
-            settingsBg: "game-ui-settings-panel-bg.png",
+            menuBg: "game-ui/game-ui-menu-background.png",
+            btnTex: "images/button.png",
+            settingsBg: "images/modal-bg.png",
           },
         ];
       } catch (e) {}
@@ -168,9 +168,9 @@
           null;
         if (!L0) {
           L0 = {
-            menuBg: "game-ui/game-ui-menu-background.png",
-            btnTex: "game-ui/game-ui-button-texture.png",
-            settingsBg: "game-ui/game-ui-settings-panel-bg.png",
+            menuBg: "images/background.png",
+            btnTex: "images/button.png",
+            settingsBg: "images/modal-bg.png",
           };
         }
         // Probe each PNG with an Image() before overwriting the CSS var; if 404, keep the inline
@@ -189,7 +189,7 @@
         _probeAndSet("--game-ui-btn-texture", L0.btnTex);
         _probeAndSet("--game-ui-settings-bg", L0.settingsBg);
         try {
-          var curMouse = new URL("mouse.png", R).href;
+          var curMouse = new URL("images/mouse.png", R).href;
           el.style.setProperty("--game-cursor-default", 'url("' + curMouse + '") 0 0, auto');
           el.style.setProperty("--game-cursor-action", 'url("' + curMouse + '") 0 0, pointer');
         } catch (eCur) {}
@@ -242,9 +242,12 @@
       height: 100%;
     }
 
-    /* Restore OS cursor when pointer lock is released (death screen, menu). */
+    /* When pointer lock is released (death screen, menu, settings, etc.) show
+     * the project's mouse.png instead of the OS default. Falls back to the OS
+     * cursor if the asset fails to load. The in-game FPS gameplay keeps
+     * `cursor: none` (above) since the renderer draws a centered crosshair. */
     body.show-cursor #app {
-      cursor: default;
+      cursor: var(--game-cursor-default, default);
     }
 
     #trainingScoreboard {
@@ -394,7 +397,7 @@
       transition: opacity 0.1s ease;
     }
 
-    /* AMR (6): full-screen scope overlay — swap file game-ui/amr-scope-overlay.png|.svg */
+    /* AMR (6): full-screen scope overlay — file svg/amr-scope.svg */
     .amr-scope-overlay {
       position: fixed;
       inset: 0;
@@ -697,7 +700,7 @@
     .ach-modal-shell {
       position: relative;
       /*
-       * Size matches the modal background image (game-ui-settings-panel-bg.png
+       * Size matches the modal background image (images/modal-bg.png
        * is 1536×1024 → 3:2). aspect-ratio is the single source of truth: the
        * browser derives the other dimension from whichever width/height cap
        * binds first, so the shell never warps to fit the content.
@@ -1682,9 +1685,9 @@
             ? window.__FPS_UI_LAYER_PATHS__
             : [
                 {
-                  menuBg: "game-ui/game-ui-menu-background.png",
-                  btnTex: "game-ui/game-ui-button-texture.png",
-                  settingsBg: "game-ui/game-ui-settings-panel-bg.png",
+                  menuBg: "images/background.png",
+                  btnTex: "images/button.png",
+                  settingsBg: "images/modal-bg.png",
                 },
               ];
         var root = document.documentElement;
@@ -3070,7 +3073,7 @@ if (typeof window !== "undefined") {
     // import + catch is kept so a missing/renamed i18n file still lets the menu boot with a minimal stub.
     let GAME_I18N, LANG_META, translateGame;
     try {
-      const _i18n = await import("./translation.js");
+      const _i18n = await import("./js/translation.js");
       GAME_I18N     = _i18n.GAME_I18N;
       LANG_META     = _i18n.LANGUAGE_OPTIONS;
       translateGame = _i18n.translate;
@@ -7762,7 +7765,7 @@ if (typeof window !== "undefined") {
       const urls = [];
       for (const base of getGameAssetBaseCandidates()) {
         try {
-          urls.push(new URL("walls.png", base).href);
+          urls.push(new URL("images/walls.png", base).href);
         } catch (_) {}
       }
       return [...new Set(urls)];
@@ -7930,9 +7933,9 @@ if (typeof window !== "undefined") {
         ? window.__FPS_UI_LAYER_PATHS__
         : [
             {
-              menuBg: "game-ui/game-ui-menu-background.png",
-              btnTex: "game-ui/game-ui-button-texture.png",
-              settingsBg: "game-ui/game-ui-settings-panel-bg.png",
+              menuBg: "images/background.png",
+              btnTex: "images/button.png",
+              settingsBg: "images/modal-bg.png",
             },
           ]);
 
@@ -9646,10 +9649,7 @@ if (typeof window !== "undefined") {
 
 
     const AMR_SCOPE_OVERLAY_PATHS = [
-      "game-ui/amr-scope-overlay.png",
-      "game-ui/amr-scope-overlay.svg",
-      "amr-scope-overlay.png",
-      "amr-scope-overlay.svg",
+      "svg/amr-scope.svg",
     ];
     const AMR_SCOPE_OVERLAY_INLINE =
       "data:image/svg+xml," +
@@ -11463,7 +11463,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       const fromBase = [];
       for (const base of getGameAssetBaseCandidates()) {
         try {
-          fromBase.push(new URL("menu.mp3", normalizeGameAssetBase(base)).href);
+          fromBase.push(new URL("media/menu.mp3", normalizeGameAssetBase(base)).href);
         } catch (_) {}
       }
       const same = [];
@@ -11478,12 +11478,12 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       }
       const tail = [];
       try {
-        tail.push(new URL("menu.mp3", pageDirFromLocation()).href);
+        tail.push(new URL("media/menu.mp3", pageDirFromLocation()).href);
       } catch (_) {}
       try {
-        tail.push(new URL("menu.mp3", window.location.href).href);
+        tail.push(new URL("media/menu.mp3", window.location.href).href);
       } catch (_) {}
-      tail.push("menu.mp3");
+      tail.push("media/menu.mp3");
       return [...new Set([...same, ...other, ...tail])];
     }
 
@@ -11637,7 +11637,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
 
     /** Zombie Arena music: zombie-arena.mp3. Plays on the PVE/co-op arena map only. */
     function getArenaBgmUrlCandidates() {
-      const filename = "zombie-arena.mp3";
+      const filename = "media/zombie-arena.mp3";
       const here = (() => {
         try {
           return window.location.origin;
@@ -11808,7 +11808,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
 
     /** Boss fight music: boss.mp3 (normal) or boss-hell.mp3 (hell mode). */
     function getBossBgmUrlCandidates(hellMode) {
-      const filename = hellMode ? "boss-hell.mp3" : "boss.mp3";
+      const filename = hellMode ? "media/boss-hell.mp3" : "media/boss.mp3";
       const here = (() => {
         try {
           return window.location.origin;
@@ -12257,13 +12257,13 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     function getKnifeSoundUrl() {
       for (const base of getGameAssetBaseCandidates()) {
         try {
-          return new URL("knife.ogg", normalizeGameAssetBase(base)).href;
+          return new URL("media/knife.ogg", normalizeGameAssetBase(base)).href;
         } catch (_) {}
       }
       try {
-        return new URL("knife.ogg", pageDirFromLocation()).href;
+        return new URL("media/knife.ogg", pageDirFromLocation()).href;
       } catch (_) {
-        return "knife.ogg";
+        return "media/knife.ogg";
       }
     }
 
@@ -12299,10 +12299,12 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     let medpack8sLoadPromise = null;
 
     function getMedpackSoundUrl(filename) {
+      // All med pack SFX live in media/ alongside the other sound effects.
+      const path = "media/" + filename;
       for (const base of getGameAssetBaseCandidates()) {
-        try { return new URL(filename, normalizeGameAssetBase(base)).href; } catch (_) {}
+        try { return new URL(path, normalizeGameAssetBase(base)).href; } catch (_) {}
       }
-      try { return new URL(filename, pageDirFromLocation()).href; } catch (_) { return filename; }
+      try { return new URL(path, pageDirFromLocation()).href; } catch (_) { return path; }
     }
 
     function ensureMedpackSwitchBuffer() {
@@ -12380,13 +12382,13 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     function getDashSoundUrl() {
       for (const base of getGameAssetBaseCandidates()) {
         try {
-          return new URL("dash.ogg", normalizeGameAssetBase(base)).href;
+          return new URL("media/dash.ogg", normalizeGameAssetBase(base)).href;
         } catch (_) {}
       }
       try {
-        return new URL("dash.ogg", pageDirFromLocation()).href;
+        return new URL("media/dash.ogg", pageDirFromLocation()).href;
       } catch (_) {
-        return "dash.ogg";
+        return "media/dash.ogg";
       }
     }
 
@@ -12412,13 +12414,13 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     function getFlashlightSoundUrl() {
       for (const base of getGameAssetBaseCandidates()) {
         try {
-          return new URL("flashlight.mp3", normalizeGameAssetBase(base)).href;
+          return new URL("media/flashlight.ogg", normalizeGameAssetBase(base)).href;
         } catch (_) {}
       }
       try {
-        return new URL("flashlight.mp3", pageDirFromLocation()).href;
+        return new URL("media/flashlight.ogg", pageDirFromLocation()).href;
       } catch (_) {
-        return "flashlight.mp3";
+        return "media/flashlight.ogg";
       }
     }
 
