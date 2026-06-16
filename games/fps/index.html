@@ -682,6 +682,142 @@
       backdrop-filter: blur(6px);
     }
 
+    /* ── Achievements modal (mirrors settings modal) ── */
+    #achievementsModal {
+      position: fixed;
+      inset: 0;
+      z-index: 115;            /* above settingsModal in case both are ever open */
+      display: none;
+      justify-content: center;
+      align-items: center;
+      background: rgba(0,0,0,0.72);
+      backdrop-filter: blur(6px);
+    }
+    #achievementsModal.open { display: flex; }
+    .ach-modal-shell {
+      position: relative;
+      /*
+       * Size matches the modal background image (game-ui-settings-panel-bg.png
+       * is 1536×1024 → 3:2). aspect-ratio is the single source of truth: the
+       * browser derives the other dimension from whichever width/height cap
+       * binds first, so the shell never warps to fit the content.
+       */
+      aspect-ratio: 3 / 2;
+      width: min(920px, 96vw, 88vh * 3 / 2);
+      max-height: 88vh;
+      min-width: 320px;
+      display: flex;
+      flex-direction: column;
+      border-radius: 14px;
+      overflow: hidden;
+      border: 1px solid rgba(255,255,255,0.14);
+      box-shadow: 0 18px 60px rgba(0,0,0,0.65);
+      background-image: var(--game-ui-settings-bg);
+      background-size: cover;
+      background-position: center;
+    }
+    .ach-modal-header {
+      padding: 22px 24px 6px 24px;
+      text-align: center;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      background: linear-gradient(180deg, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.0) 100%);
+    }
+    .ach-modal-body {
+      padding: 14px 18px 18px 18px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    /* ── In-game achievement-unlocked toast (real box, not just text) ── */
+    #achToastWrap {
+      position: fixed;
+      top: 6%;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 200;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      align-items: center;
+      pointer-events: none;
+      width: min(420px, 92vw);
+    }
+    .ach-toast {
+      pointer-events: auto;
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 12px 16px;
+      border-radius: 12px;
+      background: linear-gradient(160deg, rgba(20,20,30,0.96) 0%, rgba(8,8,12,0.98) 100%);
+      border: 1.5px solid var(--ach-toast-color, #ffd700);
+      box-shadow: 0 0 0 1px rgba(0,0,0,0.4) inset,
+                  0 0 24px color-mix(in srgb, var(--ach-toast-color, #ffd700) 40%, transparent),
+                  0 10px 30px rgba(0,0,0,0.6);
+      font-family: var(--game-font-ui);
+      color: #fff;
+      animation: ach-toast-in 0.4s cubic-bezier(.2,.8,.2,1) forwards;
+      cursor: pointer;
+    }
+    .ach-toast.dismissing {
+      animation: ach-toast-out 0.35s ease forwards;
+    }
+    .ach-toast .ach-toast-label {
+      font-size: 9px;
+      letter-spacing: 2px;
+      color: var(--ach-toast-color, #ffd700);
+      text-transform: uppercase;
+      margin-bottom: 2px;
+    }
+    .ach-toast .ach-toast-name {
+      font-size: 14px;
+      letter-spacing: 1px;
+      color: #fff;
+      line-height: 1.2;
+    }
+    .ach-toast .ach-toast-actions {
+      display: flex;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+    .ach-toast .ach-toast-btn {
+      font-family: var(--game-font-ui);
+      font-size: 10px;
+      letter-spacing: 1.5px;
+      padding: 6px 10px;
+      border-radius: 6px;
+      border: 1px solid rgba(255,255,255,0.18);
+      background: rgba(255,255,255,0.06);
+      color: #fff;
+      cursor: pointer;
+      transition: background 0.12s, border-color 0.12s;
+    }
+    .ach-toast .ach-toast-btn:hover {
+      background: rgba(255,255,255,0.14);
+      border-color: rgba(255,255,255,0.35);
+    }
+    .ach-toast .ach-toast-btn.primary {
+      background: var(--ach-toast-color, #ffd700);
+      color: #04141c;
+      border-color: var(--ach-toast-color, #ffd700);
+    }
+    .ach-toast .ach-toast-btn.primary:hover {
+      background: color-mix(in srgb, var(--ach-toast-color, #ffd700) 80%, white 20%);
+      border-color: color-mix(in srgb, var(--ach-toast-color, #ffd700) 80%, white 20%);
+    }
+    .ach-toast .ach-toast-body { flex: 1; min-width: 0; }
+    @keyframes ach-toast-in {
+      0%   { transform: translateY(-20px) scale(0.92); opacity: 0; }
+      100% { transform: translateY(0)     scale(1);    opacity: 1; }
+    }
+    @keyframes ach-toast-out {
+      0%   { transform: translateY(0)     scale(1);    opacity: 1; }
+      100% { transform: translateY(-12px) scale(0.96); opacity: 0; }
+    }
+
     .settings-shell {
       width: min(1080px, 94vw);
       height: min(680px, 88vh);
@@ -850,29 +986,313 @@
       box-shadow: 0 0 12px rgba(79, 209, 255, 0.25);
       color: #fff;
     }
-    #menuAchievements {
-      max-width: 780px !important;
-      width: 94vw !important;
-    }
+    /* ── Achievements v2: card grid + medallion + progress + sticky detail ── */
     #achList {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 12px;
+      width: 100%;
+      padding: 6px 4px 10px 4px;
+      box-sizing: border-box;
+      scrollbar-width: thin;
+    }
+    #achList::-webkit-scrollbar { width: 6px; }
+    #achList::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.18); border-radius: 3px; }
+
+    .ach-filters {
       display: flex;
-      flex-direction: row;
+      gap: 6px;
+      margin: 0 0 12px 0;
       flex-wrap: wrap;
       justify-content: center;
-      align-content: flex-start;
-      gap: 10px;
-      width: 100%;
-      max-height: 280px;
-      overflow-y: auto;
-      padding: 6px 4px;
+    }
+    .ach-filter {
+      font-family: var(--game-font-ui);
+      font-size: 11px;
+      letter-spacing: 1.5px;
+      padding: 6px 14px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.18);
+      background: rgba(0,0,0,0.35);
+      color: #ccc;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+    }
+    .ach-filter:hover { color: #fff; border-color: rgba(255,255,255,0.4); }
+    .ach-filter.active {
+      background: rgba(255, 215, 0, 0.18);
+      border-color: rgba(255, 215, 0, 0.6);
+      color: #ffd700;
+    }
+    .ach-filter .count {
+      display: inline-block;
+      margin-left: 6px;
+      padding: 0 6px;
+      font-size: 9px;
+      border-radius: 8px;
+      background: rgba(255,255,255,0.10);
+      color: inherit;
+    }
+
+    .ach-section-title {
+      grid-column: 1 / -1;
+      font-family: var(--game-font-ui);
+      font-size: 11px;
+      letter-spacing: 2px;
+      color: rgba(255,255,255,0.55);
+      text-transform: uppercase;
+      padding: 6px 4px 2px 4px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      margin-bottom: 2px;
+    }
+
+    .ach-card {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      padding: 12px 8px 10px 8px;
+      border-radius: 10px;
+      background: linear-gradient(160deg, rgba(30,30,40,0.85) 0%, rgba(10,10,14,0.92) 100%);
+      border: 1.5px solid rgba(255,255,255,0.10);
+      cursor: pointer;
+      font-family: var(--game-font-ui);
+      color: #fff;
+      text-align: center;
+      min-height: 150px;
       box-sizing: border-box;
+      transition: transform 0.12s ease-out, border-color 0.12s, box-shadow 0.18s, background 0.18s;
+      overflow: hidden;
+    }
+    .ach-card:hover {
+      transform: translateY(-2px);
+      border-color: rgba(255,255,255,0.32);
+      box-shadow: 0 6px 18px rgba(0,0,0,0.5);
+    }
+    .ach-card.active {
+      border-color: rgba(79, 209, 255, 0.85);
+      box-shadow: 0 0 0 1px rgba(79,209,255,0.5), 0 6px 22px rgba(79,209,255,0.25);
+      background: linear-gradient(160deg, rgba(20,38,52,0.92) 0%, rgba(8,18,28,0.95) 100%);
+    }
+
+    /* Medallion: the colored circle at the top of each card. */
+    .ach-medallion {
+      position: relative;
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      background: radial-gradient(circle at 30% 28%, var(--ach-glow, #ffd700) 0%, rgba(0,0,0,0.0) 60%),
+                  radial-gradient(circle at 50% 50%, rgba(0,0,0,0.0) 38%, var(--ach-color, #ffd700) 40%, var(--ach-color, #ffd700) 100%);
+      box-shadow: 0 0 14px var(--ach-shadow, rgba(255,215,0,0.4)),
+                  inset 0 0 0 2px rgba(0,0,0,0.5),
+                  inset 0 0 6px rgba(0,0,0,0.4);
+      transition: box-shadow 0.18s, transform 0.18s;
+    }
+    .ach-card:hover .ach-medallion {
+      transform: scale(1.06);
+      box-shadow: 0 0 22px var(--ach-shadow, rgba(255,215,0,0.6)),
+                  inset 0 0 0 2px rgba(0,0,0,0.5),
+                  inset 0 0 6px rgba(0,0,0,0.4);
+    }
+    .ach-medallion svg {
+      width: 24px;
+      height: 24px;
+      fill: none;
+      stroke: #fff;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      filter: drop-shadow(0 1px 2px rgba(0,0,0,0.5));
+    }
+    .ach-medallion .ach-check {
+      position: absolute;
+      bottom: -2px;
+      right: -2px;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #4fd1ff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 0 6px rgba(79,209,255,0.6);
+    }
+    .ach-medallion .ach-check svg { width: 11px; height: 11px; stroke: #04141c; stroke-width: 3; }
+
+    .ach-card-name {
+      font-size: 12px;
+      letter-spacing: 1px;
+      line-height: 1.2;
+      min-height: 2.4em;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .ach-card-status {
+      font-size: 9px;
+      letter-spacing: 1.5px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      text-transform: uppercase;
+    }
+
+    /* Unlocked: full color, warm glow, check badge. */
+    .ach-card.unlocked .ach-medallion svg { stroke: #04141c; }
+    .ach-card.unlocked .ach-card-status {
+      background: rgba(136, 221, 136, 0.18);
+      color: #88dd88;
+      border: 1px solid rgba(136,221,136,0.45);
+    }
+    .ach-card.unlocked .ach-card-name { color: #fff; }
+
+    /* Equipped: cyan accent on the card, plus the same check. */
+    .ach-card.equipped {
+      border-color: rgba(79, 209, 255, 0.7);
+      box-shadow: 0 0 16px rgba(79, 209, 255, 0.3);
+    }
+    .ach-card.equipped .ach-card-status {
+      background: rgba(79, 209, 255, 0.18);
+      color: #4fd1ff;
+      border: 1px solid rgba(79,209,255,0.6);
+    }
+
+    /* Locked (non-secret): grayscale, lock icon over medallion. */
+    .ach-card.locked {
+      filter: grayscale(0.85);
+      opacity: 0.7;
+    }
+    .ach-card.locked .ach-medallion {
+      box-shadow: 0 0 0 rgba(0,0,0,0), inset 0 0 0 2px rgba(0,0,0,0.5);
+      background: radial-gradient(circle at 50% 50%, rgba(40,40,50,0.9) 38%, rgba(70,70,80,0.6) 40%, rgba(70,70,80,0.6) 100%);
+    }
+    .ach-card.locked .ach-medallion svg { stroke: rgba(255,255,255,0.6); }
+    .ach-card.locked .ach-card-status {
+      background: rgba(120,120,120,0.18);
+      color: #aaa;
+      border: 1px solid rgba(120,120,120,0.5);
+    }
+    .ach-card.locked .ach-card-name { color: #bbb; }
+
+    /* Secret-locked: pitch black, "???" name, "SECRET" pill, with a subtle shimmer on hover. */
+    .ach-card.secret-locked {
+      background: linear-gradient(160deg, #000 0%, #0a0a0a 100%);
+      border-color: rgba(255,255,255,0.06);
+      filter: none;
+      opacity: 1;
+    }
+    .ach-card.secret-locked .ach-medallion {
+      background: radial-gradient(circle at 50% 50%, rgba(20,20,30,1) 38%, rgba(40,20,60,0.8) 40%, rgba(40,20,60,0.8) 100%);
+      box-shadow: 0 0 8px rgba(224,64,255,0.25), inset 0 0 0 2px rgba(224,64,255,0.45);
+    }
+    .ach-card.secret-locked .ach-medallion svg { stroke: rgba(224,64,255,0.7); }
+    .ach-card.secret-locked .ach-card-status {
+      background: rgba(224, 64, 255, 0.15);
+      color: #e040ff;
+      border: 1px solid rgba(224, 64, 255, 0.5);
+    }
+    .ach-card.secret-locked .ach-card-name { color: rgba(224,64,255,0.7); letter-spacing: 3px; }
+    .ach-card.secret-locked:hover .ach-medallion {
+      box-shadow: 0 0 14px rgba(224,64,255,0.6), inset 0 0 0 2px rgba(224,64,255,0.7);
+    }
+    .ach-card.secret-locked::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(120deg, transparent 30%, rgba(224,64,255,0.06) 50%, transparent 70%);
+      background-size: 200% 100%;
+      animation: ach-secret-shimmer 3.5s linear infinite;
+      pointer-events: none;
+    }
+    @keyframes ach-secret-shimmer {
+      0%   { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+
+    /* Progress bar (only on cards with measurable progress that aren't done). */
+    .ach-progress {
+      width: 100%;
+      height: 4px;
+      background: rgba(255,255,255,0.08);
+      border-radius: 2px;
+      overflow: hidden;
+      margin-top: 2px;
+    }
+    .ach-progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--ach-color, #ffd700), var(--ach-glow, #fff7c2));
+      border-radius: 2px;
+      transition: width 0.4s ease-out;
+    }
+    .ach-progress-text {
+      font-size: 9px;
+      color: rgba(255,255,255,0.55);
+      letter-spacing: 0.5px;
+    }
+
+    /* ── Detail panel (sticky footer style) ── */
+    #achDetail {
+      width: 100%;
+      padding: 14px 16px;
+      border-radius: 10px;
+      background: linear-gradient(180deg, rgba(15,15,22,0.95) 0%, rgba(8,8,12,0.98) 100%);
+      border: 1px solid rgba(255,255,255,0.12);
+      box-sizing: border-box;
+      box-shadow: 0 -6px 18px rgba(0,0,0,0.5);
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    .ach-detail-top {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 10px;
+    }
+    .ach-detail-top .ach-medallion {
+      width: 44px;
+      height: 44px;
+    }
+    .ach-detail-top .ach-medallion svg { width: 20px; height: 20px; }
+    .ach-detail-text { flex: 1; min-width: 0; }
+    #achDetailName {
+      font-family: var(--game-font-ui);
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      margin-bottom: 2px;
     }
     #achDetailStatus {
       font-family: var(--game-font-ui);
-      font-size: 12px;
-      letter-spacing: 1px;
-      margin-bottom: 10px;
+      font-size: 10px;
+      letter-spacing: 1.5px;
       opacity: 0.85;
+    }
+    #achDetailHint {
+      font-family: var(--game-font-ui);
+      font-size: 12px;
+      line-height: 1.5;
+      color: #ddd;
+      margin-bottom: 10px;
+    }
+    .ach-detail-progress {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .ach-detail-progress .ach-progress { flex: 1; }
+    #achDetailActions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    #achDetailActions .settings-action-btn {
+      font-size: 12px;
+      padding: 8px 18px;
     }
 
     .settings-close {
@@ -1028,7 +1448,7 @@
     }
     .inv-slot.inv-active .inv-name { color: rgba(180,220,255,0.75); }
 
-    /* Hotbar settings drag/swap */
+    /* Hotbar settings drag-to-reorder */
     .hb-order-slot {
       display: flex;
       flex-direction: column;
@@ -1038,13 +1458,20 @@
       border-radius: 6px;
       background: rgba(255,255,255,0.05);
       border: 1.5px solid rgba(255,255,255,0.12);
-      cursor: pointer;
-      transition: border-color 0.1s, background 0.1s;
+      cursor: grab;
+      transition: border-color 0.1s, background 0.1s, opacity 0.1s, transform 0.1s;
       min-width: 56px;
+      touch-action: none; /* let pointer events handle drag on touch */
+      user-select: none;
     }
     .hb-order-slot:hover { border-color: rgba(255,255,255,0.30); background: rgba(255,255,255,0.09); }
-    .hb-order-slot.hb-selected { border-color: #7ec8ff; background: rgba(80,160,255,0.15); }
-    .hb-order-slot canvas { border-radius: 3px; }
+    .hb-order-slot.hb-dragging { opacity: 0.35; cursor: grabbing; }
+    .hb-order-slot.hb-drop-target {
+      border-color: #7ec8ff;
+      background: rgba(80,160,255,0.20);
+      transform: translateY(-2px);
+    }
+    .hb-order-slot canvas { border-radius: 3px; pointer-events: none; }
     .hb-order-key { font-size: 9px; color: rgba(255,255,255,0.5); font-family:'Audiowide',sans-serif; }
     .hb-order-name { font-size: 8px; color: rgba(255,255,255,0.45); font-family:'Audiowide',sans-serif; text-align:center; }
 
@@ -1334,18 +1761,6 @@
       <button type="button" id="btnBossFight" data-i18n="btnBossFight">BOSS FIGHT</button>
       <button type="button" id="btnCrossfire" data-i18n="btnCrossfire">PVP</button>
     </div>
-    <div id="menuAchievements" style="display:none;flex-direction:column;align-items:center;gap:10px;position:relative;padding-top:20px;">
-      <h2 id="achMenuTitle" data-i18n="achTitle" style="font-family:var(--game-font-ui);font-size:28px;margin:0 0 8px 0;letter-spacing:3px;color:#ffd700;">Achievements</h2>
-      <p id="achMenuHint" data-i18n="achPanelHint" style="font-family:var(--game-font-ui);font-size:11px;opacity:0.65;margin:0 0 6px 0;text-align:center;">Tap an achievement for details. Equipped achievements show above your name.</p>
-      <div id="achList"></div>
-      <div id="achDetail" style="display:none;width:100%;padding:14px 16px;border-radius:10px;background:rgba(0,0,0,0.55);border:1px solid rgba(255,215,0,0.35);box-sizing:border-box;">
-        <div id="achDetailName" style="font-family:var(--game-font-ui);font-size:20px;font-weight:700;color:#ffd700;margin-bottom:6px;"></div>
-        <div id="achDetailStatus"></div>
-        <div id="achDetailHint" style="font-family:var(--game-font-ui);font-size:13px;line-height:1.5;color:#ddd;margin-bottom:12px;"></div>
-        <div id="achDetailActions" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
-      </div>
-      <button type="button" id="btnAchBack" class="menu-float-icon" style="position:fixed;top:14px;left:14px;background:none;border:none;cursor:pointer;padding:6px;opacity:0.85;transition:opacity 0.15s;z-index:105;" onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='0.85'"><svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
-    </div>
     <div id="menuArenaMode" style="display:none;flex-direction:column;align-items:center;gap:10px;position:relative;padding-top:20px;">
       <h2 id="menuZombieArenaHeading" style="font-family:var(--game-font-ui);font-size:28px;margin:0 0 14px 0;letter-spacing:3px;" data-i18n="zombieArenaTitle">ZOMBIE ARENA</h2>
       <button type="button" id="btnArenaSingle" data-i18n="btnSingleplayer">SINGLEPLAYER</button>
@@ -1354,7 +1769,7 @@
     </div>
     <div id="menuBossMode" style="display:none;flex-direction:column;align-items:center;gap:10px;position:relative;padding-top:20px;">
       <h2 data-i18n="bossFightTitle" style="font-family:var(--game-font-ui);font-size:28px;margin:0 0 14px 0;letter-spacing:3px;">BOSS FIGHT</h2>
-      <p data-i18n="bossFightDesc" style="font-family:var(--game-font-ui);font-size:12px;opacity:0.78;margin:0 0 8px 0;max-width:320px;text-align:center;line-height:1.45;">Fight the Hormone Zombie (激素僵尸) — a hulking boss that switches between Tank, Speed, and Gunner modes.</p>
+      <p data-i18n="bossFightDesc" style="font-family:var(--game-font-ui);font-size:12px;opacity:0.78;margin:0 0 8px 0;max-width:320px;text-align:center;line-height:1.45;">Fight the Boss (激素僵尸) — a hulking boss that switches between Tank, Speed, and Gunner modes.</p>
       <button type="button" id="btnBossSingle" class="btn-texture" data-i18n="btnSingleplayer" style="font-family:var(--game-font-ui);padding:10px 30px;border:2px solid #4fd1ff;border-radius:8px;color:#fff;cursor:pointer;font-size:15px;letter-spacing:1px;">SINGLEPLAYER</button>
       <button type="button" id="btnBossCoop" class="btn-texture" data-i18n="btnCoopMode" style="font-family:var(--game-font-ui);padding:10px 30px;border:2px solid #4fd1ff;border-radius:8px;color:#fff;cursor:pointer;font-size:15px;letter-spacing:1px;">CO-OP MODE</button>
       <button type="button" id="btnBossBack" class="menu-float-icon" style="position:fixed;top:14px;left:14px;background:none;border:none;cursor:pointer;padding:6px;opacity:0.85;transition:opacity 0.15s;z-index:105;" onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='0.85'"><svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
@@ -1623,9 +2038,9 @@
           <section class="settings-section" id="settingsSectionData">
             <h2 id="settingsHeadingData" data-i18n="settingsHeadingData">DATA</h2>
             <div class="settings-row" style="flex-direction:column;align-items:flex-start;gap:10px;">
-              <button type="button" class="settings-action-btn" id="btnCreatorUnlock" data-i18n="btnCreatorUnlock">I am the creator</button>
+              <button type="button" class="settings-action-btn" id="btnCreatorUnlock" data-i18n="btnCreatorUnlock">I am the developer</button>
               <p id="settingsCreatorHint" data-i18n="settingsCreatorHint" style="font-size:11px;opacity:0.65;margin:0;max-width:480px;line-height:1.45;">
-                Enter the creator password to unlock all weapons.
+                Enter the developer password to unlock all weapons.
               </p>
             </div>
             <div class="settings-row" style="flex-direction:column;align-items:flex-start;gap:10px;margin-top:14px;">
@@ -1638,7 +2053,7 @@
           <section class="settings-section" id="settingsSectionHotbar">
             <h2 id="settingsHeadingHotbar" data-i18n="settingsHeadingHotbar">HOTBAR ORDER</h2>
             <p data-i18n="hotbarOrderHint" style="font-size:11px;opacity:0.65;margin:0 0 14px 0;max-width:480px;line-height:1.5;" id="hotbarOrderHint">
-              Click a slot to select it (glows), then click another to swap. Keys 1–7 and 0 follow the new order.
+              Drag a slot to another position to reorder. Keys 1–7 and 0 follow the new order.
             </p>
             <div id="hotbarOrderSlots" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px;"></div>
             <button type="button" class="settings-action-btn" id="btnResetHotbar" data-i18n="btnResetHotbar" style="margin-top:4px;">Reset to default</button>
@@ -1647,6 +2062,20 @@
       </div>
     </div>
   </div>
+  <div id="achievementsModal">
+    <div class="ach-modal-shell">
+      <button type="button" class="settings-close" id="btnCloseAchievements" title="Close">×</button>
+      <div class="ach-modal-header">
+        <h2 id="achModalTitle" data-i18n="achTitle" style="font-family:var(--game-font-ui);font-size:24px;margin:0 0 4px 0;letter-spacing:3px;color:#ffd700;">Achievements</h2>
+        <p id="achModalHint" data-i18n="achPanelHint" style="font-family:var(--game-font-ui);font-size:11px;opacity:0.65;margin:0;text-align:center;">Tap an achievement for details. Equipped achievements show above your name.</p>
+      </div>
+      <div class="ach-modal-body">
+        <div id="achList"></div>
+        <div id="achDetail" style="display:none;"></div>
+      </div>
+    </div>
+  </div>
+  <div id="achToastWrap"></div>
   <script>
 /* === gun-sfx V3 — 仅击杀/命中/换弹/医疗包音效 === */
 // ======================================================
@@ -9546,17 +9975,19 @@ if (typeof window !== "undefined") {
     // has the real localized names ("这是什么/怪物猎人/强者/高级猎手/光明·解放者/训练者/各位弱爆了/
     // 猎手之王/不败神话/终极/创作者") in en + zh + zh-Hant. tr() pulls them straight.
     const ACHIEVEMENT_DEFS = [
-      { id: "what_is_this",    nameKey: "achWhatIsThis",     hintKey: "achWhatIsThisHint",     color: "#b8b8ff" },
-      { id: "monster_hunter",  nameKey: "achMonsterHunter",  hintKey: "achMonsterHunterHint",  color: "#ff8844" },
-      { id: "strong_one",      nameKey: "achStrongOne",      hintKey: "achStrongOneHint",      color: "#ff6622" },
-      { id: "elite_hunter",    nameKey: "achEliteHunter",    hintKey: "achEliteHunterHint",    color: "#cc44ff" },
-      { id: "light_liberator", nameKey: "achLightLiberator", hintKey: "achLightLiberatorHint", color: "#ffd700" },
-      { id: "trainer",         nameKey: "achTrainer",        hintKey: "achTrainerHint",        color: "#4fd1ff" },
-      { id: "pvp_weak",        nameKey: "achPvpWeak",        hintKey: "achPvpWeakHint",        color: "#88cc88" },
-      { id: "pvp_hunter_king", nameKey: "achPvpHunterKing",  hintKey: "achPvpHunterKingHint",  color: "#ff8844" },
-      { id: "undefeated",      nameKey: "achUndefeated",     hintKey: "achUndefeatedHint",     color: "#ff5050" },
-      { id: "creator",         nameKey: "achCreator",        hintKey: "achCreatorHint",        color: "#4fd1ff" },
-      { id: "ultimate",        nameKey: "achUltimate",       hintKey: "",                      secret: true, color: "#e040ff" },
+      // category is purely for grouping in the new panel UI; gameplay logic
+      // (unlockAchievement, equipAchievement) keys off `id` only.
+      { id: "what_is_this",    nameKey: "achWhatIsThis",     hintKey: "achWhatIsThisHint",     color: "#b8b8ff", category: "progression", icon: "trophy" },
+      { id: "monster_hunter",  nameKey: "achMonsterHunter",  hintKey: "achMonsterHunterHint",  color: "#ff8844", category: "combat",      icon: "skull" },
+      { id: "strong_one",      nameKey: "achStrongOne",      hintKey: "achStrongOneHint",      color: "#ff6622", category: "combat",      icon: "sword" },
+      { id: "elite_hunter",    nameKey: "achEliteHunter",    hintKey: "achEliteHunterHint",    color: "#cc44ff", category: "combat",      icon: "sword" },
+      { id: "light_liberator", nameKey: "achLightLiberator", hintKey: "achLightLiberatorHint", color: "#ffd700", category: "combat",      icon: "sun" },
+      { id: "trainer",         nameKey: "achTrainer",        hintKey: "achTrainerHint",        color: "#4fd1ff", category: "progression", icon: "target" },
+      { id: "pvp_weak",        nameKey: "achPvpWeak",        hintKey: "achPvpWeakHint",        color: "#88cc88", category: "pvp",         icon: "crosshair" },
+      { id: "pvp_hunter_king", nameKey: "achPvpHunterKing",  hintKey: "achPvpHunterKingHint",  color: "#ff8844", category: "pvp",         icon: "crosshair" },
+      { id: "undefeated",      nameKey: "achUndefeated",     hintKey: "achUndefeatedHint",     color: "#ff5050", category: "pvp",         icon: "crown" },
+      { id: "creator",         nameKey: "achCreator",        hintKey: "achCreatorHint",        color: "#4fd1ff", category: "secret",      icon: "key" },
+      { id: "ultimate",        nameKey: "achUltimate",       hintKey: "",                      secret: true, color: "#e040ff", category: "secret",      icon: "question" },
     ];
     const achievementsUnlocked = {};
     let equippedAchievementIds = [];
@@ -9631,18 +10062,91 @@ if (typeof window !== "undefined") {
       if (!def) return;
       achievementsUnlocked[id] = true;
       persistUnlocks();
-      showAchievementUnlockMsg(achName(def));
+      showAchievementUnlockMsg(def);
     }
 
-    function showAchievementUnlockMsg(name) {
-      const msg = document.createElement("div");
-      msg.style.cssText = "position:fixed;top:22%;left:50%;transform:translate(-50%,-50%);font-size:30px;font-weight:900;color:#ffd700;text-shadow:0 0 20px rgba(255,215,0,0.8),0 0 40px rgba(255,165,0,0.4);letter-spacing:3px;z-index:9999;pointer-events:none;opacity:0;animation:bossVicFadeIn 1s ease forwards;white-space:nowrap;";
-      msg.textContent = `${tr("achUnlockMsg", "Achievement unlocked:")} ${name}`;
-      document.body.appendChild(msg);
-      setTimeout(() => {
-        msg.style.animation = "bossVicFadeOut 1.5s ease forwards";
-        setTimeout(() => { if (msg.parentNode) msg.remove(); }, 1600);
-      }, 3200);
+    /**
+     * In-game unlock notification. Builds a styled box (medallion + name + OK
+     * button) that slides in at the top of the screen, auto-dismisses after
+     * ACH_TOAST_DURATION_MS, and queues if multiple unlock in quick succession
+     * so they never overlap visually. Click the box (or the OK button) to
+     * dismiss it immediately; clicking "Open" jumps to the achievements modal.
+     */
+    const ACH_TOAST_DURATION_MS = 3000;
+    const _achToastQueue = [];
+    let _achToastActive = false;
+    function showAchievementUnlockMsg(def) {
+      _achToastQueue.push(def);
+      _drainAchToastQueue();
+    }
+    function _drainAchToastQueue() {
+      if (_achToastActive) return;
+      const def = _achToastQueue.shift();
+      if (!def) return;
+      _achToastActive = true;
+      _renderAchToast(def, () => {
+        _achToastActive = false;
+        // After a brief gap so two toasts don't slam into each other visually.
+        setTimeout(_drainAchToastQueue, 200);
+      });
+    }
+    function _renderAchToast(def, onDone) {
+      const wrap = document.getElementById("achToastWrap");
+      if (!wrap) { onDone(); return; }
+      const box = document.createElement("div");
+      box.className = "ach-toast";
+      box.style.setProperty("--ach-toast-color", def.color);
+
+      // Medallion (reuses the inline icon helper, no separate glow).
+      const med = document.createElement("div");
+      med.className = "ach-medallion";
+      med.style.setProperty("--ach-color",  def.color);
+      med.style.setProperty("--ach-glow",   _achColorToGlow(def.color));
+      med.style.setProperty("--ach-shadow", def.color + "99");
+      med.style.width = "44px";
+      med.style.height = "44px";
+      const medSvg = document.createElement("div");
+      medSvg.innerHTML = _achIconSvg(def.icon);
+      med.appendChild(medSvg.firstChild);
+      box.appendChild(med);
+
+      const body = document.createElement("div");
+      body.className = "ach-toast-body";
+      const label = document.createElement("div");
+      label.className = "ach-toast-label";
+      label.textContent = tr("achUnlockMsg", "Achievement unlocked");
+      const name = document.createElement("div");
+      name.className = "ach-toast-name";
+      name.textContent = achName(def);
+      body.appendChild(label);
+      body.appendChild(name);
+      box.appendChild(body);
+
+      const actions = document.createElement("div");
+      actions.className = "ach-toast-actions";
+      const okBtn = document.createElement("button");
+      okBtn.type = "button";
+      okBtn.className = "ach-toast-btn primary";
+      okBtn.textContent = tr("achToastOk", "OK");
+      actions.appendChild(okBtn);
+      box.appendChild(actions);
+
+      wrap.appendChild(box);
+
+      let dismissed = false;
+      let timer = setTimeout(dismiss, ACH_TOAST_DURATION_MS);
+      function dismiss() {
+        if (dismissed) return;
+        dismissed = true;
+        clearTimeout(timer);
+        box.classList.add("dismissing");
+        setTimeout(() => {
+          if (box.parentNode) box.remove();
+          onDone();
+        }, 350);
+      }
+      // Any click on the box dismisses (the OK button also calls dismiss).
+      box.addEventListener("click", dismiss);
     }
 
     function checkAchievements() {
@@ -9706,41 +10210,287 @@ if (typeof window !== "undefined") {
       persistUnlocks();
     }
 
+    /**
+     * Inline SVG glyphs for the achievement medallion. Returned as a string
+     * that goes inside the medallion circle; stroked white so it reads on any
+     * colored backdrop (the card sets the medallion's color via CSS vars).
+     */
+    function _achIconSvg(name) {
+      switch (name) {
+        case "skull":
+          return '<svg viewBox="0 0 24 24"><path d="M5 11a7 7 0 1 1 14 0v3l-2 2v3h-2v-2h-6v2H7v-3l-2-2z"/><circle cx="9" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="15" cy="12" r="1.2" fill="currentColor" stroke="none"/></svg>';
+        case "sword":
+          return '<svg viewBox="0 0 24 24"><path d="M14.5 4.5l5 5-9 9-2.5-2.5z"/><path d="M5 19l3-3"/><path d="M3 21l4-4"/></svg>';
+        case "sun":
+          return '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>';
+        case "target":
+          return '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/></svg>';
+        case "crosshair":
+          return '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/></svg>';
+        case "crown":
+          return '<svg viewBox="0 0 24 24"><path d="M3 18h18M3 18l3-9 5 5 1-7 1 7 5-5 3 9"/></svg>';
+        case "trophy":
+          return '<svg viewBox="0 0 24 24"><path d="M7 4h10v5a5 5 0 0 1-10 0z"/><path d="M5 5H3a3 3 0 0 0 3 3M19 5h2a3 3 0 0 1-3 3"/><path d="M9 14h6v3H9zM8 20h8"/></svg>';
+        case "key":
+          return '<svg viewBox="0 0 24 24"><circle cx="8" cy="12" r="4"/><path d="M12 12h9M17 12v4M21 12v3"/></svg>';
+        case "question":
+        default:
+          return '<svg viewBox="0 0 24 24"><path d="M9 9a3 3 0 1 1 5 2c-1 1-2 1.5-2 3M12 17h.01"/></svg>';
+      }
+    }
+
+    /**
+     * Live progress per achievement id. Returns {current, target, ratio} or
+     * null if the achievement has no measurable progress (binary unlocks,
+     * secret achievements, etc.).
+     */
+    function getAchievementProgress(id) {
+      switch (id) {
+        case "monster_hunter":  return { current: sessionKillCount,    target: 200 };
+        case "strong_one":      return { current: sessionBossKillCount, target: 3   };
+        case "elite_hunter":    return { current: sessionBossKillCount, target: 3   };
+        case "light_liberator": return { current: bossKillCount,        target: 1   };
+        case "trainer":         return { current: totalTrainingDummyKills, target: 1000 };
+        case "pvp_weak":        return { current: pvpKillStreak,        target: 5   };
+        case "pvp_hunter_king": return { current: pvpKillStreak,        target: 10  };
+        case "undefeated":      return { current: pvpKillStreak,        target: 15  };
+        default: return null;
+      }
+    }
+
+    let _achActiveId = null;     // which card is currently selected (for .active styling + detail)
+    let _achFilter = "all";      // "all" | "unlocked" | "locked"
+
+    function _achColorToGlow(hex) {
+      // Lighten a hex color by ~40% for the medallion's inner highlight. Falls
+      // back to a warm yellow if parsing fails.
+      try {
+        const h = hex.replace("#", "");
+        const r = parseInt(h.substring(0, 2), 16);
+        const g = parseInt(h.substring(2, 4), 16);
+        const b = parseInt(h.substring(4, 6), 16);
+        const lr = Math.min(255, r + Math.round((255 - r) * 0.55));
+        const lg = Math.min(255, g + Math.round((255 - g) * 0.55));
+        const lb = Math.min(255, b + Math.round((255 - b) * 0.55));
+        return `rgb(${lr},${lg},${lb})`;
+      } catch (_) { return "#fff7c2"; }
+    }
+
+    function _achIsVisible(def) {
+      const unlocked = !!achievementsUnlocked[def.id];
+      if (_achFilter === "unlocked") return unlocked;
+      if (_achFilter === "locked")   return !unlocked;
+      return true;
+    }
+
+    function _achCategoryOrder() {
+      // Render in this order; "secret" goes last.
+      return ["combat", "pvp", "progression", "secret"];
+    }
+
     function renderAchievementsPanel() {
       const listEl = document.getElementById("achList");
       const detailEl = document.getElementById("achDetail");
       if (!listEl) return;
       if (detailEl) detailEl.style.display = "none";
       listEl.innerHTML = "";
-      for (const def of ACHIEVEMENT_DEFS) {
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.className = "ach-item" + (achievementsUnlocked[def.id] ? "" : " locked") + (equippedAchievementIds.includes(def.id) ? " equipped" : "");
-        btn.textContent = achName(def);
-        btn.addEventListener("click", () => showAchievementDetail(def.id));
-        listEl.appendChild(btn);
+      _achActiveId = null;
+
+      // ── Filter tabs ──
+      const filterRow = document.createElement("div");
+      filterRow.className = "ach-filters";
+      filterRow.style.gridColumn = "1 / -1";
+      const counts = {
+        all: ACHIEVEMENT_DEFS.length,
+        unlocked: ACHIEVEMENT_DEFS.filter(d => achievementsUnlocked[d.id]).length,
+        locked: ACHIEVEMENT_DEFS.filter(d => !achievementsUnlocked[d.id]).length,
+      };
+      const filters = [
+        { key: "all",      label: tr("achFilterAll", "All") },
+        { key: "unlocked", label: tr("achFilterUnlocked", "Unlocked") },
+        { key: "locked",   label: tr("achFilterLocked", "Locked") },
+      ];
+      for (const f of filters) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "ach-filter" + (_achFilter === f.key ? " active" : "");
+        b.innerHTML = `${f.label}<span class="count">${counts[f.key]}</span>`;
+        b.addEventListener("click", () => {
+          _achFilter = f.key;
+          renderAchievementsPanel();
+        });
+        filterRow.appendChild(b);
       }
+      listEl.appendChild(filterRow);
+
+      // ── Cards grouped by category ──
+      const categoryLabels = {
+        combat:      tr("achCatCombat", "Combat"),
+        pvp:         tr("achCatPvp", "PVP"),
+        progression: tr("achCatProgression", "Progression"),
+        secret:      tr("achCatSecret", "Secret"),
+      };
+      for (const cat of _achCategoryOrder()) {
+        const inCat = ACHIEVEMENT_DEFS.filter(d => d.category === cat && _achIsVisible(d));
+        if (inCat.length === 0) continue;
+        const title = document.createElement("div");
+        title.className = "ach-section-title";
+        title.textContent = categoryLabels[cat] || cat;
+        listEl.appendChild(title);
+        for (const def of inCat) {
+          listEl.appendChild(_buildAchievementCard(def));
+        }
+      }
+    }
+
+    function _buildAchievementCard(def) {
+      const unlocked = !!achievementsUnlocked[def.id];
+      const equipped = equippedAchievementIds.includes(def.id);
+      const isSecretLocked = !unlocked && !!def.secret;
+      const isLocked = !unlocked;
+
+      const card = document.createElement("button");
+      card.type = "button";
+      card.className = "ach-card";
+      card.dataset.id = def.id;
+      if (unlocked)  card.classList.add("unlocked");
+      if (equipped)  card.classList.add("equipped");
+      if (isSecretLocked) card.classList.add("secret-locked");
+      else if (isLocked)  card.classList.add("locked");
+      if (_achActiveId === def.id) card.classList.add("active");
+
+      // Medallion colors via CSS custom properties (avoids inline style soup).
+      card.style.setProperty("--ach-color",  def.color);
+      card.style.setProperty("--ach-glow",   _achColorToGlow(def.color));
+      card.style.setProperty("--ach-shadow", def.color + "99"); // ~60% alpha
+
+      const med = document.createElement("div");
+      med.className = "ach-medallion";
+      med.innerHTML = _achIconSvg(def.icon);
+      if (unlocked) {
+        const chk = document.createElement("div");
+        chk.className = "ach-check";
+        chk.innerHTML = '<svg viewBox="0 0 24 24"><polyline points="5 12 10 17 19 8"/></svg>';
+        med.appendChild(chk);
+      }
+      card.appendChild(med);
+
+      const name = document.createElement("div");
+      name.className = "ach-card-name";
+      name.textContent = isSecretLocked ? "???" : achName(def);
+      card.appendChild(name);
+
+      const status = document.createElement("div");
+      status.className = "ach-card-status";
+      if (equipped)        status.textContent = tr("achEquipped", "Equipped");
+      else if (unlocked)   status.textContent = tr("achUnlocked", "Unlocked");
+      else if (isSecretLocked) status.textContent = tr("achSecret", "???");
+      else                 status.textContent = tr("achLocked", "Locked");
+      card.appendChild(status);
+
+      // Progress bar (only when applicable and the achievement is not yet unlocked).
+      const prog = getAchievementProgress(def.id);
+      if (prog && !unlocked) {
+        const ratio = Math.max(0, Math.min(1, prog.current / prog.target));
+        const bar = document.createElement("div");
+        bar.className = "ach-progress";
+        const fill = document.createElement("div");
+        fill.className = "ach-progress-fill";
+        fill.style.width = (ratio * 100).toFixed(1) + "%";
+        bar.appendChild(fill);
+        card.appendChild(bar);
+        const txt = document.createElement("div");
+        txt.className = "ach-progress-text";
+        txt.textContent = `${Math.min(prog.current, prog.target)} / ${prog.target}`;
+        card.appendChild(txt);
+      }
+
+      card.addEventListener("click", () => showAchievementDetail(def.id));
+      return card;
     }
 
     function showAchievementDetail(id) {
       const def = getAchievementDef(id);
       const detailEl = document.getElementById("achDetail");
-      const nameEl = document.getElementById("achDetailName");
-      const statusEl = document.getElementById("achDetailStatus");
-      const hintEl = document.getElementById("achDetailHint");
-      const actionsEl = document.getElementById("achDetailActions");
-      if (!def || !detailEl || !nameEl || !statusEl || !hintEl || !actionsEl) return;
-      detailEl.style.display = "block";
-      nameEl.textContent = achName(def);
-      nameEl.style.color = def.color;
-      hintEl.textContent = def.secret ? tr("achSecret", "???") : `${tr("achUnlockHow", "How to unlock:")}${achHint(def)}`;
-      actionsEl.innerHTML = "";
+      if (!def || !detailEl) return;
+
+      // Mark the clicked card as active; clear other active markers.
+      _achActiveId = id;
+      for (const el of document.querySelectorAll(".ach-card.active")) el.classList.remove("active");
+
+      // Rebuild the detail panel from scratch.
+      detailEl.innerHTML = "";
       const unlocked = !!achievementsUnlocked[def.id];
       const equipped = equippedAchievementIds.includes(def.id);
+      const isSecretLocked = !unlocked && !!def.secret;
+
+      const top = document.createElement("div");
+      top.className = "ach-detail-top";
+      const med = document.createElement("div");
+      med.className = "ach-medallion";
+      med.style.setProperty("--ach-color",  def.color);
+      med.style.setProperty("--ach-glow",   _achColorToGlow(def.color));
+      med.style.setProperty("--ach-shadow", def.color + "99");
+      med.innerHTML = _achIconSvg(def.icon);
+      top.appendChild(med);
+
+      const text = document.createElement("div");
+      text.className = "ach-detail-text";
+      const nameEl = document.createElement("div");
+      nameEl.id = "achDetailName";
+      nameEl.textContent = isSecretLocked ? "???" : achName(def);
+      nameEl.style.color = unlocked ? def.color : (isSecretLocked ? "rgba(224,64,255,0.7)" : "#bbb");
+      const statusEl = document.createElement("div");
+      statusEl.id = "achDetailStatus";
+      if (equipped) {
+        statusEl.textContent = tr("achEquipped", "Equipped") + " (" + equippedAchievementIds.length + "/5)";
+        statusEl.style.color = "#4fd1ff";
+      } else if (unlocked) {
+        statusEl.textContent = tr("achUnlocked", "Unlocked");
+        statusEl.style.color = "#88dd88";
+      } else if (isSecretLocked) {
+        statusEl.textContent = tr("achSecret", "???");
+        statusEl.style.color = "#e040ff";
+      } else {
+        statusEl.textContent = tr("achLocked", "Locked");
+        statusEl.style.color = "#aaa";
+      }
+      text.appendChild(nameEl);
+      text.appendChild(statusEl);
+      top.appendChild(text);
+      detailEl.appendChild(top);
+
+      const hintEl = document.createElement("div");
+      hintEl.id = "achDetailHint";
+      hintEl.textContent = isSecretLocked
+        ? tr("achSecretHint", "A hidden achievement. Find the secret to unlock it.")
+        : `${tr("achUnlockHow", "How to unlock:")} ${achHint(def)}`;
+      detailEl.appendChild(hintEl);
+
+      // Progress bar in the detail panel (always when measurable, even when unlocked).
+      const prog = getAchievementProgress(def.id);
+      if (prog) {
+        const wrap = document.createElement("div");
+        wrap.className = "ach-detail-progress";
+        const bar = document.createElement("div");
+        bar.className = "ach-progress";
+        const fill = document.createElement("div");
+        fill.className = "ach-progress-fill";
+        const ratio = Math.max(0, Math.min(1, prog.current / prog.target));
+        fill.style.width = (ratio * 100).toFixed(1) + "%";
+        bar.appendChild(fill);
+        wrap.appendChild(bar);
+        const txt = document.createElement("div");
+        txt.className = "ach-progress-text";
+        txt.textContent = `${Math.min(prog.current, prog.target)} / ${prog.target}`;
+        wrap.appendChild(txt);
+        detailEl.appendChild(wrap);
+      }
+
+      const actionsEl = document.createElement("div");
+      actionsEl.id = "achDetailActions";
       if (unlocked) {
         if (equipped) {
-          statusEl.textContent = tr("achEquipped", "Equipped") + " (" + equippedAchievementIds.length + "/5)";
-          statusEl.style.color = "#4fd1ff";
           const unequipBtn = document.createElement("button");
           unequipBtn.type = "button";
           unequipBtn.className = "settings-action-btn";
@@ -9752,8 +10502,6 @@ if (typeof window !== "undefined") {
           });
           actionsEl.appendChild(unequipBtn);
         } else {
-          statusEl.textContent = tr("achUnlocked", "Unlocked");
-          statusEl.style.color = "#88dd88";
           const _isFull = equippedAchievementIds.length >= 5;
           const equipBtn = document.createElement("button");
           equipBtn.type = "button";
@@ -9767,9 +10515,15 @@ if (typeof window !== "undefined") {
           });
           actionsEl.appendChild(equipBtn);
         }
-      } else {
-        statusEl.textContent = tr("achLocked", "Locked");
-        statusEl.style.color = "#aaa";
+      }
+      detailEl.appendChild(actionsEl);
+
+      detailEl.style.display = "block";
+
+      // Apply the .active class to the card whose data-id matches.
+      // We tagged cards with data-id in _buildAchievementCard; toggle it now.
+      for (const el of document.querySelectorAll(`.ach-card[data-id="${def.id}"]`)) {
+        el.classList.add("active");
       }
     }
 
@@ -9919,7 +10673,7 @@ if (typeof window !== "undefined") {
       const bossRoundInfo = CURRENT_MAP === "boss_arena" ? ` [Round ${BOSS_ROUND}]` : "";
       const mapLabel =
         CURRENT_MAP === "boss_arena"
-          ? `${tr("mapBossArena", "BOSS FIGHT — Hormone Zombie")}${bossRoundInfo}`
+          ? `${tr("mapBossArena", "BOSS FIGHT — Boss")}${bossRoundInfo}`
           : CURRENT_MAP === "arena"
           ? tr("mapArena", "zombie arena")
           : isTrainingMap(CURRENT_MAP)
@@ -10931,7 +11685,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       if (audioCtx.state === "suspended") {
         try { void audioCtx.resume(); } catch (_) {}
       }
-      // Platform-tuned sub-bass frequency: Mac → 19 Hz, Windows → 20 Hz, other → 30 Hz.
+      // Platform-tuned sub-bass frequency: Mac → 19 Hz, Windows → 20 Hz, other → 25 Hz.
       const plat = (() => {
         try {
           const p = String(navigator.platform || "");
@@ -10948,8 +11702,15 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       osc.type = "sine";
       osc.frequency.value = freq;
       const gain = audioCtx.createGain();
-      // Modest level — audioMusic bus gain already accounts for the music slider.
-      gain.gain.value = 0.15;
+      // Cranked to the maximum the WebAudio graph can deliver on the music bus:
+      // peak amplitude 1.0 at full music volume means full-scale output to the
+      // speakers (a true 19/20/25 Hz sine going as loud as the audio hardware
+      // can play it). audioMusic bus gain still applies, so 0% music = silent
+      // and 100% music = maximum loudness. Ramped up over 80 ms to avoid a
+      // sub-bass "pop" on speakers/headphones that emphasize low end.
+      const t0 = audioCtx.currentTime;
+      gain.gain.setValueAtTime(0.0001, t0);
+      gain.gain.exponentialRampToValueAtTime(1.0, t0 + 0.08);
       osc.connect(gain);
       gain.connect(audioMusic);
       try { osc.start(); } catch (_) {}
@@ -11885,7 +12646,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     }
 
     // ── Hotbar settings section ──────────────────────────────────────────────
-    let _hbSelectedSlot = -1; // for click-to-swap
+    let _hbSelectedSlot = -1; // (legacy click-to-swap state, no longer used)
 
     function _buildHotbarSettings() {
       const container = document.getElementById("hotbarOrderSlots");
@@ -11895,7 +12656,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       order.forEach((widx, slotIdx) => {
         const div = document.createElement("div");
         div.className = "hb-order-slot";
-        div.dataset.slot = slotIdx;
+        div.dataset.slot = String(slotIdx);
         const keyEl = document.createElement("div");
         keyEl.className = "hb-order-key";
         keyEl.textContent = tr("hbKeyLabel", "Key") + " " + INV_KEY_LABELS[slotIdx];
@@ -11908,27 +12669,113 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         nameEl.className = "hb-order-name";
         nameEl.textContent = weaponDisplayName(widx);
         div.appendChild(keyEl); div.appendChild(cnv); div.appendChild(nameEl);
-        div.addEventListener("click", () => {
-          if (_hbSelectedSlot === -1) {
-            _hbSelectedSlot = slotIdx;
-            div.classList.add("hb-selected");
-          } else if (_hbSelectedSlot === slotIdx) {
-            _hbSelectedSlot = -1;
-            div.classList.remove("hb-selected");
-          } else {
-            // swap
-            const a = _hbSelectedSlot, b = slotIdx;
-            const tmp = gameSettings.weaponSlotOrder[a];
-            gameSettings.weaponSlotOrder[a] = gameSettings.weaponSlotOrder[b];
-            gameSettings.weaponSlotOrder[b] = tmp;
-            saveGameSettings();
-            _hbSelectedSlot = -1;
-            _buildHotbarSettings();
-            _buildInvBar();
-          }
-        });
+        attachHotbarDragHandlers(div, slotIdx, container);
         container.appendChild(div);
       });
+    }
+
+    /**
+     * Pointer-driven drag-to-reorder for one hotbar slot. Works on both mouse
+     * and touch: a small movement threshold (6px) distinguishes a drag from a
+     * stationary tap. Drop semantics: remove the source slot's weapon from its
+     * current position and insert it at the target slot's position, shifting
+     * the displaced items by one — i.e. standard list reorder, not swap.
+     */
+    function attachHotbarDragHandlers(el, slotIdx, container) {
+      const DRAG_THRESHOLD_PX = 6;
+      let pointerId = null;
+      let startX = 0, startY = 0;
+      let dragging = false;
+      let lastTarget = null;
+
+      function clearTarget() {
+        if (lastTarget) {
+          lastTarget.classList.remove("hb-drop-target");
+          lastTarget = null;
+        }
+      }
+
+      function onPointerDown(e) {
+        // Only react to primary button (or touch/pen). Ignore right-clicks etc.
+        if (e.button !== undefined && e.button !== 0) return;
+        pointerId = e.pointerId;
+        startX = e.clientX;
+        startY = e.clientY;
+        dragging = false;
+        try { el.setPointerCapture(pointerId); } catch (_) {}
+      }
+
+      function onPointerMove(e) {
+        if (pointerId === null || e.pointerId !== pointerId) return;
+        if (!dragging) {
+          const dx = e.clientX - startX;
+          const dy = e.clientY - startY;
+          if (dx * dx + dy * dy < DRAG_THRESHOLD_PX * DRAG_THRESHOLD_PX) return;
+          dragging = true;
+          el.classList.add("hb-dragging");
+        }
+        // Find the slot under the pointer (if any) for visual feedback.
+        const target = document.elementFromPoint(e.clientX, e.clientY);
+        const slot = target && target.closest ? target.closest(".hb-order-slot") : null;
+        if (slot && slot !== el && slot.parentElement === container) {
+          if (lastTarget !== slot) {
+            clearTarget();
+            slot.classList.add("hb-drop-target");
+            lastTarget = slot;
+          }
+        } else {
+          clearTarget();
+        }
+      }
+
+      function onPointerUp(e) {
+        if (pointerId === null || e.pointerId !== pointerId) return;
+        const wasDragging = dragging;
+        try { el.releasePointerCapture(pointerId); } catch (_) {}
+        el.classList.remove("hb-dragging");
+        const upX = e.clientX, upY = e.clientY;
+        pointerId = null;
+        dragging = false;
+        if (!wasDragging) {
+          // A stationary tap (didn't pass the movement threshold). Do nothing —
+          // the old click-to-swap behavior was confusing and a passive slot here
+          // is more predictable.
+          clearTarget();
+          return;
+        }
+        // Re-resolve target at release time in case it changed.
+        const target = document.elementFromPoint(upX, upY);
+        const slot = target && target.closest ? target.closest(".hb-order-slot") : null;
+        clearTarget();
+        if (!slot || slot === el || slot.parentElement !== container) return;
+        const fromIdx = slotIdx;
+        const toIdx = Number(slot.dataset.slot);
+        if (!Number.isFinite(toIdx) || fromIdx === toIdx) return;
+        // Reorder via splice: pull from fromIdx, insert at toIdx in the
+        // already-shortened array. Works for forward and backward moves.
+        const arr = gameSettings.weaponSlotOrder.slice();
+        const [moved] = arr.splice(fromIdx, 1);
+        arr.splice(toIdx, 0, moved);
+        gameSettings.weaponSlotOrder = arr;
+        saveGameSettings();
+        _buildHotbarSettings();
+        _buildInvBar();
+      }
+
+      function onPointerCancel() {
+        if (pointerId !== null) {
+          try { el.releasePointerCapture(pointerId); } catch (_) {}
+        }
+        pointerId = null;
+        dragging = false;
+        el.classList.remove("hb-dragging");
+        clearTarget();
+      }
+
+      el.addEventListener("pointerdown", onPointerDown);
+      el.addEventListener("pointermove", onPointerMove);
+      el.addEventListener("pointerup", onPointerUp);
+      el.addEventListener("pointercancel", onPointerCancel);
     }
 
     // Reset hotbar
@@ -14991,6 +15838,17 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     ];
     /** Gunner (ranged): seconds of clear line-of-sight to target before firing is allowed. Resets when LOS breaks. */
     const RANGED_LOS_ACQUIRE_DELAY = 0.62;
+    /**
+     * Gunner kite thresholds (XZ distance to player). When the player closes
+     * inside GUNNER_KITE_TRIGGER_DIST, the gunner starts slowly backing away
+     * while still firing (uses the existing ranged-attack path). Hysteresis:
+     * the gunner keeps kiting until the player is GUNNER_KITE_RELEASE_DIST
+     * away, so it doesn't jitter at the boundary.
+     */
+    const GUNNER_KITE_TRIGGER_DIST = 6.0;
+    const GUNNER_KITE_RELEASE_DIST = 9.0;
+    const GUNNER_KITE_SPEED        = 0.85; // slower than the gunner's normal 1.10 — "slowly"
+    const GUNNER_KITE_STRAFE_MIX   = 0.15; // perpendicular strafe blend (avoids backing into walls)
 
     function rebuildEnemyRoster() {
       for (const enemy of state.enemies) {
@@ -17510,9 +18368,41 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
               }
             } else {
               // 普通僵尸：原有逻辑
-              if (losClear && dLen > 0.02) {
+              // Gunner kite: when the player closes inside the trigger distance,
+              // the gunner slowly backs away (pure retreat + a small perpendicular
+              // strafe) instead of chasing. Skipped if LOS is broken — a blind
+              // gunner should keep navigating the maze via the flow field.
+              let gunnerKiting = false;
+              if (enemy.type === "gunner" && dLen > 0.02) {
+                const inKiteBand = enemy._kiting
+                  ? dLen < GUNNER_KITE_RELEASE_DIST
+                  : dLen < GUNNER_KITE_TRIGGER_DIST;
+                if (inKiteBand && losClear) {
+                  // Deterministic per-enemy strafe sign (set once, never flips —
+                  // prevents the gunner from oscillating as it bumps the boundary).
+                  if (enemy._kiteStrafeSign === undefined) {
+                    enemy._kiteStrafeSign = Math.random() < 0.5 ? -1 : 1;
+                  }
+                  const perpX = -dz / dLen;
+                  const perpZ = dx / dLen;
+                  const strafe = GUNNER_KITE_STRAFE_MIX * enemy._kiteStrafeSign;
+                  const kx = (-dx / dLen) * (1 - GUNNER_KITE_STRAFE_MIX) + perpX * strafe;
+                  const kz = (-dz / dLen) * (1 - GUNNER_KITE_STRAFE_MIX) + perpZ * strafe;
+                  const kl = Math.sqrt(kx * kx + kz * kz);
+                  if (kl > 0.01) {
+                    dirX = kx / kl;
+                    dirZ = kz / kl;
+                    moveSpeed = GUNNER_KITE_SPEED;
+                    gunnerKiting = true;
+                    enemy._kiting = true;
+                  }
+                } else if (dLen >= GUNNER_KITE_RELEASE_DIST) {
+                  enemy._kiting = false;
+                }
+              }
+              if (!gunnerKiting && losClear && dLen > 0.02) {
                 dirX = dx / dLen; dirZ = dz / dLen;
-              } else if (flow) {
+              } else if (!gunnerKiting && flow) {
                 const fLen = Math.sqrt(flow.x * flow.x + flow.z * flow.z);
                 if (fLen > 0.015) { dirX = flow.x / fLen; dirZ = flow.z / fLen; }
               }
@@ -18859,9 +19749,8 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     }
 
     function showMenuPanel(id) {
-      const menuAchievements = document.getElementById("menuAchievements");
       const menuStart = document.getElementById("menuStart");
-      for (const p of [menuMain, menuStart, menuAchievements, menuArenaMode, menuBossMode, menuBossDifficulty, menuTrainingMode, menuPvpMaps, menuLobby, menuJoinCode]) p.style.display = "none";
+      for (const p of [menuMain, menuStart, menuArenaMode, menuBossMode, menuBossDifficulty, menuTrainingMode, menuPvpMaps, menuLobby, menuJoinCode]) p.style.display = "none";
       clearLobbyErr();
       document.getElementById(id).style.display = "flex";
     }
@@ -18909,11 +19798,50 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     document.getElementById("menuCreditsGame").addEventListener("click", () => tryEasterEggCredit(1));
     document.getElementById("menuCreditsMusic").addEventListener("click", () => tryEasterEggCredit(2));
 
-    document.getElementById("btnAchievements").addEventListener("click", () => {
+    /**
+     * Open/close the achievements modal. Mirrors the settings-modal pattern:
+     * overlay div, centered shell, close button + click-outside + Esc to close.
+     */
+    function openAchievementsModal() {
+      const m = document.getElementById("achievementsModal");
+      if (!m) return;
       renderAchievementsPanel();
-      showMenuPanel("menuAchievements");
+      m.classList.add("open");
+      m.style.display = "flex";
+      // Hide the floating trophy icon so it doesn't sit on top of the modal's
+      // own close button (the trophy is fixed bottom-right, the close is
+      // fixed top-right inside the shell).
+      const trophy = document.getElementById("btnAchievements");
+      if (trophy) trophy.style.visibility = "hidden";
+    }
+    function closeAchievementsModal() {
+      const m = document.getElementById("achievementsModal");
+      if (!m) return;
+      m.classList.remove("open");
+      m.style.display = "none";
+      const trophy = document.getElementById("btnAchievements");
+      if (trophy) trophy.style.visibility = "";
+      // Clear the detail panel so the next open starts fresh.
+      const d = document.getElementById("achDetail");
+      if (d) d.style.display = "none";
+    }
+
+    document.getElementById("btnAchievements").addEventListener("click", () => {
+      openAchievementsModal();
     });
-    document.getElementById("btnAchBack").addEventListener("click", () => showMenuPanel("menuMain"));
+    document.getElementById("btnCloseAchievements").addEventListener("click", () => {
+      closeAchievementsModal();
+    });
+    // Click outside the shell to close (the modal overlay is the wrapper div).
+    document.getElementById("achievementsModal").addEventListener("click", (e) => {
+      if (e.target.id === "achievementsModal") closeAchievementsModal();
+    });
+    // Esc closes the achievements modal (matches settings modal behavior).
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape") return;
+      const m = document.getElementById("achievementsModal");
+      if (m && m.classList.contains("open")) closeAchievementsModal();
+    });
     btnArenaSingle.addEventListener("click", () => startGame("arena", false));
     btnArenaCoop.addEventListener("click", () => showLobby("arena-coop", tr("lobbyArenaCoop", "ARENA CO-OP")));
     btnArenaBack.addEventListener("click", () => showMenuPanel("menuStart"));
