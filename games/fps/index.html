@@ -9204,6 +9204,11 @@ if (typeof window !== "undefined") {
       dashDirZ: 0,
       dashDirY: 0,
       dashRemainingDist: 0,
+      // Last horizontal movement direction (world XZ, unit length). Updated every
+      // frame the player is actively moving; the dash uses this instead of the
+      // camera's look direction. (0, 0) means "no recent movement" → dash forward.
+      lastMoveX: 0,
+      lastMoveZ: 0,
       projectiles: [],
       knifeComboIdx: 0,
       lastKnifeSwing: 0,
@@ -14698,29 +14703,26 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         } else if (nowC < state.dashDisabledUntil) {
           showCombatFeedback("DASH LOCKED " + Math.ceil((state.dashDisabledUntil - nowC) / 1000) + "s", "#ff4422", 0.25);
         } else if (nowC >= state.dashCooldownEnd) {
-          // True velocity-based dash. The old code teleported DASH_DIST units in 0 ms;
-          // we now travel the same DASH_DIST over DASH_DURATION_MS so the dash is
-          // visibly slower (4× the prior instant) but covers the same total distance.
-          // Wall sliding + the existing 350 ms cooldown still apply.
+          // True velocity-based dash. DASH_DIST units over DASH_DURATION_MS (≈200ms —
+          // half the prior 400ms, so the dash is 2× faster and more responsive).
+          // Direction comes from the player's last horizontal movement (captured
+          // every frame in updatePlayer): W → forward, W+A → diagonal forward-left,
+          // etc. If the player has no recent movement input, fall back to camera-
+          // forward. Wall sliding + the 350ms cooldown still apply.
           const DASH_DIST = 8.0;
-          const DASH_DURATION_MS = 400;
+          const DASH_DURATION_MS = 200;
           const cp = Math.cos(player.pitch);
-          const sp = Math.sin(player.pitch);
-          // Unit direction (XZ). The Y component is stored separately so we can
-          // blend gravity in by hand each frame instead of using velocityY.
-          const dirX0 = -Math.sin(player.yaw) * cp;
-          const dirZ0 = -Math.cos(player.yaw) * cp;
-          // Pre-flight: if the very first step hits a wall, still do the (small)
-          // Y-portion of the dash — feels better than eating the input.
-          const testPos = new THREE.Vector3();
-          let dirX = dirX0, dirZ = dirZ0;
-          if (collidesWithWalls(testPos.set(player.position.x + dirX0, 1.0, player.position.z + dirZ0))) {
-            // The dash will be largely absorbed by wall-sliding; that's fine.
-            // (No need to scale the unit dir to zero.)
+          // Movement-driven direction. If state.lastMove is the zero vector
+          // (initial state, or no WASD for a while), fall back to look-forward.
+          let dirX = state.lastMoveX;
+          let dirZ = state.lastMoveZ;
+          if (dirX === 0 && dirZ === 0) {
+            dirX = -Math.sin(player.yaw) * cp;
+            dirZ = -Math.cos(player.yaw) * cp;
           }
           state.dashDirX = dirX;
           state.dashDirZ = dirZ;
-          state.dashDirY = sp;
+          state.dashDirY = 0; // horizontal dash — no vertical kick
           state.dashRemainingDist = DASH_DIST;
           state.dashActiveUntil = nowC + DASH_DURATION_MS;
           playDashSound();
@@ -16495,7 +16497,12 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       if (move.lengthSq() > 0) {
         const _ndPhase = state.speedNeedle.phase;
         const _ndMult = _ndPhase === 'boost' ? 2.0 : _ndPhase === 'weak' ? 0.25 : 1.0;
-        move.normalize().multiplyScalar(player.speed * _ndMult * dt);
+        // Normalize first so we can capture the unit direction for the dash before
+        // scaling by speed*dt. (State lookup is one branch cheaper than re-normalizing.)
+        move.normalize();
+        state.lastMoveX = move.x;
+        state.lastMoveZ = move.z;
+        move.multiplyScalar(player.speed * _ndMult * dt);
         const next = player.position.clone().add(new THREE.Vector3(move.x, 0, move.z));
         const resolved = resolveWallSliding(next);
         player.position.x = resolved.x;
