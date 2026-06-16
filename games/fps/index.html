@@ -962,6 +962,105 @@
       background: rgba(255, 60, 60, 0.22);
     }
 
+    /* ── Server config section ── */
+    .server-mode-select {
+      width: 100%;
+      max-width: 360px;
+      padding: 9px 12px;
+      border-radius: 6px;
+      border: 1px solid rgba(255,255,255,0.18);
+      background: rgba(0,0,0,0.45);
+      color: #fff;
+      font-family: var(--game-font-ui);
+      font-size: 12px;
+      letter-spacing: 0.5px;
+      cursor: pointer;
+    }
+    .server-mode-select:focus {
+      outline: none;
+      border-color: rgba(79, 209, 255, 0.7);
+    }
+    .server-subpanel {
+      padding: 12px 14px;
+      margin-bottom: 14px;
+      border-radius: 8px;
+      background: rgba(0,0,0,0.30);
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+    .server-url-input {
+      width: 100%;
+      max-width: 480px;
+      padding: 9px 12px;
+      border-radius: 6px;
+      border: 1px solid rgba(255,255,255,0.18);
+      background: rgba(0,0,0,0.45);
+      color: #fff;
+      font-family: ui-monospace, "SF Mono", Consolas, monospace;
+      font-size: 12px;
+      box-sizing: border-box;
+    }
+    .server-url-input:focus {
+      outline: none;
+      border-color: rgba(79, 209, 255, 0.7);
+    }
+    .server-url-input.invalid {
+      border-color: rgba(255, 110, 110, 0.8);
+    }
+    .server-local-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      max-height: 280px;
+      overflow-y: auto;
+      border-radius: 6px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(0,0,0,0.30);
+    }
+    .server-local-list:empty::before {
+      content: "No servers found yet — click Scan.";
+      display: block;
+      padding: 16px;
+      font-size: 11px;
+      opacity: 0.5;
+      text-align: center;
+    }
+    .server-local-list li {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px 14px;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      cursor: pointer;
+      transition: background 0.12s;
+      font-family: ui-monospace, "SF Mono", Consolas, monospace;
+      font-size: 12px;
+    }
+    .server-local-list li:last-child { border-bottom: none; }
+    .server-local-list li:hover {
+      background: rgba(79, 209, 255, 0.12);
+    }
+    .server-local-list li.picked {
+      background: rgba(79, 209, 255, 0.20);
+      border-left: 3px solid #4fd1ff;
+    }
+    .server-local-list li .server-local-url { color: #fff; }
+    .server-local-list li .server-local-meta {
+      font-size: 10px;
+      opacity: 0.55;
+      font-family: var(--game-font-ui);
+      letter-spacing: 0.5px;
+    }
+    .server-local-list li .server-local-latency {
+      color: #88dd88;
+      font-size: 10px;
+      font-family: var(--game-font-ui);
+    }
+    .server-current {
+      padding-top: 4px;
+      border-top: 1px solid rgba(255,255,255,0.06);
+    }
+
     .ach-item {
       font-family: var(--game-font-ui);
       padding: 12px 16px;
@@ -1943,6 +2042,7 @@
         <button type="button" class="settings-tab" id="settingsTabGraphics" data-scroll-target="settingsSectionGraphics">GRAPHICS</button>
         <button type="button" class="settings-tab" id="settingsTabLanguage" data-scroll-target="settingsSectionLanguage">LANGUAGE</button>
         <button type="button" class="settings-tab" id="settingsTabData" data-i18n="settingsTabData" data-scroll-target="settingsSectionData">DATA</button>
+        <button type="button" class="settings-tab" id="settingsTabServer" data-scroll-target="settingsSectionServer">SERVER</button>
         <button type="button" class="settings-tab" id="settingsTabHotbar" data-i18n="settingsTabHotbar" data-scroll-target="settingsSectionHotbar">HOTBAR</button>
       </aside>
       <div class="settings-modal-inner-wrap">
@@ -2050,6 +2150,49 @@
               <button type="button" class="settings-action-btn danger" id="btnDeleteAllData" data-i18n="btnDeleteAllData">Delete all data</button>
               <p id="settingsDeleteHint" data-i18n="settingsDeleteHint" style="font-size:11px;opacity:0.65;margin:0;max-width:480px;line-height:1.45;">
                 Clears all unlock progress and kill records on this device. Cannot be undone.
+              </p>
+            </div>
+          </section>
+          <section class="settings-section" id="settingsSectionServer">
+            <h2 id="settingsHeadingServer">SERVER</h2>
+            <p style="font-size:11px;opacity:0.65;margin:0 0 14px 0;max-width:480px;line-height:1.5;">
+              Multiplayer relay server. Default uses chat.jimmyqrg.com. Pick a different source if you self-host.
+            </p>
+            <div class="settings-row" style="flex-direction:column;align-items:flex-start;gap:8px;margin-bottom:14px;">
+              <label for="serverModeSelect" style="font-family:var(--game-font-ui);font-size:12px;letter-spacing:1px;">Source</label>
+              <select id="serverModeSelect" class="server-mode-select">
+                <option value="default">Default (chat.jimmyqrg.com)</option>
+                <option value="manual">Manually enter URL</option>
+                <option value="local">Search local servers</option>
+              </select>
+            </div>
+            <!-- Manual URL entry, shown only when mode = manual -->
+            <div id="serverManualWrap" class="server-subpanel" style="display:none;">
+              <label for="serverUrlInput" style="font-family:var(--game-font-ui);font-size:11px;letter-spacing:1px;display:block;margin-bottom:6px;">Server URL</label>
+              <input id="serverUrlInput" type="text" class="server-url-input" placeholder="https://chat.example.com" spellcheck="false" autocomplete="off" />
+              <p id="serverUrlHint" style="font-size:10px;opacity:0.6;margin:6px 0 0 0;line-height:1.4;">
+                Use http:// or https://. May include a path (e.g. <code>https://chat.example.com/zone</code>).
+              </p>
+              <p id="serverUrlError" style="font-size:10px;color:#ff6e6e;margin:6px 0 0 0;line-height:1.4;display:none;"></p>
+            </div>
+            <!-- Local discovery, shown only when mode = local -->
+            <div id="serverLocalWrap" class="server-subpanel" style="display:none;">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                <button type="button" class="settings-action-btn" id="btnServerScan">Scan localhost ports 1–99999</button>
+                <span id="serverScanStatus" style="font-size:11px;opacity:0.7;"></span>
+              </div>
+              <ul id="serverLocalList" class="server-local-list"></ul>
+              <p style="font-size:10px;opacity:0.55;margin:6px 0 0 0;line-height:1.4;">
+                Probes each port for a Socket.IO handshake. Click a row to use that server.
+              </p>
+            </div>
+            <!-- Current server + save button -->
+            <div class="server-current">
+              <p style="font-size:11px;opacity:0.65;margin:18px 0 8px 0;">Currently using:</p>
+              <p id="serverCurrentValue" style="font-family:var(--game-font-ui);font-size:12px;color:#4fd1ff;margin:0 0 14px 0;word-break:break-all;"></p>
+              <button type="button" class="settings-action-btn" id="btnServerApply">Save &amp; reload</button>
+              <p id="serverApplyHint" style="font-size:11px;color:#88dd88;margin:8px 0 0 0;display:none;">
+                Saved. Reloading…
               </p>
             </div>
           </section>
@@ -3173,6 +3316,7 @@ if (typeof window !== "undefined") {
       "settingsSectionGraphics",
       "settingsSectionLanguage",
       "settingsSectionData",
+      "settingsSectionServer",
     ];
     const btnCloseSettings = document.getElementById("btnCloseSettings");
     const rngMasterVol = document.getElementById("rngMasterVol");
@@ -5261,6 +5405,13 @@ if (typeof window !== "undefined") {
       adsLookSensPercent: LOOK_SENS_PERCENT_DEFAULT,
       skipClickToPlay: false,
       language: "en",
+      // Multiplayer server source. "default" = use the meta tag (chat.jimmyqrg.com
+      // for the GitHub Pages deploy). "manual" = use serverManualUrl. "local" = use
+      // serverLocalUrl (set by the local-discovery panel). All three are persisted;
+      // the chosen value is read on page load by getMultiplayerOrigin().
+      serverMode: "default",
+      serverManualUrl: "",
+      serverLocalUrl: "",
     };
     let settingsModalOpen = false;
 
@@ -5295,6 +5446,15 @@ if (typeof window !== "undefined") {
         }
         if (Array.isArray(o.weaponSlotOrder) && o.weaponSlotOrder.length === 8) {
           gameSettings.weaponSlotOrder = o.weaponSlotOrder;
+        }
+        if (typeof o.serverMode === "string" && ["default", "manual", "local"].includes(o.serverMode)) {
+          gameSettings.serverMode = o.serverMode;
+        }
+        if (typeof o.serverManualUrl === "string") {
+          gameSettings.serverManualUrl = o.serverManualUrl;
+        }
+        if (typeof o.serverLocalUrl === "string") {
+          gameSettings.serverLocalUrl = o.serverLocalUrl;
         }
       } catch (_) {}
     }
@@ -5943,7 +6103,21 @@ if (typeof window !== "undefined") {
     }
 
     function getMultiplayerOrigin() {
+      // Precedence: manual URL > local-discovered URL > meta tag (default) > page origin.
+      // All three are absolute URLs (http:// or https://) with optional paths; trailing
+      // slash is normalized away.
       try {
+        const fromSettings = (() => {
+          if (typeof gameSettings === "undefined" || !gameSettings) return "";
+          if (gameSettings.serverMode === "manual" && gameSettings.serverManualUrl) {
+            return gameSettings.serverManualUrl;
+          }
+          if (gameSettings.serverMode === "local" && gameSettings.serverLocalUrl) {
+            return gameSettings.serverLocalUrl;
+          }
+          return "";
+        })();
+        if (fromSettings) return fromSettings.replace(/\/+$/, "");
         const m = document.querySelector('meta[name="game-multiplayer-origin"]');
         const raw = m && m.content != null ? String(m.content).trim() : "";
         return (raw || window.location.origin).replace(/\/$/, "");
@@ -12896,8 +13070,276 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       _buildHotbarSettings();
     });
 
+    // ── Server config UI wiring ──
+    // The server URL is read once at page load by getMultiplayerOrigin(). Changing
+    // it here just updates gameSettings + localStorage; the user must reload for
+    // the new origin to take effect on the socket. The "Save & reload" button
+    // handles both the save and the reload in one step.
+    (function setupServerConfigUI() {
+      const sel      = document.getElementById("serverModeSelect");
+      const manualW  = document.getElementById("serverManualWrap");
+      const localW   = document.getElementById("serverLocalWrap");
+      const urlIn    = document.getElementById("serverUrlInput");
+      const urlErr   = document.getElementById("serverUrlError");
+      const list     = document.getElementById("serverLocalList");
+      const scanBtn  = document.getElementById("btnServerScan");
+      const scanStat = document.getElementById("serverScanStatus");
+      const applyBtn = document.getElementById("btnServerApply");
+      const applyHint= document.getElementById("serverApplyHint");
+      const current  = document.getElementById("serverCurrentValue");
+      if (!sel || !manualW || !localW || !urlIn || !list || !scanBtn || !applyBtn || !current) return;
+
+      // ── Helpers ──
+      function isValidUrl(s) {
+        if (typeof s !== "string" || !s) return false;
+        try {
+          const u = new URL(s);
+          if (u.protocol !== "http:" && u.protocol !== "https:") return false;
+          return true;
+        } catch (_) { return false; }
+      }
+      function showApplyHint(msg, color) {
+        applyHint.textContent = msg;
+        applyHint.style.color = color || "#88dd88";
+        applyHint.style.display = "block";
+      }
+      function refreshCurrentLine() {
+        // Use getMultiplayerOrigin() so the live value (which may differ from
+        // gameSettings on the first paint if the meta tag has a value) is shown.
+        current.textContent = getMultiplayerOrigin() || "(none)";
+      }
+      function applyMode() {
+        manualW.style.display = sel.value === "manual" ? "block" : "none";
+        localW.style.display  = sel.value === "local"  ? "block" : "none";
+        if (sel.value === "manual") {
+          urlIn.value = gameSettings.serverManualUrl || "";
+          validateManual();
+        } else {
+          urlErr.style.display = "none";
+          urlIn.classList.remove("invalid");
+        }
+      }
+      function validateManual() {
+        const v = (urlIn.value || "").trim();
+        if (!v) {
+          urlErr.style.display = "none";
+          urlIn.classList.remove("invalid");
+          return false;
+        }
+        if (!isValidUrl(v)) {
+          urlErr.textContent = "Invalid URL — must start with http:// or https://";
+          urlErr.style.display = "block";
+          urlIn.classList.add("invalid");
+          return false;
+        }
+        urlErr.style.display = "none";
+        urlIn.classList.remove("invalid");
+        return true;
+      }
+      function renderLocalList() {
+        // Clear and re-render. Mark the currently picked one with `.picked`.
+        list.innerHTML = "";
+        // We don't have a "discovered list" persisted (the scan is in-memory only)
+        // so the list is whatever the user clicked during this session. The picked
+        // state is gameSettings.serverLocalUrl, which IS persisted.
+        const url = gameSettings.serverLocalUrl;
+        if (!url) return;
+        const li = document.createElement("li");
+        li.className = "picked";
+        const urlSpan = document.createElement("span");
+        urlSpan.className = "server-local-url";
+        urlSpan.textContent = url;
+        const meta = document.createElement("span");
+        meta.className = "server-local-meta";
+        meta.textContent = "SELECTED";
+        li.appendChild(urlSpan);
+        li.appendChild(meta);
+        li.addEventListener("click", () => {
+          // Clicking the already-picked row is a no-op; clicking another row
+          // (added by future scan) would re-render. The scan adds new rows here.
+        });
+        list.appendChild(li);
+      }
+
+      // ── Wire events ──
+      sel.addEventListener("change", () => {
+        applyMode();
+        // Persist the mode immediately so a reload with no further clicks still
+        // lands on the chosen mode.
+        gameSettings.serverMode = sel.value;
+        if (sel.value === "manual") {
+          if (validateManual()) gameSettings.serverManualUrl = urlIn.value.trim();
+        } else if (sel.value === "local") {
+          // (No local URL change here; the scan picks.)
+        } else {
+          // default — clear manual / local so the meta tag takes effect again.
+          // (We do NOT wipe the saved values, just switch the active mode.)
+        }
+        saveGameSettings();
+        refreshCurrentLine();
+      });
+      urlIn.addEventListener("input", () => {
+        if (validateManual()) {
+          gameSettings.serverManualUrl = urlIn.value.trim();
+          saveGameSettings();
+          refreshCurrentLine();
+        }
+      });
+      applyBtn.addEventListener("click", () => {
+        // Final validation for manual mode before saving+reloading.
+        if (sel.value === "manual" && !validateManual()) {
+          showApplyHint("Fix the URL before saving.", "#ff6e6e");
+          return;
+        }
+        if (sel.value === "manual") {
+          gameSettings.serverManualUrl = urlIn.value.trim();
+        }
+        gameSettings.serverMode = sel.value;
+        saveGameSettings();
+        showApplyHint("Saved. Reloading…", "#88dd88");
+        // Brief delay so the user sees the hint before the page tears down.
+        setTimeout(() => { try { window.location.reload(); } catch (_) {} }, 250);
+      });
+
+      // ── Initial state ──
+      sel.value = gameSettings.serverMode || "default";
+      urlIn.value = gameSettings.serverManualUrl || "";
+      applyMode();
+      renderLocalList();
+      refreshCurrentLine();
+
+      // Expose a small API the local-discovery code can use to add rows to the
+      // list as it finds them. Keeps the scan loop decoupled from the DOM.
+      window.__fpsServerDiscovery = {
+        addRow(url, latencyMs) {
+          // Avoid duplicate rows.
+          for (const li of list.children) {
+            if (li.querySelector(".server-local-url")?.textContent === url) {
+              const lat = li.querySelector(".server-local-latency");
+              if (lat && typeof latencyMs === "number") lat.textContent = latencyMs + " ms";
+              return;
+            }
+          }
+          const li = document.createElement("li");
+          const urlSpan = document.createElement("span");
+          urlSpan.className = "server-local-url";
+          urlSpan.textContent = url;
+          const lat = document.createElement("span");
+          lat.className = "server-local-latency";
+          lat.textContent = typeof latencyMs === "number" ? (latencyMs + " ms") : "ok";
+          li.appendChild(urlSpan);
+          li.appendChild(lat);
+          li.addEventListener("click", () => {
+            gameSettings.serverLocalUrl = url;
+            gameSettings.serverMode = "local";
+            saveGameSettings();
+            sel.value = "local";
+            applyMode();
+            renderLocalList();
+            refreshCurrentLine();
+          });
+          // Insert in latency-sorted order (lowest first).
+          const newMs = typeof latencyMs === "number" ? latencyMs : Infinity;
+          const existing = Array.from(list.children).map(li => {
+            const t = li.querySelector(".server-local-latency")?.textContent || "";
+            const m = t.match(/(\d+)/);
+            return { li, ms: m ? parseInt(m[1], 10) : Infinity };
+          });
+          const before = existing.find(e => e.ms > newMs);
+          if (before) list.insertBefore(li, before.li);
+          else list.appendChild(li);
+        },
+        setStatus(msg) { scanStat.textContent = msg || ""; },
+        clearList() { list.innerHTML = ""; },
+      };
+    })();
+
     // Initial build
     _buildInvBar();
+
+    /**
+     * Local-server discovery. Probes localhost:1 … localhost:99999 with a
+     * bounded-concurrency fetch (no-cors, short timeout) and reports any port
+     * that responds. Uses fetch with mode: "no-cors" so a successful opaque
+     * response is enough to know the port is open — we don't need to read the
+     * body. Capped at 200 in-flight to avoid hammering the local TCP stack.
+     */
+    (function setupServerDiscovery() {
+      const btn   = document.getElementById("btnServerScan");
+      const stat  = document.getElementById("serverScanStatus");
+      const disc  = window.__fpsServerDiscovery;
+      if (!btn || !stat || !disc) return;
+
+      const MAX_PORT = 99999;
+      const CONCURRENCY = 200;
+      const TIMEOUT_MS = 1200;
+
+      let scanning = false;
+
+      async function probeOnce(port) {
+        const started = performance.now();
+        try {
+          // Probe the Socket.IO polling endpoint. A real relay/server will
+          // answer with 200 + the Engine.IO open packet; anything else
+          // (closed port, wrong service) refuses or times out.
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+          await fetch(`http://localhost:${port}/socket.io/?EIO=4&transport=polling`, {
+            mode: "no-cors",
+            cache: "no-store",
+            signal: controller.signal,
+          });
+          clearTimeout(timer);
+          return { ok: true, ms: performance.now() - started };
+        } catch (_) {
+          return { ok: false };
+        }
+      }
+
+      async function scanAll() {
+        if (scanning) return;
+        scanning = true;
+        btn.disabled = true;
+        disc.clearList();
+        let found = 0;
+        let done = 0;
+        const total = MAX_PORT;
+        const t0 = performance.now();
+
+        const updateStatus = () => {
+          const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
+          disc.setStatus(`Scanning… ${done.toLocaleString()} / ${total.toLocaleString()}  (${found} found, ${elapsed}s)`);
+        };
+        updateStatus();
+
+        // Producer/consumer with bounded concurrency.
+        let next = 1;
+        async function worker() {
+          while (true) {
+            const port = next++;
+            if (port > MAX_PORT) return;
+            done++;
+            const r = await probeOnce(port);
+            if (r.ok) {
+              found++;
+              const url = `http://localhost:${port}`;
+              disc.addRow(url, Math.round(r.ms));
+            }
+            if (done % 500 === 0) updateStatus();
+          }
+        }
+        const workers = [];
+        for (let i = 0; i < CONCURRENCY; i++) workers.push(worker());
+        await Promise.all(workers);
+        updateStatus();
+        const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
+        disc.setStatus(`Done. ${found} server${found === 1 ? "" : "s"} found in ${elapsed}s.`);
+        btn.disabled = false;
+        scanning = false;
+      }
+
+      btn.addEventListener("click", scanAll);
+    })();
 
 
 
@@ -16325,55 +16767,173 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       }
     }
 
+    /**
+     * Speed-needle inject sound. Five layers, ~420 ms total:
+     *   1. Needle crack  (0–10 ms)   — bandpass noise, very narrow Q at 5.5 kHz
+     *   2. Pneumatic hiss (5–70 ms)  — bandpass noise, broader, 2.4 kHz center
+     *   3. Sub-bass thump (0–80 ms)  — 200→55 Hz sine, fast decay
+     *   4. Activation sweep (60–280 ms) — sawtooth 70→420 Hz, lowpass 800 Hz,
+     *                                     the "you feel the stim hit" beat
+     *   5. Heart-rate hint (180–420 ms) — 1800→2400 Hz sine with a 12 Hz AM
+     *                                     pulse, hints at speed coming online
+     * The hint layer leads into _playNeedleBoostSound so the boost sound
+     * doesn't feel disconnected from the inject.
+     */
     function _playNeedleInjectSound() {
       if (!audioCtx || !audioSfx) return;
-      const t = audioCtx.currentTime;
-      // hiss: bandpass noise burst
-      const bufLen = Math.floor(audioCtx.sampleRate * 0.09);
-      const buf = audioCtx.createBuffer(1, bufLen, audioCtx.sampleRate);
-      const d = buf.getChannelData(0);
-      for (let i = 0; i < bufLen; i++) d[i] = (Math.random() * 2 - 1);
-      const ns = audioCtx.createBufferSource(); ns.buffer = buf;
-      const bp = audioCtx.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=3800; bp.Q.value=1.6;
-      const g = audioCtx.createGain();
-      g.gain.setValueAtTime(0.0001, t);
-      g.gain.linearRampToValueAtTime(0.20, t+0.007);
-      g.gain.exponentialRampToValueAtTime(0.0001, t+0.08);
-      ns.connect(bp); bp.connect(g); g.connect(audioSfx);
-      ns.start(t); ns.stop(t+0.09);
-      // low thud (press)
-      const osc = audioCtx.createOscillator(); osc.type='sine';
-      osc.frequency.setValueAtTime(200, t); osc.frequency.exponentialRampToValueAtTime(55, t+0.045);
-      const og = audioCtx.createGain();
-      og.gain.setValueAtTime(0.0001, t);
-      og.gain.linearRampToValueAtTime(0.14, t+0.004);
-      og.gain.exponentialRampToValueAtTime(0.0001, t+0.055);
-      osc.connect(og); og.connect(audioSfx);
-      osc.start(t); osc.stop(t+0.06);
+      const t0 = audioCtx.currentTime;
+      // (1) needle crack — narrow high bandpass on white noise, instant attack
+      {
+        const sr = audioCtx.sampleRate;
+        const buf = audioCtx.createBuffer(1, Math.floor(sr * 0.012), sr);
+        const d = buf.getChannelData(0);
+        for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1);
+        const ns = audioCtx.createBufferSource(); ns.buffer = buf;
+        const bp = audioCtx.createBiquadFilter();
+        bp.type = "bandpass"; bp.frequency.value = 5500; bp.Q.value = 4.5;
+        const g = audioCtx.createGain();
+        g.gain.setValueAtTime(0.0001, t0);
+        g.gain.linearRampToValueAtTime(0.45, t0 + 0.003);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.010);
+        ns.connect(bp); bp.connect(g); g.connect(audioSfx);
+        ns.start(t0); ns.stop(t0 + 0.012);
+      }
+      // (2) pneumatic hiss — broader bandpass, mid-frequency, longer tail
+      {
+        const sr = audioCtx.sampleRate;
+        const buf = audioCtx.createBuffer(1, Math.floor(sr * 0.085), sr);
+        const d = buf.getChannelData(0);
+        for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1);
+        const ns = audioCtx.createBufferSource(); ns.buffer = buf;
+        const bp = audioCtx.createBiquadFilter();
+        bp.type = "bandpass"; bp.frequency.value = 2400; bp.Q.value = 1.2;
+        const g = audioCtx.createGain();
+        g.gain.setValueAtTime(0.0001, t0 + 0.005);
+        g.gain.linearRampToValueAtTime(0.32, t0 + 0.012);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.070);
+        ns.connect(bp); bp.connect(g); g.connect(audioSfx);
+        ns.start(t0 + 0.005); ns.stop(t0 + 0.080);
+      }
+      // (3) sub-bass thump — chest punch
+      {
+        const osc = audioCtx.createOscillator(); osc.type = "sine";
+        osc.frequency.setValueAtTime(200, t0);
+        osc.frequency.exponentialRampToValueAtTime(55, t0 + 0.055);
+        const g = audioCtx.createGain();
+        g.gain.setValueAtTime(0.0001, t0);
+        g.gain.linearRampToValueAtTime(0.22, t0 + 0.005);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.080);
+        osc.connect(g); g.connect(audioSfx);
+        osc.start(t0); osc.stop(t0 + 0.085);
+      }
+      // (4) activation sweep — sawtooth rising, lowpassed to feel warm
+      {
+        const osc = audioCtx.createOscillator(); osc.type = "sawtooth";
+        osc.frequency.setValueAtTime(70, t0 + 0.060);
+        osc.frequency.exponentialRampToValueAtTime(420, t0 + 0.260);
+        const lp = audioCtx.createBiquadFilter();
+        lp.type = "lowpass";
+        lp.frequency.setValueAtTime(400, t0 + 0.060);
+        lp.frequency.exponentialRampToValueAtTime(900, t0 + 0.260);
+        lp.Q.value = 1.4;
+        const g = audioCtx.createGain();
+        g.gain.setValueAtTime(0.0001, t0 + 0.060);
+        g.gain.linearRampToValueAtTime(0.24, t0 + 0.090);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.300);
+        osc.connect(lp); lp.connect(g); g.connect(audioSfx);
+        osc.start(t0 + 0.060); osc.stop(t0 + 0.310);
+      }
+      // (5) heart-rate hint — high sine with a 12 Hz AM pulse for a "vibrating"
+      // pulse, signaling the stim taking effect before the boost sound lands.
+      {
+        const osc = audioCtx.createOscillator(); osc.type = "sine";
+        osc.frequency.setValueAtTime(1800, t0 + 0.180);
+        osc.frequency.exponentialRampToValueAtTime(2400, t0 + 0.420);
+        const am = audioCtx.createOscillator(); am.type = "sine";
+        am.frequency.value = 12;
+        const amDepth = audioCtx.createGain(); amDepth.gain.value = 0.06;
+        const g = audioCtx.createGain();
+        g.gain.setValueAtTime(0.0001, t0 + 0.180);
+        g.gain.linearRampToValueAtTime(0.10, t0 + 0.200);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.420);
+        // AM modulation: am → amDepth → g.gain (adds a small wobble to the
+        // perceived amplitude). The base gain envelope still drives the curve.
+        am.connect(amDepth); amDepth.connect(g.gain);
+        osc.connect(g); g.connect(audioSfx);
+        osc.start(t0 + 0.180); osc.stop(t0 + 0.430);
+        am.start(t0 + 0.180); am.stop(t0 + 0.430);
+      }
     }
 
+    /**
+     * Speed-needle boost sound. Fires ~250 ms after the inject sound finishes
+     * (the in-game state machine schedules this on the same trigger). Three
+     * layers, ~360 ms total:
+     *   1. Body sweep — sawtooth 110→620 Hz with a square overtone for warmth
+     *   2. Bright ping — sine 1500→1100 Hz, the "speed online" cue
+     *   3. Air whoosh — light bandpass noise tail, sells the sudden acceleration
+     */
     function _playNeedleBoostSound() {
       if (!audioCtx || !audioSfx) return;
-      const t = audioCtx.currentTime;
-      // rising sawtooth sweep
-      const osc = audioCtx.createOscillator(); osc.type='sawtooth';
-      osc.frequency.setValueAtTime(85, t); osc.frequency.exponentialRampToValueAtTime(480, t+0.20);
-      const hp = audioCtx.createBiquadFilter(); hp.type='highpass'; hp.frequency.value=180;
-      const g = audioCtx.createGain();
-      g.gain.setValueAtTime(0.0001, t);
-      g.gain.linearRampToValueAtTime(0.20, t+0.06);
-      g.gain.exponentialRampToValueAtTime(0.0001, t+0.24);
-      osc.connect(hp); hp.connect(g); g.connect(audioSfx);
-      osc.start(t); osc.stop(t+0.26);
-      // bright ping
-      const o2 = audioCtx.createOscillator(); o2.type='sine';
-      o2.frequency.setValueAtTime(1400, t+0.03); o2.frequency.exponentialRampToValueAtTime(900, t+0.16);
-      const g2 = audioCtx.createGain();
-      g2.gain.setValueAtTime(0.0001, t+0.03);
-      g2.gain.linearRampToValueAtTime(0.11, t+0.04);
-      g2.gain.exponentialRampToValueAtTime(0.0001, t+0.18);
-      o2.connect(g2); g2.connect(audioSfx);
-      o2.start(t+0.03); o2.stop(t+0.20);
+      const t0 = audioCtx.currentTime;
+      // (1) body sweep with square overtone
+      {
+        const osc1 = audioCtx.createOscillator(); osc1.type = "sawtooth";
+        osc1.frequency.setValueAtTime(110, t0);
+        osc1.frequency.exponentialRampToValueAtTime(620, t0 + 0.180);
+        const osc2 = audioCtx.createOscillator(); osc2.type = "square";
+        osc2.frequency.setValueAtTime(220, t0);
+        osc2.frequency.exponentialRampToValueAtTime(1240, t0 + 0.180);
+        const sqGain = audioCtx.createGain(); sqGain.gain.value = 0.10;
+        const lp = audioCtx.createBiquadFilter();
+        lp.type = "lowpass";
+        lp.frequency.setValueAtTime(600, t0);
+        lp.frequency.exponentialRampToValueAtTime(2200, t0 + 0.180);
+        lp.Q.value = 1.2;
+        const g = audioCtx.createGain();
+        g.gain.setValueAtTime(0.0001, t0);
+        g.gain.linearRampToValueAtTime(0.30, t0 + 0.030);
+        g.gain.linearRampToValueAtTime(0.18, t0 + 0.180);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.360);
+        osc1.connect(lp); osc2.connect(sqGain); sqGain.connect(lp);
+        lp.connect(g); g.connect(audioSfx);
+        osc1.start(t0); osc1.stop(t0 + 0.380);
+        osc2.start(t0); osc2.stop(t0 + 0.380);
+      }
+      // (2) bright ping — "speed online" cue
+      {
+        const osc = audioCtx.createOscillator(); osc.type = "sine";
+        osc.frequency.setValueAtTime(1500, t0 + 0.020);
+        osc.frequency.exponentialRampToValueAtTime(1100, t0 + 0.220);
+        const g = audioCtx.createGain();
+        g.gain.setValueAtTime(0.0001, t0 + 0.020);
+        g.gain.linearRampToValueAtTime(0.14, t0 + 0.040);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.280);
+        osc.connect(g); g.connect(audioSfx);
+        osc.start(t0 + 0.020); osc.stop(t0 + 0.300);
+      }
+      // (3) air whoosh — short bandpass noise tail selling the acceleration
+      {
+        const sr = audioCtx.sampleRate;
+        const buf = audioCtx.createBuffer(1, Math.floor(sr * 0.30), sr);
+        const d = buf.getChannelData(0);
+        // Brown noise (1/f²) reads as "wind" much better than white noise
+        let brown = 0;
+        for (let i = 0; i < d.length; i++) {
+          const w = (Math.random() * 2 - 1);
+          brown = 0.96 * brown + 0.04 * w;
+          d[i] = brown * 3.0;
+        }
+        const ns = audioCtx.createBufferSource(); ns.buffer = buf;
+        const bp = audioCtx.createBiquadFilter();
+        bp.type = "bandpass"; bp.frequency.value = 1100; bp.Q.value = 0.6;
+        const g = audioCtx.createGain();
+        g.gain.setValueAtTime(0.0001, t0 + 0.020);
+        g.gain.linearRampToValueAtTime(0.10, t0 + 0.050);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.300);
+        ns.connect(bp); bp.connect(g); g.connect(audioSfx);
+        ns.start(t0 + 0.020); ns.stop(t0 + 0.310);
+      }
     }
 
     console.info("[zone-no-light-v30] loaded — paralysis dart networking (PvP damage===1 marker) + combat knife (slot 7, key '0'). Set window.__fpsDartDebug=true to re-enable dart diagnostic logs.");
