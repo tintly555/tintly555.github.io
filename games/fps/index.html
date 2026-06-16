@@ -9196,6 +9196,14 @@ if (typeof window !== "undefined") {
       slowUntil: 0,
       dashCooldownEnd: 0,
       dashDisabledUntil: 0,
+      // Time-based (true-velocity) dash state. The C-key dash now plays out over
+      // DASH_DURATION_MS instead of teleporting; direction is captured at press time
+      // and integrated each frame in updatePlayer.
+      dashActiveUntil: 0,
+      dashDirX: 0,
+      dashDirZ: 0,
+      dashDirY: 0,
+      dashRemainingDist: 0,
       projectiles: [],
       knifeComboIdx: 0,
       lastKnifeSwing: 0,
@@ -11463,6 +11471,76 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     let flashlightAudioBuffer = null;
     let flashlightSoundLoadPromise = null;
 
+    let dashAudioBuffer = null;
+    let dashSoundLoadPromise = null;
+
+    let knifeAudioBuffer = null;
+    let knifeSoundLoadPromise = null;
+
+    function getKnifeSoundUrl() {
+      for (const base of getGameAssetBaseCandidates()) {
+        try {
+          return new URL("knife.ogg", normalizeGameAssetBase(base)).href;
+        } catch (_) {}
+      }
+      try {
+        return new URL("knife.ogg", pageDirFromLocation()).href;
+      } catch (_) {
+        return "knife.ogg";
+      }
+    }
+
+    function ensureKnifeSoundBuffer() {
+      if (knifeAudioBuffer) return Promise.resolve();
+      if (!knifeSoundLoadPromise) {
+        knifeSoundLoadPromise = fetch(getKnifeSoundUrl())
+          .then((res) => {
+            if (!res.ok) throw new Error("knife fetch");
+            return res.arrayBuffer();
+          })
+          .then((arr) => audioCtx.decodeAudioData(arr.slice(0)))
+          .then((buf) => {
+            knifeAudioBuffer = buf;
+          })
+          .catch(() => {
+            knifeSoundLoadPromise = null;
+          });
+      }
+      return knifeSoundLoadPromise;
+    }
+
+    function getDashSoundUrl() {
+      for (const base of getGameAssetBaseCandidates()) {
+        try {
+          return new URL("dash.ogg", normalizeGameAssetBase(base)).href;
+        } catch (_) {}
+      }
+      try {
+        return new URL("dash.ogg", pageDirFromLocation()).href;
+      } catch (_) {
+        return "dash.ogg";
+      }
+    }
+
+    function ensureDashSoundBuffer() {
+      if (dashAudioBuffer) return Promise.resolve();
+      if (!dashSoundLoadPromise) {
+        dashSoundLoadPromise = fetch(getDashSoundUrl())
+          .then((res) => {
+            if (!res.ok) throw new Error("dash fetch");
+            return res.arrayBuffer();
+          })
+          .then((arr) => audioCtx.decodeAudioData(arr.slice(0)))
+          .then((buf) => {
+            dashAudioBuffer = buf;
+          })
+          .catch(() => {
+            dashSoundLoadPromise = null;
+          });
+      }
+      return dashSoundLoadPromise;
+    }
+
     function getFlashlightSoundUrl() {
       for (const base of getGameAssetBaseCandidates()) {
         try {
@@ -12348,98 +12426,71 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     }
 
     function playKnifeSwingSound(duration = 0.22, peakGain = 0.28) {
+      // Plays knife.ogg on every knife swing. The duration / peakGain parameters
+      // are kept for API compatibility with the 3 call sites but are ignored
+      // (we play the OGG at a single fixed level, with a small random pitch +
+      // speed variation on every swing so repeated slashes don't sound identical).
       if (audioCtx.state === "suspended") void audioCtx.resume();
-      const now = audioCtx.currentTime;
-      const dur = Math.max(0.12, duration);
-      const whoosh = audioCtx.createBufferSource();
-      whoosh.buffer = getGunNoiseBuffer(dur + 0.06);
-      const bp = audioCtx.createBiquadFilter();
-      bp.type = "bandpass";
-      bp.frequency.setValueAtTime(2200, now);
-      bp.frequency.exponentialRampToValueAtTime(720, now + dur * 0.82);
-      bp.Q.setValueAtTime(0.62, now);
-      const g = audioCtx.createGain();
-      g.gain.setValueAtTime(0.0001, now);
-      g.gain.linearRampToValueAtTime(peakGain, now + Math.min(0.055, dur * 0.22));
-      g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
-      whoosh.connect(bp);
-      bp.connect(g);
-      g.connect(audioSfx);
-      whoosh.start(now);
-      whoosh.stop(now + dur + 0.04);
+      // Slight per-swing variation: ±6% in playbackRate (which raises pitch and
+      // speeds the sample up proportionally — both are "tiny").
+      const rate = 1 + (Math.random() * 0.12 - 0.06);
+      if (knifeAudioBuffer) {
+        try {
+          const bs = audioCtx.createBufferSource();
+          bs.buffer = knifeAudioBuffer;
+          bs.playbackRate.value = rate;
+          const g = audioCtx.createGain();
+          g.gain.value = 0.9;
+          bs.connect(g);
+          g.connect(audioSfx);
+          bs.start();
+        } catch (_) {}
+        return;
+      }
+      void ensureKnifeSoundBuffer().then(() => {
+        if (!knifeAudioBuffer) return;
+        try {
+          const bs = audioCtx.createBufferSource();
+          bs.buffer = knifeAudioBuffer;
+          bs.playbackRate.value = rate;
+          const g = audioCtx.createGain();
+          g.gain.value = 0.9;
+          bs.connect(g);
+          g.connect(audioSfx);
+          bs.start();
+        } catch (_) {}
+      });
     }
 
     function playDashSound() {
       if (audioCtx.state === "suspended") void audioCtx.resume();
-      const now = audioCtx.currentTime;
-
-      // ── Layer A: initial air-crack transient (0–30ms) ──
-      // Broadband noise burst — the moment of breaking through air
-      const crack = audioCtx.createBufferSource();
-      crack.buffer = getGunNoiseBuffer(0.035);
-      const crackG = audioCtx.createGain();
-      crackG.gain.setValueAtTime(0.0001, now);
-      crackG.gain.linearRampToValueAtTime(0.95, now + 0.004);
-      crackG.gain.exponentialRampToValueAtTime(0.0001, now + 0.032);
-      crack.connect(crackG);
-      crackG.connect(audioSfx);
-      crack.start(now);
-      crack.stop(now + 0.04);
-
-      // ── Layer B: sweeping whoosh (20ms–600ms) ──
-      // Two bandpass stages: ultra-high → mid sweep for the "tearing" character
-      const whoosh = audioCtx.createBufferSource();
-      whoosh.buffer = getGunNoiseBuffer(0.65);
-      const bp1 = audioCtx.createBiquadFilter();
-      bp1.type = "bandpass";
-      bp1.frequency.setValueAtTime(7200, now + 0.02);
-      bp1.frequency.exponentialRampToValueAtTime(180, now + 0.60);
-      bp1.Q.setValueAtTime(0.9, now + 0.02);
-      const bp2 = audioCtx.createBiquadFilter();
-      bp2.type = "highpass";
-      bp2.frequency.setValueAtTime(900, now + 0.02);
-      bp2.frequency.exponentialRampToValueAtTime(80, now + 0.60);
-      const wG = audioCtx.createGain();
-      wG.gain.setValueAtTime(0.0001, now);
-      wG.gain.linearRampToValueAtTime(0.88, now + 0.025);
-      wG.gain.setValueAtTime(0.88, now + 0.025);
-      wG.gain.exponentialRampToValueAtTime(0.0001, now + 0.62);
-      whoosh.connect(bp1);
-      bp1.connect(bp2);
-      bp2.connect(wG);
-      wG.connect(audioSfx);
-      whoosh.start(now);
-      whoosh.stop(now + 0.68);
-
-      // ── Layer C: sub-bass punch (0–200ms) ──
-      const sub = audioCtx.createOscillator();
-      sub.type = "sine";
-      sub.frequency.setValueAtTime(260, now);
-      sub.frequency.exponentialRampToValueAtTime(38, now + 0.18);
-      const subG = audioCtx.createGain();
-      subG.gain.setValueAtTime(0.38, now);
-      subG.gain.exponentialRampToValueAtTime(0.0001, now + 0.20);
-      sub.connect(subG);
-      subG.connect(audioSfx);
-      sub.start(now);
-      sub.stop(now + 0.22);
-
-      // ── Layer D: high-frequency shimmer trail (50ms–500ms) ──
-      const shimmer = audioCtx.createBufferSource();
-      shimmer.buffer = getGunNoiseBuffer(0.48);
-      const shimHp = audioCtx.createBiquadFilter();
-      shimHp.type = "highpass";
-      shimHp.frequency.setValueAtTime(8000, now + 0.05);
-      shimHp.frequency.exponentialRampToValueAtTime(2200, now + 0.48);
-      const shimG = audioCtx.createGain();
-      shimG.gain.setValueAtTime(0.0001, now);
-      shimG.gain.linearRampToValueAtTime(0.22, now + 0.06);
-      shimG.gain.exponentialRampToValueAtTime(0.0001, now + 0.50);
-      shimmer.connect(shimHp);
-      shimHp.connect(shimG);
-      shimG.connect(audioSfx);
-      shimmer.start(now + 0.05);
-      shimmer.stop(now + 0.55);
+      // Plays dash.ogg (loaded once, cached). If the buffer hasn't decoded yet
+      // the first press kicks off the load and fires the sound on completion;
+      // subsequent presses play immediately from cache.
+      if (dashAudioBuffer) {
+        try {
+          const bs = audioCtx.createBufferSource();
+          bs.buffer = dashAudioBuffer;
+          const g = audioCtx.createGain();
+          g.gain.value = 0.9;
+          bs.connect(g);
+          g.connect(audioSfx);
+          bs.start();
+        } catch (_) {}
+        return;
+      }
+      void ensureDashSoundBuffer().then(() => {
+        if (!dashAudioBuffer) return;
+        try {
+          const bs = audioCtx.createBufferSource();
+          bs.buffer = dashAudioBuffer;
+          const g = audioCtx.createGain();
+          g.gain.value = 0.9;
+          bs.connect(g);
+          g.connect(audioSfx);
+          bs.start();
+        } catch (_) {}
+      });
     }
 
     function playKnifeHitSound() {
@@ -14647,26 +14698,31 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         } else if (nowC < state.dashDisabledUntil) {
           showCombatFeedback("DASH LOCKED " + Math.ceil((state.dashDisabledUntil - nowC) / 1000) + "s", "#ff4422", 0.25);
         } else if (nowC >= state.dashCooldownEnd) {
+          // True velocity-based dash. The old code teleported DASH_DIST units in 0 ms;
+          // we now travel the same DASH_DIST over DASH_DURATION_MS so the dash is
+          // visibly slower (4× the prior instant) but covers the same total distance.
+          // Wall sliding + the existing 350 ms cooldown still apply.
           const DASH_DIST = 8.0;
-          const DASH_STEPS = 20;
+          const DASH_DURATION_MS = 400;
           const cp = Math.cos(player.pitch);
           const sp = Math.sin(player.pitch);
-          const stepX = -Math.sin(player.yaw) * cp * DASH_DIST / DASH_STEPS;
-          const stepZ = -Math.cos(player.yaw) * cp * DASH_DIST / DASH_STEPS;
-          const totalDY = sp * DASH_DIST;
-          let stepsOk = 0;
+          // Unit direction (XZ). The Y component is stored separately so we can
+          // blend gravity in by hand each frame instead of using velocityY.
+          const dirX0 = -Math.sin(player.yaw) * cp;
+          const dirZ0 = -Math.cos(player.yaw) * cp;
+          // Pre-flight: if the very first step hits a wall, still do the (small)
+          // Y-portion of the dash — feels better than eating the input.
           const testPos = new THREE.Vector3();
-          for (let i = 1; i <= DASH_STEPS; i++) {
-            testPos.set(player.position.x + stepX * i, 1.0, player.position.z + stepZ * i);
-            if (collidesWithWalls(testPos)) break;
-            stepsOk = i;
+          let dirX = dirX0, dirZ = dirZ0;
+          if (collidesWithWalls(testPos.set(player.position.x + dirX0, 1.0, player.position.z + dirZ0))) {
+            // The dash will be largely absorbed by wall-sliding; that's fine.
+            // (No need to scale the unit dir to zero.)
           }
-          player.position.x += stepX * stepsOk;
-          player.position.z += stepZ * stepsOk;
-          const fracDone = stepsOk / DASH_STEPS;
-          player.position.y = Math.max(1.65, player.position.y + totalDY * fracDone);
-          player.velocityY = sp * 10;
-          if (Math.abs(totalDY * fracDone) > 0.05) player.onGround = false;
+          state.dashDirX = dirX;
+          state.dashDirZ = dirZ;
+          state.dashDirY = sp;
+          state.dashRemainingDist = DASH_DIST;
+          state.dashActiveUntil = nowC + DASH_DURATION_MS;
           playDashSound();
           state.dashCooldownEnd = nowC + 350;
           state.camShake = Math.max(state.camShake, 0.06);
@@ -16391,7 +16447,35 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         camera.rotation.x = player.pitch;
         return;
       }
-      
+
+      // ── Time-based dash (C key) ───────────────────────────────────────
+      // While a dash is active, override the normal movement + gravity with
+      // a constant-velocity integration along the stored direction. Distance
+      // is capped at DASH_DIST; wall sliding takes care of obstacles.
+      const _nowMs = performance.now();
+      const _dashing = _nowMs < state.dashActiveUntil;
+      if (_dashing) {
+        const _speed = (() => {
+          // 8 units over DASH_DURATION_MS — recompute from remaining time so a
+          // long frame finishes the dash on schedule (no overshoot).
+          const _remaining = (state.dashActiveUntil - _nowMs) / 1000;
+          return state.dashRemainingDist / Math.max(_remaining, 1e-3);
+        })();
+        const _stepX = state.dashDirX * _speed * dt;
+        const _stepZ = state.dashDirZ * _speed * dt;
+        const _stepY = state.dashDirY * _speed * dt;
+        const _next = player.position.clone().add(new THREE.Vector3(_stepX, _stepY, _stepZ));
+        const _resolved = resolveWallSliding(_next);
+        // Apply XZ from the resolver (it only handles horizontal walls) and clamp Y
+        // so we don't tunnel through floors/ceilings.
+        player.position.x = _resolved.x;
+        player.position.z = _resolved.z;
+        player.position.y = Math.max(1.65, _resolved.y);
+        player.velocityY = 0;
+        player.onGround = true;
+        state.dashRemainingDist = Math.max(0, state.dashRemainingDist - _speed * dt);
+      }
+
       const healLock = isMedKitHoldHealing();
 
       const forward = new THREE.Vector3(0, 0, -1)
@@ -16401,7 +16485,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
 
       const move = new THREE.Vector3();
       const moveLocked = isPlayerSlowed();
-      if (!healLock && !moveLocked) {
+      if (!_dashing && !healLock && !moveLocked) {
         if (keys.w) move.add(forward);
         if (keys.s) move.sub(forward);
         if (keys.d) move.add(right);
@@ -16415,16 +16499,20 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         const next = player.position.clone().add(new THREE.Vector3(move.x, 0, move.z));
         const resolved = resolveWallSliding(next);
         player.position.x = resolved.x;
-        player.position.z = resolved.z;  
+        player.position.z = resolved.z;
       }
 
-      if (!healLock && !moveLocked && keys.space && player.onGround) {
+      if (!_dashing && !healLock && !moveLocked && keys.space && player.onGround) {
         player.velocityY = 5.8;
         player.onGround = false;
       }
 
-      player.velocityY -= 14 * dt;
-      player.position.y += player.velocityY * dt;
+      // Skip gravity + vertical integration during the dash — the dash branch
+      // already wrote a fresh position and reset velocityY to 0.
+      if (!_dashing) {
+        player.velocityY -= 14 * dt;
+        player.position.y += player.velocityY * dt;
+      }
 
       if (player.position.y <= 1.65) {
         player.position.y = 1.65;
@@ -16645,12 +16733,30 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       pauseOverlay.style.display = "flex";
       btnPauseRestart.style.display = isPvpCrossfireMap(CURRENT_MAP) ? "none" : "";
       crosshairEl.classList.add("hidden");
+      // Single-player: silence everything — WebAudio buses (SFX + music bus carrying
+      // the 19/20/25 Hz arena tone + ambient wind) and the HTML <audio> BGM tracks.
+      // Multiplayer is unchanged so other players' voice/SFX from the server stay live.
+      if (!MULTIPLAYER) {
+        try {
+          audioSfx.gain.value = 0;
+          audioMusic.gain.value = 0;
+        } catch (_) {}
+        try { if (arenaBgmAudio && !arenaBgmAudio.paused) arenaBgmAudio.pause(); } catch (_) {}
+        try { if (bossBgmAudio && !bossBgmAudio.paused) bossBgmAudio.pause(); } catch (_) {}
+      }
     }
 
     function hidePause() {
       paused = false;
       pauseOverlay.style.display = "none";
       crosshairEl.classList.remove("hidden");
+      if (!MULTIPLAYER) {
+        // Restore bus gains from current settings and resume whichever in-game BGM
+        // is supposed to be playing (no-op if not in arena/boss mode).
+        try { applyAudioVolumes(); } catch (_) {}
+        try { if (isArenaLikeMap(CURRENT_MAP) && arenaBgmAudio) tryStartArenaBgmPlayback(); } catch (_) {}
+        try { if (isBossArenaMap(CURRENT_MAP) && bossBgmAudio) tryStartBossBgmPlayback(); } catch (_) {}
+      }
     }
 
     function setActiveSettingsTab(sectionId) {
