@@ -2164,12 +2164,12 @@
           <section class="settings-section" id="settingsSectionServer">
             <h2 id="settingsHeadingServer">SERVER</h2>
             <p style="font-size:11px;opacity:0.65;margin:0 0 14px 0;max-width:480px;line-height:1.5;">
-              Multiplayer relay server. Default uses chat.jimmyqrg.com. Pick a different source if you self-host.
+              Multiplayer relay server. Default uses JimmyQrg cloud. Pick a different source if you self-host.
             </p>
             <div class="settings-row" style="flex-direction:column;align-items:flex-start;gap:8px;margin-bottom:14px;">
               <label for="serverModeSelect" style="font-family:var(--game-font-ui);font-size:12px;letter-spacing:1px;">Source</label>
               <select id="serverModeSelect" class="server-mode-select">
-                <option value="default">Default (chat.jimmyqrg.com)</option>
+                <option value="default">Default</option>
                 <option value="manual">Manually enter URL</option>
                 <option value="local">Search local servers</option>
               </select>
@@ -2177,9 +2177,9 @@
             <!-- Manual URL entry, shown only when mode = manual -->
             <div id="serverManualWrap" class="server-subpanel" style="display:none;">
               <label for="serverUrlInput" style="font-family:var(--game-font-ui);font-size:11px;letter-spacing:1px;display:block;margin-bottom:6px;">Server URL</label>
-              <input id="serverUrlInput" type="text" class="server-url-input" placeholder="https://chat.example.com" spellcheck="false" autocomplete="off" />
+              <input id="serverUrlInput" type="text" class="server-url-input" placeholder="https://api.example.com" spellcheck="false" autocomplete="off" />
               <p id="serverUrlHint" style="font-size:10px;opacity:0.6;margin:6px 0 0 0;line-height:1.4;">
-                Use http:// or https://. May include a path (e.g. <code>https://chat.example.com/zone</code>).
+                Use http:// or https://. May include a path (e.g. <code>https://api.example.com/zone</code>).
               </p>
               <p id="serverUrlError" style="font-size:10px;color:#ff6e6e;margin:6px 0 0 0;line-height:1.4;display:none;"></p>
             </div>
