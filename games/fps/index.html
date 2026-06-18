@@ -9892,6 +9892,11 @@ if (typeof window !== "undefined") {
       medKitDefilling: false,
       medKitDefillPhase: 0,
       medKitDefillStart: 0,
+      // True while the heal OGG (medpack-5s / medpack-8s) is playing. Tracked so we can
+      // stop it if the player releases F/LMB before the heal completes — the OGG is
+      // designed to last exactly the heal duration, so it should run from heal-start to
+      // heal-end (or be cut short on interruption).
+      medKitHealSoundActive: false,
       weaponAction: null,
       weaponActionStart: 0,
       weaponActionDur: 320,
@@ -12792,14 +12797,51 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       const is5 = Math.round(durationSec) === 5;
       const buf = is5 ? medpack5sBuffer : medpack8sBuffer;
       const loader = is5 ? ensureMedpack5sBuffer : ensureMedpack8sBuffer;
+      const play = (ready) => {
+        if (!ready) return;
+        try {
+          // Stop any in-flight heal source so back-to-back heals don't stack
+          // (rare but possible if the player med-packs right as the heal ends).
+          if (state.medKitHealSource) {
+            try { state.medKitHealSource.stop(); } catch (_) {}
+          }
+          const bs = audioCtx.createBufferSource();
+          bs.buffer = ready;
+          const g = audioCtx.createGain();
+          g.gain.value = 0.95;
+          bs.connect(g);
+          g.connect(audioSfx);
+          // Clear the active flag when the OGG finishes naturally — keeps
+          // state.medKitHealSoundActive honest so the next heal always restarts sound.
+          bs.addEventListener("ended", () => {
+            if (state.medKitHealSource === bs) {
+              state.medKitHealSource = null;
+              state.medKitHealSoundActive = false;
+            }
+          });
+          bs.start();
+          state.medKitHealSource = bs;
+          state.medKitHealSoundActive = true;
+        } catch (_) {}
+      };
       if (buf) {
-        _playMedpackOgg(buf, 0.95);
+        play(buf);
         return;
       }
       void loader().then(() => {
         const ready = is5 ? medpack5sBuffer : medpack8sBuffer;
-        if (ready) _playMedpackOgg(ready, 0.95);
+        play(ready);
       });
+    }
+
+    /** Stop the in-flight heal OGG (if any). Used when the player releases F/LMB before
+     *  the heal completes. Safe to call when no source is active. */
+    function stopMedPackHealSound() {
+      if (state.medKitHealSource) {
+        try { state.medKitHealSource.stop(); } catch (_) {}
+        state.medKitHealSource = null;
+      }
+      state.medKitHealSoundActive = false;
     }
 
     function getDashSoundUrl() {
@@ -14432,13 +14474,6 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         return;
       }
       if (typeof GunSFX !== "undefined" && GunSFX.reload) GunSFX.reload(skin);
-    }
-
-    function playMedKitHealCompleteSound() {
-      // Pick the right OGG by the current mode's heal duration (5s PVP,
-      // 8s PVE). getMedKitHealDuration() is the same source of truth that
-      // drives the actual hold time, so the audio always matches the gameplay.
-      playMedPackHealSound(getMedKitHealDuration());
     }
 
     function triggerHitFeedback(isKill = false, headshot = false) {
@@ -18061,6 +18096,11 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       const wantsHold = isMedKitInputHeld() && canHeal && !state.medKitNeedsRelease;
 
       if (wantsHold) {
+        // Heal just started — kick off the heal OGG. The OGG is exactly the heal
+        // duration long, so it plays in sync with the ring filling up; on completion
+        // we let it finish naturally (no re-trigger), on early release we stop it.
+        const wasIdle = state.medKitHealProgress === 0 && !state.medKitHealSoundActive;
+        if (wasIdle) playMedPackHealSound(getMedKitHealDuration());
         state.medKitHealProgress += dt / getMedKitHealDuration();
         if (state.medKitHealProgress >= 1) {
           player.health = Math.min(player.maxHealth, player.health + 50);
@@ -18069,14 +18109,15 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           state.medKitRingVisual = 0;
           state.medKitNeedsRelease = true;
           applyMedKitRingVisual(0);
-          playMedKitHealCompleteSound();
           updateHud();
         } else {
           state.medKitRingVisual = state.medKitHealProgress;
-          applyMedKitRingVisual(state.medKitHealProgress);
+          applyMedKitRingVisual(state.medKitRingVisual);
         }
       } else {
         if (state.medKitHealProgress > 0 && !state.medKitNeedsRelease) {
+          // Player released F/LMB before the heal completed — stop the OGG mid-way.
+          stopMedPackHealSound();
           state.medKitDefilling = true;
           state.medKitDefillStart = state.medKitHealProgress;
           state.medKitDefillPhase = 0;
