@@ -1871,7 +1871,7 @@
     </div>
     <div id="menuBossMode" style="display:none;flex-direction:column;align-items:center;gap:10px;position:relative;padding-top:20px;">
       <h2 data-i18n="bossFightTitle" style="font-family:var(--game-font-ui);font-size:28px;margin:0 0 14px 0;letter-spacing:3px;">BOSS FIGHT</h2>
-      <p data-i18n="bossFightDesc" style="font-family:var(--game-font-ui);font-size:12px;opacity:0.78;margin:0 0 8px 0;max-width:320px;text-align:center;line-height:1.45;">Fight the Boss (激素僵尸) — a hulking boss that switches between Tank, Speed, and Gunner modes.</p>
+      <p data-i18n="bossFightDesc" style="font-family:var(--game-font-ui);font-size:12px;opacity:0.78;margin:0 0 8px 0;max-width:320px;text-align:center;line-height:1.45;">Fight the Boss (Hormone Zombie) — a hulking boss that switches between Tank, Speed, and Gunner modes.</p>
       <button type="button" id="btnBossSingle" class="btn-texture" data-i18n="btnSingleplayer" style="font-family:var(--game-font-ui);padding:10px 30px;border:2px solid #4fd1ff;border-radius:8px;color:#fff;cursor:pointer;font-size:15px;letter-spacing:1px;">SINGLEPLAYER</button>
       <button type="button" id="btnBossCoop" class="btn-texture" data-i18n="btnCoopMode" style="font-family:var(--game-font-ui);padding:10px 30px;border:2px solid #4fd1ff;border-radius:8px;color:#fff;cursor:pointer;font-size:15px;letter-spacing:1px;">CO-OP MODE</button>
       <button type="button" id="btnBossBack" class="menu-float-icon" style="position:fixed;top:14px;left:14px;background:none;border:none;cursor:pointer;padding:6px;opacity:0.85;transition:opacity 0.15s;z-index:105;" onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='0.85'"><svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
@@ -1994,7 +1994,7 @@
   <div class="hitmarker" id="hitmarker"></div>
   <div id="combatFeedback"></div>
   <div id="bossShakeBar" style="position:fixed;bottom:88px;left:50%;transform:translateX(-50%);display:none;width:240px;pointer-events:none;z-index:40;font-family:'Audiowide',sans-serif;">
-    <div style="font-size:9px;color:#aaa;text-align:center;margin-bottom:3px;letter-spacing:1px;opacity:0.8;">━ 震 CYCLE ━</div>
+    <div data-i18n="bossShakeLabel" style="font-size:9px;color:#aaa;text-align:center;margin-bottom:3px;letter-spacing:1px;opacity:0.8;">━ SHAKE CYCLE ━</div>
     <div style="position:relative;height:10px;background:rgba(0,0,0,0.55);border-radius:5px;border:1px solid #444;overflow:hidden;">
       <div id="bossShakeBarFill" style="position:absolute;left:0;top:0;height:100%;width:0%;background:#c53030;border-radius:5px 0 0 5px;"></div>
       <div id="bossShakeBarWindow" style="position:absolute;top:0;right:0;height:100%;width:26.67%;background:rgba(72,199,120,0.55);border-radius:0 5px 5px 0;"></div>
@@ -13784,14 +13784,17 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     }
 
     function getBossRoundLabel(round) {
-      const labels = [
-        { name: "普通", nameEn: "NORMAL", color: "#aaa" },
-        { name: "困难", nameEn: "HARD", color: "#ff8c00" },
-        { name: "噩梦", nameEn: "NIGHTMARE", color: "#cc33ff" },
-        { name: "地狱", nameEn: "HELL", color: "#ff2222" },
-      ];
-      if (round <= labels.length) return labels[round - 1];
-      return { name: `地狱+${round - 4}`, nameEn: `HELL+${round - 4}`, color: "#ff0000" };
+      // Difficulty colors are universal; labels are pulled from tr() so each language
+      // gets the right "NORMAL/HARD/NIGHTMARE/HELL/HELL+N" wording.
+      const colors = ["#aaa", "#ff8c00", "#cc33ff", "#ff2222"];
+      const keys = ["bossRoundNormal", "bossRoundHard", "bossRoundNightmare", "bossRoundHell"];
+      if (round <= keys.length) {
+        return { name: tr(keys[round - 1], keys[round - 1].replace(/^bossRound/, "")), color: colors[round - 1] };
+      }
+      return {
+        name: tr("bossRoundHellPlus", "HELL+{n}").replace("{n}", String(round - 4)),
+        color: "#ff0000",
+      };
     }
 
     function isFinalBossRound() {
@@ -13957,14 +13960,16 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         overlay.id = "bossVictoryOverlay";
         overlay.style.cssText = "position:fixed;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;flex-direction:column;z-index:9999;pointer-events:none;";
         const title = document.createElement("div");
-        title.textContent = isFinal ? "ALL BOSSES DEFEATED" : `ROUND ${BOSS_ROUND} CLEAR`;
+        title.textContent = isFinal
+          ? tr("bossAllDefeated", "ALL BOSSES DEFEATED")
+          : tr("bossRoundCleared", "ROUND {n} CLEAR").replace("{n}", String(BOSS_ROUND));
         title.style.cssText = `font-size:64px;font-weight:900;color:${isFinal ? "#ffd700" : rl.color};text-shadow:0 0 30px rgba(255,215,0,0.8),0 0 60px rgba(255,165,0,0.5),0 4px 12px rgba(0,0,0,0.7);letter-spacing:6px;opacity:0;animation:bossVicFadeIn 2s ease forwards;`;
         const sub = document.createElement("div");
         if (isFinal) {
-          sub.textContent = "YOU WIN";
+          sub.textContent = tr("bossYouWin", "YOU WIN");
         } else {
           const nextRl = getBossRoundLabel(BOSS_ROUND + 1);
-          sub.innerHTML = `难度: <span style="color:${rl.color};">${rl.name}</span> → 下一关: <span style="color:${nextRl.color};">${nextRl.name}</span>`;
+          sub.innerHTML = `${tr("bossDiffCleared", "Difficulty:")} <span style="color:${rl.color};">${rl.name}</span> → ${tr("bossNextRound", "Next round:")} <span style="color:${nextRl.color};">${nextRl.name}</span>`;
         }
         sub.style.cssText = "font-size:28px;font-weight:700;color:#fff;text-shadow:0 0 20px rgba(255,255,255,0.5),0 2px 8px rgba(0,0,0,0.6);margin-top:16px;letter-spacing:4px;opacity:0;animation:bossVicFadeIn 2s ease 0.8s forwards;";
         overlay.appendChild(title);
@@ -16371,17 +16376,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
 
       if (isAction(e, "dash") && started && !paused && player.health > 0 && gameWorldReady && menuEl.style.display === "none" && !chatOpen && !settingsModalOpen) {
         const nowC = performance.now();
-        // Boss 震 cycle: dash restricted except during the 4-second open window
-        const _bossShakeLocked = (() => {
-          if (!isBossArenaMap(CURRENT_MAP)) return false;
-          if (!state.enemies.some(e => e.isBoss && e.alive)) return false;
-          return (bossShakeTimerMs % BOSS_SHAKE_CYCLE_MS) < BOSS_DASH_LOCK_MS;
-        })();
-        if (_bossShakeLocked) {
-          const _ttOpen = ((BOSS_DASH_LOCK_MS - bossShakeTimerMs % BOSS_SHAKE_CYCLE_MS) / 1000).toFixed(1);
-          showCombatFeedback("震·封锁 " + _ttOpen + "s", "#ff4422", 0.28);
-          e.preventDefault();
-        } else if (nowC < state.dashDisabledUntil) {
+        if (nowC < state.dashDisabledUntil) {
           showCombatFeedback("DASH LOCKED " + Math.ceil((state.dashDisabledUntil - nowC) / 1000) + "s", "#ff4422", 0.25);
         } else if (nowC >= state.dashCooldownEnd) {
           // True velocity-based dash. DASH_DIST units over DASH_DURATION_MS (≈200ms —
@@ -16899,6 +16894,23 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       else if (zone === "leg") enemy.hp -= w.damageLegs;
       else enemy.hp -= w.damageBody;
       drawEnemyHp(enemy);
+      // Aggro on hit: being damaged always alerts the enemy (bosses are already always-
+      // aware, but for regular zombies a long-range sniper shot should pull them off
+      // patrol). Store the bullet direction (player → enemy) so awareness logic can
+      // look that way; if the player becomes visible from that direction, the zombie
+      // targets the player.
+      const ex = enemy.group.position.x;
+      const ez = enemy.group.position.z;
+      const dx = ex - player.position.x;
+      const dz = ez - player.position.z;
+      const dlen = Math.sqrt(dx * dx + dz * dz);
+      if (dlen > 0.01) {
+        enemy.lastHitDirX = dx / dlen;
+        enemy.lastHitDirZ = dz / dlen;
+        enemy.lastHitTime = performance.now();
+      }
+      enemy.aware = true;
+      enemy.hiddenTimer = 0;
     }
 
     const SLOW_TEXT_EL = document.getElementById("blindText");
@@ -18845,11 +18857,28 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       if (!flowDirX) return null;
       const c = Math.min(navCols - 1, Math.max(0, ((ex - navMinX) / NAV_CELL) | 0));
       const r = Math.min(navRows - 1, Math.max(0, ((ez - navMinZ) / NAV_CELL) | 0));
-      const idx = r * navCols + c;
-      const fx = flowDirX[idx];
-      const fz = flowDirZ[idx];
-      if (fx === 0 && fz === 0) return null;
-      return { x: fx, z: fz };
+      // If the cell is a wall (rare after push-out, but possible during edge cases) or has
+      // no flow (goal cell), look at the 8 neighbors and pick the first with non-zero flow.
+      // This keeps bosses/zombies pathing smoothly even when spawned right next to a wall.
+      const tryCell = (cc, rr) => {
+        const idx = rr * navCols + cc;
+        const fx = flowDirX[idx];
+        const fz = flowDirZ[idx];
+        if (fx === 0 && fz === 0) return null;
+        return { x: fx, z: fz };
+      };
+      const direct = tryCell(c, r);
+      if (direct) return direct;
+      for (let dr = -1; dr <= 1; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+          if (dr === 0 && dc === 0) continue;
+          const nc = c + dc, nr = r + dr;
+          if (nc < 0 || nc >= navCols || nr < 0 || nr >= navRows) continue;
+          const n = tryCell(nc, nr);
+          if (n) return n;
+        }
+      }
+      return null;
     }
 
     // ── Zombie vision / awareness (throttled, 360° FOV) ──
@@ -19278,8 +19307,23 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         }
 
         const target = getEnemyTarget(enemy);
-        const dx = target.x - enemy.group.position.x;
-        const dz = target.z - enemy.group.position.z;
+        // Hit-direction aggro override: if the zombie was recently hit but currently has
+        // no LOS to the player (e.g. the bullet came through a wall), walk in the bullet
+        // direction toward where the shooter came from. As soon as LOS opens, the
+        // zombie targets the player normally.
+        let moveX = target.x, moveZ = target.z;
+        const useHitDir =
+          !enemy.isBoss &&
+          enemy.aware &&
+          enemy.lastHitDirX !== undefined &&
+          performance.now() - (enemy.lastHitTime || 0) < 6000 &&
+          (enemy._lastLosClear === false || enemy._lastLosClear === undefined);
+        if (useHitDir) {
+          moveX = enemy.group.position.x + enemy.lastHitDirX * 10;
+          moveZ = enemy.group.position.z + enemy.lastHitDirZ * 10;
+        }
+        const dx = moveX - enemy.group.position.x;
+        const dz = moveZ - enemy.group.position.z;
         const dist = Math.sqrt(dx * dx + dz * dz);
 
         const isSlowed =
@@ -20282,7 +20326,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
                 (_cycleReset && _prevPos < BOSS_DASH_LOCK_MS && _newPos < BOSS_DASH_LOCK_MS && false)) {
               // 震 triggered
               state.camShake = Math.max(state.camShake || 0, 0.9);
-              showCombatFeedback("⚡ 震·DASH OPEN 4s!", "#48c778", 1.5);
+              showCombatFeedback(tr("bossShakeDashOpenToast", "⚡ SHAKE · DASH OPEN 4s!"), "#48c778", 1.5);
               // Tremor SFX
               if (audioCtx && audioSfx) {
                 const _t0 = audioCtx.currentTime;
@@ -20305,7 +20349,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
             }
             // Detect OPEN→LOCKED (cycle resets while open)
             if (_cycleReset && _prevPos >= BOSS_DASH_LOCK_MS) {
-              showCombatFeedback("震 封锁 11s", "#fc8181", 1.0);
+              showCombatFeedback(tr("bossShakeDashLockedToast", "SHAKE LOCKED 11s"), "#fc8181", 1.0);
             }
             // Update HUD bar
             if (_bossShakeBar) {
@@ -20319,11 +20363,11 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
               if (_lbl) {
                 if (_isOpen) {
                   const _tLeft = ((BOSS_SHAKE_CYCLE_MS - _newPos) / 1000).toFixed(1);
-                  _lbl.textContent = "⚡ DASH OPEN " + _tLeft + "s";
+                  _lbl.textContent = "⚡ " + tr("bossDashOpen", "DASH OPEN") + " " + _tLeft + "s";
                   _lbl.style.color = "#48c778";
                 } else {
                   const _tLock = ((BOSS_DASH_LOCK_MS - _newPos) / 1000).toFixed(1);
-                  _lbl.textContent = "震 LOCKED " + _tLock + "s";
+                  _lbl.textContent = tr("bossShakeLockedSecs", "SHAKE LOCKED {s}s").replace("{s}", _tLock);
                   _lbl.style.color = "#fc8181";
                 }
               }
