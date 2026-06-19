@@ -9892,11 +9892,6 @@ if (typeof window !== "undefined") {
       medKitDefilling: false,
       medKitDefillPhase: 0,
       medKitDefillStart: 0,
-      // True while the heal OGG (medpack-5s / medpack-8s) is playing. Tracked so we can
-      // stop it if the player releases F/LMB before the heal completes — the OGG is
-      // designed to last exactly the heal duration, so it should run from heal-start to
-      // heal-end (or be cut short on interruption).
-      medKitHealSoundActive: false,
       weaponAction: null,
       weaponActionStart: 0,
       weaponActionDur: 320,
@@ -12792,56 +12787,24 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       });
     }
     function playMedPackHealSound(durationSec) {
+      // Pick the right OGG by the current mode's heal duration (5s PVP, 8s PVE).
+      // The OGG is exactly the heal duration long, so it plays in sync with the ring
+      // filling up and ends naturally when the heal completes. If the player releases
+      // F/LMB before completion, the OGG plays out its remaining buffer — harmless.
+      // Kept deliberately simple (no source-tracking, no early stop): the simpler the
+      // path, the fewer ways it can break the medpack.
       if (audioCtx.state === "suspended") void audioCtx.resume();
-      // Pick the right OGG by the current mode's heal duration.
       const is5 = Math.round(durationSec) === 5;
       const buf = is5 ? medpack5sBuffer : medpack8sBuffer;
       const loader = is5 ? ensureMedpack5sBuffer : ensureMedpack8sBuffer;
-      const play = (ready) => {
-        if (!ready) return;
-        try {
-          // Stop any in-flight heal source so back-to-back heals don't stack
-          // (rare but possible if the player med-packs right as the heal ends).
-          if (state.medKitHealSource) {
-            try { state.medKitHealSource.stop(); } catch (_) {}
-          }
-          const bs = audioCtx.createBufferSource();
-          bs.buffer = ready;
-          const g = audioCtx.createGain();
-          g.gain.value = 0.95;
-          bs.connect(g);
-          g.connect(audioSfx);
-          // Clear the active flag when the OGG finishes naturally — keeps
-          // state.medKitHealSoundActive honest so the next heal always restarts sound.
-          bs.addEventListener("ended", () => {
-            if (state.medKitHealSource === bs) {
-              state.medKitHealSource = null;
-              state.medKitHealSoundActive = false;
-            }
-          });
-          bs.start();
-          state.medKitHealSource = bs;
-          state.medKitHealSoundActive = true;
-        } catch (_) {}
-      };
       if (buf) {
-        play(buf);
+        _playMedpackOgg(buf, 0.95);
         return;
       }
       void loader().then(() => {
         const ready = is5 ? medpack5sBuffer : medpack8sBuffer;
-        play(ready);
+        if (ready) _playMedpackOgg(ready, 0.95);
       });
-    }
-
-    /** Stop the in-flight heal OGG (if any). Used when the player releases F/LMB before
-     *  the heal completes. Safe to call when no source is active. */
-    function stopMedPackHealSound() {
-      if (state.medKitHealSource) {
-        try { state.medKitHealSource.stop(); } catch (_) {}
-        state.medKitHealSource = null;
-      }
-      state.medKitHealSoundActive = false;
     }
 
     function getDashSoundUrl() {
@@ -18097,10 +18060,10 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
 
       if (wantsHold) {
         // Heal just started — kick off the heal OGG. The OGG is exactly the heal
-        // duration long, so it plays in sync with the ring filling up; on completion
-        // we let it finish naturally (no re-trigger), on early release we stop it.
-        const wasIdle = state.medKitHealProgress === 0 && !state.medKitHealSoundActive;
-        if (wasIdle) playMedPackHealSound(getMedKitHealDuration());
+        // duration long, so it plays in sync with the ring filling up and ends
+        // naturally when the heal completes. If the player releases early, the OGG
+        // plays out its remaining buffer (harmless, no source-tracking complexity).
+        if (state.medKitHealProgress === 0) playMedPackHealSound(getMedKitHealDuration());
         state.medKitHealProgress += dt / getMedKitHealDuration();
         if (state.medKitHealProgress >= 1) {
           player.health = Math.min(player.maxHealth, player.health + 50);
@@ -18116,8 +18079,6 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         }
       } else {
         if (state.medKitHealProgress > 0 && !state.medKitNeedsRelease) {
-          // Player released F/LMB before the heal completed — stop the OGG mid-way.
-          stopMedPackHealSound();
           state.medKitDefilling = true;
           state.medKitDefillStart = state.medKitHealProgress;
           state.medKitDefillPhase = 0;
