@@ -9887,6 +9887,7 @@ if (typeof window !== "undefined") {
       weaponBobRotZ: 0,
       camShake: 0,
       medKitHealProgress: 0,
+      medKitHealStartMs: 0,
       medKitRingVisual: 0,
       medKitNeedsRelease: false,
       medKitDefilling: false,
@@ -11359,7 +11360,10 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         torsoZV: 0,
         torsoPitchV: 0,
         targetId: null,
-        retargetTimer: 0,
+        // Stagger initial retarget across [0, RETARGET_INTERVAL) so all 32 arena
+        // zombies don't re-ray-cast LOS at the same frame every 2s — that burst
+        // was the source of the periodic multi-frame stalls.
+        retargetTimer: Math.random() * 2.0,
         moveYaw: 0,
         rangedLosAcquireTimer: 0
       };
@@ -15503,6 +15507,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
 
     function resetMedKitChargeState() {
       state.medKitHealProgress = 0;
+      state.medKitHealStartMs = 0;
       state.medKitRingVisual = 0;
       state.medKitNeedsRelease = false;
       state.medKitDefilling = false;
@@ -18059,16 +18064,21 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       const wantsHold = isMedKitInputHeld() && canHeal && !state.medKitNeedsRelease;
 
       if (wantsHold) {
-        // Heal just started — kick off the heal OGG. The OGG is exactly the heal
-        // duration long, so it plays in sync with the ring filling up and ends
-        // naturally when the heal completes. If the player releases early, the OGG
-        // plays out its remaining buffer (harmless, no source-tracking complexity).
-        if (state.medKitHealProgress === 0) playMedPackHealSound(getMedKitHealDuration());
-        state.medKitHealProgress += dt / getMedKitHealDuration();
+        // Heal timing is wall-clock based (not accumulated frame dt) so it stays
+        // correct under heavy load — animate() caps dt at 33ms (~30fps), so a real
+        // 10fps game would otherwise take ~3x the intended heal duration.
+        if (state.medKitHealProgress === 0) {
+          state.medKitHealStartMs = performance.now();
+          playMedPackHealSound(getMedKitHealDuration());
+        }
+        const healDur = getMedKitHealDuration();
+        const elapsedMs = performance.now() - state.medKitHealStartMs;
+        state.medKitHealProgress = elapsedMs / (healDur * 1000);
         if (state.medKitHealProgress >= 1) {
           player.health = Math.min(player.maxHealth, player.health + 50);
           wMed.ammo = Math.max(0, wMed.ammo - 1);
           state.medKitHealProgress = 0;
+          state.medKitHealStartMs = 0;
           state.medKitRingVisual = 0;
           state.medKitNeedsRelease = true;
           applyMedKitRingVisual(0);
@@ -19403,9 +19413,11 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
             let dirX = 0, dirZ = 0;
             const flow = getFlowDirection(enemy.group.position.x, enemy.group.position.z);
 
-            // LOS 检测（boss 每帧，普通僵尸每 2 帧）
+            // LOS 检测（boss 每帧，普通僵尸每 4 帧）。canSeePoint ray-casts against every
+            // wall mesh — at 32 zombies in the arena, %2 was 16 ray-casts/frame and
+            // %4 halves it to 8, which was the main perf win for arena-mode stalls.
             let losClear = enemy._lastLosClear;
-            if (losClear === undefined || (enemy.isBoss ? true : (visFrameCounter + ei) % 2 === 0)) {
+            if (losClear === undefined || (enemy.isBoss ? true : (visFrameCounter + ei) % 4 === 0)) {
               losClear = clearLosToTarget(
                 enemy.group.position.x,
                 enemy.group.position.z,
