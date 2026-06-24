@@ -21138,18 +21138,33 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         if (parsed.variant) PENDING_PVP_MAP = parsed.variant;
       }
       _pendingServerMode = pendingLobbyMode;
-      socket.emit("joinByCode", { code, mode: _pendingServerMode }, (res) => {
-        if (res == null) {
-          codeError.textContent = tr("mpNoServerAck", "No response from server.");
-          return;
-        }
-        const norm = normalizeMatchAck(res);
-        if (norm.error) {
-          codeError.textContent = norm.error;
-          return;
-        }
-        beginMultiplayerGame(lobbyMapFromPending(), { roomKey: norm.roomKey, roomCode: norm.roomCode || code });
-      });
+      // The host may be briefly offline (browser-throttled background tab, momentary network
+      // blip). The relay keeps the room suspended until the host reconnects, so a single
+      // joinByCode call races the host's reconnect. Retry a few times with a short backoff so
+      // the friend doesn't have to mash the button while the host's tab wakes up.
+      const RETRY_DELAYS_MS = [600, 1200, 2000];
+      let attempt = 0;
+      const tryJoin = () => {
+        socket.emit("joinByCode", { code, mode: _pendingServerMode }, (res) => {
+          if (res == null) {
+            codeError.textContent = tr("mpNoServerAck", "No response from server.");
+            return;
+          }
+          const norm = normalizeMatchAck(res);
+          if (norm.error) {
+            if (norm.error === "Room not found" && attempt < RETRY_DELAYS_MS.length) {
+              codeError.textContent = tr("mpWaitingForHost", "Waiting for host to reconnect…");
+              const delay = RETRY_DELAYS_MS[attempt++];
+              setTimeout(tryJoin, delay);
+              return;
+            }
+            codeError.textContent = norm.error;
+            return;
+          }
+          beginMultiplayerGame(lobbyMapFromPending(), { roomKey: norm.roomKey, roomCode: norm.roomCode || code });
+        });
+      };
+      tryJoin();
     });
 
     codeInput.addEventListener("keydown", (e) => {
