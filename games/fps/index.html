@@ -8054,64 +8054,21 @@ if (typeof window !== "undefined") {
     let menuBackdropReady = false;
     let menuBackdropRaf = 0;
 
-    const MENU_BACKDROP_LIGHT_MIN = 0.38;
-    const MENU_BACKDROP_LIGHT_MAX = 6.2;
+    const MENU_BACKDROP_LIGHT_FIXED = 2.4;
     let menuBgmAnalyser = null;
     let menuBgmMenuGain = null;
     let menuBgmMediaSrc = null;
     let menuBgmTimeBuf = null;
-    // Slow-decay rolling peak of the menu.mp3 waveform. Used to normalize the lamp so the
-    // brightest reading corresponds to the song's intrinsic peak. Climbs to the true peak
-    // in ~10s, then slowly relaxes if the song dips to a quieter section.
-    let menuBgmSourcePeakRef = 0.18;
-    let menuBackdropPeakSmooth = 0;
+    // WebAudio analyser is still created in ensureMenuBgmAudio (so the menu music can route
+    // through the WebAudio graph), but the lamp no longer reads it. Keeping the analyser
+    // here preserves the existing audio wiring; it just isn't sampled.
 
     function updateMenuBackdropLightFromMusic() {
       if (!menuBackdropPoint) return;
-      // Lamp intensity = (volume the user is actually hearing) × (waveform amplitude).
-      //
-      // The user's effective music volume = masterVolume × musicVolume. If either is 0, the
-      // user hears silence, and the lamp is dark. This also handles Safari's quirk where the
-      // AnalyserNode returns non-zero data even when no audio is actually flowing audibly:
-      // the volume-setting gate is the source of truth for "is the user hearing this?", and
-      // Safari can't fake the volume setting.
-      const vol = THREE.MathUtils.clamp(
-        (gameSettings.masterVolume || 0) * (gameSettings.musicVolume || 0),
-        0,
-        1
-      );
-      // Only read the analyser when we have a real audio chain AND the audio is actually
-      // playing (Safari reports audioCtx.state === "running" and advances currentTime even
-      // when output is gated, so we still need the volume gate above as the real gate).
-      let peak = 0;
-      if (vol > 0 && menuBgmAnalyser && menuBgmTimeBuf &&
-          audioCtx && audioCtx.state === "running" &&
-          menuBgmAudio && !menuBgmAudio.paused && menuBgmAudio.currentTime > 0) {
-        menuBgmAnalyser.getFloatTimeDomainData(menuBgmTimeBuf);
-        let sumSq = 0;
-        for (let i = 0; i < menuBgmTimeBuf.length; i++) {
-          const v = menuBgmTimeBuf[i];
-          sumSq += v * v;
-        }
-        // RMS matches perceived loudness better than peak and is robust against single-sample
-        // spikes that Safari occasionally returns.
-        peak = Math.sqrt(sumSq / menuBgmTimeBuf.length);
-        if (peak > menuBgmSourcePeakRef) {
-          menuBgmSourcePeakRef = peak;
-        } else {
-          menuBgmSourcePeakRef += (peak - menuBgmSourcePeakRef) * 0.0025;
-        }
-      } else {
-        // No live audio — let the rolling reference decay slowly so a resume doesn't spike.
-        menuBgmSourcePeakRef *= 0.995;
-      }
-      const peakNorm = Math.min(1, peak / Math.max(menuBgmSourcePeakRef, 0.01));
-      menuBackdropPeakSmooth += (peakNorm - menuBackdropPeakSmooth) * 0.22;
-      // Final brightness: minimum floor + (volume setting × waveform amplitude × range).
-      // When vol = 0 → MIN. When vol = 1 and waveform is at peak → MAX.
-      const range = MENU_BACKDROP_LIGHT_MAX - MENU_BACKDROP_LIGHT_MIN;
-      menuBackdropPoint.intensity =
-        MENU_BACKDROP_LIGHT_MIN + vol * menuBackdropPeakSmooth * range;
+      // Lamp is held at a fixed intensity. The wall glows steadily; we don't read the
+      // analyser, we don't track the volume slider, and we don't depend on the audio
+      // context state. This is the simplest possible "lamp on a wall" behavior.
+      menuBackdropPoint.intensity = MENU_BACKDROP_LIGHT_FIXED;
     }
 
     function resizeMenuWallBackdrop() {
@@ -8175,7 +8132,7 @@ if (typeof window !== "undefined") {
       menuBackdropHemi = new THREE.HemisphereLight(0xffe8c8, 0x141008, 0.11 * Math.PI);
       menuBackdropScene.add(menuBackdropHemi);
 
-      menuBackdropPoint = new THREE.PointLight(0xffe6b8, MENU_BACKDROP_LIGHT_MIN, 46, 2);
+      menuBackdropPoint = new THREE.PointLight(0xffe6b8, MENU_BACKDROP_LIGHT_FIXED, 46, 2);
       menuBackdropPoint.position.set(0, 6.2, 1.4);
       menuBackdropScene.add(menuBackdropPoint);
 
@@ -11958,8 +11915,26 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
 
     function onMenuBgmUserGesture() {
       if (!shouldPlayMenuBgm()) return;
+      // Safari is the strictest of the major browsers: it only counts a user gesture if the
+      // <audio>.play() call is in the same synchronous call stack as the gesture. So we do
+      // EVERYTHING (resume context, ensure element, route audio, call play) right here, with
+      // no setTimeout / Promise / queueMicrotask between the gesture and the play() call.
       try {
-        tryPlayMenuBgm();
+        // Resume the AudioContext synchronously so Safari marks the gesture as "owned" by us.
+        if (audioCtx && audioCtx.state === "suspended") {
+          try { void audioCtx.resume(); } catch (_) {}
+        }
+        // Create the <audio> element + WebAudio graph if it doesn't exist yet. This call
+        // may take a few microseconds (it loads media candidates) but does not yield to the
+        // event loop, so the gesture context is still active when play() is called below.
+        try { ensureMenuBgmAudio(); } catch (_) {}
+        if (!menuBgmAudio) return;
+        // Sync the gain to the current volume setting and start playback in the same stack.
+        try { syncMenuBgmRoutingAndVolumes(); } catch (_) {}
+        try {
+          const p = menuBgmAudio.play();
+          if (p && typeof p.catch === "function") p.catch(() => {});
+        } catch (_) {}
       } catch (_) {}
     }
     ["pointerdown", "keydown", "touchstart"].forEach((ev) => {
@@ -20878,7 +20853,6 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       { const gb = document.getElementById("btnMenuSettings"); if(gb) gb.style.display=""; }
       { const tb = document.getElementById("btnAchievements"); if(tb) tb.style.display=""; }
       showMenuPanel("menuMain");
-      menuBackdropPeakSmooth = 0;
       startMenuBackdropLoop();
       pauseBossBgm();
       pauseArenaBgm();
