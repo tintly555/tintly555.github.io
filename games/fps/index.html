@@ -8068,34 +8068,50 @@ if (typeof window !== "undefined") {
 
     function updateMenuBackdropLightFromMusic() {
       if (!menuBackdropPoint) return;
-      // Lamp intensity is driven by the menu.mp3 waveform alone. The volume slider does NOT
-      // affect the visual — only the actual music amplitude matters. So the lamp always shows
-      // the song's dynamics, regardless of the music volume setting.
+      // Lamp intensity = (volume the user is actually hearing) × (waveform amplitude).
       //
-      // Use getFloatTimeDomainData (returns [-1, 1] floats, 0 = silence) instead of the byte
-      // version. The byte version writes 0 (not 128) into the buffer when the analyser has no
-      // signal flowing, which produced peak = 1.0 and pinned the lamp at MAX.
+      // The user's effective music volume = masterVolume × musicVolume. If either is 0, the
+      // user hears silence, and the lamp is dark. This also handles Safari's quirk where the
+      // AnalyserNode returns non-zero data even when no audio is actually flowing audibly:
+      // the volume-setting gate is the source of truth for "is the user hearing this?", and
+      // Safari can't fake the volume setting.
+      const vol = THREE.MathUtils.clamp(
+        (gameSettings.masterVolume || 0) * (gameSettings.musicVolume || 0),
+        0,
+        1
+      );
+      // Only read the analyser when we have a real audio chain AND the audio is actually
+      // playing (Safari reports audioCtx.state === "running" and advances currentTime even
+      // when output is gated, so we still need the volume gate above as the real gate).
       let peak = 0;
-      if (menuBgmAnalyser && menuBgmTimeBuf) {
+      if (vol > 0 && menuBgmAnalyser && menuBgmTimeBuf &&
+          audioCtx && audioCtx.state === "running" &&
+          menuBgmAudio && !menuBgmAudio.paused && menuBgmAudio.currentTime > 0) {
         menuBgmAnalyser.getFloatTimeDomainData(menuBgmTimeBuf);
+        let sumSq = 0;
         for (let i = 0; i < menuBgmTimeBuf.length; i++) {
-          const v = Math.abs(menuBgmTimeBuf[i]);
-          if (v > peak) peak = v;
+          const v = menuBgmTimeBuf[i];
+          sumSq += v * v;
         }
-        // Slow-decay envelope: climb instantly to new peaks, relax slowly toward `peak` so the
-        // lamp doesn't pop when a loud transient ends. Floor at 0.05 to avoid divide-by-zero
-        // and to give the lamp a flicker on a quiet menu.mp3.
+        // RMS matches perceived loudness better than peak and is robust against single-sample
+        // spikes that Safari occasionally returns.
+        peak = Math.sqrt(sumSq / menuBgmTimeBuf.length);
         if (peak > menuBgmSourcePeakRef) {
           menuBgmSourcePeakRef = peak;
         } else {
           menuBgmSourcePeakRef += (peak - menuBgmSourcePeakRef) * 0.0025;
         }
+      } else {
+        // No live audio — let the rolling reference decay slowly so a resume doesn't spike.
+        menuBgmSourcePeakRef *= 0.995;
       }
-      const peakNorm = Math.min(1, peak / Math.max(menuBgmSourcePeakRef, 0.05));
+      const peakNorm = Math.min(1, peak / Math.max(menuBgmSourcePeakRef, 0.01));
       menuBackdropPeakSmooth += (peakNorm - menuBackdropPeakSmooth) * 0.22;
+      // Final brightness: minimum floor + (volume setting × waveform amplitude × range).
+      // When vol = 0 → MIN. When vol = 1 and waveform is at peak → MAX.
       const range = MENU_BACKDROP_LIGHT_MAX - MENU_BACKDROP_LIGHT_MIN;
       menuBackdropPoint.intensity =
-        MENU_BACKDROP_LIGHT_MIN + menuBackdropPeakSmooth * range;
+        MENU_BACKDROP_LIGHT_MIN + vol * menuBackdropPeakSmooth * range;
     }
 
     function resizeMenuWallBackdrop() {
