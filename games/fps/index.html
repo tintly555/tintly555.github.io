@@ -8060,54 +8060,42 @@ if (typeof window !== "undefined") {
     let menuBgmMenuGain = null;
     let menuBgmMediaSrc = null;
     let menuBgmTimeBuf = null;
-    // Slow-decay rolling peak of the SOURCE waveform (pre-volume-gain). Used to normalize the
-    // waveform peak so the lamp's brightest reading corresponds to the menu.mp3's intrinsic peak.
-    // Climbs to the true peak in ~10s, then slowly relaxes if the song dips.
+    // Slow-decay rolling peak of the menu.mp3 waveform. Used to normalize the lamp so the
+    // brightest reading corresponds to the song's intrinsic peak. Climbs to the true peak
+    // in ~10s, then slowly relaxes if the song dips to a quieter section.
     let menuBgmSourcePeakRef = 0.18;
-    let menuBackdropVolumeSmooth = 0;
     let menuBackdropPeakSmooth = 0;
 
     function updateMenuBackdropLightFromMusic() {
       if (!menuBackdropPoint) return;
-      const vol = THREE.MathUtils.clamp(
-        (gameSettings.masterVolume || 0) * (gameSettings.musicVolume || 0),
-        0,
-        1
-      );
-      // Waveform peak from the analyser. Falls back to 0 when no analyser is wired yet (e.g.
-      // audio context blocked, autoplay gate, or routing failure). We still drive the lamp
-      // from the volume setting so the slider has a visible effect either way.
+      // Lamp intensity is driven by the menu.mp3 waveform alone. The volume slider does NOT
+      // affect the visual — only the actual music amplitude matters. So the lamp always shows
+      // the song's dynamics, regardless of the music volume setting.
+      //
+      // Use getFloatTimeDomainData (returns [-1, 1] floats, 0 = silence) instead of the byte
+      // version. The byte version writes 0 (not 128) into the buffer when the analyser has no
+      // signal flowing, which produced peak = 1.0 and pinned the lamp at MAX.
       let peak = 0;
       if (menuBgmAnalyser && menuBgmTimeBuf) {
-        menuBgmAnalyser.getByteTimeDomainData(menuBgmTimeBuf);
+        menuBgmAnalyser.getFloatTimeDomainData(menuBgmTimeBuf);
         for (let i = 0; i < menuBgmTimeBuf.length; i++) {
-          const v = Math.abs(menuBgmTimeBuf[i] - 128) / 128;
+          const v = Math.abs(menuBgmTimeBuf[i]);
           if (v > peak) peak = v;
         }
         // Slow-decay envelope: climb instantly to new peaks, relax slowly toward `peak` so the
-        // lamp doesn't pop when a loud transient ends. Floor at 0.18 to avoid divide-by-zero.
+        // lamp doesn't pop when a loud transient ends. Floor at 0.05 to avoid divide-by-zero
+        // and to give the lamp a flicker on a quiet menu.mp3.
         if (peak > menuBgmSourcePeakRef) {
           menuBgmSourcePeakRef = peak;
         } else {
           menuBgmSourcePeakRef += (peak - menuBgmSourcePeakRef) * 0.0025;
         }
       }
-      const peakNorm = Math.min(1, peak / Math.max(menuBgmSourcePeakRef, 0.18));
-      // Smooth both so the lamp doesn't jitter with every frame.
-      menuBackdropVolumeSmooth += (vol - menuBackdropVolumeSmooth) * 0.12;
+      const peakNorm = Math.min(1, peak / Math.max(menuBgmSourcePeakRef, 0.05));
       menuBackdropPeakSmooth += (peakNorm - menuBackdropPeakSmooth) * 0.22;
-      // Brightness model:
-      //   floor:  MIN                                                  (always-on glow)
-      //   + vol  * (1.0 + 0.6 * peakNorm) * 0.65 * range               (volume-driven + waveform flicker on top)
-      //   + a small static "menu.mp3 is playing" floor of MIN*0.15     (so vol=0 isn't pitch-black)
-      // At vol=0, peakNorm>0: lamp sits at MIN + 0.15*MIN ≈ 0.44 (dim but visible).
-      // At vol=1, peakNorm=1: lamp sits at MIN + 1.6 * 0.65 * range = MAX (~6.2).
-      // Slider movement always produces a visible change; waveform adds flicker when music plays.
       const range = MENU_BACKDROP_LIGHT_MAX - MENU_BACKDROP_LIGHT_MIN;
-      const wave = 1.0 + 0.6 * menuBackdropPeakSmooth;
       menuBackdropPoint.intensity =
-        MENU_BACKDROP_LIGHT_MIN * 1.15 +
-        menuBackdropVolumeSmooth * wave * range * 0.65;
+        MENU_BACKDROP_LIGHT_MIN + menuBackdropPeakSmooth * range;
     }
 
     function resizeMenuWallBackdrop() {
@@ -11851,40 +11839,10 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       menuBgmAudio.loop = true;
       menuBgmAudio.preload = "auto";
       menuBgmAudio.setAttribute("playsinline", "");
-      // Route the menu BGM through the WebAudio graph so the menu-wall lamp can read its waveform.
-      // createMediaElementSource can only be called once per element, but ensureMenuBgmAudio
-      // early-returns above on the second call, so this is safe across the page lifetime.
-      try {
-        menuBgmMediaSrc = audioCtx.createMediaElementSource(menuBgmAudio);
-        menuBgmMenuGain = audioCtx.createGain();
-        menuBgmMenuGain.gain.value = THREE.MathUtils.clamp(
-          gameSettings.masterVolume * gameSettings.musicVolume,
-          0,
-          1
-        );
-        menuBgmAnalyser = audioCtx.createAnalyser();
-        menuBgmAnalyser.fftSize = 256;
-        menuBgmAnalyser.smoothingTimeConstant = 0.4;
-        menuBgmTimeBuf = new Uint8Array(menuBgmAnalyser.fftSize);
-        menuBgmMediaSrc.connect(menuBgmMenuGain);
-        menuBgmMenuGain.connect(menuBgmAnalyser);
-        menuBgmMenuGain.connect(audioMusic);
-        // Volume is now controlled by menuBgmMenuGain; zero out the <audio>.volume so
-        // the slider doesn't double-up with the WebAudio gain.
-        menuBgmAudio.volume = 1.0;
-      } catch (_) {
-        // If createMediaElementSource fails (e.g. the element is in an unsupported state)
-        // fall back to the old direct-<.volume> path by clearing the WebAudio handles.
-        menuBgmMediaSrc = null;
-        menuBgmMenuGain = null;
-        menuBgmAnalyser = null;
-        menuBgmTimeBuf = null;
-        menuBgmAudio.volume = THREE.MathUtils.clamp(
-          gameSettings.masterVolume * gameSettings.musicVolume,
-          0,
-          1
-        );
-      }
+      // Set the src + crossOrigin BEFORE createMediaElementSource — Chrome throws
+      // InvalidStateError if you call it on an element that has no src yet, and even when
+      // it doesn't throw the source ends up in a torn state. The audio element also needs
+      // its CORS attribute settled first so the WebAudio path matches the actual fetch.
       let urlIdx = 0;
       function applySrcAt(idx) {
         if (idx >= urls.length) return;
@@ -11912,6 +11870,46 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           menuBgmAudio.load();
         } catch (_) {}
       }
+      // First URL goes in before we wire the WebAudio graph. Fallbacks (via the 'error'
+      // listener) reuse the same applySrcAt helper below.
+      applySrcAt(0);
+      // Route the menu BGM through the WebAudio graph so the menu-wall lamp can read its waveform.
+      // createMediaElementSource can only be called once per element, but ensureMenuBgmAudio
+      // early-returns above on the second call, so this is safe across the page lifetime.
+      try {
+        menuBgmMediaSrc = audioCtx.createMediaElementSource(menuBgmAudio);
+        menuBgmMenuGain = audioCtx.createGain();
+        menuBgmMenuGain.gain.value = THREE.MathUtils.clamp(
+          gameSettings.masterVolume * gameSettings.musicVolume,
+          0,
+          1
+        );
+        menuBgmAnalyser = audioCtx.createAnalyser();
+        menuBgmAnalyser.fftSize = 256;
+        menuBgmAnalyser.smoothingTimeConstant = 0.4;
+        // Float32Array for getFloatTimeDomainData (writes [-1, 1] floats, 0 = silence).
+        // Don't use Uint8Array + getByteTimeDomainData — when no signal is flowing the byte
+        // buffer stays at 0 (not 128), which produces peak = 1.0 and pins the lamp at MAX.
+        menuBgmTimeBuf = new Float32Array(menuBgmAnalyser.fftSize);
+        menuBgmMediaSrc.connect(menuBgmMenuGain);
+        menuBgmMenuGain.connect(menuBgmAnalyser);
+        menuBgmMenuGain.connect(audioMusic);
+        // Volume is now controlled by menuBgmMenuGain; zero out the <audio>.volume so
+        // the slider doesn't double-up with the WebAudio gain.
+        menuBgmAudio.volume = 1.0;
+      } catch (_) {
+        // If createMediaElementSource fails (e.g. the element is in an unsupported state)
+        // fall back to the old direct-<.volume> path by clearing the WebAudio handles.
+        menuBgmMediaSrc = null;
+        menuBgmMenuGain = null;
+        menuBgmAnalyser = null;
+        menuBgmTimeBuf = null;
+        menuBgmAudio.volume = THREE.MathUtils.clamp(
+          gameSettings.masterVolume * gameSettings.musicVolume,
+          0,
+          1
+        );
+      }
       /** Previously only wired routing here — never called play(), so menu stayed silent until accidental timing. Restore “start when buffered” + entry retries. */
       menuBgmAudio.addEventListener("canplaythrough", () => {
         syncMenuBgmRoutingAndVolumes();
@@ -11925,7 +11923,6 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         urlIdx++;
         if (urlIdx < urls.length) applySrcAt(urlIdx);
       });
-      applySrcAt(0);
     }
     function pauseMenuBgm() {
       if (!menuBgmAudio) return;
@@ -20865,8 +20862,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       { const gb = document.getElementById("btnMenuSettings"); if(gb) gb.style.display=""; }
       { const tb = document.getElementById("btnAchievements"); if(tb) tb.style.display=""; }
       showMenuPanel("menuMain");
-      menuBgmPeakSessionMax = 1e-6;
-      menuBackdropLightSmooth = 0;
+      menuBackdropPeakSmooth = 0;
       startMenuBackdropLoop();
       pauseBossBgm();
       pauseArenaBgm();
