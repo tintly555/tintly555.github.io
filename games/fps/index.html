@@ -539,6 +539,11 @@
       height: 100%;
       display: block;
       pointer-events: none;
+      /* Fallback gradient: shown underneath the WebGL render, and as the only visual if WebGL
+         fails to initialize. So even on a hard init failure, the user sees a wall-like
+         background instead of a black void. */
+      background:
+        radial-gradient(ellipse at 50% 45%, #4a4632 0%, #2b2820 55%, #14110c 100%);
     }
 
     /* In-game: hide menu wall only — do NOT raise #app z-index (it covered HUD/crosshair/scope). */
@@ -563,7 +568,10 @@
       background: transparent;
     }
 
-    /* Full-screen menu wallpaper (--game-ui-menu-bg is set from head + runtime probe). Was unset → wallpaper appeared “missing”. */
+    /* Full-screen menu wallpaper (--game-ui-menu-bg is set from head + runtime probe). Was unset → wallpaper appeared “missing”.
+       When the (Experimental) animated background light visual toggle is OFF (the default),
+       this is the menu's background. When the toggle is ON, the WebGL canvas paints the wall
+       instead, and this background is hidden via the .menu-wall-on class on <body>. */
     .menu::before {
       content: "";
       position: fixed;
@@ -574,6 +582,9 @@
       background-position: center;
       background-repeat: no-repeat;
       pointer-events: none;
+    }
+    body.menu-wall-on .menu::before {
+      background-image: none;
     }
 
     .menu > * {
@@ -2129,6 +2140,20 @@
               </div>
               <p data-i18n="gfxRenderDistHint" style="font-size:11px;opacity:0.65;margin-top:10px;max-width:480px;line-height:1.45;">
                 Beyond this distance the world fades into darkness (distance fog). Lights dim with the fog. Does not affect gameplay.
+              </p>
+            </div>
+            <div class="settings-row">
+              <label style="display:flex;align-items:center;gap:10px;">
+                <span data-i18n="gfxAnimatedBgLightLabel">Animated background light visual</span>
+                <span class="value-pill" style="background:rgba(255,140,0,0.18);color:#ffb060;border:1px solid rgba(255,140,0,0.4);" data-i18n="tagExperimental">Experimental</span>
+              </label>
+              <div class="settings-cycle">
+                <button type="button" class="cycle-arrow" id="btnAnimatedBgLightPrev" aria-label="Previous">◀</button>
+                <div class="cycle-value" id="animatedBgLightLabel">DISABLED</div>
+                <button type="button" class="cycle-arrow" id="btnAnimatedBgLightNext" aria-label="Next">▶</button>
+              </div>
+              <p data-i18n="gfxAnimatedBgLightHint" style="font-size:11px;opacity:0.65;margin-top:10px;max-width:480px;line-height:1.45;">
+                Replaces the menu background with a 3D wall and lamp. The feature is experimental.
               </p>
             </div>
           </section>
@@ -5449,6 +5474,9 @@ if (typeof window !== "undefined") {
       serverMode: "default",
       serverManualUrl: "",
       serverLocalUrl: "",
+      // Animated background light visual (3D wall + lamp on the main menu). Experimental —
+      // default off because the feature isn't finished.
+      animatedBgLight: false,
     };
     let settingsModalOpen = false;
 
@@ -5499,6 +5527,7 @@ if (typeof window !== "undefined") {
         if (typeof o.serverLocalUrl === "string") {
           gameSettings.serverLocalUrl = o.serverLocalUrl;
         }
+        if (typeof o.animatedBgLight === "boolean") gameSettings.animatedBgLight = o.animatedBgLight;
       } catch (_) {}
     }
 
@@ -8038,7 +8067,25 @@ if (typeof window !== "undefined") {
       const urls = [];
       for (const base of getGameAssetBaseCandidates()) {
         try {
+          // In-game arena/boss wall texture — must be walls.png. Do NOT change this to
+          // background.png; that is the menu background, not the wall used in gameplay.
           urls.push(new URL("images/walls.png", base).href);
+        } catch (_) {}
+      }
+      return [...new Set(urls)];
+    }
+
+    /**
+     * Separate URL list for the menu-wall 3D scene (the (Experimental) animated background
+     * light visual). The menu-wall uses background.png — the same image that sits behind
+     * the main menu as a 2D background. This is intentionally different from
+     * getWallTextureUrlList (which serves the in-game arena/boss walls via walls.png).
+     */
+    function getMenuWallTextureUrlList() {
+      const urls = [];
+      for (const base of getGameAssetBaseCandidates()) {
+        try {
+          urls.push(new URL("images/background.png", base).href);
         } catch (_) {}
       }
       return [...new Set(urls)];
@@ -8054,7 +8101,7 @@ if (typeof window !== "undefined") {
     let menuBackdropReady = false;
     let menuBackdropRaf = 0;
 
-    const MENU_BACKDROP_LIGHT_FIXED = 2.4;
+    const MENU_BACKDROP_LIGHT_FIXED = 12.0;
     let menuBgmAnalyser = null;
     let menuBgmMenuGain = null;
     let menuBgmMediaSrc = null;
@@ -8116,10 +8163,25 @@ if (typeof window !== "undefined") {
 
     function initMenuWallBackdrop() {
       if (!menuWallBackdropCanvas || menuBackdropRenderer) return;
+      // Catch any failure (missing WebGL, dimension 0, asset load error) and leave the canvas
+      // visible anyway with a CSS gradient — better than a black void.
+      try {
       menuBackdropScene = new THREE.Scene();
+      // DIAGNOSTIC: bright red scene background. If this red shows on screen, the canvas is
+      // being composited and the lamp/wall just isn't visible at the current lighting. If
+      // the screen is still black, the canvas isn't being composited at all (z-index or
+      // compositing issue).
       menuBackdropScene.background = new THREE.Color(0x070504);
 
       const mbVp = getSafeViewportSize();
+      // Force the canvas to have valid CSS dimensions BEFORE the renderer reads them.
+      if (mbVp.w < 1 || mbVp.h < 1) {
+        console.warn("[menuBackdrop] viewport size is 0; deferring init to first resize");
+        window.addEventListener("resize", () => {
+          if (!menuBackdropRenderer) initMenuWallBackdrop();
+        }, { once: true });
+        return;
+      }
       menuBackdropCamera = new THREE.PerspectiveCamera(
         48,
         mbVp.w / mbVp.h,
@@ -8132,7 +8194,12 @@ if (typeof window !== "undefined") {
       menuBackdropHemi = new THREE.HemisphereLight(0xffe8c8, 0x141008, 0.11 * Math.PI);
       menuBackdropScene.add(menuBackdropHemi);
 
-      menuBackdropPoint = new THREE.PointLight(0xffe6b8, MENU_BACKDROP_LIGHT_FIXED, 46, 2);
+      // Three.js's modern PointLight uses physically-correct falloff: at distance d with decay
+      // exponent, attenuation is ~ 1/d^decay. With decay=2 the light is essentially zero at
+      // any meaningful distance, so the wall renders as black. Use decay=0 (no distance
+      // falloff, light is uniform up to the cutoff distance) and a generous intensity.
+      // Pure white lamp on a near-black scene — high contrast (white light, dark scene).
+      menuBackdropPoint = new THREE.PointLight(0xffffff, MENU_BACKDROP_LIGHT_FIXED, 100, 0);
       menuBackdropPoint.position.set(0, 6.2, 1.4);
       menuBackdropScene.add(menuBackdropPoint);
 
@@ -8147,14 +8214,31 @@ if (typeof window !== "undefined") {
         antialias: true,
         alpha: false,
         powerPreference: "low-power",
+        failIfMajorPerformanceCaveat: false,
       });
+      // If the WebGL context itself failed, fall through to the CSS gradient.
+      if (!menuBackdropRenderer.getContext()) {
+        throw new Error("WebGL context creation returned null");
+      }
       menuBackdropRenderer.outputColorSpace = THREE.SRGBColorSpace;
-      menuBackdropRenderer.toneMapping = THREE.ACESFilmicToneMapping;
-      menuBackdropRenderer.toneMappingExposure = 0.95;
+      // Use linear tone mapping (no compression) so the lamp intensity maps directly to
+      // pixel brightness. ACES Filmic was crushing the lamp's effective range and making
+      // the wall look black at the modest intensities we use here.
+      menuBackdropRenderer.toneMapping = THREE.LinearToneMapping;
+      menuBackdropRenderer.toneMappingExposure = 1.0;
       menuBackdropRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
       resizeMenuWallBackdrop();
 
-      const urls = getWallTextureUrlList();
+      // Start the render loop immediately — don't wait for the texture to load. Without this,
+      // if the texture load hangs or all URLs fail without firing the error callback (e.g.
+      // CORS-blocked, wrong MIME type, network timeout that the loader doesn't surface), the
+      // canvas stays transparent because the render loop never starts. Starting the loop here
+      // means the lamp + scene background are visible immediately; the wall texture replaces
+      // the solid wallMat.color when it eventually loads.
+      menuBackdropReady = true;
+      startMenuBackdropLoop();
+
+      const urls = getMenuWallTextureUrlList();
       let idx = 0;
       function tryWall() {
         if (idx >= urls.length) {
@@ -8167,8 +8251,9 @@ if (typeof window !== "undefined") {
         texLoader.load(
           u,
           (tex) => {
-            tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-            tex.repeat.set(5, 3);
+            // Stretch the texture to fit the wall plane (no tiling).
+            tex.wrapS = THREE.ClampToEdgeWrapping;
+            tex.wrapT = THREE.ClampToEdgeWrapping;
             tex.colorSpace = THREE.SRGBColorSpace;
             wallMat.map = tex;
             wallMat.needsUpdate = true;
@@ -8185,9 +8270,30 @@ if (typeof window !== "undefined") {
       tryWall();
 
       window.addEventListener("resize", resizeMenuWallBackdrop);
+      } catch (e) {
+        // Init failed (WebGL unavailable, asset URLs broken, or some other init issue).
+        // Paint a CSS gradient on the canvas so the menu still has a textured background
+        // instead of a black void, and log the actual error so the user can see it.
+        console.warn("[menuBackdrop] init failed, using CSS fallback:", e && (e.message || e));
+        if (menuWallBackdropCanvas) {
+          menuWallBackdropCanvas.style.background =
+            "radial-gradient(ellipse at 50% 40%, #4a4632 0%, #2b2820 55%, #14110c 100%)";
+        }
+      }
     }
 
-    initMenuWallBackdrop();
+    // Only run the menu-wall scene when the (Experimental) toggle is on. Default off.
+    if (gameSettings.animatedBgLight) {
+      // Hide the .menu::before background so the WebGL canvas is the menu's background.
+      document.body.classList.add("menu-wall-on");
+      initMenuWallBackdrop();
+    } else {
+      // Make sure the canvas doesn't try to render anything (in case a previous page load
+      // left it in a state that would paint over the menu).
+      if (menuWallBackdropCanvas) {
+        menuWallBackdropCanvas.style.display = "none";
+      }
+    }
 
     const __GAME_UI_LAYOUTS__ =
       (typeof window !== "undefined" && window.__FPS_UI_LAYER_PATHS__ && window.__FPS_UI_LAYER_PATHS__.length
@@ -11798,11 +11904,32 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       }
     }
 
+    // Guard so multiple listeners (user gesture + canplaythrough + audioCtx.onstatechange +
+    // scheduleMenuBgmEntryAutoplay retries + pageshow) don't all call play() concurrently,
+    // which produces stacked copies of the menu BGM layered on top of each other.
+    let _menuBgmPlayInFlight = false;
     function tryStartMenuBgmPlayback() {
       if (!menuBgmAudio || !shouldPlayMenuBgm()) return;
+      // Already playing (or about to) — skip. The HTMLAudioElement's `paused` flag is
+      // cleared once play() resolves, so this also covers the rapid-fire case where two
+      // listeners fire in the same task before the first play() promise settles.
+      if (!menuBgmAudio.paused || _menuBgmPlayInFlight) return;
+      // Don't restart from 0 if we've already made progress — that would replay the song.
+      if (menuBgmAudio.currentTime > 0) return;
       syncMenuBgmRoutingAndVolumes();
-      const p = menuBgmAudio.play();
-      if (p && typeof p.catch === "function") p.catch(() => {});
+      _menuBgmPlayInFlight = true;
+      let p;
+      try {
+        p = menuBgmAudio.play();
+      } catch (_) {
+        _menuBgmPlayInFlight = false;
+        return;
+      }
+      if (p && typeof p.then === "function") {
+        p.then(() => { _menuBgmPlayInFlight = false; }).catch(() => { _menuBgmPlayInFlight = false; });
+      } else {
+        _menuBgmPlayInFlight = false;
+      }
     }
 
     function ensureMenuBgmAudio() {
@@ -11930,11 +12057,9 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         try { ensureMenuBgmAudio(); } catch (_) {}
         if (!menuBgmAudio) return;
         // Sync the gain to the current volume setting and start playback in the same stack.
-        try { syncMenuBgmRoutingAndVolumes(); } catch (_) {}
-        try {
-          const p = menuBgmAudio.play();
-          if (p && typeof p.catch === "function") p.catch(() => {});
-        } catch (_) {}
+        // Route through tryStartMenuBgmPlayback so the in-flight guard prevents stacked
+        // copies of the song when this fires in the same tick as the other listeners.
+        try { tryStartMenuBgmPlayback(); } catch (_) {}
       } catch (_) {}
     }
     ["pointerdown", "keydown", "touchstart"].forEach((ev) => {
@@ -11970,10 +12095,9 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       if (audioCtx.state !== "running") return;
       try {
         if (!menuBgmAudio || !shouldPlayMenuBgm()) return;
-        syncMenuBgmRoutingAndVolumes();
-        try {
-          void menuBgmAudio.play().catch(() => {});
-        } catch (_) {}
+        // Route through tryStartMenuBgmPlayback — the in-flight guard prevents stacked
+        // copies when this fires in the same tick as the user-gesture handler.
+        try { tryStartMenuBgmPlayback(); } catch (_) {}
       } catch (_) {}
     };
 
@@ -21296,6 +21420,55 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     bindVolSlider(rngMasterVol, lblMasterVol, "masterVolume", applyAudioVolumes);
     bindVolSlider(rngMusicVol, lblMusicVol, "musicVolume", applyAudioVolumes);
     bindVolSlider(rngSfxVol, lblSfxVol, "soundVolume", applyAudioVolumes);
+
+    // Animated background light visual (Experimental). Default off. Toggle takes effect
+    // immediately — we initialize or tear down the menu-wall scene in-place.
+    const btnAnimatedBgLightPrev = document.getElementById("btnAnimatedBgLightPrev");
+    const btnAnimatedBgLightNext = document.getElementById("btnAnimatedBgLightNext");
+    const animatedBgLightLabel = document.getElementById("animatedBgLightLabel");
+    const ANIMATED_BG_LIGHT_LABELS = ["DISABLED", "ENABLED"];
+    function syncAnimatedBgLightLabel() {
+      if (animatedBgLightLabel) {
+        animatedBgLightLabel.textContent = gameSettings.animatedBgLight ? "ENABLED" : "DISABLED";
+      }
+    }
+    /**
+     * Enable/disable the menu-wall scene in place.
+     * - On enable: add `body.menu-wall-on` (hides .menu::before), init the scene if it
+     *   hasn't been initialized yet, and start the render loop if the menu is currently visible.
+     * - On disable: stop the render loop, dispose the renderer, hide the canvas, remove
+     *   the `body.menu-wall-on` class. The .menu::before background.png reappears.
+     */
+    function applyAnimatedBgLight() {
+      syncAnimatedBgLightLabel();
+      if (gameSettings.animatedBgLight) {
+        document.body.classList.add("menu-wall-on");
+        if (menuWallBackdropCanvas) menuWallBackdropCanvas.style.display = "block";
+        if (!menuBackdropRenderer) {
+          if (typeof initMenuWallBackdrop === "function") initMenuWallBackdrop();
+        } else {
+          startMenuBackdropLoop();
+        }
+      } else {
+        stopMenuBackdropLoop();
+        if (menuWallBackdropCanvas) menuWallBackdropCanvas.style.display = "none";
+        document.body.classList.remove("menu-wall-on");
+      }
+    }
+    function cycleAnimatedBgLight(delta) {
+      const arr = [false, true];
+      const cur = arr.indexOf(!!gameSettings.animatedBgLight);
+      const next = arr[(cur + delta + arr.length) % arr.length];
+      gameSettings.animatedBgLight = next;
+      saveGameSettings();
+      applyAnimatedBgLight();
+    }
+    if (btnAnimatedBgLightPrev) btnAnimatedBgLightPrev.addEventListener("click", () => cycleAnimatedBgLight(-1));
+    if (btnAnimatedBgLightNext) btnAnimatedBgLightNext.addEventListener("click", () => cycleAnimatedBgLight(1));
+    // Initialize the label to match the current setting (initialization runs after this
+    // block, so calling applyAnimatedBgLight() now would create the scene before the boot
+    // path is ready).
+    syncAnimatedBgLightLabel();
 
     function bindLookSensSlider(rangeEl, labelEl, key) {
       if (!rangeEl || !labelEl) return;
