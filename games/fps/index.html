@@ -303,6 +303,9 @@
       backdrop-filter: blur(4px);
       box-shadow: 0 6px 20px rgba(0,0,0,0.28);
     }
+    /* Hide the HUD when not in-game (menu screen, boot, etc.). The body gets
+       `game-active` only when the player has entered the world. */
+    body:not(.game-active) #hud { display: none; }
 
     .hint {
       position: fixed;
@@ -12755,7 +12758,8 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       // Stop the previous AR source so auto-fire doesn't pile overlapping tails into a wash.
       // Gain pushed above 1.0 (other guns sit at 0.85–0.92) so the AR is clearly the loudest
       // weapon. Peaks will clip into the destination — that's intentional, gunshots clipping
-      // sound punchier than clean levels.
+      // sound punchier than clean levels. Slightly quieter than before (1.6 vs 1.8) so the
+      // AR is loud but not painfully so in headphones.
       if (idx === 1 && arFireBuffer) {
         if (arCurrentSource) {
           try { arCurrentSource.stop(); } catch (_) {}
@@ -12763,7 +12767,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         const bs = audioCtx.createBufferSource();
         bs.buffer = arFireBuffer;
         const g = audioCtx.createGain();
-        g.gain.value = 1.8;
+        g.gain.value = 1.6;
         bs.connect(g);
         g.connect(audioSfx);
         arCurrentSource = bs;
