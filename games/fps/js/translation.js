@@ -2308,7 +2308,6 @@ const V96_EN = {
   musicByPrefix: "Music by ", musicAuthor: "JimmyQrg", chooseModeToPlay: "CHOOSE A MODE TO PLAY",
   gfxQualityLabel: "Quality", gfxQualityPill: "performance / fidelity", gfxQualityHint: "Does not change zombie sync or gameplay — rendering only. Brightness is matched across tiers so difficulty stays fair.",
   gfxTextureLabel: "Texture detail", gfxRenderDistLabel: "Render distance", gfxRenderDistHint: "Beyond this distance the world fades into darkness (distance fog). Lights dim with the fog. Does not affect gameplay.",
-  gfxAnimatedBgLightLabel: "Animated background light visual", tagExperimental: "Experimental", gfxAnimatedBgLightHint: "Replaces the menu background with a 3D wall and lamp. The feature is experimental.",
   settingsHeadingData: "DATA", btnCreatorUnlock: "I am the creator", settingsCreatorHint: "Enter the creator password to unlock all weapons.",
   btnDeleteAllData: "Delete all data", settingsDeleteHint: "Clears all unlock progress and kill records on this device. Cannot be undone.",
   settingsHeadingHotbar: "HOTBAR ORDER", hotbarOrderHint: "Click a slot to select it (glows), then click another to swap. Keys 1–7 and 0 follow the new order.",

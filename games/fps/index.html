@@ -539,11 +539,9 @@
       height: 100%;
       display: block;
       pointer-events: none;
-      /* Fallback gradient: shown underneath the WebGL render, and as the only visual if WebGL
-         fails to initialize. So even on a hard init failure, the user sees a wall-like
-         background instead of a black void. */
-      background:
-        radial-gradient(ellipse at 50% 45%, #4a4632 0%, #2b2820 55%, #14110c 100%);
+      /* No CSS background — the WebGL canvas is alpha-transparent (alpha: true on
+         the renderer) so the <img id="menuBg"> underneath shows through. A brown
+         gradient here would paint over the img and hide the menu background. */
     }
 
     /* In-game: hide menu wall only — do NOT raise #app z-index (it covered HUD/crosshair/scope). */
@@ -568,8 +566,14 @@
       object-position: center;
       pointer-events: none;
       display: block;
+      background-color: #000; /* Solid black so any transparent or unloaded
+                                area of the image still shows a solid color,
+                                not a transparent gap to the body underneath. */
     }
-    body.menu-wall-on #menuBg { display: none; }
+    /* The menu-wall 3D scene is always on. The img remains visible underneath it;
+       the WebGL canvas paints over the top of the img. The .menu-wall-on class
+       is no longer used to hide the img. */
+    /* (intentionally no rule hiding #menuBg) */
 
     .menu {
       position: fixed;
@@ -7679,7 +7683,7 @@ if (typeof window !== "undefined") {
     scene.add(moon);
 
     const fallbackColor = "#13151d";
-    const fallbackWallColor = "#3b4334";
+    const fallbackWallColor = "#020202";
     let wallTexture = null;
     let wallTextureLoaded = false;
 
@@ -8116,8 +8120,15 @@ if (typeof window !== "undefined") {
       // Lamp brightness is driven by the 700Hz frequency band of the menu music.
       // The closer a frequency bin is to 700Hz, the more it affects the lamp.
       // Frequencies above 700Hz are ignored (a hard cutoff at 700Hz).
+      //
+      // The visual responds directly to the audio file (the analyser is tapped from
+      // menuBgmMenuGain, which sits BEFORE the audio music bus / master gain — so it
+      // reads the file's instantaneous content, not the device output). The visual
+      // only activates when the audio is actually playing (the play() promise has
+      // resolved and !paused); otherwise bandEnergy stays at 0 and the lamp sits
+      // at its minimum.
       let bandEnergy = 0;
-      if (menuBgmAnalyser && menuBgmFreqBuf) {
+      if (menuBgmAnalyser && menuBgmFreqBuf && menuBgmAudio && !menuBgmAudio.paused && menuBgmAudio.currentTime > 0) {
         menuBgmAnalyser.getByteFrequencyData(menuBgmFreqBuf);
         const sampleRate = (typeof audioCtx !== "undefined" && audioCtx) ? audioCtx.sampleRate : 44100;
         const fftSize = menuBgmAnalyser.fftSize;
@@ -8140,14 +8151,12 @@ if (typeof window !== "undefined") {
           bandEnergy = Math.min(1, weighted / totalWeight);
         }
       }
-      // Combine band energy with a baseline flicker so the lamp has some life.
-      const t = performance.now() * 0.001;
-      const baselineFlicker = Math.sin(t * 2.0 * Math.PI * 0.5) * 0.5
-                             + Math.sin(t * 2.0 * Math.PI * 2.1 + 1.1) * 0.25
-                             + (Math.random() - 0.5) * 0.1;
-      const musicMul = bandEnergy * 1.5;
-      const intensityMul = 1.0 + musicMul + baselineFlicker;
-      menuBackdropPoint.intensity = Math.max(0.1, MENU_BACKDROP_LIGHT_FIXED * intensityMul);
+      // Lamp = base × musicMul. The 700Hz band energy drives a HUGE intensity
+      // range: 0 (silent) to ~10 (loud peak at 700Hz). bandEnergy is already
+      // normalized to [0, 1], so multiplying by 10 gives a 10x dynamic range.
+      // When no music is playing, bandEnergy is 0 and the lamp is at its minimum.
+      const musicMul = bandEnergy * 6;
+      menuBackdropPoint.intensity = Math.max(0.4, MENU_BACKDROP_LIGHT_FIXED * musicMul - 5);
     }
 
     function resizeMenuWallBackdrop() {
@@ -8203,7 +8212,11 @@ if (typeof window !== "undefined") {
       // being composited and the lamp/wall just isn't visible at the current lighting. If
       // the screen is still black, the canvas isn't being composited at all (z-index or
       // compositing issue).
-      menuBackdropScene.background = new THREE.Color(0x070504);
+      // Background is null so the scene's clear color is transparent — the <img
+      // id="menuBg"> underneath shows through the canvas wherever the wall geometry
+      // doesn't cover (edges, etc.). With alpha: true on the WebGL context, the
+      // canvas composites cleanly over the img.
+      menuBackdropScene.background = null;
 
       const mbVp = getSafeViewportSize();
       // Force the canvas to have valid CSS dimensions BEFORE the renderer reads them.
@@ -8236,7 +8249,11 @@ if (typeof window !== "undefined") {
       menuBackdropScene.add(menuBackdropPoint);
 
       const wallMat = new THREE.MeshLambertMaterial({ color: 0xffffff });
-      const wallGeo = new THREE.PlaneGeometry(28, 16);
+      // Make the wall plane large enough to fill the camera's view at z=-11 on
+      // any reasonable aspect ratio, but not so large that the texture looks
+      // pixelated or the lamp is spread too thin. 60×34 covers ultrawide 21:9
+      // comfortably while keeping the wall readable.
+      const wallGeo = new THREE.PlaneGeometry(60, 34);
       menuBackdropWall = new THREE.Mesh(wallGeo, wallMat);
       menuBackdropWall.position.set(0, 6.2, -11);
       menuBackdropScene.add(menuBackdropWall);
@@ -8244,7 +8261,11 @@ if (typeof window !== "undefined") {
       menuBackdropRenderer = new THREE.WebGLRenderer({
         canvas: menuWallBackdropCanvas,
         antialias: true,
-        alpha: false,
+        // alpha: true so the <img id="menuBg"> underneath shows through wherever
+        // the 3D scene doesn't cover (edges, etc.). With scene.background = null
+        // the canvas clears to transparent and the wall geometry paints on top
+        // of the img.
+        alpha: true,
         powerPreference: "low-power",
         failIfMajorPerformanceCaveat: false,
       });
@@ -8274,7 +8295,7 @@ if (typeof window !== "undefined") {
       let idx = 0;
       function tryWall() {
         if (idx >= urls.length) {
-          wallMat.color.set("#3b4334");
+          wallMat.color.set("#020202");
           menuBackdropReady = true;
           startMenuBackdropLoop();
           return;
@@ -8424,7 +8445,10 @@ if (typeof window !== "undefined") {
     const FLOOR_CEILING_METERS_PER_REPEAT = 5;
 
     function makeWallMaterial(repeatX, repeatY, color) {
-      const tint = color || fallbackWallColor;
+      // When textures are off, force the wall color to the dark fallback — the caller's
+      // `color` arg is often a neutral gray (0xaaaaaa) used for lit textured walls, which
+      // would be too bright when the texture is missing.
+      const tint = gameSettings.texturesOn ? (color || fallbackWallColor) : fallbackWallColor;
       if (wallTextureLoaded && wallTexture && gameSettings.texturesOn) {
         const t = wallTexture.clone();
         t.needsUpdate = true;
@@ -8442,7 +8466,10 @@ if (typeof window !== "undefined") {
       if (!wallTexture) return;
       for (const entry of _texturedMeshes) {
         const { mesh, rx, ry, tint, faceRepeats } = entry;
-        const baseTint = tint || 0xaaaaaa;
+        // When textures are on, use the caller's tint (often a neutral gray for lit walls).
+        // When textures are off, force the dark fallback so the wall isn't lit by a bright
+        // gray tint that would dominate the untextured surface.
+        const baseTint = gameSettings.texturesOn ? (tint || 0xaaaaaa) : fallbackWallColor;
         if (faceRepeats && Array.isArray(mesh.material)) {
           const mats = mesh.material;
           for (let i = 0; i < mats.length && i < faceRepeats.length; i++) {
@@ -8458,7 +8485,7 @@ if (typeof window !== "undefined") {
               mats[i].color.set(baseTint);
             } else {
               mats[i].map = null;
-              mats[i].color.set(tint || fallbackWallColor);
+              mats[i].color.set(fallbackWallColor);
             }
             mats[i].needsUpdate = true;
           }
@@ -8474,7 +8501,7 @@ if (typeof window !== "undefined") {
             mesh.material.color.set(baseTint);
           } else {
             mesh.material.map = null;
-            mesh.material.color.set(tint || fallbackWallColor);
+            mesh.material.color.set(fallbackWallColor);
           }
           mesh.material.needsUpdate = true;
         }
@@ -21447,54 +21474,9 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     bindVolSlider(rngMusicVol, lblMusicVol, "musicVolume", applyAudioVolumes);
     bindVolSlider(rngSfxVol, lblSfxVol, "soundVolume", applyAudioVolumes);
 
-    // Animated background light visual (Experimental). Default off. Toggle takes effect
-    // immediately — we initialize or tear down the menu-wall scene in-place.
-    const btnAnimatedBgLightPrev = document.getElementById("btnAnimatedBgLightPrev");
-    const btnAnimatedBgLightNext = document.getElementById("btnAnimatedBgLightNext");
-    const animatedBgLightLabel = document.getElementById("animatedBgLightLabel");
-    const ANIMATED_BG_LIGHT_LABELS = ["DISABLED", "ENABLED"];
-    function syncAnimatedBgLightLabel() {
-      if (animatedBgLightLabel) {
-        animatedBgLightLabel.textContent = gameSettings.animatedBgLight ? "ENABLED" : "DISABLED";
-      }
-    }
-    /**
-     * Enable/disable the menu-wall scene in place.
-     * - On enable: add `body.menu-wall-on` (hides .menu::before), init the scene if it
-     *   hasn't been initialized yet, and start the render loop if the menu is currently visible.
-     * - On disable: stop the render loop, dispose the renderer, hide the canvas, remove
-     *   the `body.menu-wall-on` class. The .menu::before background.png reappears.
-     */
-    function applyAnimatedBgLight() {
-      syncAnimatedBgLightLabel();
-      if (gameSettings.animatedBgLight) {
-        document.body.classList.add("menu-wall-on");
-        if (menuWallBackdropCanvas) menuWallBackdropCanvas.style.display = "block";
-        if (!menuBackdropRenderer) {
-          if (typeof initMenuWallBackdrop === "function") initMenuWallBackdrop();
-        } else {
-          startMenuBackdropLoop();
-        }
-      } else {
-        stopMenuBackdropLoop();
-        if (menuWallBackdropCanvas) menuWallBackdropCanvas.style.display = "none";
-        document.body.classList.remove("menu-wall-on");
-      }
-    }
-    function cycleAnimatedBgLight(delta) {
-      const arr = [false, true];
-      const cur = arr.indexOf(!!gameSettings.animatedBgLight);
-      const next = arr[(cur + delta + arr.length) % arr.length];
-      gameSettings.animatedBgLight = next;
-      saveGameSettings();
-      applyAnimatedBgLight();
-    }
-    if (btnAnimatedBgLightPrev) btnAnimatedBgLightPrev.addEventListener("click", () => cycleAnimatedBgLight(-1));
-    if (btnAnimatedBgLightNext) btnAnimatedBgLightNext.addEventListener("click", () => cycleAnimatedBgLight(1));
-    // Initialize the label to match the current setting (initialization runs after this
-    // block, so calling applyAnimatedBgLight() now would create the scene before the boot
-    // path is ready).
-    syncAnimatedBgLightLabel();
+    // (The "Animated background light visual" toggle was removed — the menu-wall
+    // 3D scene is always on. The boot path unconditionally calls
+    // initMenuWallBackdrop().)
 
     function bindLookSensSlider(rangeEl, labelEl, key) {
       if (!rangeEl || !labelEl) return;
