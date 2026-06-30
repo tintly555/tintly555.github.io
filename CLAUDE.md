@@ -36,6 +36,7 @@ The main project. One ~1.6 MB `index.html` plus the assets in `images/`, `js/`, 
 - **i18n** lives in `js/translation.js` (18 language blocks). `tr(key, fallback)` resolves via `translateGame(lang, key, fallback)`; missing keys fall back to the second argument, which is always English text. **Add new strings by editing the EN block in `translation.js` first**; the other 17 locales fall back to English automatically until translated.
 - **Achievement system** is in-script: `ACHIEVEMENT_DEFS` (id, nameKey, hintKey, color, category, icon, secret), `achievementsUnlocked` (state), `renderAchievementsPanel` (DOM), `showAchievementDetail`. UI lives in the `achievementsModal` (mirrors the `settingsModal`).
 - **In-game unlock toast** lives in `#achToastWrap` at the top of the screen, 3-second auto-dismiss, queued if multiple unlock in quick succession.
+- **Menu-wall 3D scene (Experimental):** a Three.js scene rendered behind the main menu showing a wall + lamp. Opt-in via the "Animated background light visual" toggle in Settings → GRAPHICS (tagged "Experimental", default off). When off, the `.menu::before` pseudo-element (driven by `--game-ui-menu-bg`) is the menu background. The lamp is driven by the 700Hz frequency band of the menu music (see "Menu-wall audio reactivity" below).
 
 ### Critical: the `dt` cap (line 20086)
 
@@ -63,6 +64,19 @@ There are two separate audio paths that **do not interact**:
 2. **HTML `<audio>` elements (BGM, recorded SFX):** each per-mode `*BgmAudio` and the inline base64 fire sounds (PISTOL/SHOTGUN/SMG/SNIPER/DEV) are `new Audio()`. **They bypass the Web Audio graph entirely** — they go straight to the browser's destination. Volume is set per-element via `.volume`.
 
 **Implication:** muting the music via the slider updates `audioMusic.gain.value`, but does NOT silence `menuBgmAudio` / `arenaBgmAudio` / `bossBgmAudio` / `pvpBgmAudio`. You must sync each `<audio>` element's `.volume` separately. `applyAudioVolumes()` does this — extend it when adding new BGM elements. Forgetting this is a known bug class.
+
+### Menu-wall audio reactivity (700Hz band)
+
+The 3D menu-wall lamp (Experimental toggle) is driven by the menu music's frequency content:
+
+- An `AnalyserNode` is created in `ensureMenuBgmAudio()` (search `menuBgmAnalyser = audioCtx.createAnalyser()`) and is tapped off the menu BGM signal after the `menuBgmMenuGain` gain.
+- `menuBgmFreqBuf` (Uint8Array) holds the latest frequency data via `getByteFrequencyData()`. Frequencies above 700Hz are completely ignored (the loop breaks at the 700Hz bin); the 700Hz band itself has the strongest weight, with linear falloff to the surrounding bins.
+- The lamp intensity is `MENU_BACKDROP_LIGHT_FIXED * (1.0 + musicMul + baselineFlicker)` where `musicMul` is the weighted 700Hz energy (0–1.5) and `baselineFlicker` is a small always-on 0.5 Hz + 2.1 Hz + random-noise component so the lamp has some life when the music is silent.
+
+When extending or debugging the lamp:
+- `MENU_BACKDROP_LIGHT_FIXED` controls the base intensity. Raising it brightens the whole lamp; lowering it dims the whole lamp.
+- The 700Hz cutoff and bin-weighting are hard-coded in `updateMenuBackdropLightFromMusic()`. To retune the band, change the `targetBin` / `±6` window and the `1 - dist / 7` weight falloff.
+- The baseline flicker is the only thing keeping the lamp from sitting at a constant brightness when the music is silent or has no energy at 700Hz.
 
 ### State persistence (`localStorage`)
 
@@ -109,6 +123,7 @@ games/fps/
 ## Commits and PRs
 
 - One feature per commit when possible. The user has been doing a lot of small atomic commits; matching that style keeps `git diff` readable.
+- **Uncommitted work is fragile.** The git reflog only tracks commits, not staged or unstaged work. If a change is in the working tree and the user asks to revert or reset, recover by re-applying the changes from the session's diff — never `git checkout -- <file>` or `git reset --hard` over uncommitted work without an explicit go-ahead, and always confirm what's uncommitted (`git status`, `git diff --stat`) before any destructive operation.
 - The author info is `JQRG <165354267+JimmyQrg@users.noreply.github.com>` — don't change it.
 - After a non-trivial change, verify with `git diff --stat` before committing and `wc -l games/fps/index.html` to confirm the file isn't truncated (a previous `ENOSPC` write left it at 0 bytes — always sanity-check size before pushing).
 

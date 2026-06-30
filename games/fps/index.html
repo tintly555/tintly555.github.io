@@ -553,6 +553,24 @@
       pointer-events: none !important;
     }
 
+    /* The img element is the actual menu background. object-fit: cover makes it
+       fill the entire viewport regardless of aspect-ratio mismatch with the
+       image. The src is set inline in the HTML so it loads even if JS probes
+       fail. The .menu::before pseudo-element (below) is a fallback. */
+    #menuBg {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 1;
+      object-fit: cover;
+      object-position: center;
+      pointer-events: none;
+      display: block;
+    }
+    body.menu-wall-on #menuBg { display: none; }
+
     .menu {
       position: fixed;
       inset: 0;
@@ -571,20 +589,21 @@
     /* Full-screen menu wallpaper (--game-ui-menu-bg is set from head + runtime probe). Was unset → wallpaper appeared “missing”.
        When the (Experimental) animated background light visual toggle is OFF (the default),
        this is the menu's background. When the toggle is ON, the WebGL canvas paints the wall
-       instead, and this background is hidden via the .menu-wall-on class on <body>. */
+       instead, and this background is hidden via the .menu-wall-on class on <body>.
+       Note: the actual visible menu background is the <img id="menuBg"> element
+       below. The .menu::before is kept only to provide a stacking context for
+       the menu children (.menu > * { position: relative; z-index: 1 }) — it
+       has no visible background. */
     .menu::before {
       content: "";
       position: fixed;
       inset: 0;
       z-index: 0;
-      background-image: var(--game-ui-menu-bg);
-      background-size: cover;
-      background-position: center;
-      background-repeat: no-repeat;
+      background: transparent;
       pointer-events: none;
     }
     body.menu-wall-on .menu::before {
-      background-image: none;
+      background: transparent;
     }
 
     .menu > * {
@@ -1853,6 +1872,7 @@
 </head>
 <body>
   <canvas id="menuWallBackdrop" aria-hidden="true"></canvas>
+  <img id="menuBg" alt="" aria-hidden="true" src="images/background.png" />
   <div id="menu" class="menu">
     <div class="menu-panels-wrap">
     <div id="menuMain" style="display:flex;flex-direction:column;align-items:center;gap:10px;">
@@ -2140,20 +2160,6 @@
               </div>
               <p data-i18n="gfxRenderDistHint" style="font-size:11px;opacity:0.65;margin-top:10px;max-width:480px;line-height:1.45;">
                 Beyond this distance the world fades into darkness (distance fog). Lights dim with the fog. Does not affect gameplay.
-              </p>
-            </div>
-            <div class="settings-row">
-              <label style="display:flex;align-items:center;gap:10px;">
-                <span data-i18n="gfxAnimatedBgLightLabel">Animated background light visual</span>
-                <span class="value-pill" style="background:rgba(255,140,0,0.18);color:#ffb060;border:1px solid rgba(255,140,0,0.4);" data-i18n="tagExperimental">Experimental</span>
-              </label>
-              <div class="settings-cycle">
-                <button type="button" class="cycle-arrow" id="btnAnimatedBgLightPrev" aria-label="Previous">◀</button>
-                <div class="cycle-value" id="animatedBgLightLabel">DISABLED</div>
-                <button type="button" class="cycle-arrow" id="btnAnimatedBgLightNext" aria-label="Next">▶</button>
-              </div>
-              <p data-i18n="gfxAnimatedBgLightHint" style="font-size:11px;opacity:0.65;margin-top:10px;max-width:480px;line-height:1.45;">
-                Replaces the menu background with a 3D wall and lamp. The feature is experimental.
               </p>
             </div>
           </section>
@@ -5474,9 +5480,6 @@ if (typeof window !== "undefined") {
       serverMode: "default",
       serverManualUrl: "",
       serverLocalUrl: "",
-      // Animated background light visual (3D wall + lamp on the main menu). Experimental —
-      // default off because the feature isn't finished.
-      animatedBgLight: false,
     };
     let settingsModalOpen = false;
 
@@ -5527,7 +5530,6 @@ if (typeof window !== "undefined") {
         if (typeof o.serverLocalUrl === "string") {
           gameSettings.serverLocalUrl = o.serverLocalUrl;
         }
-        if (typeof o.animatedBgLight === "boolean") gameSettings.animatedBgLight = o.animatedBgLight;
       } catch (_) {}
     }
 
@@ -8101,21 +8103,51 @@ if (typeof window !== "undefined") {
     let menuBackdropReady = false;
     let menuBackdropRaf = 0;
 
-    const MENU_BACKDROP_LIGHT_FIXED = 12.0;
+    const MENU_BACKDROP_LIGHT_FIXED = 2.0;
     let menuBgmAnalyser = null;
     let menuBgmMenuGain = null;
     let menuBgmMediaSrc = null;
     let menuBgmTimeBuf = null;
-    // WebAudio analyser is still created in ensureMenuBgmAudio (so the menu music can route
-    // through the WebAudio graph), but the lamp no longer reads it. Keeping the analyser
-    // here preserves the existing audio wiring; it just isn't sampled.
+    // Frequency-domain buffer for reading the 700Hz band that drives the menu-wall lamp.
+    let menuBgmFreqBuf = null;
 
     function updateMenuBackdropLightFromMusic() {
       if (!menuBackdropPoint) return;
-      // Lamp is held at a fixed intensity. The wall glows steadily; we don't read the
-      // analyser, we don't track the volume slider, and we don't depend on the audio
-      // context state. This is the simplest possible "lamp on a wall" behavior.
-      menuBackdropPoint.intensity = MENU_BACKDROP_LIGHT_FIXED;
+      // Lamp brightness is driven by the 700Hz frequency band of the menu music.
+      // The closer a frequency bin is to 700Hz, the more it affects the lamp.
+      // Frequencies above 700Hz are ignored (a hard cutoff at 700Hz).
+      let bandEnergy = 0;
+      if (menuBgmAnalyser && menuBgmFreqBuf) {
+        menuBgmAnalyser.getByteFrequencyData(menuBgmFreqBuf);
+        const sampleRate = (typeof audioCtx !== "undefined" && audioCtx) ? audioCtx.sampleRate : 44100;
+        const fftSize = menuBgmAnalyser.fftSize;
+        const hzPerBin = sampleRate / fftSize;
+        const targetBin = Math.floor(700 / hzPerBin);
+        const minBin = Math.max(0, targetBin - 6);
+        const maxBin = Math.min(menuBgmFreqBuf.length - 1, targetBin + 6);
+        let weighted = 0;
+        let totalWeight = 0;
+        for (let i = 0; i < menuBgmFreqBuf.length; i++) {
+          if (i > maxBin) break;
+          if (i < minBin) continue;
+          const dist = Math.abs(i - targetBin);
+          const w = Math.max(0, 1 - dist / 7);
+          if (w <= 0) continue;
+          weighted += (menuBgmFreqBuf[i] / 255) * w;
+          totalWeight += w;
+        }
+        if (totalWeight > 0) {
+          bandEnergy = Math.min(1, weighted / totalWeight);
+        }
+      }
+      // Combine band energy with a baseline flicker so the lamp has some life.
+      const t = performance.now() * 0.001;
+      const baselineFlicker = Math.sin(t * 2.0 * Math.PI * 0.5) * 0.5
+                             + Math.sin(t * 2.0 * Math.PI * 2.1 + 1.1) * 0.25
+                             + (Math.random() - 0.5) * 0.1;
+      const musicMul = bandEnergy * 1.5;
+      const intensityMul = 1.0 + musicMul + baselineFlicker;
+      menuBackdropPoint.intensity = Math.max(0.1, MENU_BACKDROP_LIGHT_FIXED * intensityMul);
     }
 
     function resizeMenuWallBackdrop() {
@@ -8282,18 +8314,9 @@ if (typeof window !== "undefined") {
       }
     }
 
-    // Only run the menu-wall scene when the (Experimental) toggle is on. Default off.
-    if (gameSettings.animatedBgLight) {
-      // Hide the .menu::before background so the WebGL canvas is the menu's background.
-      document.body.classList.add("menu-wall-on");
-      initMenuWallBackdrop();
-    } else {
-      // Make sure the canvas doesn't try to render anything (in case a previous page load
-      // left it in a state that would paint over the menu).
-      if (menuWallBackdropCanvas) {
-        menuWallBackdropCanvas.style.display = "none";
-      }
-    }
+    // Always run the menu-wall scene. The 3D wall + lamp is on by default.
+    document.body.classList.add("menu-wall-on");
+    initMenuWallBackdrop();
 
     const __GAME_UI_LAYOUTS__ =
       (typeof window !== "undefined" && window.__FPS_UI_LAYER_PATHS__ && window.__FPS_UI_LAYER_PATHS__.length
@@ -11991,6 +12014,8 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         // Don't use Uint8Array + getByteTimeDomainData — when no signal is flowing the byte
         // buffer stays at 0 (not 128), which produces peak = 1.0 and pins the lamp at MAX.
         menuBgmTimeBuf = new Float32Array(menuBgmAnalyser.fftSize);
+        // Uint8Array for getByteFrequencyData (drives the 700Hz band of the menu-wall lamp).
+        menuBgmFreqBuf = new Uint8Array(menuBgmAnalyser.frequencyBinCount);
         menuBgmMediaSrc.connect(menuBgmMenuGain);
         menuBgmMenuGain.connect(menuBgmAnalyser);
         menuBgmMenuGain.connect(audioMusic);
@@ -12004,6 +12029,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         menuBgmMenuGain = null;
         menuBgmAnalyser = null;
         menuBgmTimeBuf = null;
+        menuBgmFreqBuf = null;
         menuBgmAudio.volume = THREE.MathUtils.clamp(
           gameSettings.masterVolume * gameSettings.musicVolume,
           0,
