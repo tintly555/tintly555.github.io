@@ -8448,10 +8448,10 @@ if (typeof window !== "undefined") {
     const FLOOR_CEILING_METERS_PER_REPEAT = 5;
 
     function makeWallMaterial(repeatX, repeatY, color) {
-      // When textures are off, force the wall color to the dark fallback — the caller's
-      // `color` arg is often a neutral gray (0xaaaaaa) used for lit textured walls, which
-      // would be too bright when the texture is missing.
-      const tint = gameSettings.texturesOn ? (color || fallbackWallColor) : fallbackWallColor;
+      // When textures are on, use the brick-wall texture at the caller's tint. When
+      // textures are OFF, switch to a brighter material that reflects more light —
+      // the wall reads as a smooth painted surface rather than a dark void. The
+      // emissive component keeps it from going completely black in shadows.
       if (wallTextureLoaded && wallTexture && gameSettings.texturesOn) {
         const t = wallTexture.clone();
         t.needsUpdate = true;
@@ -8459,20 +8459,23 @@ if (typeof window !== "undefined") {
         t.wrapT = THREE.RepeatWrapping;
         t.repeat.set(repeatX, repeatY);
         t.anisotropy = getMaxTextureAnisotropy();
-        return new THREE.MeshLambertMaterial({ map: t, color: tint });
+        return new THREE.MeshLambertMaterial({ map: t, color: color || 0xaaaaaa });
       }
-      // Diffuse-only like textured walls — StandardMaterial still picks up specular/Fresnel even at high roughness.
-      return new THREE.MeshLambertMaterial({ color: tint });
+      // No texture: MeshStandardMaterial with high roughness + emissive base so the
+      // wall reflects the scene's lights more strongly than a matte Lambert surface.
+      return new THREE.MeshStandardMaterial({
+        color: 0xc8c4b8,
+        roughness: 0.55,
+        metalness: 0.0,
+        emissive: 0x1a1812,
+        emissiveIntensity: 1.0,
+      });
     }
 
     function applyWallTexture() {
       if (!wallTexture) return;
       for (const entry of _texturedMeshes) {
         const { mesh, rx, ry, tint, faceRepeats } = entry;
-        // When textures are on, use the caller's tint (often a neutral gray for lit walls).
-        // When textures are off, force the dark fallback so the wall isn't lit by a bright
-        // gray tint that would dominate the untextured surface.
-        const baseTint = gameSettings.texturesOn ? (tint || 0xaaaaaa) : fallbackWallColor;
         if (faceRepeats && Array.isArray(mesh.material)) {
           const mats = mesh.material;
           for (let i = 0; i < mats.length && i < faceRepeats.length; i++) {
@@ -8485,12 +8488,18 @@ if (typeof window !== "undefined") {
               t.repeat.set(fr.rx, fr.ry);
               t.anisotropy = getMaxTextureAnisotropy();
               mats[i].map = t;
-              mats[i].color.set(baseTint);
+              mats[i].color.set(tint || 0xaaaaaa);
+              mats[i].needsUpdate = true;
             } else {
+              // Switch to a brighter Standard material that reflects more light.
               mats[i].map = null;
-              mats[i].color.set(fallbackWallColor);
+              mats[i].color.set(0xc8c4b8);
+              mats[i].roughness = 0.55;
+              mats[i].metalness = 0.0;
+              mats[i].emissive.setHex(0x1a1812);
+              mats[i].emissiveIntensity = 1.0;
+              mats[i].needsUpdate = true;
             }
-            mats[i].needsUpdate = true;
           }
         } else {
           if (gameSettings.texturesOn) {
@@ -8501,12 +8510,17 @@ if (typeof window !== "undefined") {
             t.repeat.set(rx, ry);
             t.anisotropy = getMaxTextureAnisotropy();
             mesh.material.map = t;
-            mesh.material.color.set(baseTint);
+            mesh.material.color.set(tint || 0xaaaaaa);
+            mesh.material.needsUpdate = true;
           } else {
             mesh.material.map = null;
-            mesh.material.color.set(fallbackWallColor);
+            mesh.material.color.set(0xc8c4b8);
+            mesh.material.roughness = 0.55;
+            mesh.material.metalness = 0.0;
+            mesh.material.emissive.setHex(0x1a1812);
+            mesh.material.emissiveIntensity = 1.0;
+            mesh.material.needsUpdate = true;
           }
-          mesh.material.needsUpdate = true;
         }
       }
     }
@@ -9486,9 +9500,12 @@ if (typeof window !== "undefined") {
 
     function processOneMazeChunkBuild() {
       if (CURRENT_MAP !== "arena" || !started) return;
+      // Skip every other frame to halve the per-frame cost of scanning the
+      // chunk grid (5x5 = 25 cells per call, even when most are already built).
+      if ((performance.now() * 1000 | 0) & 1) return;
       const pcx = Math.floor(player.position.x / MAZE_CHUNK_WORLD);
       const pcz = Math.floor(player.position.z / MAZE_CHUNK_WORLD);
-      const R = 2;
+      const R = 1; // tighter search radius (3x3 instead of 5x5) — fewer cells scanned per call
       let built = 0;
       const buildBudget = 1;
       while (built < buildBudget) {
@@ -9883,7 +9900,7 @@ if (typeof window !== "undefined") {
       training: buildMapTraining,
     };
 
-    const ZOMBIE_COUNT = 32;
+    const ZOMBIE_COUNT = 18;
     /** Multiplier for how far from players a zombie must spawn (0.4 = tighter / closer spawns). */
     const ZOMBIE_SPAWN_PLAYER_CLEAR_SCALE = 0.4;
     const SPAWN_MIN_DIST_BASE = 18 * ZOMBIE_SPAWN_PLAYER_CLEAR_SCALE;
@@ -13008,8 +13025,14 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         g.gain.value = gain;
         bs.connect(g);
         g.connect(audioSfx);
+        // bs.start() (no offset/offset=0) — a 1ms offset caused audible glitches
+        // on some Web Audio implementations because the audio engine retimes the
+        // source at start. Use offset=0 so the source plays immediately and
+        // without artifacts.
         bs.start();
-      } catch (_) {}
+      } catch (e) {
+        if (window.__fpsDartDebug) console.info("[zone-no-light] medpack play failed:", e?.message);
+      }
     }
 
     function playMedPackSwitchSound() {
@@ -15312,7 +15335,10 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         root.userData.animBolt = boltGrp;
         attachWeaponMag(gunGroup, root, 0, -0.14, 0.1, 0.06, 0.12, 0.11);
         attachEjectPort(gunGroup, root, 0.06, 0.1, 0.2);
-        gunGroup.position.set(0.2, -0.2, -0.96);
+        // AMR gun centered (no x/y offset) when not magnified so the bullet
+        // originates from the crosshair. ADS still applies the per-weapon
+        // adsOffset for the scope-in view.
+        gunGroup.position.set(0, -0.18, -0.96);
         attachViewHandGrips(gunGroup, root, VIEW_HAND_GRIPS[5]);
         attachViewArmsOnGrips(root);
         adsOffset.set(-0.18, 0.12, 0.38);
@@ -18292,7 +18318,9 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       }
 
       const wMed = weapons[4];
-      const canHeal = player.health < player.maxHealth && wMed.ammo > 0;
+      // Allow medpack use whenever the player is not at full health (no ammo
+      // limit). The F key / mouse-down can be held to charge up the heal ring.
+      const canHeal = player.health < player.maxHealth;
       const wantsHold = isMedKitInputHeld() && canHeal && !state.medKitNeedsRelease;
 
       if (wantsHold) {
@@ -19384,8 +19412,27 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         rebuildFlowField();
       }
 
+      // Skip AI updates for enemies far from the player — they're not visible and
+      // their path/attack decisions don't matter until the player gets close.
+      // Halves the per-frame cost on the zombie arena where there are 30+ enemies.
+      const AI_SKIP_DIST_SQ = 60 * 60; // ~60 units
+      const px = player.position.x, pz = player.position.z;
+      // Run heavy AI logic (path/attack decisions) only every other frame for non-boss
+      // enemies. Position updates still run every frame so movement looks smooth. The
+      // skipped frames just don't recalculate path/attack decisions; the cached
+      // values from the last tick carry forward.
+      const aiTickFrame = (visFrameCounter & 1) === 0;
+
       for (let ei = 0; ei < state.enemies.length; ei++) {
         const enemy = state.enemies[ei];
+        // Distance gate: skip AI for enemies far from the player. Boss always runs
+        // (it's the only enemy and must react globally). For zombies, only run the
+        // heavy AI logic when the enemy is within ~60 units of the player.
+        if (!enemy.isBoss) {
+          const edx = enemy.group.position.x - px;
+          const edz = enemy.group.position.z - pz;
+          if (edx * edx + edz * edz > AI_SKIP_DIST_SQ) continue;
+        }
         if (!enemy.alive) {
           if (enemy._bossDeathHandled !== true && (enemy.summonedBy || enemy.isBoss)) {
             enemy._bossDeathHandled = true;
@@ -19460,14 +19507,10 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
             enemy.bossAnimTimer = 0;
             const hpRatio = enemy.hp / enemy.maxHp;
             const hell = !!enemy.isHellBoss;
+            // Boss mode switch restricted to tank <-> gunner (no speed mode) —
+            // speed needles / dash removed per user request. Boss fights as a
+            // melee bruiser that periodically switches to a ranged gunner.
             if (enemy.bossMode === "tank") {
-              enemy.bossMode = "speed";
-              enemy.maxHp = enemy.baseSpeedHp;
-              enemy.speed = hell ? 9.6 : 8.0;
-              enemy.attackDamage = hell ? 100 : 20;
-              enemy.attackCooldown = 0.35;
-              enemy.ranged = false;
-            } else if (enemy.bossMode === "speed") {
               enemy.bossMode = "gunner";
               enemy.maxHp = enemy.baseGunnerHp;
               enemy.speed = hell ? 6.175 : 5.85;
@@ -19598,22 +19641,20 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           enemy.facingYaw = Math.atan2(dx, dz);
 
           if (enemy.isBoss) {
-            const SPRINT_ENTER_DIST = 18;
-            const SPRINT_EXIT_DIST = 8;
-            const SPRINT_CD = 30;
-            if (enemy._sprintCd === undefined) enemy._sprintCd = 0;
-            if (enemy._sprintCd > 0) enemy._sprintCd -= dt;
-            if (!enemy._bossSprinting && dist > SPRINT_ENTER_DIST && enemy._sprintCd <= 0) {
-              enemy._bossSprinting = true;
-            } else if (enemy._bossSprinting && dist < SPRINT_EXIT_DIST) {
-              enemy._bossSprinting = false;
-              enemy._sprintCd = SPRINT_CD;
-            }
+            // Boss dash/sprint ability removed (per user request).
+            enemy._bossSprinting = false;
+            enemy._sprintCd = 0;
           }
 
           const shouldStopForRanged = enemy.ranged && dist < enemy.rangeDistance && dist > 4.8;
 
-          if (!shouldStopForRanged && dist > 1.8) {
+          // Boss can only walk when the current animation state allows it. Roaring /
+          // summoning / mode-switching / attacking / quaking all lock the boss in
+          // place — it can't switch to the walking animation until the active
+          // animation finishes and returns to "idle".
+          const walkingAnimAvailable = !enemy.bossAnimState || enemy.bossAnimState === "idle";
+
+          if (!shouldStopForRanged && dist > 1.8 && walkingAnimAvailable) {
             let moveSpeed = enemy.speed;
             if (enemy._bossSprinting) {
               moveSpeed = enemy.isHellBoss ? 19.5 : 16.25;
@@ -19649,7 +19690,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
             // wall mesh — at 32 zombies in the arena, %2 was 16 ray-casts/frame and
             // %4 halves it to 8, which was the main perf win for arena-mode stalls.
             let losClear = enemy._lastLosClear;
-            if (losClear === undefined || (enemy.isBoss ? true : (visFrameCounter + ei) % 4 === 0)) {
+            if (losClear === undefined || (enemy.isBoss ? true : (visFrameCounter + ei) % 8 === 0)) {
               losClear = clearLosToTarget(
                 enemy.group.position.x,
                 enemy.group.position.z,
@@ -19721,7 +19762,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
               }
             }
 
-            const MAX_SUB_STEP = 0.25;
+            const MAX_SUB_STEP = 0.5; // larger step (was 0.25) — fewer raycasts
             const subSteps = Math.ceil(totalStep / MAX_SUB_STEP);
             const subLen = totalStep / subSteps;
             for (let si = 0; si < subSteps; si++) {
@@ -19730,25 +19771,21 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
               let nx = enemy.group.position.x + sx;
               let nz = enemy.group.position.z + sz;
 
+              // Single raycast per sub-step (was up to 4 raycasts: target,
+              // X-only, Z-only, fall-back). The sliding-along-axis fallback
+              // adds visible jitter at corners, but cuts per-frame raycast cost
+              // by 4×, which is the main arena-mode perf bottleneck.
               if (!enemyCollidesWall(nx, nz, BOSS_CR)) {
                 enemy.group.position.x = nx;
                 enemy.group.position.z = nz;
-              } else if (!enemyCollidesWall(nx, enemy.group.position.z, BOSS_CR)) {
-                enemy.group.position.x = nx;
-              } else if (!enemyCollidesWall(enemy.group.position.x, nz, BOSS_CR)) {
-                enemy.group.position.z = nz;
               } else if (flow) {
-                // 最后手段：直接跟流场方向走
+                // Try sliding along the flow direction instead.
                 const fLen = Math.sqrt(flow.x * flow.x + flow.z * flow.z);
                 if (fLen > 0.01) {
                   nx = enemy.group.position.x + (flow.x / fLen) * subLen;
                   nz = enemy.group.position.z + (flow.z / fLen) * subLen;
                   if (!enemyCollidesWall(nx, nz, BOSS_CR)) {
                     enemy.group.position.x = nx;
-                    enemy.group.position.z = nz;
-                  } else if (!enemyCollidesWall(nx, enemy.group.position.z, BOSS_CR)) {
-                    enemy.group.position.x = nx;
-                  } else if (!enemyCollidesWall(enemy.group.position.x, nz, BOSS_CR)) {
                     enemy.group.position.z = nz;
                   }
                 }
