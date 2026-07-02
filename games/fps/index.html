@@ -1884,15 +1884,13 @@
     <div class="menu-panels-wrap">
     <div id="menuMain" style="display:flex;flex-direction:column;align-items:center;gap:10px;">
       <h1 id="menuGameTitle" data-i18n="gameTitle">Zone No Light</h1>
-      <p id="menuCreditsGame" data-i18n="creditsGame" style="cursor:pointer;user-select:none;">Game by Tintly555 and JimmyQrg</p>
-      <p id="menuCreditsMusic" style="cursor:pointer;user-select:none;">Music by JimmyQrg</p>
       <button type="button" id="btnStart" data-i18n="btnStart">START</button>
       <button type="button" id="btnTraining" data-i18n="btnTrainingCamp">Training Camp</button>
     </div>
     <!-- Floating settings gear — top-right, only visible in menu -->
     <button type="button" id="btnMenuSettings" class="menu-float-icon" title="Settings" style="position:fixed;top:16px;right:16px;z-index:102;background:none;border:none;cursor:pointer;padding:8px;opacity:0.82;transition:opacity 0.15s;" onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='0.82'"><svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
     <!-- Floating achievements trophy — bottom-right, only visible in menu -->
-    <button type="button" id="btnAchievements" class="menu-float-icon" title="Achievements" style="position:fixed;bottom:16px;right:16px;z-index:102;background:none;border:none;cursor:pointer;padding:8px;opacity:0.82;transition:opacity 0.15s;" onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='0.82'"><svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2z"/></svg></button>
+    <button type="button" id="btnAchievements" class="menu-float-icon" title="Achievements" style="position:fixed;bottom:72px;right:16px;z-index:102;background:none;border:none;cursor:pointer;padding:8px;opacity:0.82;transition:opacity 0.15s;" onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='0.82'"><svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2z"/></svg></button>
     <!-- START submenu: Zombie Arena | Boss Fight | PVP -->
     <div id="menuStart" style="display:none;flex-direction:column;align-items:center;gap:10px;position:relative;padding-top:20px;">
       <button type="button" id="btnStartBack" class="menu-float-icon" style="position:fixed;top:14px;left:14px;background:none;border:none;cursor:pointer;padding:6px;opacity:0.85;transition:opacity 0.15s;z-index:105;" onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='0.85'"><svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
@@ -3257,5 +3255,9 @@ if (typeof window !== "undefined") {
 }
 </script>
   <script type="module" src="main.min.js"></script>
+  <footer id="pageFooter" style="position:fixed;left:0;right:0;bottom:0;display:flex;justify-content:center;align-items:center;gap:16px;padding:10px 14px;background:transparent;backdrop-filter:none;z-index:101;pointer-events:auto;">
+    <img src="images/tintly555.png" alt="Tintly555" style="height:28px;width:auto;display:block;opacity:0.75;" />
+    <img src="images/jimmyqrg.png" alt="JimmyQrg" style="height:32px;width:auto;display:block;margin-bottom:2px;opacity:0.75;" />
+  </footer>
 </body>
 </html>

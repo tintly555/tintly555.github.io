@@ -17886,8 +17886,13 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
 
     btnArena.addEventListener("click", () => showMenuPanel("menuArenaMode"));
 
-    document.getElementById("menuCreditsGame").addEventListener("click", () => tryEasterEggCredit(1));
-    document.getElementById("menuCreditsMusic").addEventListener("click", () => tryEasterEggCredit(2));
+    // The credit text was removed from index.html; the easter-egg click handlers
+    // below are guarded with optional-chaining so a missing element is a no-op
+    // rather than an unhandled promise rejection.
+    const menuCreditsGameEl = document.getElementById("menuCreditsGame");
+    if (menuCreditsGameEl) menuCreditsGameEl.addEventListener("click", () => tryEasterEggCredit(1));
+    const menuCreditsMusicEl = document.getElementById("menuCreditsMusic");
+    if (menuCreditsMusicEl) menuCreditsMusicEl.addEventListener("click", () => tryEasterEggCredit(2));
 
     /**
      * Open/close the achievements modal. Mirrors the settings-modal pattern:
