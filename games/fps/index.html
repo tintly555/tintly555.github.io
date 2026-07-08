@@ -189,10 +189,147 @@
         _probeAndSet("--game-ui-btn-texture", L0.btnTex);
         _probeAndSet("--game-ui-settings-bg", L0.settingsBg);
         try {
-          var curMouse = new URL("images/mouse.png", R).href;
-          el.style.setProperty("--game-cursor-default", 'url("' + curMouse + '") 0 0, auto');
-          el.style.setProperty("--game-cursor-action", 'url("' + curMouse + '") 0 0, pointer');
-        } catch (eCur) {}
+          // Custom cursor (mouse.png / mouse-hover.png). Because CSS cursor()
+          // cannot cross-fade, two layered <div>s follow the pointer and their
+          // opacities are tweened in JS. The transition is a 500ms linear lerp
+          // from the *current* opacity values to the new targets; if the hover
+          // state flips mid-tween, we restart from the in-flight opacity so the
+          // fade continues smoothly without a snap.
+          var curDefault = new URL("images/mouse.png", R).href;
+          var curHover   = new URL("images/mouse-hover.png", R).href;
+          el.style.setProperty("--game-cursor-default-image", 'url("' + curDefault + '")');
+          el.style.setProperty("--game-cursor-hover-image",   'url("' + curHover   + '")');
+
+          function setupGameCursor() {
+            var root  = document.getElementById("gameCursor");
+            var defEl = root && root.querySelector('[data-layer="default"]');
+            var hovEl = root && root.querySelector('[data-layer="hover"]');
+            if (!root || !defEl || !hovEl) return;
+
+            // Logical state — single source of truth. `target` is "default" or
+            // "hover" depending on whether the element under the pointer has a
+            // `cursor: pointer` computed style. `opacities` tracks what each
+            // layer is currently rendering at; this is what gets lerped.
+            var CURSOR_DURATION_MS = 500;
+            var state = {
+              active: false,                  // mirrors body.show-cursor
+              target: "default",              // desired layer
+              inFlight: false,                // true while a tween is running
+              startMs: 0,                     // performance.now() at tween start
+              fromDef: 1, fromHov: 0,         // opacity at tween start
+              toDef:   1, toHov:   0,         // opacity at tween end
+              opacDef: 1, opacHov: 0,         // opacity rendered last frame
+              raf: 0
+            };
+
+            function setLayerOpacity(def, hov) {
+              state.opacDef = def;
+              state.opacHov = hov;
+              defEl.style.setProperty("--cursor-layer-opacity", def.toFixed(4));
+              hovEl.style.setProperty("--cursor-layer-opacity", hov.toFixed(4));
+            }
+
+            function startTween(toDef, toHov) {
+              // Use the current opacities as the new `from` so a state change
+              // mid-animation continues smoothly from where the fade is now.
+              state.fromDef = state.opacDef;
+              state.fromHov = state.opacHov;
+              state.toDef   = toDef;
+              state.toHov   = toHov;
+              state.startMs = performance.now();
+              state.inFlight = true;
+              if (!state.raf) state.raf = requestAnimationFrame(tick);
+            }
+
+            function tick(now) {
+              state.raf = 0;
+              if (!state.inFlight) return;
+              var t = (now - state.startMs) / CURSOR_DURATION_MS;
+              if (t >= 1) {
+                setLayerOpacity(state.toDef, state.toHov);
+                state.inFlight = false;
+                return;
+              }
+              var def = state.fromDef + (state.toDef - state.fromDef) * t;
+              var hov = state.fromHov + (state.toHov - state.fromHov) * t;
+              setLayerOpacity(def, hov);
+              state.raf = requestAnimationFrame(tick);
+            }
+
+            function applyTarget() {
+              // Snap immediately when the cursor is hidden — no fade-out so the
+              // UI feels instant when re-locking into gameplay.
+              if (!state.active) {
+                state.inFlight = false;
+                if (state.raf) { cancelAnimationFrame(state.raf); state.raf = 0; }
+                // Hide the DOM cursor entirely; restore the OS default elsewhere.
+                root.removeAttribute("data-active");
+                return;
+              }
+              root.setAttribute("data-active", "1");
+              if (state.target === "hover")      startTween(0, 1);
+              else /* "default" */              startTween(1, 0);
+            }
+
+            // Pointer tracking — both layers share the same hotspot offset so
+            // the arrow tip lands at the real cursor position.
+            var lastX = -1000, lastY = -1000;
+            function onMove(e) {
+              lastX = e.clientX;
+              lastY = e.clientY;
+              var t = "translate3d(" + lastX + "px," + lastY + "px,0)";
+              defEl.style.transform = t;
+              hovEl.style.transform = t;
+            }
+            window.addEventListener("mousemove", onMove, { passive: true });
+            window.addEventListener("mouseenter", onMove, { passive: true });
+
+            // Hover detection: when any element under the pointer has a
+            // computed `cursor: pointer`, fade to the hover layer.
+            function isPointerCursor(el) {
+              if (!el || el.nodeType !== 1) return false;
+              // Cheap & accurate: read the computed style. Cached walk-up to
+              // avoid repeated queries when the cursor moves across deep trees.
+              while (el && el !== document) {
+                var c = window.getComputedStyle(el).cursor;
+                if (c === "pointer") return true;
+                if (c === "auto" || c === "default" || c === "none") return false;
+                el = el.parentElement;
+              }
+              return false;
+            }
+            function onOver(e) {
+              var want = isPointerCursor(e.target) ? "hover" : "default";
+              if (state.target === want) return;
+              state.target = want;
+              applyTarget();
+            }
+            window.addEventListener("mouseover", onOver, { passive: true });
+            window.addEventListener("mouseout",  onOver, { passive: true });
+
+            // Show/hide mirroring body.show-cursor — this is the toggle set by
+            // main.js (death screen, settings modal, etc.).
+            function syncActive() {
+              state.active = document.body.classList.contains("show-cursor");
+              applyTarget();
+            }
+            new MutationObserver(syncActive).observe(document.body, {
+              attributes: true, attributeFilter: ["class"]
+            });
+            syncActive();
+          }
+          // The <div id="gameCursor"> markup lives later in <body>, so defer
+          // the setup until it's been parsed. The CSS variable assignments
+          // above already took effect — only the JS wiring depends on the DOM.
+          if (document.readyState === "loading") {
+            document.addEventListener("DOMContentLoaded", setupGameCursor, { once: true });
+          } else {
+            setupGameCursor();
+          }
+        } catch (eCur) {
+          /* Cursor setup failed — fall back to whatever the CSS cursor declarations
+             in :root provide (empty / OS default). Nothing else to do. */
+        }
       } catch (e1) {}
     })();
   </script>
@@ -243,11 +380,44 @@
     }
 
     /* When pointer lock is released (death screen, menu, settings, etc.) show
-     * the project's mouse.png instead of the OS default. Falls back to the OS
-     * cursor if the asset fails to load. The in-game FPS gameplay keeps
-     * `cursor: none` (above) since the renderer draws a centered crosshair. */
-    body.show-cursor #app {
-      cursor: var(--game-cursor-default, default);
+     * the project's mouse.png / mouse-hover.png instead of the OS default. The
+     * native cursor is hidden; two absolutely-positioned <div>s follow the
+     * pointer and cross-fade between the two images (driven by the script
+     * injected at the bottom of this file). In-game FPS gameplay keeps
+     * `cursor: none` since the renderer draws a centered crosshair. */
+    body.show-cursor #app,
+    body.show-cursor { cursor: none; }
+
+    #gameCursor {
+      position: fixed;
+      inset: 0;
+      z-index: 2147483640;            /* below modal overlays, above canvas */
+      pointer-events: none;
+      user-select: none;
+      visibility: hidden;             /* shown via [data-active="1"] by the JS */
+      contain: layout style paint;
+    }
+    #gameCursor[data-active="1"] { visibility: visible; }
+
+    #gameCursor .game-cursor-layer {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 64px;
+      height: 64px;
+      margin-left: 0;
+      margin-top: 0;
+      background-repeat: no-repeat;
+      background-position: 0 0;
+      will-change: transform, opacity;
+      /* opacity is driven by --cursor-layer-opacity (set by JS each frame) */
+      opacity: var(--cursor-layer-opacity, 0);
+    }
+    #gameCursor .game-cursor-layer--default {
+      background-image: var(--game-cursor-default-image, none);
+    }
+    #gameCursor .game-cursor-layer--hover {
+      background-image: var(--game-cursor-hover-image, none);
     }
 
     #trainingScoreboard {
@@ -1878,6 +2048,13 @@
   </script>
 </head>
 <body>
+  <!-- Custom cursor system: two layers (default + hover) follow the pointer and
+       cross-fade when the underlying element's computed cursor is `pointer`.
+       See the boot script near the top of <body> for the tween logic. -->
+  <div id="gameCursor" aria-hidden="true">
+    <div class="game-cursor-layer game-cursor-layer--default" data-layer="default"></div>
+    <div class="game-cursor-layer game-cursor-layer--hover" data-layer="hover"></div>
+  </div>
   <canvas id="menuWallBackdrop" aria-hidden="true"></canvas>
   <img id="menuBg" alt="" aria-hidden="true" src="images/background.png" />
   <div id="menu" class="menu">
