@@ -55,20 +55,21 @@ Commit **both** `js/main.js` (the source) and `main.min.js` (the deployed build)
 
 ### Custom mouse cursor (`images/mouse.png`, `images/mouse-hover.png`)
 
-The cursor when pointer-lock is released (death screen, menu, settings, etc.) is **not** a CSS `cursor: url(...)`. CSS cursor() cannot cross-fade, so the game uses two `<div class="game-cursor-layer">` elements inside `#gameCursor` that:
+The cursor when pointer-lock is released (menus, settings, death screen, anywhere the pointer is free) is the browser's own cursor with **two URLs swapped via CSS** — no DOM element tracks the pointer.
 
-- follow the mouse position via a `mousemove` listener and `transform: translate3d()`,
-- hold `background-image: var(--game-cursor-default-image)` (default layer, `mouse.png`) and `var(--game-cursor-hover-image)` (hover layer, `mouse-hover.png`),
-- have their opacities tweened by `setupGameCursor()` (defined in the head boot script around line 203 of `index.html`).
+The CSS rule is `body.show-cursor #app { cursor: var(--game-cursor-url, default); }`. The boot script (in `index.html`'s head) sets up three CSS variables:
+- `--game-cursor-url-default` — `url("images/mouse.png") 0 0, auto` (the standard arrow pointer).
+- `--game-cursor-url-hover`   — `url("images/mouse-hover.png") 0 0, pointer` (the hover/grab cursor).
+- `--game-cursor-url`         — the *currently active* one. Initialised to default and updated on hover.
 
-When `body.show-cursor` is set (the toggle fired by `js/main.js` for menu/settings/death), the DOM cursor fades visible. The `default` and `hover` layers cross-fade on a **500 ms linear tween** (`CURSOR_DURATION_MS` in `setupGameCursor`); when the underlying element's computed `cursor` becomes `pointer`, the tween target flips to hover, and a mid-fade flip **continues from the current opacity** (no snap, no restart) — that's the bug-class safeguard: capture `state.opacDef`/`state.opacHov` as the new `from` and reset `startMs`.
+`--game-cursor-url` is swapped by a delegated `mouseover` / `mouseout` listener that reads `getComputedStyle(el).cursor` walking up from `event.target` — any element with `cursor: pointer` along the chain flips it to the hover URL.
 
-Hover detection: a delegated `mouseover`/`mouseout` listener walks up from `event.target` reading `getComputedStyle(el).cursor` — any element with `cursor: pointer` along the chain flips the target.
+`pointerlockchange` toggles `body.show-cursor` itself (since `js/main.js` only adds the class on death, but the cursor should appear on every unlocked screen). When locked, the class is removed and `--game-cursor-url` is cleared so the canvas shows the crosshair-only look from the base `#app { cursor: none }` rule.
 
-The native cursor is hidden via `body.show-cursor #app, body.show-cursor { cursor: none }` while the DOM cursor is shown. The cursor `<div>` is `position: fixed` at `z-index: 2147483640` (below modal overlays, above canvas), `pointer-events: none` so it doesn't intercept mouse events.
+**Why instant swap, no cross-fade.** Native CSS `cursor: url()` only renders one image at a time and cannot interpolate opacity between two cursors. SVG cursors with SMIL `<animate>` look promising but are unreliable on Safari (the cursor either rejects the data URL on re-load or skips the animation entirely). A real cross-fade requires rendering the cursor as a fixed-state DOM element under the pointer — exactly the "movable object" pattern the current design intentionally avoids. The visual jump between two static cursors is small at OS-cursor scale; if it becomes a concern, layer a CSS transition on the closest surrounding DOM hover effect (button highlight, etc.) and not on the cursor.
 
-- **Both PNGs are 64×64.** Browser cursor-size caps do *not* apply to elements rendered by the page (only to `cursor: url()`), but keep them consistent so a future regression to CSS `cursor: url(...)` doesn't blow up.
-- Adding a new cursor state: add a `mouse-<name>.png`, set `--game-cursor-<name>-image` in the head boot script, add a third layer `<div data-layer="<name>">` to `#gameCursor`, and extend `applyTarget()` / `startTween()` to handle the new target opacity key.
+- **Both PNGs are 64×64.** That's well under every browser's `cursor: url()` size cap (Chrome 128, Firefox 32). Larger PNGs are silently rejected by `cursor: url()`, with no console error — and the user sees the OS default with no clue why the custom cursor is missing. If the cursor ever stops appearing, check `mouse.png`'s dimensions first.
+- **Browser cursor rendering size:** the SVG/PNG renders at native size unless the page is in HiDPI scaling; that's intentional — a 64×64 PNG at 1× DPR looks like a chunky arrow, at 2× DPR it looks like a normal pointer. Don't shrink the source artwork.
 
 ### Critical: the `dt` cap (`js/main.js:17096`)
 
