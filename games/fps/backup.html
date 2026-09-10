@@ -108,7 +108,7 @@
   <!-- Only the script-injected <base> above should set the document base (folder of this HTML).
        A second fixed base (e.g. chat origin) breaks relative game-ui/ + walls.png when the page is not at site root or when assets live beside this file. -->
   <!-- Multiplayer：Socket.IO API 主机（不是壁纸/CDN）。对战 relay 未改动时请保持下面一行不变；除非你自己在同源部署了 /game。 -->
-  <meta name="game-multiplayer-origin" content="https://chat.jimmyqrg.com" />
+  <meta name="game-multiplayer-origin" content="https://discord.jimmyqrg.com" />
   <!-- Optional absolute base for walls.png + game-ui/ when this HTML is embedded or hosted away from those files (empty = auto-detect). -->
   <meta name="game-asset-base" content="" />
   <!-- GitHub Pages deploy path for this repo (public → /games/fps/). Use content="" if this file is served at site root. -->
@@ -5480,7 +5480,7 @@ if (typeof window !== "undefined") {
       adsLookSensPercent: LOOK_SENS_PERCENT_DEFAULT,
       skipClickToPlay: false,
       language: "en",
-      // Multiplayer server source. "default" = use the meta tag (chat.jimmyqrg.com
+      // Multiplayer server source. "default" = use the meta tag (discord.jimmyqrg.com
       // for the GitHub Pages deploy). "manual" = use serverManualUrl. "local" = use
       // serverLocalUrl (set by the local-discovery panel). All three are persisted;
       // the chosen value is read on page load by getMultiplayerOrigin().
@@ -13920,7 +13920,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     function ensurePistolFireBuffer() {
       if (pistolFireBuffer) return Promise.resolve();
       if (!pistolFireLoadPromise) {
-        pistolFireLoadPromise = fetch("https://cdn.jsdelivr.net/gh/indiamonda/indiamonda.github.io@main/q/g/krunker-io/sound/weapon_4.mp3")
+        pistolFireLoadPromise = fetch("https://cdn.jsdelivr.net/gh/indiamonda/perfectnip.github.io@main/q/g/krunker-io/sound/weapon_4.mp3")
           .then((res) => {
             if (!res.ok) throw new Error("pistol fire fetch");
             return res.arrayBuffer();

@@ -330,7 +330,7 @@
       adsSensMultiplier: ADS_SENS_MUL_DEFAULT,
       skipClickToPlay: false,
       language: "en",
-      // Multiplayer server source. "default" = use the meta tag (chat.jimmyqrg.com
+      // Multiplayer server source. "default" = use the meta tag (discord.jimmyqrg.com
       // for the GitHub Pages deploy). "manual" = use serverManualUrl. "local" = use
       // serverLocalUrl (set by the local-discovery panel). All three are persisted;
       // the chosen value is read on page load by getMultiplayerOrigin().
@@ -10231,7 +10231,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     function ensurePistolFireBuffer() {
       if (pistolFireBuffer) return Promise.resolve();
       if (!pistolFireLoadPromise) {
-        pistolFireLoadPromise = fetch("https://cdn.jsdelivr.net/gh/indiamonda/indiamonda.github.io@main/q/g/krunker-io/sound/weapon_4.mp3")
+        pistolFireLoadPromise = fetch("https://cdn.jsdelivr.net/gh/indiamonda/perfectnip.github.io@main/q/g/krunker-io/sound/weapon_4.mp3")
           .then((res) => {
             if (!res.ok) throw new Error("pistol fire fetch");
             return res.arrayBuffer();
