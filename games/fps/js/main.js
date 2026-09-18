@@ -16754,6 +16754,17 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       // skipped frames just don't recalculate path/attack decisions; the cached
       // values from the last tick carry forward.
       const aiTickFrame = (visFrameCounter & 1) === 0;
+      // Perf (2026-09-18):
+      // 1. HP chips fade out past ~32 units — a zombie at 40m is a ~3°
+      //    silhouette; its sub-pixel HP sprite still costs a fullscreen-quad
+      //    draw + overdraw in the dark. 30+ sprites add up every frame.
+      // 2. Zombie groups stop casting shadows beyond 50 units — every caster
+      //    adds a shadow-pass draw, and the moon's ±100 shadow camera covers
+      //    the whole leash radius (30 groups ≈ 150+ box meshes re-drawn into
+      //    the shadow map each frame). Shadows re-enable as they approach.
+      const HP_FADE_START = 32, HP_FADE_END = 48;
+      const HP_FADE_RANGE = HP_FADE_END - HP_FADE_START;
+      const SHADOW_DIST_SQ = 50 * 50;
 
       for (let ei = 0; ei < state.enemies.length; ei++) {
         const enemy = state.enemies[ei];
@@ -16766,13 +16777,33 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         //   • the distance-cull line reset group.visible to true, undoing the visible=false
         //     set on death — that is why a killed target stood there instead of dissolving.
         if (enemy.trainingDummy) continue;
+        // Distance bookkeeping for the perf toggles below (cheap: 2 subs + 2 mults).
+        const edx = enemy.group.position.x - px;
+        const edz = enemy.group.position.z - pz;
+        const d2 = edx * edx + edz * edz;
+        // HP chip distance fade: sprite opacity scales down between
+        // HP_FADE_START and HP_FADE_END, fully hidden beyond. Base opacity is
+        // captured once so each enemy keeps its own look.
+        if (enemy.hpSprite) {
+          if (enemy._hpBaseOpacity === undefined) enemy._hpBaseOpacity = enemy.hpSprite.material.opacity;
+          const d = Math.sqrt(d2);
+          const fade = THREE.MathUtils.clamp((HP_FADE_END - d) / HP_FADE_RANGE, 0, 1);
+          enemy.hpSprite.material.opacity = enemy._hpBaseOpacity * fade;
+        }
+        // Shadow-cast distance toggle (non-boss only; the boss is one big group
+        // and must stay visible from across the map). Toggled on state change
+        // only so we don't traverse the group every frame.
+        if (!enemy.isBoss) {
+          const shadowOn = d2 < SHADOW_DIST_SQ;
+          if (enemy._shadowOn !== shadowOn) {
+            enemy._shadowOn = shadowOn;
+            enemy.group.traverse((o) => { if (o.isMesh) o.castShadow = shadowOn; });
+          }
+        }
         // Distance gate: skip AI for enemies far from the player. Boss always runs
         // (it's the only enemy and must react globally). For zombies, only run the
         // heavy AI logic when the enemy is within ~60 units of the player.
         if (!enemy.isBoss) {
-          const edx = enemy.group.position.x - px;
-          const edz = enemy.group.position.z - pz;
-          const d2 = edx * edx + edz * edz;
           // Far zombies are >90% fogged (AI already frozen at AI_SKIP_DIST_SQ) — hide
           // them so we don't keep drawing + skinning fully-fogged humanoids each frame.
           const cullDistSq = scene.fog ? (scene.fog.far * 0.9) * (scene.fog.far * 0.9) : d2;
