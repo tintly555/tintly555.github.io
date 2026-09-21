@@ -6465,6 +6465,9 @@
     }
     /** The single gate every weapon-selection path goes through. */
     function weaponAvailable(idx) {
+      // Training camp is a sandbox: the whole armoury is unlocked there, dev gun
+      // included, no matter what progression or backpack the player carries.
+      if (isTrainingMap(CURRENT_MAP)) return true;
       return !!weaponUnlocked[idx] && weaponInLoadout(idx);
     }
 
@@ -7169,6 +7172,8 @@
     }
 
     function trySelectWeapon(idx) {
+      // The first switch of the run ends the intro hold, so the bar starts auto-hiding again.
+      endInvBarIntro();
       // Peek the hotbar even when the slot is locked, so pressing a number always tells the
       // player what is in that slot and whether they own it yet.
       flashInvBar();
@@ -7272,7 +7277,7 @@
         // Loadout matches list exactly what you packed; the training range still lists the
         // whole armoury with its lock markers. The hidden gun is never printed here.
         const parts = activeHotbarSlots().map(({ key, widx }) => {
-          const owned = weaponUnlocked[widx];
+          const owned = isTrainingMap(CURRENT_MAP) ? true : weaponUnlocked[widx];
           const keyEl = `<b style="color:${owned ? "#8fd8ff" : "#6b7280"};">${key || "?"}</b>`;
           const nm = owned
             ? weaponDisplayName(widx)
@@ -9672,6 +9677,11 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     function flashInvBar() {
       _invBarShowUntil = performance.now() + INV_BAR_HOLD_MS;
     }
+    // Intro hold (per game): the hotbar stays up from the moment a match starts so the
+    // player can read their loadout, and only starts auto-hiding once they have switched
+    // (or tried to switch) a weapon at least once this run. bootGame() re-arms it.
+    let _invBarIntroHold = true;
+    function endInvBarIntro() { _invBarIntroHold = false; }
 
     function updateInvBar() {
       if (!_invBar) return;
@@ -9679,7 +9689,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       // Kept in the layout (rather than display:none) while in-game so the slide can animate.
       _invBar.style.display = inGame ? "flex" : "none";
       if (!inGame) return;
-      const shown = performance.now() < _invBarShowUntil && player.health > 0;
+      const shown = (_invBarIntroHold || performance.now() < _invBarShowUntil) && player.health > 0;
       // The element's own inline style already carries translateX(-50%) for centring, so the
       // slide has to re-state it rather than replace it.
       _invBar.style.transform = shown
@@ -18314,6 +18324,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
 
     async function bootGame(mapName, multiplayer, arenaCoop, trainingCoop) {
       gameWorldReady = false;
+      _invBarIntroHold = true; // hotbar stays up until the first weapon switch this run
       gameBootOverlay.style.display = "flex";
       gameBootOverlay.setAttribute("aria-busy", "true");
       gameBootLabel.textContent = "Building world…";
