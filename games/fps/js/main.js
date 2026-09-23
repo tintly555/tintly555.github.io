@@ -4,7 +4,7 @@
     // import + catch is kept so a missing/renamed i18n file still lets the menu boot with a minimal stub.
     let GAME_I18N, LANG_META, translateGame;
     try {
-      const _i18n = await import("./js/translation.js");
+      const _i18n = await import("./translation.js");
       GAME_I18N     = _i18n.GAME_I18N;
       LANG_META     = _i18n.LANGUAGE_OPTIONS;
       translateGame = _i18n.translate;
@@ -7550,6 +7550,35 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       return cur + d * (1 - Math.exp(-lambda * dt));
     }
 
+    // Low-poly anatomical primitives used by enemies.  The deliberately modest segment
+    // counts keep the arena affordable with 30+ actors, while rounded silhouettes and
+    // tapered limbs catch the game's directional light much more naturally than boxes.
+    function enemyEllipsoid(rx, ry, rz, material, segments = 10) {
+      const mesh = new THREE.Mesh(new THREE.SphereGeometry(1, segments, Math.max(6, segments - 2)), material);
+      mesh.scale.set(rx, ry, rz);
+      return mesh;
+    }
+
+    function enemyLimb(topRadius, bottomRadius, length, material, segments = 8) {
+      return new THREE.Mesh(
+        new THREE.CylinderGeometry(topRadius, bottomRadius, length, segments, 1, false),
+        material
+      );
+    }
+
+    function enemyCapsule(radius, length, material, radialSegments = 8) {
+      return new THREE.Mesh(
+        new THREE.CapsuleGeometry(radius, length, 4, radialSegments),
+        material
+      );
+    }
+
+    function enemyScar(length, material, rotation = 0) {
+      const scar = new THREE.Mesh(new THREE.CapsuleGeometry(0.012, length, 2, 5), material);
+      scar.rotation.z = rotation;
+      return scar;
+    }
+
     function makeZombie(x, z, type = "normal") {
       const root = new THREE.Group();
       const torsoRoot = new THREE.Group();
@@ -7558,12 +7587,12 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       const leftLegRoot = new THREE.Group();
       const rightLegRoot = new THREE.Group();
 
-      let skinColor = 0x6b8f5e;
-      let skinDark = 0x4a6b3e;
-      let shirtColor = 0x4a5a3e;
-      let pantsColor = 0x3a3a2e;
-      let woundColor = 0x8b3a3a;
-      let eyeColor = 0xe8e830;
+      let skinColor = 0x7b8170;
+      let skinDark = 0x4d5147;
+      let shirtColor = 0x3c443c;
+      let pantsColor = 0x292b28;
+      let woundColor = 0x692b2d;
+      let eyeColor = 0xc7b947;
       let hp = 100;
       let speed = 1.75;
       let attackDamage = 8;
@@ -7572,31 +7601,34 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       let rangeDistance = 12;
 
       if (type === "fast") {
-        skinColor = 0xb8a848; skinDark = 0x8a7b22; shirtColor = 0x6b6020;
-        pantsColor = 0x4a4520; woundColor = 0xa04040; eyeColor = 0xff4444;
+        skinColor = 0x9a936f; skinDark = 0x625c43; shirtColor = 0x554c2f;
+        pantsColor = 0x353228; woundColor = 0x7a3030; eyeColor = 0xe5513e;
         hp = 70; speed = 7.4; attackDamage = 9; attackCooldown = 0.18;
       } else if (type === "gunner") {
-        skinColor = 0xb07070; skinDark = 0x7a3f3f; shirtColor = 0x5a2a2a;
-        pantsColor = 0x3a2525; woundColor = 0xcc3333; eyeColor = 0xff6666;
+        skinColor = 0x856b6b; skinDark = 0x533e40; shirtColor = 0x4a3030;
+        pantsColor = 0x292425; woundColor = 0x812f32; eyeColor = 0xdd5a50;
         hp = 75; speed = 1.10; attackDamage = 4; attackCooldown = 1.6;
         ranged = true; rangeDistance = 16;
       } else if (type === "tank") {
-        skinColor = 0x6888a0; skinDark = 0x3f5367; shirtColor = 0x384858;
-        pantsColor = 0x2a3540; woundColor = 0x6a4444; eyeColor = 0x80c0ff;
+        skinColor = 0x718087; skinDark = 0x465057; shirtColor = 0x39434a;
+        pantsColor = 0x252c31; woundColor = 0x593a3c; eyeColor = 0x7eb2c9;
         hp = 180; speed = 1.05; attackDamage = 14; attackCooldown = 0.70;
       }
 
-      const matSkin = new THREE.MeshStandardMaterial({ color: skinColor, roughness: 0.95, metalness: 0 });
-      const matSkinD = new THREE.MeshStandardMaterial({ color: skinDark, roughness: 0.95, metalness: 0 });
-      const matShirt = new THREE.MeshStandardMaterial({ color: shirtColor, roughness: 0.96, metalness: 0 });
-      const matPants = new THREE.MeshStandardMaterial({ color: pantsColor, roughness: 0.96, metalness: 0 });
-      const matWound = new THREE.MeshStandardMaterial({ color: woundColor, roughness: 0.94, metalness: 0 });
+      const matSkin = new THREE.MeshStandardMaterial({ color: skinColor, roughness: 0.82, metalness: 0 });
+      const matSkinD = new THREE.MeshStandardMaterial({ color: skinDark, roughness: 0.9, metalness: 0 });
+      const matShirt = new THREE.MeshStandardMaterial({ color: shirtColor, roughness: 1, metalness: 0 });
+      const matPants = new THREE.MeshStandardMaterial({ color: pantsColor, roughness: 1, metalness: 0 });
+      const matWound = new THREE.MeshStandardMaterial({ color: woundColor, roughness: 0.72, metalness: 0 });
       const matBone = new THREE.MeshStandardMaterial({ color: 0xd4c8a8, roughness: 0.94, metalness: 0 });
       const matBlood = new THREE.MeshStandardMaterial({ color: 0x551111, roughness: 0.93, metalness: 0 });
+      const matShoe = new THREE.MeshStandardMaterial({ color: 0x171817, roughness: 0.96, metalness: 0 });
 
-      const chest = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.56, 0.34), matShirt);
+      const chest = enemyCapsule(0.27, 0.25, matShirt, 10);
+      chest.scale.set(1.25, 1, 0.68);
       chest.position.y = 1.22; torsoRoot.add(chest);
-      const belly = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.32, 0.32), matShirt);
+      const belly = enemyCapsule(0.22, 0.10, matShirt, 9);
+      belly.scale.set(1.25, 1, 0.72);
       belly.position.y = 0.84; torsoRoot.add(belly);
       const ribWound = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.16, 0.05), matWound);
       ribWound.position.set(0.14, 1.12, 0.18); torsoRoot.add(ribWound);
@@ -7607,7 +7639,8 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       tearL.position.set(-0.24, 0.94, 0.18); torsoRoot.add(tearL);
       const bloodStain = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.10, 0.04), matBlood);
       bloodStain.position.set(-0.10, 0.88, 0.18); torsoRoot.add(bloodStain);
-      const collar = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.06, 0.28), matShirt);
+      const collar = enemyLimb(0.22, 0.25, 0.08, matShirt, 10);
+      collar.scale.z = 0.62;
       collar.position.set(0, 1.52, 0); torsoRoot.add(collar);
       const collarTear = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.08, 0.06), matSkin);
       collarTear.position.set(0.18, 1.52, 0.12); torsoRoot.add(collarTear);
@@ -7637,36 +7670,31 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       }
 
       const headGroup = new THREE.Group();
-      const skull = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.46, 0.42), matSkin);
+      const skull = enemyEllipsoid(0.215, 0.245, 0.205, matSkin, 12);
       headGroup.add(skull);
-      const jawBone = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.12, 0.32), matSkinD);
-      jawBone.position.set(0, -0.24, 0.02); headGroup.add(jawBone);
+      const jawBone = enemyEllipsoid(0.175, 0.105, 0.165, matSkinD, 9);
+      jawBone.position.set(0.015, -0.205, 0.025); jawBone.rotation.z = -0.05; headGroup.add(jawBone);
 
-      const eyeGlowMat = new THREE.MeshBasicMaterial({ color: eyeColor });
+      const eyeGlowMat = new THREE.MeshStandardMaterial({ color: eyeColor, emissive: eyeColor, emissiveIntensity: 1.35, roughness: 0.35 });
       const eyeSocketMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 1, metalness: 0 });
-      const sockL = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.10, 0.04), eyeSocketMat);
-      sockL.position.set(-0.10, 0.06, 0.20); headGroup.add(sockL);
+      const sockL = enemyEllipsoid(0.068, 0.057, 0.025, eyeSocketMat, 8);
+      sockL.position.set(-0.095, 0.055, 0.194); headGroup.add(sockL);
       const sockR = sockL.clone(); sockR.position.x = 0.10; headGroup.add(sockR);
-      const eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.07, 0.05), eyeGlowMat);
-      eyeL.position.set(-0.10, 0.06, 0.215); headGroup.add(eyeL);
+      const eyeL = enemyEllipsoid(0.036, 0.027, 0.018, eyeGlowMat, 8);
+      eyeL.position.set(-0.095, 0.052, 0.218); headGroup.add(eyeL);
       const eyeR = eyeL.clone(); eyeR.position.x = 0.10; headGroup.add(eyeR);
-      // 2× eye glow: a real point light per eye so the face / gun / floor pick
-      // up the color, not just a brighter pixel on the eye box itself.
-      const eyeLightL = new THREE.PointLight(eyeColor, 2.5, 4);
-      eyeLightL.position.set(-0.10, 0.06, 0.28); headGroup.add(eyeLightL);
-      const eyeLightR = new THREE.PointLight(eyeColor, 2.5, 4);
-      eyeLightR.position.set(0.10, 0.06, 0.28); headGroup.add(eyeLightR);
 
-      const brow = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.06, 0.08), matSkinD);
-      brow.position.set(0, 0.15, 0.19); headGroup.add(brow);
-      const cheekL = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.10, 0.10), matSkinD);
+      const brow = enemyCapsule(0.025, 0.33, matSkinD, 7);
+      brow.rotation.z = Math.PI / 2;
+      brow.position.set(0, 0.145, 0.185); headGroup.add(brow);
+      const cheekL = enemyEllipsoid(0.055, 0.085, 0.075, matSkinD, 7);
       cheekL.position.set(-0.20, -0.06, 0.14); headGroup.add(cheekL);
       const cheekR = cheekL.clone(); cheekR.position.x = 0.20; headGroup.add(cheekR);
       const mouthWound = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.04, 0.04), matWound);
       mouthWound.position.set(0.03, -0.14, 0.21); headGroup.add(mouthWound);
       const teeth = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.03, 0.03), matBone);
       teeth.position.set(0, -0.18, 0.20); headGroup.add(teeth);
-      const noseBridge = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.08, 0.06), matSkinD);
+      const noseBridge = enemyEllipsoid(0.035, 0.065, 0.048, matSkinD, 7);
       noseBridge.position.set(0, -0.02, 0.22); headGroup.add(noseBridge);
 
       const hairMat = new THREE.MeshStandardMaterial({ color: 0x25201d, roughness: 0.96, metalness: 0 });
@@ -7690,7 +7718,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       earL.position.set(-0.24, 0.02, 0); headGroup.add(earL);
       const earR = earL.clone(); earR.position.x = 0.24; headGroup.add(earR);
 
-      const neck = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.14, 0.20), matSkin);
+      const neck = enemyLimb(0.095, 0.11, 0.16, matSkin, 8);
       neck.position.set(0, -0.32, 0); headGroup.add(neck);
       const neckVein = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.12, 0.03), matWound);
       neckVein.position.set(0.06, -0.30, 0.08); headGroup.add(neckVein);
@@ -7700,11 +7728,15 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       leftArmRoot.position.set(-0.48, 1.48, 0);
       rightArmRoot.position.set(0.48, 1.48, 0);
       const makeArm = (ar, side) => {
-        const up = new THREE.Mesh(new THREE.BoxGeometry(0.19, 0.42, 0.19), matShirt);
+        const shoulder = enemyEllipsoid(0.13, 0.14, 0.13, matShirt, 8);
+        shoulder.position.set(0, -0.04, 0); ar.add(shoulder);
+        const up = enemyLimb(0.105, 0.085, 0.38, matShirt, 8);
         up.position.set(0, -0.22, 0); ar.add(up);
-        const sleeve = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.08, 0.20), matShirt);
+        const sleeve = enemyLimb(0.115, 0.10, 0.10, matShirt, 8);
         sleeve.position.set(0, -0.04, 0); ar.add(sleeve);
-        const fa = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.38, 0.17), matSkin);
+        const elbow = enemyEllipsoid(0.088, 0.075, 0.088, matSkinD, 8);
+        elbow.position.set(0, -0.43, 0.025); ar.add(elbow);
+        const fa = enemyLimb(0.082, 0.064, 0.36, matSkin, 8);
         fa.position.set(0, -0.58, 0.06); ar.add(fa);
         if (side === "left" && type !== "fast") {
           const w = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.10, 0.06), matWound);
@@ -7716,7 +7748,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           const scratch = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.14, 0.04), matWound);
           scratch.position.set(-0.06, -0.42, 0.10); ar.add(scratch);
         }
-        const hand = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.14, 0.18), matSkin);
+        const hand = enemyEllipsoid(0.078, 0.10, 0.09, matSkin, 8);
         hand.position.set(0, -0.82, 0.12); ar.add(hand);
         const f1 = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.08, 0.06), matSkinD);
         f1.position.set(-0.04, -0.92, 0.16); ar.add(f1);
@@ -7730,9 +7762,11 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       leftLegRoot.position.set(-0.18, 0.62, 0);
       rightLegRoot.position.set(0.18, 0.62, 0);
       const makeLeg = (lr, side) => {
-        const th = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.44, 0.22), matPants);
+        const th = enemyLimb(0.125, 0.105, 0.43, matPants, 8);
         th.position.set(0, -0.22, 0); lr.add(th);
-        const sh = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.40, 0.20), matPants);
+        const knee = enemyEllipsoid(0.105, 0.085, 0.105, matPants, 8);
+        knee.position.set(0, -0.43, 0.025); lr.add(knee);
+        const sh = enemyLimb(0.095, 0.075, 0.38, matPants, 8);
         sh.position.set(0, -0.60, 0); lr.add(sh);
         if (side === "right") {
           const tear = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.12, 0.08), matSkin);
@@ -7744,8 +7778,10 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           const bloodDrip = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.16, 0.04), matBlood);
           bloodDrip.position.set(0.06, -0.52, 0.10); lr.add(bloodDrip);
         }
-        const foot = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.10, 0.28), matSkinD);
-        foot.position.set(0, -0.86, 0.04); lr.add(foot);
+        const foot = enemyCapsule(0.085, 0.14, matShoe, 8);
+        foot.rotation.x = Math.PI / 2;
+        foot.scale.x = 1.12;
+        foot.position.set(0, -0.86, 0.07); lr.add(foot);
         const toe = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.06, 0.06), matSkinD);
         toe.position.set(0, -0.88, 0.16); lr.add(toe);
       };
@@ -7859,67 +7895,84 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       const leftLegRoot = new THREE.Group();
       const rightLegRoot = new THREE.Group();
 
-      const skinColor = isHell ? 0x2a3a6a : 0x8a7098;
-      const skinDark = isHell ? 0x1a2848 : 0x6a5078;
-      const shirtColor = isHell ? 0x1a1a2a : 0x2a6050;
-      const pantsColor = isHell ? 0x1a1a1a : 0x3a3a32;
-      const veinColor = 0x9a2255;
-      const eyeColor = 0xff0000;
+      const skinColor = isHell ? 0x31384b : 0x766b70;
+      const skinDark = isHell ? 0x171c2b : 0x4b4145;
+      const shirtColor = isHell ? 0x17171c : 0x263b35;
+      const pantsColor = isHell ? 0x111215 : 0x292a27;
+      const veinColor = isHell ? 0xc51835 : 0x7b2037;
+      const eyeColor = isHell ? 0xff210d : 0xd53a24;
 
-      const matSkin = new THREE.MeshStandardMaterial({ color: skinColor, roughness: 0.92, metalness: 0 });
-      const matSkinD = new THREE.MeshStandardMaterial({ color: skinDark, roughness: 0.92, metalness: 0 });
-      const matShirt = new THREE.MeshStandardMaterial({ color: shirtColor, roughness: 0.96, metalness: 0 });
-      const matPants = new THREE.MeshStandardMaterial({ color: pantsColor, roughness: 0.96, metalness: 0 });
-      const matVein = new THREE.MeshStandardMaterial({ color: veinColor, roughness: 0.9, metalness: 0.1 });
+      const matSkin = new THREE.MeshStandardMaterial({ color: skinColor, roughness: 0.76, metalness: 0 });
+      const matSkinD = new THREE.MeshStandardMaterial({ color: skinDark, roughness: 0.9, metalness: 0 });
+      const matShirt = new THREE.MeshStandardMaterial({ color: shirtColor, roughness: 1, metalness: 0 });
+      const matPants = new THREE.MeshStandardMaterial({ color: pantsColor, roughness: 1, metalness: 0 });
+      const matVein = new THREE.MeshStandardMaterial({ color: veinColor, emissive: veinColor, emissiveIntensity: isHell ? 0.34 : 0.05, roughness: 0.65, metalness: 0 });
       const matBone = new THREE.MeshStandardMaterial({ color: 0xd4c8a8, roughness: 0.94, metalness: 0 });
+      const matWound = new THREE.MeshStandardMaterial({ color: isHell ? 0x73101a : 0x4f161d, roughness: 0.7, metalness: 0 });
+      const matLeather = new THREE.MeshStandardMaterial({ color: 0x211914, roughness: 0.92, metalness: 0 });
 
-      const chest = new THREE.Mesh(new THREE.BoxGeometry(1.30, 0.70, 0.65), matShirt);
+      const chest = enemyCapsule(0.49, 0.35, matShirt, 12);
+      chest.scale.set(1.35, 1, 0.72);
       chest.position.set(0, 1.55, 0.15);
       torsoRoot.add(chest);
-      const pecL = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.36, 0.24), matSkin);
+      const pecL = enemyEllipsoid(0.30, 0.24, 0.18, matSkin, 10);
       pecL.position.set(-0.25, 1.48, 0.48);
       pecL.rotation.x = 0.30;
       torsoRoot.add(pecL);
-      const pecR = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.36, 0.24), matSkin);
+      const pecR = enemyEllipsoid(0.32, 0.255, 0.19, matSkin, 10);
       pecR.position.set(0.25, 1.48, 0.48);
       pecR.rotation.x = 0.30;
       torsoRoot.add(pecR);
 
-      const upperBack = new THREE.Mesh(new THREE.BoxGeometry(1.30, 0.60, 0.60), matShirt);
+      const upperBack = enemyCapsule(0.43, 0.34, matShirt, 10);
+      upperBack.scale.set(1.45, 1, 0.78);
       upperBack.position.set(0, 1.82, -0.10);
       upperBack.rotation.x = 0.25;
       torsoRoot.add(upperBack);
 
-      const midTorso = new THREE.Mesh(new THREE.BoxGeometry(0.82, 0.32, 0.46), matShirt);
+      const midTorso = enemyCapsule(0.31, 0.18, matShirt, 10);
+      midTorso.scale.set(1.26, 1, 0.75);
       midTorso.position.y = 1.08; torsoRoot.add(midTorso);
-      const belly = new THREE.Mesh(new THREE.BoxGeometry(0.70, 0.28, 0.40), matSkin);
+      const belly = enemyEllipsoid(0.34, 0.24, 0.23, matSkin, 10);
       belly.position.y = 0.88; torsoRoot.add(belly);
-      const hip = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.16, 0.38), matPants);
+      const hip = enemyCapsule(0.25, 0.10, matPants, 10);
+      hip.scale.set(1.25, 1, 0.76);
       hip.position.y = 0.70; torsoRoot.add(hip);
 
       const tearL = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.16, 0.06), matSkin);
       tearL.position.set(-0.45, 1.42, 0.36); torsoRoot.add(tearL);
       const tearR = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.14, 0.06), matSkin);
       tearR.position.set(0.40, 1.20, 0.34); torsoRoot.add(tearR);
-      const tVein1 = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.24, 0.05), matVein);
-      tVein1.position.set(0.35, 1.50, 0.38); torsoRoot.add(tVein1);
-      const tVein2 = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.22, 0.05), matVein);
-      tVein2.position.set(-0.40, 1.38, 0.36); torsoRoot.add(tVein2);
+      const tVein1 = enemyScar(0.24, matVein, -0.18);
+      tVein1.position.set(0.35, 1.50, 0.57); torsoRoot.add(tVein1);
+      const tVein2 = enemyScar(0.22, matVein, 0.30);
+      tVein2.position.set(-0.40, 1.38, 0.53); torsoRoot.add(tVein2);
 
-      const trapL = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.36, 0.46), matSkin);
+      // Torn sternum and exposed ribs make the mutation readable in silhouette without
+      // relying on gore textures.  These sit just proud of the chest to avoid z-fighting.
+      const sternumWound = enemyEllipsoid(0.13, 0.27, 0.025, matWound, 9);
+      sternumWound.position.set(0.02, 1.48, 0.655); sternumWound.rotation.z = -0.08; torsoRoot.add(sternumWound);
+      for (let i = 0; i < 4; i++) {
+        const rib = enemyCapsule(0.018, 0.22 - i * 0.018, matBone, 6);
+        rib.rotation.z = Math.PI / 2 + (i - 1.5) * 0.06;
+        rib.position.set((i % 2 ? 1 : -1) * 0.055, 1.61 - i * 0.085, 0.684);
+        torsoRoot.add(rib);
+      }
+
+      const trapL = enemyEllipsoid(0.28, 0.25, 0.25, matSkin, 9);
       trapL.position.set(-0.40, 2.04, -0.06);
       trapL.rotation.x = 0.20;
       torsoRoot.add(trapL);
-      const trapR = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.36, 0.46), matSkin);
+      const trapR = enemyEllipsoid(0.30, 0.27, 0.26, matSkin, 9);
       trapR.position.set(0.40, 2.04, -0.06);
       trapR.rotation.x = 0.20;
       torsoRoot.add(trapR);
-      const neckTrap = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.30, 0.46), matSkin);
+      const neckTrap = enemyEllipsoid(0.30, 0.23, 0.24, matSkin, 9);
       neckTrap.position.set(0, 2.06, -0.02);
       neckTrap.rotation.x = 0.18;
       torsoRoot.add(neckTrap);
 
-      const neck = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.12, 0.28), matSkin);
+      const neck = enemyLimb(0.15, 0.18, 0.22, matSkin, 9);
       neck.position.set(0, 2.00, 0.18); torsoRoot.add(neck);
       const neckVein1 = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.18, 0.05), matVein);
       neckVein1.position.set(0.10, 2.02, 0.28); torsoRoot.add(neckVein1);
@@ -7927,25 +7980,26 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       neckVein2.position.set(-0.12, 2.00, 0.26); torsoRoot.add(neckVein2);
 
       // Delts
-      const deltL = new THREE.Mesh(new THREE.BoxGeometry(0.40, 0.34, 0.40), matSkin);
+      const deltL = enemyEllipsoid(0.27, 0.24, 0.25, matSkin, 9);
       deltL.position.set(-0.76, 1.86, 0.08); torsoRoot.add(deltL);
-      const deltR = new THREE.Mesh(new THREE.BoxGeometry(0.40, 0.34, 0.40), matSkin);
+      const deltR = enemyEllipsoid(0.30, 0.26, 0.27, matSkin, 9);
       deltR.position.set(0.76, 1.86, 0.08); torsoRoot.add(deltR);
 
       // Head: low and forward, BELOW the traps — creates the hunched look
       const headGroup = new THREE.Group();
-      const skull = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.46, 0.42), matSkin);
+      const skull = enemyEllipsoid(0.225, 0.255, 0.22, matSkin, 12);
       headGroup.add(skull);
-      const jawBone = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.14, 0.34), matSkinD);
-      jawBone.position.set(0, -0.26, 0.02); headGroup.add(jawBone);
-      const brow = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.10, 0.14), matSkinD);
+      const jawBone = enemyEllipsoid(0.20, 0.12, 0.18, matSkinD, 9);
+      jawBone.position.set(0.025, -0.22, 0.025); jawBone.rotation.z = -0.09; headGroup.add(jawBone);
+      const brow = enemyCapsule(0.035, 0.36, matSkinD, 7);
+      brow.rotation.z = Math.PI / 2;
       brow.position.set(0, 0.18, 0.19); headGroup.add(brow);
-      const eyeGlowMat = new THREE.MeshBasicMaterial({ color: eyeColor });
+      const eyeGlowMat = new THREE.MeshStandardMaterial({ color: eyeColor, emissive: eyeColor, emissiveIntensity: isHell ? 3.2 : 1.8, roughness: 0.28 });
       const eyeSocketMat = new THREE.MeshStandardMaterial({ color: 0x0a0a0a, roughness: 1, metalness: 0 });
-      const sockL = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.10, 0.06), eyeSocketMat);
+      const sockL = enemyEllipsoid(0.07, 0.058, 0.032, eyeSocketMat, 8);
       sockL.position.set(-0.10, 0.07, 0.20); headGroup.add(sockL);
       const sockR = sockL.clone(); sockR.position.x = 0.10; headGroup.add(sockR);
-      const eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.07, 0.07), eyeGlowMat);
+      const eyeL = enemyEllipsoid(0.038, 0.028, 0.024, eyeGlowMat, 8);
       eyeL.position.set(-0.10, 0.07, 0.22); headGroup.add(eyeL);
       const eyeR = eyeL.clone(); eyeR.position.x = 0.10; headGroup.add(eyeR);
       // 2× eye glow on the boss: lights are present in both normal and hell
@@ -7954,18 +8008,16 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       // surrounding fog. Hell keeps its red, normal mode uses the boss's
       // actual eyeColor (also red for Hormone Zombie but kept parameterized
       // so the function reads cleanly for any future boss variant).
-      const eyeGlowL = new THREE.PointLight(eyeColor, 5.0, 6);
-      eyeGlowL.position.set(-0.10, 0.07, 0.28); headGroup.add(eyeGlowL);
-      const eyeGlowR = new THREE.PointLight(eyeColor, 5.0, 6);
-      eyeGlowR.position.set(0.10, 0.07, 0.28); headGroup.add(eyeGlowR);
+      const eyeGlow = new THREE.PointLight(eyeColor, isHell ? 2.2 : 0.75, isHell ? 5 : 3);
+      eyeGlow.position.set(0, 0.07, 0.30); headGroup.add(eyeGlow);
       const fangL = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.08, 0.04), matBone);
       fangL.position.set(-0.07, -0.24, 0.19); headGroup.add(fangL);
       const fangR = fangL.clone(); fangR.position.x = 0.07; headGroup.add(fangR);
       const teethRow = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.03, 0.04), matBone);
       teethRow.position.set(0, -0.19, 0.20); headGroup.add(teethRow);
-      const scar = new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.03, 0.04), matVein);
-      scar.position.set(0, 0.0, 0.22); scar.rotation.z = 0.3; headGroup.add(scar);
-      const nose = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.09, 0.08), matSkinD);
+      const scar = enemyScar(0.30, matVein, 0.3);
+      scar.position.set(0, 0.0, 0.226); headGroup.add(scar);
+      const nose = enemyEllipsoid(0.042, 0.065, 0.052, matSkinD, 7);
       nose.position.set(0, -0.04, 0.23); headGroup.add(nose);
       const earL = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.10, 0.06), matSkinD);
       earL.position.set(-0.24, 0.02, 0); headGroup.add(earL);
@@ -7979,26 +8031,26 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       leftArmRoot.position.set(-0.80, 1.76, 0.10);
       rightArmRoot.position.set(0.80, 1.76, 0.10);
       const makeArm = (ar, forearmGrp, side) => {
-        const shoulder = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.26, 0.48), matShirt);
+        const shoulder = enemyEllipsoid(0.28, 0.20, 0.27, matShirt, 9);
         shoulder.position.set(0, -0.06, 0); ar.add(shoulder);
-        const shoulderCap = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.14, 0.42), matSkin);
+        const shoulderCap = enemyEllipsoid(0.25, 0.14, 0.24, matSkin, 9);
         shoulderCap.position.set(0, 0.06, 0); ar.add(shoulderCap);
-        const bicep = new THREE.Mesh(new THREE.BoxGeometry(0.50, 0.54, 0.50), matSkin);
+        const bicep = enemyLimb(0.26, 0.21, 0.52, matSkin, 10);
         bicep.position.set(0, -0.34, 0); ar.add(bicep);
-        const bicepPeak = new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.22, 0.18), matSkin);
+        const bicepPeak = enemyEllipsoid(0.18, 0.16, 0.13, matSkin, 8);
         bicepPeak.position.set(0, -0.24, side === "left" ? -0.22 : 0.22); ar.add(bicepPeak);
         const bicepVein = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.32, 0.06), matVein);
         bicepVein.position.set(side === "left" ? 0.18 : -0.18, -0.30, 0.20); ar.add(bicepVein);
         const bicepVein2 = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.20, 0.05), matVein);
         bicepVein2.position.set(side === "left" ? -0.14 : 0.14, -0.36, 0.16); ar.add(bicepVein2);
 
-        const elbow = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.18, 0.36), matSkinD);
+        const elbow = enemyEllipsoid(0.19, 0.14, 0.19, matSkinD, 8);
         elbow.position.set(0, 0.02, 0); forearmGrp.add(elbow);
-        const forearm = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.50, 0.42), matSkin);
+        const forearm = enemyLimb(0.21, 0.17, 0.48, matSkin, 9);
         forearm.position.set(0, -0.26, 0.04); forearmGrp.add(forearm);
         const foreVein = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.30, 0.06), matVein);
         foreVein.position.set(side === "left" ? -0.12 : 0.12, -0.24, 0.20); forearmGrp.add(foreVein);
-        const hand = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.30, 0.36), matSkinD);
+        const hand = enemyEllipsoid(0.18, 0.17, 0.19, matSkinD, 9);
         hand.position.set(0, -0.56, 0.08); forearmGrp.add(hand);
         const fist = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.18, 0.28), matSkinD);
         fist.position.set(0, -0.68, 0.06); forearmGrp.add(fist);
@@ -8027,9 +8079,9 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       const leftShinRoot = new THREE.Group();
       const rightShinRoot = new THREE.Group();
       const makeLeg = (lr, shinGrp, side) => {
-        const thigh = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.46, 0.34), matPants);
+        const thigh = enemyLimb(0.19, 0.155, 0.46, matPants, 9);
         thigh.position.set(0, -0.24, 0); lr.add(thigh);
-        const thighMuscle = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.28, 0.16), matSkin);
+        const thighMuscle = enemyEllipsoid(0.16, 0.18, 0.12, matSkin, 8);
         thighMuscle.position.set(0, -0.18, 0.18); lr.add(thighMuscle);
 
         shinGrp.position.set(0, -0.48, 0);
@@ -8038,18 +8090,20 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         // which is how a knee actually bends. The old -0.18 swung the foot FORWARD, so the
         // boss stood with both knees hyperextended: the "reverse-bow leg".
         shinGrp.rotation.x = 0.10;
-        const knee = new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.14, 0.30), matSkinD);
+        const knee = enemyEllipsoid(0.16, 0.12, 0.16, matSkinD, 8);
         knee.position.set(0, 0.02, 0.02); shinGrp.add(knee);
-        const shin = new THREE.Mesh(new THREE.BoxGeometry(0.30, 0.42, 0.30), matPants);
+        const shin = enemyLimb(0.145, 0.115, 0.41, matPants, 9);
         shin.position.set(0, -0.22, 0); shinGrp.add(shin);
-        const calf = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.24, 0.14), matSkin);
+        const calf = enemyEllipsoid(0.13, 0.16, 0.105, matSkin, 8);
         calf.position.set(0, -0.16, -0.16); shinGrp.add(calf);
         if (side === "right") {
           const tear = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.08, 0.06), matSkin);
           tear.position.set(0, -0.32, 0.14); shinGrp.add(tear);
         }
-        const foot = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.12, 0.38), matSkinD);
-        foot.position.set(0, -0.48, 0.06); shinGrp.add(foot);
+        const foot = enemyCapsule(0.14, 0.18, matLeather, 9);
+        foot.rotation.x = Math.PI / 2;
+        foot.scale.x = 1.08;
+        foot.position.set(0, -0.48, 0.08); shinGrp.add(foot);
         lr.add(shinGrp);
       };
       makeLeg(leftLegRoot, leftShinRoot, "left");
