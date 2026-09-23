@@ -8327,12 +8327,27 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     }
 
     function setRealZombieAction(enemy, name, fade = 0.18) {
-      if (!enemy.modelActions || enemy.modelActionName === name) return;
+      if (!enemy.modelActions) return;
       const next = enemy.modelActions[name] || enemy.modelActions.idle;
+      const duration = Math.max(0.01, next.getClip().duration || 0.01);
+      let cycleSeconds = duration;
+      if (name === "walk" || name === "run") {
+        // These exported Mixamo clips are unusually long/slow (the walk is nearly 4s).
+        // Match their gait cycle to actual enemy speed so feet do not drift under a
+        // character that is moving several times faster than the source animation.
+        const speed = Math.max(0.65, Number(enemy.speed) || 1.5);
+        cycleSeconds = THREE.MathUtils.clamp(1.7 / speed, name === "run" ? 0.22 : 0.72, name === "run" ? 0.72 : 1.65);
+      } else if (name === "attack") {
+        // The authored swipe lasts 2.63s, but combat hits land on a much shorter
+        // cooldown. Keep one visible swing close to each gameplay attack beat.
+        cycleSeconds = THREE.MathUtils.clamp(Number(enemy.attackCooldown) || 0.42, 0.18, 1.35);
+      }
+      const timeScale = THREE.MathUtils.clamp(duration / cycleSeconds, 0.5, name === "attack" ? 15 : 8);
+      next.setEffectiveTimeScale(timeScale);
+      if (enemy.modelActionName === name) return;
       const prev = enemy.modelActions[enemy.modelActionName];
       next.enabled = true;
       next.reset();
-      next.setEffectiveTimeScale(name === "run" && enemy.type === "fast" ? 1.18 : 1);
       next.setEffectiveWeight(1);
       next.setLoop(name === "death" ? THREE.LoopOnce : THREE.LoopRepeat, name === "death" ? 1 : Infinity);
       next.clampWhenFinished = name === "death";
@@ -8347,8 +8362,8 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       if (!enemy.alive) next = "death";
       else if (enemy.isBoss && ["attacking", "quaking"].includes(enemy.bossAnimState)) next = "attack";
       else if (!enemy.isBoss && enemy.attackPhase > 0.15) next = "attack";
-      else if (enemy.moving) next = (enemy.type === "fast" || enemy._bossSprinting) ? "run" : "walk";
-      setRealZombieAction(enemy, next);
+      else if (enemy.moving) next = (enemy.type === "fast" || enemy.isBoss || enemy._bossSprinting || enemy.speed >= 1.6) ? "run" : "walk";
+      setRealZombieAction(enemy, next, next === "attack" ? 0.07 : 0.16);
       enemy.modelMixer.update(Math.min(dt, 0.05));
     }
 
@@ -8839,7 +8854,6 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       const typeScale = type === "tank" ? 0.0108 : type === "fast" ? 0.00965 : 0.0100;
       visual.scale.setScalar(isBoss ? 0.015 : typeScale);
       visual.position.y = isBoss ? -0.50 : 0;
-      visual.rotation.y = Math.PI;
       torsoRoot.add(visual);
 
       const tint = isBoss
