@@ -1,0 +1,8 @@
+Male City Zombie
+Author: Rikindle3D
+Source: https://opengameart.org/node/111870
+License: CC0 1.0 Universal (Public Domain Dedication)
+License URL: https://creativecommons.org/publicdomain/zero/1.0/
+
+The source model, textures, rig, and animations are released under CC0.
+The GLB files in this directory were converted from the original FBX files for this game.

@@ -1,4 +1,6 @@
     import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.182.0/build/three.module.js";
+    import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/loaders/GLTFLoader.js";
+    import { clone as cloneSkinnedModel } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/utils/SkeletonUtils.js";
     // The deployed file is translation.js (not translate.js — earlier versions of this HTML had the
     // wrong path and 404'd, which aborted the whole module and left Start unresponsive). The dynamic
     // import + catch is kept so a missing/renamed i18n file still lets the menu boot with a minimal stub.
@@ -5230,6 +5232,11 @@
       if (!isTrainingMap(CURRENT_MAP) || !gameWorldReady) return;
       for (const enemy of state.enemies) {
         if (!enemy.trainingDummy) continue;
+        // Authored skinned targets need their mixer advanced here because training targets
+        // intentionally bypass updateEnemies(). This keeps the same idle/walk/death clips
+        // visible in the range instead of leaving the mesh in its bind pose.
+        enemy.moving = !!(enemy.alive && enemy.lane && enemy.dissolveTimer <= 0);
+        updateRealZombieAnimation(enemy, dt);
 
         // Downed: run out the dissolve, then stand back up at full HP on the home spot.
         if (!enemy.alive) {
@@ -7579,7 +7586,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       return scar;
     }
 
-    function makeZombie(x, z, type = "normal") {
+    function legacyMakeZombie(x, z, type = "normal") {
       const root = new THREE.Group();
       const torsoRoot = new THREE.Group();
       const leftArmRoot = new THREE.Group();
@@ -7885,7 +7892,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       enemy.hpTexture.needsUpdate = true;
     }
 
-    function makeHormoneZombie(x, z, isHell) {
+    function legacyMakeHormoneZombie(x, z, isHell) {
       const root = new THREE.Group();
       const torsoRoot = new THREE.Group();
       const leftArmRoot = new THREE.Group();
@@ -8204,6 +8211,742 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         bossQuakeCooldownTimer: 6,
         _quakeShook: false
       };
+    }
+
+    // ── Authored zombie mesh assets ───────────────────────────────────────────
+    let realZombieTemplate = null;
+    let realZombieClips = null;
+    let realZombieAssetsPromise = null;
+
+    async function loadGltfFromGameAssets(rel) {
+      const loader = new GLTFLoader();
+      let lastError = null;
+      for (const url of assetUrlList(rel)) {
+        try {
+          return await loader.loadAsync(url);
+        } catch (err) {
+          lastError = err;
+        }
+      }
+      throw lastError || new Error(`Unable to load ${rel}`);
+    }
+
+    async function loadTextureFromGameAssets(rel, colorTexture = false) {
+      let lastError = null;
+      for (const url of assetUrlList(rel)) {
+        try {
+          const texture = await texLoader.loadAsync(url);
+          texture.flipY = false;
+          if (colorTexture) texture.colorSpace = THREE.SRGBColorSpace;
+          texture.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+          return texture;
+        } catch (err) {
+          lastError = err;
+        }
+      }
+      throw lastError || new Error(`Unable to load ${rel}`);
+    }
+
+    async function preloadRealZombieAssets() {
+      if (realZombieTemplate && realZombieClips) return;
+      if (realZombieAssetsPromise) return realZombieAssetsPromise;
+      realZombieAssetsPromise = (async () => {
+        const base = "models/zombie/";
+        const [model, idle, walk, run, attack, death, bodyBase, bodyNormal, bodyOrm, outfitBase, outfitNormal, outfitOrm] =
+          await Promise.all([
+            loadGltfFromGameAssets(base + "zombie.glb"),
+            loadGltfFromGameAssets(base + "idle.glb"),
+            loadGltfFromGameAssets(base + "walk.glb"),
+            loadGltfFromGameAssets(base + "run.glb"),
+            loadGltfFromGameAssets(base + "attack.glb"),
+            loadGltfFromGameAssets(base + "death.glb"),
+            loadTextureFromGameAssets(base + "body-base.png", true),
+            loadTextureFromGameAssets(base + "body-normal.png"),
+            loadTextureFromGameAssets(base + "body-orm.png"),
+            loadTextureFromGameAssets(base + "outfit-base.png", true),
+            loadTextureFromGameAssets(base + "outfit-normal.png"),
+            loadTextureFromGameAssets(base + "outfit-orm.png"),
+          ]);
+
+        // GLTFLoader sanitizes FBX namespaces by removing the colon. The animation files
+        // therefore expose `mixamorigHips` while the mesh exposes `CityDeadOutfitHips`.
+        // Rename only that runtime prefix so the authored clips bind to the weighted rig.
+        model.scene.traverse((o) => {
+          if (o.name) o.name = o.name.replace(/^CityDeadOutfit:?/, "mixamorig");
+          if (!o.isMesh) return;
+          const original = Array.isArray(o.material) ? o.material : [o.material];
+          const materials = original.map((source) => {
+            const m = source.clone();
+            const outfit = /outfit/i.test(m.name || "");
+            m.map = outfit ? outfitBase : bodyBase;
+            m.normalMap = outfit ? outfitNormal : bodyNormal;
+            const orm = outfit ? outfitOrm : bodyOrm;
+            m.roughnessMap = orm;
+            m.metalnessMap = orm;
+            m.roughness = 0.92;
+            m.metalness = 0.02;
+            m.needsUpdate = true;
+            return m;
+          });
+          o.material = Array.isArray(o.material) ? materials : materials[0];
+          o.castShadow = true;
+          o.receiveShadow = true;
+          o.frustumCulled = true;
+        });
+
+        const clipOf = (gltf, fallback) => {
+          const clip = gltf.animations && gltf.animations[0];
+          if (!clip) throw new Error(`Missing zombie animation: ${fallback}`);
+          clip.name = fallback;
+          // Three export helpers can omit empty FBX rotation pivots from the mesh while
+          // retaining animation channels for them. Retarget those three channels to the
+          // corresponding weighted bone instead of dropping the neck/toe motion.
+          for (const track of clip.tracks) {
+            const split = track.name.lastIndexOf(".");
+            if (split < 0) continue;
+            const nodeName = track.name.slice(0, split);
+            if (model.scene.getObjectByName(nodeName)) continue;
+            const boneName = nodeName.replace(/_\$AssimpFbx\$_Rotation$/, "");
+            if (boneName !== nodeName && model.scene.getObjectByName(boneName)) {
+              track.name = boneName + track.name.slice(split);
+            }
+          }
+          return clip;
+        };
+        realZombieTemplate = model.scene;
+        realZombieClips = {
+          idle: clipOf(idle, "idle"), walk: clipOf(walk, "walk"), run: clipOf(run, "run"),
+          attack: clipOf(attack, "attack"), death: clipOf(death, "death")
+        };
+      })().catch((err) => {
+        realZombieAssetsPromise = null;
+        console.warn("[enemy-model] authored zombie asset unavailable; using procedural fallback", err);
+        throw err;
+      });
+      return realZombieAssetsPromise;
+    }
+
+    function setRealZombieAction(enemy, name, fade = 0.18) {
+      if (!enemy.modelActions || enemy.modelActionName === name) return;
+      const next = enemy.modelActions[name] || enemy.modelActions.idle;
+      const prev = enemy.modelActions[enemy.modelActionName];
+      next.enabled = true;
+      next.reset();
+      next.setEffectiveTimeScale(name === "run" && enemy.type === "fast" ? 1.18 : 1);
+      next.setEffectiveWeight(1);
+      next.setLoop(name === "death" ? THREE.LoopOnce : THREE.LoopRepeat, name === "death" ? 1 : Infinity);
+      next.clampWhenFinished = name === "death";
+      if (prev && prev !== next) next.crossFadeFrom(prev, fade, true);
+      next.play();
+      enemy.modelActionName = name;
+    }
+
+    function updateRealZombieAnimation(enemy, dt) {
+      if (!enemy.modelMixer) return;
+      let next = "idle";
+      if (!enemy.alive) next = "death";
+      else if (enemy.isBoss && ["attacking", "quaking"].includes(enemy.bossAnimState)) next = "attack";
+      else if (!enemy.isBoss && enemy.attackPhase > 0.15) next = "attack";
+      else if (enemy.moving) next = (enemy.type === "fast" || enemy._bossSprinting) ? "run" : "walk";
+      setRealZombieAction(enemy, next);
+      enemy.modelMixer.update(Math.min(dt, 0.05));
+    }
+
+    // ── Procedural fallback enemy models ──────────────────────────────────────
+    // These rigs are authored independently from the legacy box models above.  Every joint
+    // shares an exact endpoint with the next segment, and arms are parented to the torso so
+    // breathing, leaning and attack animations cannot leave hands or shoulders behind.
+    function enemyMaterial(color, roughness = 0.86, extra = {}) {
+      return new THREE.MeshStandardMaterial({ color, roughness, metalness: 0, ...extra });
+    }
+
+    function setEnemyShadows(root, cast = true) {
+      root.traverse((o) => {
+        if (!o.isMesh) return;
+        o.castShadow = cast;
+        o.receiveShadow = true;
+      });
+    }
+
+    function addAnatomicalHand(parent, side, skin, nail, scale = 1, anchorY = -0.405) {
+      const hand = new THREE.Group();
+      hand.position.set(0, anchorY, 0.035 * scale);
+      parent.add(hand);
+
+      const palm = enemyEllipsoid(0.082 * scale, 0.105 * scale, 0.052 * scale, skin, 12);
+      palm.position.y = -0.045 * scale;
+      hand.add(palm);
+
+      const fingerSpread = [-0.054, -0.018, 0.018, 0.054];
+      for (let i = 0; i < fingerSpread.length; i++) {
+        const finger = enemyCapsule((0.014 - i * 0.0008) * scale, (0.075 - Math.abs(1.5 - i) * 0.007) * scale, skin, 7);
+        finger.position.set(fingerSpread[i] * scale, -0.135 * scale, 0.018 * scale);
+        finger.rotation.x = -0.16;
+        hand.add(finger);
+        const claw = enemyEllipsoid(0.012 * scale, 0.018 * scale, 0.010 * scale, nail, 7);
+        claw.position.set(fingerSpread[i] * scale, -0.187 * scale, 0.030 * scale);
+        hand.add(claw);
+      }
+
+      const thumb = enemyCapsule(0.017 * scale, 0.065 * scale, skin, 7);
+      thumb.position.set((side < 0 ? 0.088 : -0.088) * scale, -0.065 * scale, 0.018 * scale);
+      thumb.rotation.z = side < 0 ? -0.72 : 0.72;
+      thumb.rotation.x = -0.2;
+      hand.add(thumb);
+      return hand;
+    }
+
+    function addZombieArm(torsoRoot, side, y, skin, skinDark, cloth, nail, opts = {}) {
+      const armRoot = new THREE.Group();
+      armRoot.position.set(side * (opts.shoulderX || 0.43), y, opts.shoulderZ || 0);
+      torsoRoot.add(armRoot);
+
+      const shoulder = enemyEllipsoid(opts.shoulderR || 0.13, opts.shoulderY || 0.14, opts.shoulderZScale || 0.13, cloth, 12);
+      shoulder.position.y = -0.045;
+      armRoot.add(shoulder);
+
+      const upperLen = opts.upperLen || 0.40;
+      const upper = enemyLimb(opts.upperTop || 0.105, opts.upperBottom || 0.082, upperLen, opts.bareUpper ? skin : cloth, 12);
+      upper.position.y = -upperLen * 0.52;
+      armRoot.add(upper);
+
+      if (opts.tornSleeve) {
+        const cuff = enemyLimb(0.112, 0.095, 0.07, cloth, 12);
+        cuff.position.y = -0.10;
+        cuff.rotation.z = side * 0.06;
+        armRoot.add(cuff);
+      }
+
+      const forearmRoot = new THREE.Group();
+      forearmRoot.position.y = -upperLen;
+      forearmRoot.rotation.x = opts.elbowBend ?? -0.16;
+      armRoot.add(forearmRoot);
+
+      const elbow = enemyEllipsoid(opts.elbowR || 0.088, opts.elbowY || 0.078, opts.elbowR || 0.088, skinDark, 11);
+      forearmRoot.add(elbow);
+      const foreLen = opts.foreLen || 0.34;
+      const forearm = enemyLimb(opts.foreTop || 0.082, opts.foreBottom || 0.058, foreLen, skin, 12);
+      forearm.position.y = -foreLen * 0.52;
+      forearmRoot.add(forearm);
+      const wristR = opts.wristR || 0.059;
+      const wrist = enemyLimb(wristR, wristR * 0.92, opts.wristLen || 0.08, skin, 10);
+      wrist.position.y = -foreLen - 0.015;
+      forearmRoot.add(wrist);
+      addAnatomicalHand(forearmRoot, side, skin, nail, opts.handScale || 1, -foreLen - (opts.handGap || 0.065));
+
+      return { armRoot, forearmRoot };
+    }
+
+    function addZombieLeg(root, side, skin, skinDark, pants, shoe, opts = {}) {
+      const legRoot = new THREE.Group();
+      legRoot.position.set(side * (opts.hipX || 0.17), opts.hipY || 0.66, 0);
+      root.add(legRoot);
+
+      const hipJoint = enemyEllipsoid(opts.hipR || 0.125, opts.hipJointY || 0.12, opts.hipR || 0.12, pants, 11);
+      legRoot.add(hipJoint);
+      const thighLen = opts.thighLen || 0.41;
+      const thigh = enemyLimb(opts.thighTop || 0.122, opts.thighBottom || 0.098, thighLen, pants, 12);
+      thigh.position.y = -thighLen * 0.52;
+      legRoot.add(thigh);
+
+      const shinRoot = new THREE.Group();
+      shinRoot.position.y = -thighLen;
+      shinRoot.rotation.x = opts.kneeBend || 0.04;
+      legRoot.add(shinRoot);
+      const knee = enemyEllipsoid(opts.kneeR || 0.10, opts.kneeY || 0.083, opts.kneeR || 0.098, opts.exposedKnee ? skinDark : pants, 11);
+      knee.position.z = 0.015;
+      shinRoot.add(knee);
+      const shinLen = opts.shinLen || 0.37;
+      const shin = enemyLimb(opts.shinTop || 0.092, opts.shinBottom || 0.064, shinLen, opts.tornLeg ? skin : pants, 11);
+      shin.position.y = -shinLen * 0.52;
+      shinRoot.add(shin);
+      const ankleR = opts.ankleR || 0.064;
+      const ankle = enemyLimb(ankleR, ankleR * 0.9, 0.08, skinDark, 9);
+      ankle.position.y = -shinLen - 0.01;
+      shinRoot.add(ankle);
+      const foot = enemyCapsule(opts.footR || 0.072, opts.footLen || 0.15, shoe, 10);
+      foot.rotation.x = Math.PI / 2;
+      foot.scale.x = 1.10;
+      foot.position.set(0, -shinLen - 0.075 - (opts.footDrop || 0), 0.095);
+      shinRoot.add(foot);
+      return { legRoot, shinRoot };
+    }
+
+    function addZombieFace(headGroup, skin, skinDark, wound, eyeColor, opts = {}) {
+      const skull = enemyEllipsoid(opts.headX || 0.205, opts.headY || 0.235, opts.headZ || 0.195, skin, 16);
+      headGroup.add(skull);
+      const jaw = enemyEllipsoid(0.165, 0.105, 0.145, skinDark, 12);
+      jaw.position.set(opts.jawShift || 0.012, -0.205, 0.025);
+      jaw.rotation.z = opts.jawTilt || -0.05;
+      headGroup.add(jaw);
+
+      const socketMat = enemyMaterial(0x100e0e, 1);
+      const eyeMat = enemyMaterial(eyeColor, 0.35, { emissive: eyeColor, emissiveIntensity: opts.eyeIntensity || 0.8 });
+      for (const side of [-1, 1]) {
+        const socket = enemyEllipsoid(0.060, 0.052, 0.025, socketMat, 10);
+        socket.position.set(side * 0.088, 0.045, 0.184);
+        socket.rotation.z = side * -0.10;
+        headGroup.add(socket);
+        const eye = enemyEllipsoid(0.027, 0.022, 0.016, eyeMat, 10);
+        eye.position.set(side * 0.088, 0.043, 0.207);
+        headGroup.add(eye);
+      }
+
+      const browL = enemyCapsule(0.020, 0.135, skinDark, 8);
+      browL.rotation.z = Math.PI / 2 - 0.15;
+      browL.position.set(-0.082, 0.125, 0.183);
+      headGroup.add(browL);
+      const browR = browL.clone();
+      browR.rotation.z = Math.PI / 2 + 0.15;
+      browR.position.x = 0.082;
+      headGroup.add(browR);
+
+      const nose = enemyEllipsoid(0.034, 0.058, 0.045, skinDark, 10);
+      nose.position.set(0, -0.025, 0.205);
+      headGroup.add(nose);
+      const mouth = enemyCapsule(0.014, 0.13, wound, 7);
+      mouth.rotation.z = Math.PI / 2 + (opts.mouthTilt || 0.08);
+      mouth.position.set(0.018, -0.142, 0.174);
+      headGroup.add(mouth);
+      const teethMat = enemyMaterial(0xb9ad8c, 0.9);
+      for (let i = 0; i < 4; i++) {
+        const tooth = enemyEllipsoid(0.012, 0.020, 0.009, teethMat, 7);
+        tooth.position.set(-0.045 + i * 0.030, -0.145 + (i % 2) * 0.006, 0.188);
+        headGroup.add(tooth);
+      }
+
+      const earL = enemyEllipsoid(0.028, 0.060, 0.028, skinDark, 9);
+      earL.position.set(-0.215, 0, 0);
+      headGroup.add(earL);
+      const earR = earL.clone(); earR.position.x = 0.215; headGroup.add(earR);
+
+      if (opts.hair !== false) {
+        const hair = enemyEllipsoid(0.207, 0.095, 0.19, enemyMaterial(opts.hairColor || 0x211d1b, 1), 14);
+        hair.position.set(0, 0.185, -0.018);
+        hair.rotation.z = opts.hairTilt || 0.04;
+        headGroup.add(hair);
+      }
+      return skull;
+    }
+
+    function createEnemyHpSprite(root, width, scaleX, scaleY, y) {
+      const hpCanvas = document.createElement("canvas");
+      hpCanvas.width = width;
+      hpCanvas.height = 24;
+      const hpCtx = hpCanvas.getContext("2d");
+      const hpTexture = new THREE.CanvasTexture(hpCanvas);
+      const hpSprite = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: hpTexture, transparent: true, depthTest: true, depthWrite: false
+      }));
+      hpSprite.scale.set(scaleX, scaleY, 1);
+      hpSprite.position.set(0, y, 0);
+      hpSprite.raycast = () => {};
+      root.add(hpSprite);
+      return { hpCanvas, hpCtx, hpTexture, hpSprite };
+    }
+
+    function makeProceduralZombie(x, z, type = "normal") {
+      const palettes = {
+        normal: { skin: 0x77786a, dark: 0x46483f, shirt: 0x343a34, pants: 0x252724, eye: 0xb7a93e },
+        fast:   { skin: 0x8f876b, dark: 0x554f3e, shirt: 0x4b422d, pants: 0x302d25, eye: 0xdc4b38 },
+        gunner: { skin: 0x806969, dark: 0x4b393b, shirt: 0x443033, pants: 0x282426, eye: 0xd6554b },
+        tank:   { skin: 0x6f7a7e, dark: 0x424a4e, shirt: 0x353e43, pants: 0x252b2f, eye: 0x78aabd },
+      };
+      const p = palettes[type] || palettes.normal;
+      const root = new THREE.Group();
+      const torsoRoot = new THREE.Group();
+      root.add(torsoRoot);
+
+      const skin = enemyMaterial(p.skin, 0.82);
+      const skinDark = enemyMaterial(p.dark, 0.92);
+      const shirt = enemyMaterial(p.shirt, 1);
+      const pants = enemyMaterial(p.pants, 1);
+      const wound = enemyMaterial(0x67272a, 0.68);
+      const blood = enemyMaterial(0x350b0c, 0.72);
+      const bone = enemyMaterial(0xc5b995, 0.9);
+      const nail = enemyMaterial(0x282520, 0.95);
+      const shoe = enemyMaterial(0x141514, 0.98);
+
+      const pelvis = enemyEllipsoid(0.285, 0.17, 0.19, pants, 14);
+      pelvis.position.y = 0.72;
+      torsoRoot.add(pelvis);
+      const abdomen = enemyCapsule(0.205, 0.18, type === "fast" ? skin : shirt, 14);
+      abdomen.scale.set(1.15, 1, 0.72);
+      abdomen.position.y = 0.95;
+      torsoRoot.add(abdomen);
+      const ribcage = enemyCapsule(0.26, 0.30, shirt, 14);
+      ribcage.scale.set(type === "tank" ? 1.40 : 1.24, 1, 0.70);
+      ribcage.position.set(0, 1.28, 0.01);
+      torsoRoot.add(ribcage);
+      const clavicle = enemyLimb(0.055, 0.055, type === "tank" ? 0.74 : 0.62, shirt, 12);
+      clavicle.rotation.z = Math.PI / 2;
+      clavicle.position.set(0, 1.50, 0.005);
+      torsoRoot.add(clavicle);
+
+      const neck = enemyLimb(0.095, 0.115, 0.18, skin, 12);
+      neck.position.set(0, 1.62, 0.035);
+      torsoRoot.add(neck);
+      const headGroup = new THREE.Group();
+      headGroup.position.set(type === "fast" ? 0.025 : 0, 1.86, 0.075);
+      headGroup.rotation.set(type === "fast" ? 0.16 : 0.08, 0, type === "gunner" ? -0.06 : 0.035);
+      torsoRoot.add(headGroup);
+      const skull = addZombieFace(headGroup, skin, skinDark, wound, p.eye, {
+        hair: type !== "fast", jawShift: type === "fast" ? 0.035 : 0.012,
+        jawTilt: type === "fast" ? -0.12 : -0.05, mouthTilt: type === "gunner" ? -0.10 : 0.08
+      });
+
+      // Layered damage belongs to the new anatomy and follows the torso naturally.
+      const chestWound = enemyEllipsoid(0.105, 0.145, 0.022, wound, 11);
+      chestWound.position.set(0.14, 1.26, 0.205);
+      chestWound.rotation.z = -0.28;
+      torsoRoot.add(chestWound);
+      const ribA = enemyCapsule(0.012, 0.13, bone, 6);
+      ribA.rotation.z = Math.PI / 2 - 0.10;
+      ribA.position.set(0.14, 1.30, 0.232);
+      torsoRoot.add(ribA);
+      const ribB = ribA.clone(); ribB.position.y = 1.23; ribB.rotation.z += 0.14; torsoRoot.add(ribB);
+      const driedBlood = enemyScar(0.18, blood, -0.18);
+      driedBlood.position.set(-0.17, 1.08, 0.215);
+      torsoRoot.add(driedBlood);
+
+      if (type === "tank") {
+        const armor = enemyMaterial(0x343b40, 0.72, { metalness: 0.22 });
+        const plate = new THREE.Mesh(new THREE.BoxGeometry(0.63, 0.42, 0.065, 2, 2, 1), armor);
+        plate.position.set(0, 1.30, 0.225);
+        plate.rotation.x = -0.05;
+        torsoRoot.add(plate);
+        const plateInset = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.23, 0.025), enemyMaterial(0x252b2f, 0.78, { metalness: 0.16 }));
+        plateInset.position.set(0, 1.30, 0.268);
+        torsoRoot.add(plateInset);
+      }
+      if (type === "gunner") {
+        const strapMat = enemyMaterial(0x241b16, 0.96);
+        const strap = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.62, 0.035), strapMat);
+        strap.position.set(-0.10, 1.24, 0.225);
+        strap.rotation.z = -0.38;
+        torsoRoot.add(strap);
+      }
+
+      const leftArm = addZombieArm(torsoRoot, -1, 1.47, skin, skinDark, shirt, nail, {
+        shoulderX: type === "tank" ? 0.49 : 0.43, bareUpper: type === "fast", tornSleeve: true,
+        elbowBend: type === "gunner" ? -0.52 : -0.18
+      });
+      const rightArm = addZombieArm(torsoRoot, 1, 1.47, skin, skinDark, shirt, nail, {
+        shoulderX: type === "tank" ? 0.49 : 0.43, bareUpper: type === "fast", tornSleeve: type !== "fast",
+        elbowBend: type === "gunner" ? -0.70 : -0.24
+      });
+      const leftLeg = addZombieLeg(root, -1, skin, skinDark, pants, shoe, { tornLeg: type === "fast" });
+      const rightLeg = addZombieLeg(root, 1, skin, skinDark, pants, shoe, { exposedKnee: true });
+
+      // A compact, recognisable weapon for the ranged silhouette; both hands stay attached
+      // to their wrists because the prop is carried by the arm hierarchy.
+      if (type === "gunner") {
+        const gunMat = enemyMaterial(0x17191a, 0.64, { metalness: 0.48 });
+        const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.42), gunMat);
+        receiver.position.set(0, -0.53, 0.26);
+        rightArm.forearmRoot.add(receiver);
+        const barrel = enemyLimb(0.018, 0.018, 0.34, gunMat, 10);
+        barrel.rotation.x = Math.PI / 2;
+        barrel.position.set(0, -0.53, 0.62);
+        rightArm.forearmRoot.add(barrel);
+      }
+
+      // A permanent diseased posture gives each type character without breaking the
+      // animation code, which continues to drive these same rig roots.
+      torsoRoot.rotation.x = type === "fast" ? 0.14 : 0.06;
+      torsoRoot.rotation.z = type === "gunner" ? -0.025 : 0.02;
+      leftArm.armRoot.rotation.z = type === "tank" ? -0.12 : -0.08;
+      rightArm.armRoot.rotation.z = type === "tank" ? 0.12 : 0.08;
+
+      const fy0 = Math.random() * Math.PI * 2;
+      root.position.set(x, 0, z);
+      setEnemyShadows(root, true);
+      scene.add(root);
+
+      const hpUi = createEnemyHpSprite(root, 128, 1.7, 0.32, 2.55);
+      let hp = 100, speed = 1.75, attackDamage = 8, attackCooldown = 0.42, ranged = false, rangeDistance = 12;
+      if (type === "fast") { hp = 70; speed = 7.4; attackDamage = 9; attackCooldown = 0.18; }
+      else if (type === "gunner") { hp = 75; speed = 1.10; attackDamage = 4; attackCooldown = 1.6; ranged = true; rangeDistance = 16; }
+      else if (type === "tank") { hp = 180; speed = 1.05; attackDamage = 14; attackCooldown = 0.70; }
+
+      return {
+        type, group: root, torsoRoot, headGroup,
+        leftArmRoot: leftArm.armRoot, rightArmRoot: rightArm.armRoot,
+        leftForearmRoot: leftArm.forearmRoot, rightForearmRoot: rightArm.forearmRoot,
+        leftLegRoot: leftLeg.legRoot, rightLegRoot: rightLeg.legRoot,
+        leftShinRoot: leftLeg.shinRoot, rightShinRoot: rightLeg.shinRoot,
+        ...hpUi, alive: true, hp, maxHp: hp, attackCooldownTimer: 0, attackCooldown,
+        attackDamage, ranged, rangeDistance, respawnTimer: 0,
+        spawn: new THREE.Vector3(x, 0, z), walkTime: Math.random() * 10, moving: false,
+        attackPhase: 0, speed, aware: false, hiddenTimer: 0, facingYaw: fy0, visYaw: fy0,
+        armLV: -0.2, armRV: -0.2, legLV: 0, legRV: 0, torsoBobYV: 0,
+        torsoXV: 0, torsoZV: 0, torsoPitchV: 0, targetId: null,
+        retargetTimer: Math.random() * 2, moveYaw: 0, rangedLosAcquireTimer: 0
+      };
+    }
+
+    function makeProceduralHormoneZombie(x, z, isHell) {
+      const root = new THREE.Group();
+      const torsoRoot = new THREE.Group();
+      root.add(torsoRoot);
+
+      const skin = enemyMaterial(isHell ? 0x343846 : 0x71676b, 0.74);
+      const skinDark = enemyMaterial(isHell ? 0x181b25 : 0x453c40, 0.88);
+      const tissue = enemyMaterial(isHell ? 0x82101d : 0x541820, 0.62, {
+        emissive: isHell ? 0x3b0308 : 0x000000, emissiveIntensity: isHell ? 0.55 : 0
+      });
+      const vein = enemyMaterial(isHell ? 0xd01d32 : 0x742033, 0.56, {
+        emissive: isHell ? 0x5c0710 : 0x000000, emissiveIntensity: isHell ? 0.6 : 0
+      });
+      const cloth = enemyMaterial(isHell ? 0x14151a : 0x24352f, 1);
+      const pants = enemyMaterial(0x20211f, 1);
+      const bone = enemyMaterial(0xc4b793, 0.9);
+      const nail = enemyMaterial(0x1a1717, 0.95);
+      const boot = enemyMaterial(0x121313, 0.96);
+
+      const pelvis = enemyEllipsoid(0.34, 0.19, 0.24, pants, 14);
+      pelvis.position.y = 0.72;
+      torsoRoot.add(pelvis);
+      const abdomen = enemyCapsule(0.30, 0.24, skin, 14);
+      abdomen.scale.set(1.14, 1, 0.76);
+      abdomen.position.y = 1.02;
+      torsoRoot.add(abdomen);
+      const ribcage = enemyCapsule(0.47, 0.38, cloth, 16);
+      ribcage.scale.set(1.36, 1, 0.72);
+      ribcage.position.set(0, 1.54, 0.08);
+      torsoRoot.add(ribcage);
+      const backMass = enemyEllipsoid(0.64, 0.43, 0.36, skinDark, 14);
+      backMass.position.set(0, 1.79, -0.15);
+      torsoRoot.add(backMass);
+      const trapL = enemyEllipsoid(0.35, 0.27, 0.29, skin, 13);
+      trapL.position.set(-0.36, 1.96, 0.00); torsoRoot.add(trapL);
+      const trapR = enemyEllipsoid(0.39, 0.30, 0.31, skin, 13);
+      trapR.position.set(0.38, 1.98, 0.01); torsoRoot.add(trapR);
+
+      const chestTear = enemyEllipsoid(0.18, 0.34, 0.030, tissue, 12);
+      chestTear.position.set(0.04, 1.54, 0.55);
+      chestTear.rotation.z = -0.10;
+      torsoRoot.add(chestTear);
+      for (let i = 0; i < 5; i++) {
+        const rib = enemyCapsule(0.018, 0.29 - i * 0.022, bone, 7);
+        rib.rotation.z = Math.PI / 2 + (i - 2) * 0.045;
+        rib.position.set((i % 2 ? 1 : -1) * 0.065, 1.72 - i * 0.095, 0.585);
+        torsoRoot.add(rib);
+      }
+      for (let i = 0; i < 4; i++) {
+        const v = enemyScar(0.22 + i * 0.035, vein, (i % 2 ? 0.28 : -0.22));
+        v.position.set(-0.37 + i * 0.24, 1.38 + (i % 2) * 0.26, 0.49 + (i % 2) * 0.025);
+        torsoRoot.add(v);
+      }
+
+      const neck = enemyLimb(0.16, 0.22, 0.28, skin, 13);
+      neck.position.set(0, 2.01, 0.27);
+      neck.rotation.x = 0.20;
+      torsoRoot.add(neck);
+      const headGroup = new THREE.Group();
+      headGroup.position.set(0, 1.96, 0.50); // retained for projectile origin math
+      headGroup.rotation.x = 0.25;
+      torsoRoot.add(headGroup);
+      const skull = addZombieFace(headGroup, skin, skinDark, tissue, isHell ? 0xff210d : 0xd53a24, {
+        headX: 0.235, headY: 0.265, headZ: 0.225, hair: false,
+        jawShift: 0.035, jawTilt: -0.12, eyeIntensity: isHell ? 3.0 : 1.5, mouthTilt: -0.12
+      });
+      const facialScar = enemyScar(0.34, vein, 0.32);
+      facialScar.position.set(0.01, 0.015, 0.228);
+      headGroup.add(facialScar);
+      const eyeLight = new THREE.PointLight(isHell ? 0xff210d : 0xb52b20, isHell ? 1.8 : 0.55, isHell ? 4.5 : 2.5);
+      eyeLight.position.set(0, 0.05, 0.30);
+      headGroup.add(eyeLight);
+
+      const leftArm = addZombieArm(torsoRoot, -1, 1.80, skin, skinDark, skin, nail, {
+        shoulderX: 0.78, shoulderR: 0.30, shoulderY: 0.28, shoulderZScale: 0.29,
+        upperTop: 0.27, upperBottom: 0.22, upperLen: 0.58, foreLen: 0.50,
+        foreTop: 0.22, foreBottom: 0.16, elbowR: 0.20, elbowY: 0.15,
+        wristR: 0.145, wristLen: 0.10, bareUpper: true, handScale: 1.75, elbowBend: -0.55
+      });
+      const rightArm = addZombieArm(torsoRoot, 1, 1.80, skin, skinDark, skin, nail, {
+        shoulderX: 0.78, shoulderR: 0.33, shoulderY: 0.30, shoulderZScale: 0.31,
+        upperTop: 0.29, upperBottom: 0.23, upperLen: 0.60, foreLen: 0.52,
+        foreTop: 0.23, foreBottom: 0.17, elbowR: 0.21, elbowY: 0.16,
+        wristR: 0.15, wristLen: 0.10, bareUpper: true, handScale: 1.85, elbowBend: -0.55
+      });
+
+      // Boss forearms use their animation groups, with enlarged anatomy rebuilt around the
+      // exact elbow origin.  Replace the human-sized pieces created by the shared arm helper.
+      for (const data of [leftArm, rightArm]) {
+        const fore = data.forearmRoot;
+        const side = data === leftArm ? -1 : 1;
+        const muscle = enemyEllipsoid(0.23, 0.28, 0.22, skin, 12);
+        muscle.position.set(side * 0.015, -0.23, 0.035);
+        fore.add(muscle);
+        const v = enemyScar(0.31, vein, side * 0.18);
+        v.position.set(side * -0.12, -0.24, 0.215);
+        fore.add(v);
+      }
+
+      const leftLeg = addZombieLeg(root, -1, skin, skinDark, pants, boot, {
+        hipX: 0.30, hipY: 0.69, hipR: 0.19, hipJointY: 0.16,
+        thighTop: 0.19, thighBottom: 0.15, thighLen: 0.48,
+        kneeR: 0.155, kneeY: 0.12, shinTop: 0.145, shinBottom: 0.105,
+        ankleR: 0.10, footR: 0.11, footLen: 0.22, footDrop: 0.095,
+        shinLen: 0.43, kneeBend: 0.10
+      });
+      const rightLeg = addZombieLeg(root, 1, skin, skinDark, pants, boot, {
+        hipX: 0.30, hipY: 0.69, hipR: 0.19, hipJointY: 0.16,
+        thighTop: 0.19, thighBottom: 0.15, thighLen: 0.48,
+        kneeR: 0.155, kneeY: 0.12, shinTop: 0.145, shinBottom: 0.105,
+        ankleR: 0.10, footR: 0.11, footLen: 0.22, footDrop: 0.095, shinLen: 0.43,
+        kneeBend: 0.10, exposedKnee: true
+      });
+
+      torsoRoot.rotation.x = 0.18;
+      const bossScale = isHell ? 2.6 : 2.0;
+      const bossBaseY = isHell ? 1.30 : 1.00;
+      root.scale.setScalar(bossScale);
+      root.position.set(x, bossBaseY, z);
+      setEnemyShadows(root, true);
+      scene.add(root);
+
+      const hpUi = createEnemyHpSprite(root, 256, isHell ? 4.0 : 3.2, isHell ? 0.6 : 0.5, isHell ? 3.6 : 3.2);
+      const hp = isHell ? 75000 : 15000;
+      return {
+        type: "boss", group: root, torsoRoot, headGroup,
+        leftArmRoot: leftArm.armRoot, rightArmRoot: rightArm.armRoot,
+        leftForearmRoot: leftArm.forearmRoot, rightForearmRoot: rightArm.forearmRoot,
+        leftLegRoot: leftLeg.legRoot, rightLegRoot: rightLeg.legRoot,
+        leftShinRoot: leftLeg.shinRoot, rightShinRoot: rightLeg.shinRoot,
+        ...hpUi, alive: true, hp, maxHp: hp, attackCooldownTimer: 0, attackCooldown: 1.2,
+        attackDamage: isHell ? 250 : 50, ranged: false, rangeDistance: 20,
+        respawnTimer: 0, spawn: new THREE.Vector3(x, 0, z), walkTime: Math.random() * 10,
+        moving: false, attackPhase: 0, speed: isHell ? 6.175 : 5.85, aware: false,
+        hiddenTimer: 0, facingYaw: 0, visYaw: 0, armLV: -0.2, armRV: -0.2,
+        legLV: 0, legRV: 0, torsoBobYV: 0, torsoXV: 0, torsoZV: 0, torsoPitchV: 0,
+        targetId: null, retargetTimer: 0, moveYaw: 0, rangedLosAcquireTimer: 0,
+        isBoss: true, isHormoneZombie: true, isHellBoss: !!isHell,
+        bossMode: "tank", bossModeSwitchTimer: 5,
+        baseTankHp: hp, baseSpeedHp: isHell ? 40000 : 8000, baseGunnerHp: isHell ? 50000 : 10000,
+        summonCooldown: 999, summonCount: 0, summonTriggered: false,
+        bossAnimState: "idle", bossAnimTimer: 0, bossQuakeCooldownTimer: 6, _quakeShook: false
+      };
+    }
+
+    function makeAuthoredZombieRig(x, z, type, isBoss = false, isHell = false) {
+      const root = new THREE.Group();
+      const torsoRoot = new THREE.Group();
+      root.add(torsoRoot);
+
+      const visual = cloneSkinnedModel(realZombieTemplate);
+      const typeScale = type === "tank" ? 0.0108 : type === "fast" ? 0.00965 : 0.0100;
+      visual.scale.setScalar(isBoss ? 0.015 : typeScale);
+      visual.position.y = isBoss ? -0.50 : 0;
+      visual.rotation.y = Math.PI;
+      torsoRoot.add(visual);
+
+      const tint = isBoss
+        ? new THREE.Color(isHell ? 0x6f3438 : 0x806a69)
+        : new THREE.Color(type === "fast" ? 0xb49b78 : type === "gunner" ? 0xa77c78 : type === "tank" ? 0x839398 : 0x929080);
+      visual.traverse((o) => {
+        if (!o.isMesh) return;
+        const originals = Array.isArray(o.material) ? o.material : [o.material];
+        const copies = originals.map((source) => {
+          const m = source.clone();
+          m.color.multiply(tint);
+          if (isHell) {
+            m.emissive = new THREE.Color(0x2b0305);
+            m.emissiveIntensity = 0.32;
+          }
+          return m;
+        });
+        o.material = Array.isArray(o.material) ? copies : copies[0];
+        o.castShadow = true;
+        o.receiveShadow = true;
+      });
+
+      // Compatibility pivots keep the established movement and hitbox code stable. The
+      // visible body is one authored skinned mesh, so no hand or joint can detach from it.
+      const leftArmRoot = new THREE.Group();
+      const rightArmRoot = new THREE.Group();
+      const leftForearmRoot = new THREE.Group();
+      const rightForearmRoot = new THREE.Group();
+      leftArmRoot.add(leftForearmRoot);
+      rightArmRoot.add(rightForearmRoot);
+      torsoRoot.add(leftArmRoot, rightArmRoot);
+      const leftLegRoot = new THREE.Group();
+      const rightLegRoot = new THREE.Group();
+      const leftShinRoot = new THREE.Group();
+      const rightShinRoot = new THREE.Group();
+      leftLegRoot.add(leftShinRoot);
+      rightLegRoot.add(rightShinRoot);
+      root.add(leftLegRoot, rightLegRoot);
+      const headGroup = new THREE.Group();
+      torsoRoot.add(headGroup);
+
+      const mixer = new THREE.AnimationMixer(visual);
+      const actions = {};
+      for (const [name, clip] of Object.entries(realZombieClips)) actions[name] = mixer.clipAction(clip);
+
+      if (isBoss) {
+        const bossScale = isHell ? 2.6 : 2.0;
+        root.scale.setScalar(bossScale);
+        root.position.set(x, isHell ? 1.30 : 1.00, z);
+      } else {
+        root.position.set(x, 0, z);
+      }
+      scene.add(root);
+
+      const hpUi = createEnemyHpSprite(
+        root,
+        isBoss ? 256 : 128,
+        isBoss ? (isHell ? 4.0 : 3.2) : 1.7,
+        isBoss ? (isHell ? 0.6 : 0.5) : 0.32,
+        isBoss ? (isHell ? 3.6 : 3.2) : 2.45
+      );
+
+      const common = {
+        type, group: root, torsoRoot, headGroup, leftArmRoot, rightArmRoot,
+        leftForearmRoot, rightForearmRoot, leftLegRoot, rightLegRoot, leftShinRoot, rightShinRoot,
+        modelVisual: visual, modelMixer: mixer, modelActions: actions, modelActionName: null,
+        ...hpUi, alive: true, attackCooldownTimer: 0, respawnTimer: 0,
+        spawn: new THREE.Vector3(x, 0, z), walkTime: Math.random() * 10,
+        moving: false, attackPhase: 0, aware: false, hiddenTimer: 0,
+        facingYaw: Math.random() * Math.PI * 2, visYaw: 0,
+        armLV: -0.2, armRV: -0.2, legLV: 0, legRV: 0,
+        torsoBobYV: 0, torsoXV: 0, torsoZV: 0, torsoPitchV: 0,
+        targetId: null, retargetTimer: Math.random() * 2, moveYaw: 0, rangedLosAcquireTimer: 0
+      };
+      common.visYaw = common.facingYaw;
+      setRealZombieAction(common, "idle", 0);
+      return common;
+    }
+
+    function makeZombie(x, z, type = "normal") {
+      if (!realZombieTemplate || !realZombieClips) return makeProceduralZombie(x, z, type);
+      const enemy = makeAuthoredZombieRig(x, z, type, false, false);
+      enemy.hp = enemy.maxHp = type === "tank" ? 180 : type === "fast" ? 70 : type === "gunner" ? 75 : 100;
+      enemy.speed = type === "fast" ? 7.4 : type === "tank" ? 1.05 : type === "gunner" ? 1.10 : 1.75;
+      enemy.attackDamage = type === "tank" ? 14 : type === "fast" ? 9 : type === "gunner" ? 4 : 8;
+      enemy.attackCooldown = type === "tank" ? 0.70 : type === "fast" ? 0.18 : type === "gunner" ? 1.6 : 0.42;
+      enemy.ranged = type === "gunner";
+      enemy.rangeDistance = type === "gunner" ? 16 : 12;
+      return enemy;
+    }
+
+    function makeHormoneZombie(x, z, isHell) {
+      if (!realZombieTemplate || !realZombieClips) return makeProceduralHormoneZombie(x, z, isHell);
+      const enemy = makeAuthoredZombieRig(x, z, "boss", true, !!isHell);
+      const hp = isHell ? 75000 : 15000;
+      Object.assign(enemy, {
+        hp, maxHp: hp, attackCooldown: 1.2, attackDamage: isHell ? 250 : 50,
+        ranged: false, rangeDistance: 20, speed: isHell ? 6.175 : 5.85,
+        isBoss: true, isHormoneZombie: true, isHellBoss: !!isHell,
+        bossMode: "tank", bossModeSwitchTimer: 5,
+        baseTankHp: hp, baseSpeedHp: isHell ? 40000 : 8000,
+        baseGunnerHp: isHell ? 50000 : 10000,
+        summonCooldown: 999, summonCount: 0, summonTriggered: false,
+        bossAnimState: "idle", bossAnimTimer: 0, bossQuakeCooldownTimer: 6, _quakeShook: false
+      });
+      enemy.facingYaw = enemy.visYaw = 0;
+      return enemy;
     }
 
     
@@ -13839,8 +14582,8 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
      * at -0.40 — shots well BEHIND the boss registered as body hits. Both errors are then
      * multiplied by the boss scale (2.0, or 2.6 for the hell boss).
      *
-     * Boxes fit a box-built model exactly, so they simply do not have this failure mode.
-     * Extents below are read off the mesh positions in makeHormoneZombie().
+     * The rebuilt model is rounded, so these boxes hug each articulated anatomical region
+     * independently and move with that region's rig group.
      */
     /**
      * Boss hit volumes, one list per RIG GROUP, each box in that group's OWN local space.
@@ -13871,8 +14614,8 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       ]],
       ["leftArmRoot",      [{ x0: -0.27, x1: 0.27, y0: -0.64, y1: 0.14, z0: -0.30, z1: 0.30, zone: "body" }]],
       ["rightArmRoot",     [{ x0: -0.27, x1: 0.27, y0: -0.64, y1: 0.14, z0: -0.30, z1: 0.30, zone: "body" }]],
-      ["leftForearmRoot",  [{ x0: -0.23, x1: 0.23, y0: -0.80, y1: 0.13, z0: -0.20, z1: 0.28, zone: "body" }]],
-      ["rightForearmRoot", [{ x0: -0.23, x1: 0.23, y0: -0.80, y1: 0.13, z0: -0.20, z1: 0.28, zone: "body" }]],
+      ["leftForearmRoot",  [{ x0: -0.23, x1: 0.23, y0: -0.95, y1: 0.13, z0: -0.20, z1: 0.28, zone: "body" }]],
+      ["rightForearmRoot", [{ x0: -0.23, x1: 0.23, y0: -0.95, y1: 0.13, z0: -0.20, z1: 0.28, zone: "body" }]],
       ["leftLegRoot",      [{ x0: -0.19, x1: 0.19, y0: -0.50, y1: 0.04, z0: -0.19, z1: 0.28, zone: "leg" }]],
       ["rightLegRoot",     [{ x0: -0.19, x1: 0.19, y0: -0.50, y1: 0.04, z0: -0.19, z1: 0.28, zone: "leg" }]],
       ["leftShinRoot",     [{ x0: -0.17, x1: 0.17, y0: -0.56, y1: 0.10, z0: -0.24, z1: 0.26, zone: "leg" }]],
@@ -17742,6 +18485,8 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           enemy.torsoRoot.rotation.z = enemy.torsoZV;
           enemy.torsoRoot.rotation.x = enemy.torsoPitchV;
         }
+
+        updateRealZombieAnimation(enemy, dt);
       }
     }
 
@@ -18438,6 +19183,16 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       loadUnlocks();
       sanitizeLoadoutSelection();
       setWeapon(0);
+
+      if (isTrainingMap(CURRENT_MAP) || isArenaLikeMap(CURRENT_MAP) || isBossArenaMap(CURRENT_MAP) || isGauntletMap(CURRENT_MAP)) {
+        try {
+          gameBootLabel.textContent = "Loading enemy models…";
+          await preloadRealZombieAssets();
+        } catch (_) {
+          // The standalone procedural rebuild remains available for offline/CDN failures.
+        }
+        gameBootLabel.textContent = "Building world…";
+      }
 
       clearMap();
 
