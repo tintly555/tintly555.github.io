@@ -2145,8 +2145,8 @@ const V96_EN = {
     weaponAsVal: "AS Val", weaponDev: "???",
   mapArena: "Zombie Arena", mapBossArena: "BOSS FIGHT — Boss", mapPvpClassic: "PVP — Classic", mapPvpGrid: "PVP — Grid", hudBrightDuel: "Bright duel map — flashlight stays off",
   musicByPrefix: "Music by ", musicAuthor: "JimmyQrg", chooseModeToPlay: "CHOOSE A MODE TO PLAY",
-  gfxQualityLabel: "Quality", gfxQualityPill: "performance / fidelity", gfxQualityHint: "Does not change zombie sync or gameplay — rendering only. Brightness is matched across tiers so difficulty stays fair.",
-  gfxTextureLabel: "Texture detail", gfxRenderDistLabel: "Render distance", gfxRenderDistHint: "Beyond this distance the world fades into darkness (distance fog). Lights dim with the fog. Does not affect gameplay.",
+  gfxQualityLabel: "Quality", gfxQualityPill: "performance / fidelity", gfxQualityHint: "Adjusts adaptive resolution, texture filtering, and shadow fidelity. Visibility, aiming, lighting, fog, and gameplay stay identical.",
+  gfxTextureLabel: "Texture detail", gfxRenderDistLabel: "Render distance", gfxRenderDistHint: "Controls how far the world remains visible through realistic atmospheric fog. Does not affect gameplay.",
   settingsHeadingHotbar: "HOTBAR ORDER", hotbarOrderHint: "Click a slot to select it (glows), then click another to swap. Keys 1–7 and 0 follow the new order.",
   btnResetHotbar: "Reset to default", hbKeyLabel: "Key"
 };

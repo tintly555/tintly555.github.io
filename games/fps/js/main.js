@@ -6,7 +6,7 @@
     // import + catch is kept so a missing/renamed i18n file still lets the menu boot with a minimal stub.
     let GAME_I18N, LANG_META, translateGame;
     try {
-      const _i18n = await import("./translation.js");
+      const _i18n = await import("./translation.js?v=20260924-fair-quality-v8");
       GAME_I18N     = _i18n.GAME_I18N;
       LANG_META     = _i18n.LANGUAGE_OPTIONS;
       translateGame = _i18n.translate;
@@ -148,17 +148,31 @@
 
     const SETTINGS_STORAGE_KEY = "fpsGameSettingsV1";
     /**
-     * Per-tier rendering preset. Every tier's realism is raised to its ceiling (potato now gets
-     * ACES tone mapping + PCF soft shadows too), but values stay strictly monotonic so the
-     * performance ladder (potato fastest → extreme slowest) and the realism ladder
-     * (extreme best → potato worst) are both preserved.
+     * Per-tier rendering preset. Values stay strictly monotonic so the performance
+     * ladder (potato fastest → extreme slowest) and the realism ladder (extreme best
+     * → potato worst) are both preserved. Resolution, filtering, and shadow fidelity
+     * scale independently; visibility and player/camera behavior never do.
      */
     const QUALITY_PRESETS = {
-      potato:  { label: "POTATO",  dpr: 0.62, presentation: 0.55, aniso: 4,  fog: { near: 15, far: 64 }, shadowSz: 256, exposure: 1.0,   bias: -0.0009,  normalBias: 0.018, warFilm: "0.015", shade: "0.09" },
-      regular: { label: "REGULAR", dpr: 0.78, presentation: 0.75, aniso: 8,  fog: { near: 17, far: 78 }, shadowSz: 512, exposure: 1.03,  bias: -0.0008,  normalBias: 0.015, warFilm: "0.035", shade: "0.06" },
-      high:    { label: "HIGH",    dpr: 0.95, presentation: 0.9,  aniso: 12, fog: { near: 18, far: 90 }, shadowSz: 768, exposure: 1.06,  bias: -0.00065, normalBias: 0.012, warFilm: "0.05",  shade: "0.035" },
-      extreme: { label: "EXTREME", dpr: 1.08, presentation: 1,    aniso: 16, fog: { near: 19, far: 96 }, shadowSz: 896, exposure: 1.1,   bias: -0.00055, normalBias: 0.008, warFilm: "0.07",  shade: "0.018" },
+      potato:  { label: "POTATO",  dpr: 0.65, minDpr: 0.50, targetFps: 52, aniso: 2,  shadowSz: 256,  shadowDist: 28, shadowSoft: false, bias: -0.0009,  normalBias: 0.018 },
+      regular: { label: "REGULAR", dpr: 0.85, minDpr: 0.64, targetFps: 56, aniso: 6,  shadowSz: 512,  shadowDist: 40, shadowSoft: false, bias: -0.0008,  normalBias: 0.015 },
+      high:    { label: "HIGH",    dpr: 1.00, minDpr: 0.78, targetFps: 58, aniso: 12, shadowSz: 1024, shadowDist: 55, shadowSoft: true,  bias: -0.00065, normalBias: 0.012 },
+      extreme: { label: "EXTREME", dpr: 1.25, minDpr: 0.92, targetFps: 60, aniso: 16, shadowSz: 2048, shadowDist: 72, shadowSoft: true,  bias: -0.00055, normalBias: 0.008 },
     };
+    // Fairness-critical presentation is intentionally identical on every tier.
+    // Quality may change fidelity and cost, never visibility, brightness, camera
+    // motion, fog obstruction, or the number of lights revealing an enemy.
+    const FAIR_PRESENTATION = Object.freeze({
+      exposure: 1.05,
+      fog: Object.freeze({ near: 17, far: 82 }),
+      fogParticles: 32,
+      fogOpacity: 0.048,
+      fogSize: 10,
+      pointLights: 12,
+      spotLights: 8,
+      warFilm: "0.035",
+      shade: "0.06",
+    });
     const QUALITY_LEVELS = Object.keys(QUALITY_PRESETS);
     const QUALITY_LABELS = QUALITY_LEVELS.map((s) => QUALITY_PRESETS[s].label);
     const LANGUAGE_OPTIONS = LANG_META.map((o) => o.code);
@@ -910,6 +924,7 @@
     }
     let BOSS_IS_COOP = false;
     const bossProjectiles = [];
+    const bossLavaImpacts = [];
     let started = false;
     /** False during boot overlay: no movement, shooting, zombie AI, or damage until map + assets are ready. */
     let gameWorldReady = false;
@@ -2738,7 +2753,11 @@
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(0x070504);
-    scene.fog = new THREE.Fog(0x070504, 16, 72);
+    // Exponential-squared fog gives a natural gradual haze close to the player and
+    // dense light extinction in the distance instead of a visible linear fog wall.
+    scene.fog = new THREE.FogExp2(0x070504, 0.026);
+    scene.fog.near = 16; // compatibility metadata used by gameplay presentation
+    scene.fog.far = 72;
 
     const _vpInit = getSafeViewportSize();
     const camera = new THREE.PerspectiveCamera(
@@ -2791,15 +2810,59 @@
       return QUALITY_PRESETS[getQualityId()] || QUALITY_PRESETS.regular;
     }
 
+    let adaptivePixelRatio = null;
+    let adaptivePerfTime = 0;
+    let adaptivePerfFrames = 0;
+    let adaptivePerfCooldown = 2.5;
+
     function getPixelRatioForQuality() {
       const dpr = window.devicePixelRatio || 1;
-      // Capped DPR: higher tiers add realism via shading and textures first, not brute-force resolution.
-      return Math.min(getQualityPreset().dpr, dpr);
+      const p = getQualityPreset();
+      const requested = adaptivePixelRatio == null ? p.dpr : adaptivePixelRatio;
+      return Math.min(requested, dpr);
     }
 
-    /** Scales camera shake / head bob. Realism raised across every tier (potato included); the ladder stays strictly monotonic so higher tiers still feel heavier. */
+    function resetAdaptiveResolution() {
+      const p = getQualityPreset();
+      adaptivePixelRatio = Math.min(p.dpr, window.devicePixelRatio || 1);
+      adaptivePerfTime = 0;
+      adaptivePerfFrames = 0;
+      adaptivePerfCooldown = 2.5;
+    }
+
+    /**
+     * Slowly adjust internal resolution inside the selected tier's bounds. This
+     * reacts to sustained load only, preventing rapid resolution pumping during
+     * explosions, map streaming, or a single shader compilation frame.
+     */
+    function updateAdaptiveResolution(frameDt) {
+      if (!started || paused || document.visibilityState === "hidden") return;
+      const p = getQualityPreset();
+      adaptivePerfCooldown = Math.max(0, adaptivePerfCooldown - frameDt);
+      adaptivePerfTime += Math.min(frameDt, 0.1);
+      adaptivePerfFrames++;
+      if (adaptivePerfTime < 1.5 || adaptivePerfCooldown > 0) return;
+
+      const fps = adaptivePerfFrames / Math.max(0.001, adaptivePerfTime);
+      const maxDpr = Math.min(p.dpr, window.devicePixelRatio || 1);
+      const minDpr = Math.min(maxDpr, p.minDpr);
+      const current = adaptivePixelRatio == null ? maxDpr : adaptivePixelRatio;
+      let next = current;
+      if (fps < p.targetFps - 5) next = Math.max(minDpr, next - 0.08);
+      else if (fps > p.targetFps + 3) next = Math.min(maxDpr, next + 0.04);
+
+      adaptivePerfTime = 0;
+      adaptivePerfFrames = 0;
+      if (Math.abs(next - current) >= 0.015) {
+        adaptivePixelRatio = next;
+        adaptivePerfCooldown = 2.0;
+        syncGameRendererSize();
+      }
+    }
+
+    /** Camera motion cannot depend on quality: lower settings must not make aiming easier. */
     function getQualityPresentationScale() {
-      return getQualityPreset().presentation;
+      return 1;
     }
 
     function getMaxTextureAnisotropy() {
@@ -2812,7 +2875,7 @@
     }
 
     function getQualityFogBase() {
-      return getQualityPreset().fog;
+      return FAIR_PRESENTATION.fog;
     }
 
     function getMapEnvColors() {
@@ -2829,9 +2892,111 @@
       return { fog: 0x070504, bg: 0x070504 };
     }
 
-    /** Distance fog + camera far: darkness and light fade beyond render distance (scaled by preset). */
+    function fogDensityForFar(far) {
+      // FogExp2 factor is 1-exp(-(density*distance)^2). Reach ~98% at far.
+      return Math.sqrt(-Math.log(0.02)) / Math.max(1, far);
+    }
+
+    function setSceneFogVisibility(near, far, color) {
+      if (!scene.fog || !scene.fog.isFogExp2) scene.fog = new THREE.FogExp2(color, 0.02);
+      scene.fog.color.set(color);
+      scene.fog.density = fogDensityForFar(far);
+      // Keep readable metadata for culling and the scripted boss-victory transition.
+      scene.fog.near = near;
+      scene.fog.far = far;
+      scene.userData.fogCullFar = far;
+    }
+
+    const MAX_ATMOSPHERIC_FOG_POINTS = 64;
+    let atmosphericFog = null;
+    let atmosphericFogVelocity = null;
+
+    function createFogParticleTexture() {
+      const canvas = document.createElement("canvas");
+      canvas.width = canvas.height = 128;
+      const ctx = canvas.getContext("2d");
+      const radial = ctx.createRadialGradient(64, 64, 3, 64, 64, 62);
+      radial.addColorStop(0, "rgba(255,255,255,0.62)");
+      radial.addColorStop(0.34, "rgba(255,255,255,0.24)");
+      radial.addColorStop(0.72, "rgba(255,255,255,0.07)");
+      radial.addColorStop(1, "rgba(255,255,255,0)");
+      ctx.fillStyle = radial;
+      ctx.fillRect(0, 0, 128, 128);
+      const texture = new THREE.CanvasTexture(canvas);
+      texture.colorSpace = THREE.SRGBColorSpace;
+      texture.minFilter = THREE.LinearMipmapLinearFilter;
+      texture.magFilter = THREE.LinearFilter;
+      return texture;
+    }
+
+    function ensureAtmosphericFog() {
+      if (atmosphericFog) return;
+      const positions = new Float32Array(MAX_ATMOSPHERIC_FOG_POINTS * 3);
+      atmosphericFogVelocity = new Float32Array(MAX_ATMOSPHERIC_FOG_POINTS * 2);
+      let seed = 0x51f15e;
+      const random = () => {
+        seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+        return seed / 4294967296;
+      };
+      for (let i = 0; i < MAX_ATMOSPHERIC_FOG_POINTS; i++) {
+        const i3 = i * 3;
+        positions[i3] = (random() - 0.5) * 62;
+        positions[i3 + 1] = -1.4 + random() * 5.8;
+        positions[i3 + 2] = (random() - 0.5) * 62;
+        atmosphericFogVelocity[i * 2] = 0.12 + random() * 0.22;
+        atmosphericFogVelocity[i * 2 + 1] = (random() - 0.5) * 0.12;
+      }
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+      const material = new THREE.PointsMaterial({
+        map: createFogParticleTexture(),
+        color: 0x7b8490,
+        size: 10,
+        transparent: true,
+        opacity: 0.05,
+        alphaTest: 0.012,
+        depthWrite: false,
+        depthTest: true,
+        sizeAttenuation: true,
+        fog: true,
+      });
+      atmosphericFog = new THREE.Points(geometry, material);
+      atmosphericFog.frustumCulled = false;
+      atmosphericFog.renderOrder = 2;
+      scene.add(atmosphericFog);
+    }
+
+    function applyAtmosphericFogQuality() {
+      ensureAtmosphericFog();
+      const env = getMapEnvColors();
+      const fogColor = new THREE.Color(env.fog).lerp(new THREE.Color(0xb8c1ca), 0.2);
+      atmosphericFog.geometry.setDrawRange(0, FAIR_PRESENTATION.fogParticles);
+      atmosphericFog.material.color.copy(fogColor);
+      atmosphericFog.material.opacity = FAIR_PRESENTATION.fogOpacity;
+      atmosphericFog.material.size = FAIR_PRESENTATION.fogSize;
+      atmosphericFog.material.needsUpdate = true;
+      atmosphericFog.visible = FAIR_PRESENTATION.fogParticles > 0;
+    }
+
+    function updateAtmosphericFog(dt) {
+      if (!atmosphericFog || !atmosphericFog.visible) return;
+      atmosphericFog.position.set(camera.position.x, camera.position.y, camera.position.z);
+      const positions = atmosphericFog.geometry.attributes.position;
+      const count = FAIR_PRESENTATION.fogParticles;
+      const radius = 31;
+      for (let i = 0; i < count; i++) {
+        const i3 = i * 3;
+        positions.array[i3] += atmosphericFogVelocity[i * 2] * dt;
+        positions.array[i3 + 2] += atmosphericFogVelocity[i * 2 + 1] * dt;
+        if (positions.array[i3] > radius) positions.array[i3] = -radius;
+        if (positions.array[i3 + 2] > radius) positions.array[i3 + 2] = -radius;
+        else if (positions.array[i3 + 2] < -radius) positions.array[i3 + 2] = radius;
+      }
+      positions.needsUpdate = true;
+    }
+
+    /** Distance fog + camera far: atmospheric extinction and render culling share one range. */
     function applySceneFogAndCameraFar() {
-      if (!scene.fog || !scene.fog.isFog) return;
       const rdIdx = THREE.MathUtils.clamp(
         gameSettings.renderDistanceIndex | 0,
         0,
@@ -2852,10 +3017,8 @@
         near = THREE.MathUtils.clamp(base.near * scale * 0.97, 4, Math.max(8, far - 12));
       }
       const env = getMapEnvColors();
-      scene.fog.color.set(env.fog);
       scene.background.set(env.bg);
-      scene.fog.near = near;
-      scene.fog.far = far;
+      setSceneFogVisibility(near, far, env.fog);
 
       // Pad the far plane by ~2 wall thicknesses, not 48 units: beyond fog.far the
       // maze is 100% fogged (pixel-identical to the background), so the old +48 band
@@ -2864,23 +3027,32 @@
         ? THREE.MathUtils.clamp(far + 48, 52, 280)
         : THREE.MathUtils.clamp(far + 8, 52, 280);
       camera.updateProjectionMatrix();
+      if (atmosphericFog) applyAtmosphericFogQuality();
     }
 
     /** Local rendering: tone mapping, capped resolution, shadows, fog distance, textures — each step should look more realistic, not just heavier. */
     function applyGraphicsQuality() {
       const p = getQualityPreset();
+      resetAdaptiveResolution();
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
-      renderer.toneMappingExposure = p.exposure;
+      renderer.toneMappingExposure = FAIR_PRESENTATION.exposure;
       renderer.setPixelRatio(getPixelRatioForQuality());
-      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      renderer.shadowMap.type = p.shadowSoft ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
       moon.shadow.mapSize.set(p.shadowSz, p.shadowSz);
       moon.shadow.bias = p.bias;
       moon.shadow.normalBias = p.normalBias;
+      moon.shadow.radius = p.shadowSoft ? 2 : 1;
+      if (moon.shadow.map) {
+        moon.shadow.map.dispose();
+        moon.shadow.map = null;
+      }
+      renderer.shadowMap.needsUpdate = true;
 
       applySceneFogAndCameraFar();
+      applyAtmosphericFogQuality();
 
-      if (warFilmOverlay) warFilmOverlay.style.opacity = p.warFilm;
-      if (shadeOverlay) shadeOverlay.style.opacity = p.shade;
+      if (warFilmOverlay) warFilmOverlay.style.opacity = FAIR_PRESENTATION.warFilm;
+      if (shadeOverlay) shadeOverlay.style.opacity = FAIR_PRESENTATION.shade;
 
       syncGameRendererSize();
       applyWallTexture();
@@ -3125,9 +3297,12 @@
     }
 
     function getWallTextureUrlList() {
-      // In-game arena/boss wall texture — must be walls.png. Do NOT change this to
-      // background.png; that is the menu background, not the wall used in gameplay.
-      return assetUrlList("images/walls.png");
+      // Prefer the square high-detail gameplay texture. Keep the original as a
+      // deployment fallback; background.png belongs only to the menu backdrop.
+      return [
+        ...assetUrlList("images/walls-hd.jpg"),
+        ...assetUrlList("images/walls.png"),
+      ];
     }
 
     /**
@@ -3483,10 +3658,10 @@
     resolveGameUiLayersFromProbe();
 
     const _texturedMeshes = [];
-    /** World meters per full texture repeat on wall boxes (higher = larger pattern, thin faces use ≥1 repeat). */
-    const WALL_TEXTURE_METERS_PER_REPEAT = 5;
-    /** Floor / ceiling planes (crossfire + maze chunks): same world-space texture scale. */
-    const FLOOR_CEILING_METERS_PER_REPEAT = 5;
+    /** World meters per texture tile. A larger span makes distant repetition far less visible. */
+    const WALL_TEXTURE_METERS_PER_REPEAT = 10;
+    /** Floor / ceiling planes keep a slightly denser scale for nearby ground detail. */
+    const FLOOR_CEILING_METERS_PER_REPEAT = 8;
 
     const _wallTextureCache = new Map();
     const _wallMaterialCache = new Map();
@@ -3520,18 +3695,35 @@
       return mat;
     }
 
-    /** Bake per-face UV repeat into the geometry so ONE material with repeat(1,1) works for all faces. */
+    /**
+     * Return world-scale UVs for a face. Values below one deliberately sample a
+     * centered crop of the texture, preserving texel proportions on narrow walls.
+     */
+    function wallFaceUvs(width, height) {
+      const rx = Math.max(0.01, width / WALL_TEXTURE_METERS_PER_REPEAT);
+      const ry = Math.max(0.01, height / WALL_TEXTURE_METERS_PER_REPEAT);
+      return {
+        rx,
+        ry,
+        ox: rx < 1 ? (1 - rx) * 0.5 : 0,
+        oy: ry < 1 ? (1 - ry) * 0.5 : 0,
+      };
+    }
+
+    /** Bake per-face world-scale UVs into geometry so one shared material covers every face. */
     function bakeWallUvs(geometry, faceRepeats) {
       const uv = geometry.attributes.uv;
       if (!uv || !geometry.groups || !geometry.groups.length) return;
-      const arr = uv.array;
+      const index = geometry.index;
       for (let g = 0; g < geometry.groups.length && g < faceRepeats.length; g++) {
         const { start, count } = geometry.groups[g];
-        const rx = faceRepeats[g].rx;
-        const ry = faceRepeats[g].ry;
-        for (let vi = start; vi < start + count; vi++) {
-          arr[vi * 2] *= rx;
-          arr[vi * 2 + 1] *= ry;
+        const { rx, ry, ox = 0, oy = 0 } = faceRepeats[g];
+        const vertices = new Set();
+        for (let i = start; i < start + count; i++) {
+          vertices.add(index ? index.getX(i) : i);
+        }
+        for (const vi of vertices) {
+          uv.setXY(vi, ox + uv.getX(vi) * rx, oy + uv.getY(vi) * ry);
         }
       }
       uv.needsUpdate = true;
@@ -3707,12 +3899,10 @@
     }
 
     function addWallBox(w, h, d, x, y, z, color = 0x6b7384) {
-      const S = WALL_TEXTURE_METERS_PER_REPEAT;
-      const rep = (u, v) => ({ rx: Math.max(1, u / S), ry: Math.max(1, v / S) });
       const faceRepeats = [
-        rep(d, h), rep(d, h),
-        rep(w, d), rep(w, d),
-        rep(w, h), rep(w, h),
+        wallFaceUvs(d, h), wallFaceUvs(d, h),
+        wallFaceUvs(w, d), wallFaceUvs(w, d),
+        wallFaceUvs(w, h), wallFaceUvs(w, h),
       ];
       const tint = resolveWallTint(color);
       // Bake the per-face repeat into UVs so one shared material (repeat 1,1) works
@@ -3749,7 +3939,9 @@
     let mazeNavRebuildRow = 0;
     /** WebGL forward shading has a hard limit on fragment light uniforms — register maze lamps and cull visibility each frame. */
     const mazeCullableLights = [];
-    const MAX_MAZE_LIGHTS_ACTIVE = 20;
+    let mazeLightCullDirty = true;
+    let mazeLightCullX = Infinity;
+    let mazeLightCullZ = Infinity;
 
     function clearMazeGridCache() {
       mazeGridCache.clear();
@@ -4172,14 +4364,12 @@
       // (and ch.wallBoxes for O(1) unload).
       const wallGeos = [];
       const chunkWallBoxes = [];
-      const S = WALL_TEXTURE_METERS_PER_REPEAT;
-      const wallRep = (u, v) => ({ rx: Math.max(1, u / S), ry: Math.max(1, v / S) });
       const pushWall = (mw, mh, md, px, py, pz) => {
         const g = new THREE.BoxGeometry(mw, mh, md);
         bakeWallUvs(g, [
-          wallRep(md, mh), wallRep(md, mh),
-          wallRep(mw, md), wallRep(mw, md),
-          wallRep(mw, mh), wallRep(mw, mh),
+          wallFaceUvs(md, mh), wallFaceUvs(md, mh),
+          wallFaceUvs(mw, md), wallFaceUvs(mw, md),
+          wallFaceUvs(mw, mh), wallFaceUvs(mw, mh),
         ]);
         g.translate(px, py, pz);
         wallGeos.push(g);
@@ -4351,12 +4541,14 @@
     function registerMazeCullLight(light, chunkKey) {
       light.userData.mazeCullKey = chunkKey;
       mazeCullableLights.push(light);
+      mazeLightCullDirty = true;
     }
 
     function pruneMazeCullLightsForChunk(chunkKey) {
       for (let i = mazeCullableLights.length - 1; i >= 0; i--) {
         if (mazeCullableLights[i].userData.mazeCullKey === chunkKey) mazeCullableLights.splice(i, 1);
       }
+      mazeLightCullDirty = true;
     }
 
     function cullMazeLightsNearCamera() {
@@ -4364,12 +4556,13 @@
       const cx = camera.position.x;
       const cy = camera.position.y;
       const cz = camera.position.z;
-      // Constant per-type counts (12 point + 8 spot) keep NUM_POINT_LIGHTS /
-      // NUM_SPOT_LIGHTS frame-invariant, so three.js never recompiles shaders as
-      // the active set rotates while the player moves. (The old top-20 mixed list
-      // churned the point/spot split on every chunk crossing → multi-frame hitch.)
-      const K_POINT = 12;
-      const K_SPOT = 8;
+      const cdx = cx - mazeLightCullX;
+      const cdz = cz - mazeLightCullZ;
+      if (!mazeLightCullDirty && cdx * cdx + cdz * cdz < 4) return;
+      // Light count is fairness-critical: every tier illuminates the same enemies
+      // and corridors. Keep each shader's point/spot counts frame-invariant too.
+      const K_POINT = FAIR_PRESENTATION.pointLights;
+      const K_SPOT = FAIR_PRESENTATION.spotLights;
       const selected = new Set();
       const addNearest = (wantSpot, k, bias) => {
         const top = [];
@@ -4403,6 +4596,9 @@
       for (let li = 0; li < mazeCullableLights.length; li++) {
         mazeCullableLights[li].visible = selected.has(mazeCullableLights[li]);
       }
+      mazeLightCullDirty = false;
+      mazeLightCullX = cx;
+      mazeLightCullZ = cz;
     }
 
     function unloadMazeChunk(cx, cz) {
@@ -4450,6 +4646,9 @@
 
     function clearAllMazeChunks() {
       mazeCullableLights.length = 0;
+      mazeLightCullDirty = true;
+      mazeLightCullX = Infinity;
+      mazeLightCullZ = Infinity;
       clearMazeGridCache();
       for (const k of [...mazeChunks.keys()]) {
         const [sx, sz] = k.split(",").map(Number);
@@ -8326,44 +8525,56 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       return realZombieAssetsPromise;
     }
 
-    function setRealZombieAction(enemy, name, fade = 0.18) {
+    function setRealZombieAction(enemy, name, fade = 0.18, opts = {}) {
       if (!enemy.modelActions) return;
       const next = enemy.modelActions[name] || enemy.modelActions.idle;
       const duration = Math.max(0.01, next.getClip().duration || 0.01);
-      let cycleSeconds = duration;
+      let cycleSeconds = Number(opts.cycleSeconds) > 0 ? Number(opts.cycleSeconds) : duration;
       if (name === "walk" || name === "run") {
         // These exported Mixamo clips are unusually long/slow (the walk is nearly 4s).
         // Match their gait cycle to actual enemy speed so feet do not drift under a
         // character that is moving several times faster than the source animation.
         const speed = Math.max(0.65, Number(enemy.speed) || 1.5);
         cycleSeconds = THREE.MathUtils.clamp(1.7 / speed, name === "run" ? 0.22 : 0.72, name === "run" ? 0.72 : 1.65);
-      } else if (name === "attack") {
+      } else if (name === "attack" && !(Number(opts.cycleSeconds) > 0)) {
         // The authored swipe lasts 2.63s, but combat hits land on a much shorter
         // cooldown. Keep one visible swing close to each gameplay attack beat.
         cycleSeconds = THREE.MathUtils.clamp(Number(enemy.attackCooldown) || 0.42, 0.18, 1.35);
       }
       const timeScale = THREE.MathUtils.clamp(duration / cycleSeconds, 0.5, name === "attack" ? 15 : 8);
       next.setEffectiveTimeScale(timeScale);
-      if (enemy.modelActionName === name) return;
+      const token = opts.token || name;
+      if (enemy.modelActionName === name && enemy.modelActionToken === token) return;
       const prev = enemy.modelActions[enemy.modelActionName];
       next.enabled = true;
       next.reset();
       next.setEffectiveWeight(1);
-      next.setLoop(name === "death" ? THREE.LoopOnce : THREE.LoopRepeat, name === "death" ? 1 : Infinity);
-      next.clampWhenFinished = name === "death";
+      const loopOnce = name === "death" || !!opts.loopOnce;
+      next.setLoop(loopOnce ? THREE.LoopOnce : THREE.LoopRepeat, loopOnce ? 1 : Infinity);
+      next.clampWhenFinished = loopOnce;
       if (prev && prev !== next) next.crossFadeFrom(prev, fade, true);
       next.play();
       enemy.modelActionName = name;
+      enemy.modelActionToken = token;
     }
 
     function updateRealZombieAnimation(enemy, dt) {
       if (!enemy.modelMixer) return;
       let next = "idle";
+      let actionOpts = {};
       if (!enemy.alive) next = "death";
-      else if (enemy.isBoss && ["attacking", "quaking"].includes(enemy.bossAnimState)) next = "attack";
+      else if (enemy.isBoss && ["attacking", "quaking", "rangedAttack", "summoning", "modeSwitch"].includes(enemy.bossAnimState)) {
+        next = "attack";
+        const durations = { attacking: 1.4, quaking: 1.5, rangedAttack: 0.9, summoning: 2.5, modeSwitch: 1.4 };
+        actionOpts = {
+          token: `boss-${enemy.bossAnimState}`,
+          cycleSeconds: durations[enemy.bossAnimState] || 1.4,
+          loopOnce: true,
+        };
+      }
       else if (!enemy.isBoss && enemy.attackPhase > 0.15) next = "attack";
       else if (enemy.moving) next = (enemy.type === "fast" || enemy.isBoss || enemy._bossSprinting || enemy.speed >= 1.6) ? "run" : "walk";
-      setRealZombieAction(enemy, next, next === "attack" ? 0.07 : 0.16);
+      setRealZombieAction(enemy, next, next === "attack" ? 0.07 : 0.16, actionOpts);
       enemy.modelMixer.update(Math.min(dt, 0.05));
     }
 
@@ -11196,7 +11407,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     }
 
     function spawnNextBossRound() {
-      for (let i = bossProjectiles.length - 1; i >= 0; i--) destroyBossProjectile(i);
+      clearBossProjectileEffects();
       for (let i = state.enemies.length - 1; i >= 0; i--) {
         const e = state.enemies[i];
         if (e.group) scene.remove(e.group);
@@ -11213,7 +11424,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         state.enemies.push(boss);
       }
       const darkFog = new THREE.Color(0x1a1a22);
-      if (scene.fog) { scene.fog.color.copy(darkFog); scene.fog.near = 8; scene.fog.far = 50; }
+      setSceneFogVisibility(8, 50, darkFog);
       if (scene.background && scene.background.isColor) scene.background.copy(darkFog);
       camera.far = 98; camera.updateProjectionMatrix();
     }
@@ -11335,13 +11546,11 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         const darkFog = new THREE.Color(0x1a1a22);
         const clearFog = new THREE.Color(0x87ceeb);
         const blended = darkFog.clone().lerp(clearFog, s);
-        if (scene.fog) scene.fog.color.copy(blended);
         if (scene.background && scene.background.isColor) scene.background.copy(blended);
         else scene.background = blended.clone();
-        if (scene.fog) {
-          scene.fog.near = THREE.MathUtils.lerp(8, 80, s);
-          scene.fog.far = THREE.MathUtils.lerp(50, 280, s);
-        }
+        const victoryNear = THREE.MathUtils.lerp(8, 80, s);
+        const victoryFar = THREE.MathUtils.lerp(50, 280, s);
+        setSceneFogVisibility(victoryNear, victoryFar, blended);
         camera.far = THREE.MathUtils.clamp(scene.fog ? scene.fog.far + 48 : 280, 52, 320);
         camera.updateProjectionMatrix();
       }
@@ -16168,7 +16377,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           createSparks(hitPt, 0xff6622);
           createBulletTrail(muzzleStart, hitPt, w.color);
           if (proj.hp <= 0) {
-            destroyBossProjectile(bestProjIdx);
+            destroyBossProjectile(bestProjIdx, true);
           }
           continue;
         }
@@ -17405,8 +17614,13 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         }
         const e = state.enemies[ei];
         if (!e || e._placeholder) continue;
+        const prevX = e.group.position.x;
+        const prevZ = e.group.position.z;
         if (typeof z.x === "number") e.group.position.x = z.x;
         if (typeof z.z === "number") e.group.position.z = z.z;
+        const syncDx = e.group.position.x - prevX;
+        const syncDz = e.group.position.z - prevZ;
+        e.moving = syncDx * syncDx + syncDz * syncDz > 0.0004;
         if (typeof z.y === "number") {
           e.visYaw = z.y;
           e.facingYaw = z.y;
@@ -17416,6 +17630,10 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         if (typeof z.a === "number") e.alive = z.a !== 0;
         if (typeof z.rt === "number") e.respawnTimer = z.rt;
         if (z.bm && e.isBoss) e.bossMode = z.bm;
+        if (e.isBoss && ["idle", "attacking", "quaking", "rangedAttack", "summoning", "modeSwitch"].includes(z.ba)) {
+          e.bossAnimState = z.ba;
+          if (typeof z.bt === "number") e.bossAnimTimer = z.bt;
+        }
         if (e.alive) e.dissolveTimer = 0;
         e.group.visible = e.alive;
         drawEnemyHp(e);
@@ -17424,16 +17642,86 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     }
 
     function spawnBossProjectile(ox, oy, oz, dx, dy, dz, damage) {
-      const geo = new THREE.SphereGeometry(0.45, 10, 8);
-      const mat = new THREE.MeshBasicMaterial({ color: 0xff4422 });
-      const mesh = new THREE.Mesh(geo, mat);
-      const glow = new THREE.PointLight(0xff2200, 3, 6);
-      mesh.add(glow);
+      const mesh = new THREE.Group();
       mesh.position.set(ox, oy, oz);
-      scene.add(mesh);
+
+      // Animated molten-rock shell. The dark islands remain opaque while the
+      // procedural fissures pulse from orange to white-hot, so the projectile
+      // reads as lava rather than a plain red sphere at any graphics setting.
+      const lavaMat = new THREE.ShaderMaterial({
+        uniforms: { uTime: { value: 0 } },
+        vertexShader: `
+          uniform float uTime;
+          varying vec3 vPos;
+          varying vec3 vNormalDir;
+          void main() {
+            vPos = position;
+            vNormalDir = normalize(normalMatrix * normal);
+            float wobble = sin(position.x * 17.0 + uTime * 4.0)
+                         * sin(position.y * 13.0 - uTime * 3.0)
+                         * sin(position.z * 19.0 + uTime * 2.0);
+            vec3 p = position + normal * wobble * 0.035;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+          }
+        `,
+        fragmentShader: `
+          uniform float uTime;
+          varying vec3 vPos;
+          varying vec3 vNormalDir;
+          void main() {
+            float a = sin((vPos.x + vPos.y * 0.7) * 18.0 + uTime * 2.4);
+            float b = sin((vPos.z - vPos.y * 0.5) * 21.0 - uTime * 1.8);
+            float c = sin((vPos.x - vPos.z) * 15.0 + uTime * 1.2);
+            float fissure = 1.0 - smoothstep(0.08, 0.34, abs(a * b * c));
+            float pulse = 0.72 + 0.28 * sin(uTime * 8.0 + vPos.y * 12.0);
+            vec3 crust = vec3(0.055, 0.018, 0.010);
+            vec3 ember = mix(vec3(1.0, 0.08, 0.0), vec3(1.0, 0.82, 0.18), pulse);
+            float rim = pow(1.0 - abs(dot(normalize(vNormalDir), vec3(0.0, 0.0, 1.0))), 2.0);
+            gl_FragColor = vec4(mix(crust, ember, fissure) + ember * rim * 0.18, 1.0);
+          }
+        `,
+      });
+      const core = new THREE.Mesh(new THREE.IcosahedronGeometry(0.48, 3), lavaMat);
+      core.castShadow = true;
+      mesh.add(core);
+
+      const aura = new THREE.Mesh(
+        new THREE.SphereGeometry(0.62, 18, 14),
+        new THREE.MeshBasicMaterial({ color: 0xff3b08, transparent: true, opacity: 0.18, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.BackSide })
+      );
+      mesh.add(aura);
+      const ringMat = new THREE.MeshBasicMaterial({ color: 0xff9a22, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false });
+      const ringA = new THREE.Mesh(new THREE.TorusGeometry(0.57, 0.022, 6, 28), ringMat);
+      const ringB = new THREE.Mesh(new THREE.TorusGeometry(0.52, 0.016, 6, 24), ringMat.clone());
+      ringA.rotation.x = Math.PI * 0.5;
+      ringB.rotation.set(Math.PI * 0.22, Math.PI * 0.5, 0);
+      mesh.add(ringA, ringB);
+      mesh.add(new THREE.PointLight(0xff3a08, 4.5, 9, 2));
+
+      const trailPositions = new Float32Array(12 * 3);
+      const trailColors = new Float32Array(12 * 3);
+      for (let i = 0; i < 12; i++) {
+        trailPositions[i * 3] = ox; trailPositions[i * 3 + 1] = oy; trailPositions[i * 3 + 2] = oz;
+        const heat = 1 - i / 12;
+        trailColors[i * 3] = 1; trailColors[i * 3 + 1] = 0.08 + heat * 0.62; trailColors[i * 3 + 2] = heat * 0.08;
+      }
+      const trailGeo = new THREE.BufferGeometry();
+      trailGeo.setAttribute("position", new THREE.BufferAttribute(trailPositions, 3));
+      trailGeo.setAttribute("color", new THREE.BufferAttribute(trailColors, 3));
+      const trail = new THREE.Points(trailGeo, new THREE.PointsMaterial({ size: 0.34, vertexColors: true, transparent: true, opacity: 0.72, blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true }));
+      trail.frustumCulled = false;
+      scene.add(mesh, trail);
       const spd = 22;
       bossProjectiles.push({
         mesh,
+        core,
+        aura,
+        ringA,
+        ringB,
+        lavaMat,
+        trail,
+        trailPositions,
+        visualTime: Math.random() * 10,
         velocity: new THREE.Vector3(dx * spd, dy * spd, dz * spd),
         life: 5,
         damage: damage || 8,
@@ -17441,12 +17729,68 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       });
     }
 
-    function destroyBossProjectile(idx) {
+    function disposeBossVisual(root) {
+      if (!root) return;
+      root.traverse((node) => {
+        node.geometry?.dispose?.();
+        if (Array.isArray(node.material)) node.material.forEach((m) => m.dispose?.());
+        else node.material?.dispose?.();
+      });
+    }
+
+    function spawnBossLavaImpact(position) {
+      const group = new THREE.Group();
+      group.position.copy(position);
+      const flash = new THREE.Mesh(
+        new THREE.SphereGeometry(0.38, 12, 10),
+        new THREE.MeshBasicMaterial({ color: 0xffa52a, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false })
+      );
+      const ring = new THREE.Mesh(
+        new THREE.RingGeometry(0.18, 0.28, 28),
+        new THREE.MeshBasicMaterial({ color: 0xff4a0b, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })
+      );
+      ring.rotation.x = -Math.PI * 0.5;
+      group.add(flash, ring);
+      scene.add(group);
+      bossLavaImpacts.push({ group, flash, ring, life: 0.48, maxLife: 0.48 });
+    }
+
+    function destroyBossProjectile(idx, impact = false) {
       const bp = bossProjectiles[idx];
+      if (!bp) return;
+      if (impact) spawnBossLavaImpact(bp.mesh.position);
       scene.remove(bp.mesh);
-      bp.mesh.geometry.dispose();
-      bp.mesh.material.dispose();
+      scene.remove(bp.trail);
+      disposeBossVisual(bp.mesh);
+      disposeBossVisual(bp.trail);
       bossProjectiles.splice(idx, 1);
+    }
+
+    function updateBossLavaImpacts(dt) {
+      for (let i = bossLavaImpacts.length - 1; i >= 0; i--) {
+        const fx = bossLavaImpacts[i];
+        fx.life -= dt;
+        const p = 1 - Math.max(0, fx.life) / fx.maxLife;
+        fx.flash.scale.setScalar(1 + p * 4.2);
+        fx.ring.scale.setScalar(1 + p * 8.0);
+        fx.flash.material.opacity = (1 - p) * 0.85;
+        fx.ring.material.opacity = (1 - p) * 0.9;
+        if (fx.life <= 0) {
+          scene.remove(fx.group);
+          disposeBossVisual(fx.group);
+          bossLavaImpacts.splice(i, 1);
+        }
+      }
+    }
+
+    function clearBossProjectileEffects() {
+      for (let i = bossProjectiles.length - 1; i >= 0; i--) destroyBossProjectile(i, false);
+      for (let i = bossLavaImpacts.length - 1; i >= 0; i--) {
+        const fx = bossLavaImpacts[i];
+        scene.remove(fx.group);
+        disposeBossVisual(fx.group);
+      }
+      bossLavaImpacts.length = 0;
     }
 
     /**
@@ -17476,8 +17820,17 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     }
 
     function updateBossProjectiles(dt) {
+      updateBossLavaImpacts(dt);
       for (let i = bossProjectiles.length - 1; i >= 0; i--) {
         const bp = bossProjectiles[i];
+        bp.visualTime += dt;
+        bp.lavaMat.uniforms.uTime.value = bp.visualTime;
+        bp.core.rotation.x += dt * 2.8;
+        bp.core.rotation.y += dt * 4.1;
+        bp.ringA.rotation.z += dt * 5.5;
+        bp.ringB.rotation.y -= dt * 4.2;
+        const pulse = 1 + Math.sin(bp.visualTime * 9) * 0.08;
+        bp.aura.scale.setScalar(pulse);
         playerBodyCenter(_bbBody);
         const toPx = _bbBody.x - bp.mesh.position.x;
         const toPy = _bbBody.y - bp.mesh.position.y;
@@ -17491,9 +17844,17 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         bp.mesh.position.x += bp.velocity.x * dt;
         bp.mesh.position.y += bp.velocity.y * dt;
         bp.mesh.position.z += bp.velocity.z * dt;
+        const tp = bp.trailPositions;
+        for (let ti = 11; ti > 0; ti--) {
+          tp[ti * 3] = tp[(ti - 1) * 3];
+          tp[ti * 3 + 1] = tp[(ti - 1) * 3 + 1];
+          tp[ti * 3 + 2] = tp[(ti - 1) * 3 + 2];
+        }
+        tp[0] = bp.mesh.position.x; tp[1] = bp.mesh.position.y; tp[2] = bp.mesh.position.z;
+        bp.trail.geometry.attributes.position.needsUpdate = true;
         bp.life -= dt;
         if (bp.life <= 0 || bp.hp <= 0) {
-          destroyBossProjectile(i);
+          destroyBossProjectile(i, bp.hp <= 0);
           continue;
         }
         if (player.health > 0) {
@@ -17523,7 +17884,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
             createSparks(bp.mesh.position.clone(), 0xff5522);
             state.flashTimer = 0.25;
             damagePlayer(bp.damage, null);
-            destroyBossProjectile(i);
+            destroyBossProjectile(i, true);
             continue;
           }
         }
@@ -17547,6 +17908,10 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       }
 
       if (MULTIPLAYER && ARENA_COOP && (isArenaLikeMap(CURRENT_MAP) || isBossArenaMap(CURRENT_MAP)) && !ZOMBIE_AUTHORITY) {
+        // The host owns movement/combat decisions, but every client must still
+        // advance the skinned clips. Previously co-op bosses slid in a frozen
+        // pose because this authority return happened before mixer updates.
+        for (const enemy of state.enemies) updateRealZombieAnimation(enemy, dt);
         return;
       }
 
@@ -17585,7 +17950,8 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       //    the shadow map each frame). Shadows re-enable as they approach.
       const HP_FADE_START = 32, HP_FADE_END = 48;
       const HP_FADE_RANGE = HP_FADE_END - HP_FADE_START;
-      const SHADOW_DIST_SQ = 50 * 50;
+      const shadowDistance = getQualityPreset().shadowDist;
+      const SHADOW_DIST_SQ = shadowDistance * shadowDistance;
 
       for (let ei = 0; ei < state.enemies.length; ei++) {
         const enemy = state.enemies[ei];
@@ -17703,7 +18069,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           }
 
           enemy.bossModeSwitchTimer -= dt;
-          if (enemy.bossModeSwitchTimer <= 0) {
+          if (enemy.bossModeSwitchTimer <= 0 && enemy.bossAnimState === "idle") {
             enemy.bossModeSwitchTimer = 5;
             enemy.bossAnimState = "modeSwitch";
             playBossRoarSfx();
@@ -17738,7 +18104,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
             if (!enemy._hellSummonStage) enemy._hellSummonStage = 0;
             const hpPct = enemy.hp / enemy.maxHp;
             const stage = Math.floor((1 - hpPct) * 10);
-            if (stage > enemy._hellSummonStage && hpPct > 0.10) {
+            if (stage > enemy._hellSummonStage && hpPct > 0.10 && enemy.bossAnimState === "idle") {
               const wavesToSpawn = stage - enemy._hellSummonStage;
               enemy._hellSummonStage = stage;
               enemy.bossAnimState = "summoning";
@@ -17761,7 +18127,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
                 }
               }
             }
-            if (!enemy._hellBossSummoned && hpPct <= 0.10) {
+            if (!enemy._hellBossSummoned && hpPct <= 0.10 && enemy.bossAnimState === "idle") {
               enemy._hellBossSummoned = true;
               enemy.bossAnimState = "summoning";
               enemy.bossAnimTimer = 0;
@@ -17777,7 +18143,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
                 state.enemies.push(miniBoss);
               }
             }
-          } else if (!enemy.summonTriggered && enemy.hp <= enemy.maxHp * 0.5) {
+          } else if (!enemy.summonTriggered && enemy.hp <= enemy.maxHp * 0.5 && enemy.bossAnimState === "idle") {
             enemy.summonTriggered = true;
             enemy.bossAnimState = "summoning";
             enemy.bossAnimTimer = 0;
@@ -18028,13 +18394,16 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
             enemy.bossQuakeCooldownTimer -= dt;
           }
           if (!enemy.ranged) {
-            if (dist < (enemy.isBoss ? 3.5 : 2.05) && enemy.attackCooldownTimer <= 0) {
+            if (dist < (enemy.isBoss ? 3.5 : 2.05) && enemy.attackCooldownTimer <= 0 && (!enemy.isBoss || enemy.bossAnimState === "idle")) {
               enemy.attackCooldownTimer = enemy.attackCooldown;
               if (enemy.isBoss) {
                 enemy.bossAnimState = "attacking";
                 enemy.bossAnimTimer = 0;
+                enemy._smashShook = false;
+                enemy._meleeDamagePending = true;
+              } else {
+                applyCoopZombieDamageToTarget(enemy);
               }
-              applyCoopZombieDamageToTarget(enemy);
             } else if (
               enemy.isBoss &&
               enemy.bossMode !== "gunner" &&
@@ -18051,6 +18420,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
             enemy.ranged &&
             dist < enemy.rangeDistance &&
             enemy.attackCooldownTimer <= 0 &&
+            (!enemy.isBoss || enemy.bossAnimState === "idle") &&
             enemy.rangedLosAcquireTimer >= RANGED_LOS_ACQUIRE_DELAY
           ) {
             _visOrigin.set(enemy.group.position.x, 1.6, enemy.group.position.z);
@@ -18088,11 +18458,16 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
                 const yaw = enemy.visYaw || enemy.facingYaw || 0;
                 const mouthX = enemy.group.position.x + Math.sin(yaw) * mouthWorldZ;
                 const mouthZ = enemy.group.position.z + Math.cos(yaw) * mouthWorldZ;
-                spawnBossProjectile(
-                  mouthX, mouthWorldY, mouthZ,
-                  _enemyShotDir.x, _enemyShotDir.y, _enemyShotDir.z,
-                  enemy.attackDamage
-                );
+                // Hold the ball until the authored throw reaches its release
+                // pose; previously it appeared at the start of an idle frame.
+                enemy.bossAnimState = "rangedAttack";
+                enemy.bossAnimTimer = 0;
+                enemy._rangedBallReleased = false;
+                enemy._pendingBossProjectile = {
+                  ox: mouthX, oy: mouthWorldY, oz: mouthZ,
+                  dx: _enemyShotDir.x, dy: _enemyShotDir.y, dz: _enemyShotDir.z,
+                  damage: enemy.attackDamage,
+                };
               } else {
                 applyCoopZombieDamageToTarget(enemy);
                 _tracerEnd.set(
@@ -18215,6 +18590,63 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
             }
           }
 
+          if (!bossAnimOverride && enemy.bossAnimState === "rangedAttack") {
+            bossAnimOverride = true;
+            const dur = 0.9;
+            const t = Math.min(enemy.bossAnimTimer / dur, 1);
+            if (t < 0.38) {
+              const s0 = t / 0.38;
+              const s = s0 * s0 * (3 - 2 * s0);
+              enemy.rightArmRoot.rotation.x = THREE.MathUtils.lerp(-0.10, -2.45, s);
+              enemy.rightArmRoot.rotation.z = THREE.MathUtils.lerp(0.50, 0.18, s);
+              enemy.rightArmRoot.rotation.y = THREE.MathUtils.lerp(-0.25, -0.05, s);
+              rfa.rotation.x = THREE.MathUtils.lerp(ELBOW_REST, -0.15, s);
+              enemy.leftArmRoot.rotation.x = THREE.MathUtils.lerp(-0.10, -0.75, s);
+              enemy.leftArmRoot.rotation.z = THREE.MathUtils.lerp(-0.50, -0.75, s);
+              enemy.torsoRoot.rotation.x = THREE.MathUtils.lerp(HUNCH, HUNCH - 0.32, s);
+              enemy.torsoRoot.rotation.z = THREE.MathUtils.lerp(0, -0.16, s);
+            } else if (t < 0.55) {
+              const s = 1 - Math.pow(1 - (t - 0.38) / 0.17, 4);
+              enemy.rightArmRoot.rotation.x = THREE.MathUtils.lerp(-2.45, -0.25, s);
+              enemy.rightArmRoot.rotation.z = THREE.MathUtils.lerp(0.18, 0.02, s);
+              rfa.rotation.x = THREE.MathUtils.lerp(-0.15, -1.1, s);
+              enemy.leftArmRoot.rotation.x = THREE.MathUtils.lerp(-0.75, -0.20, s);
+              enemy.torsoRoot.rotation.x = THREE.MathUtils.lerp(HUNCH - 0.32, HUNCH + 0.28, s);
+              enemy.torsoRoot.rotation.z = THREE.MathUtils.lerp(-0.16, 0.10, s);
+              if (s > 0.45 && !enemy._rangedBallReleased && enemy._pendingBossProjectile) {
+                enemy._rangedBallReleased = true;
+                const p = enemy._pendingBossProjectile;
+                spawnBossProjectile(p.ox, p.oy, p.oz, p.dx, p.dy, p.dz, p.damage);
+                enemy._pendingBossProjectile = null;
+                state.camShake = Math.max(state.camShake || 0, 0.16);
+              }
+            } else {
+              const s = 1 - Math.pow(1 - (t - 0.55) / 0.45, 2);
+              enemy.rightArmRoot.rotation.x = THREE.MathUtils.lerp(-0.25, -0.10, s);
+              enemy.rightArmRoot.rotation.z = THREE.MathUtils.lerp(0.02, 0.50, s);
+              enemy.rightArmRoot.rotation.y = THREE.MathUtils.lerp(-0.05, -0.25, s);
+              rfa.rotation.x = THREE.MathUtils.lerp(-1.1, ELBOW_REST, s);
+              enemy.leftArmRoot.rotation.x = THREE.MathUtils.lerp(-0.20, -0.10, s);
+              enemy.leftArmRoot.rotation.z = THREE.MathUtils.lerp(-0.75, -0.50, s);
+              enemy.torsoRoot.rotation.x = THREE.MathUtils.lerp(HUNCH + 0.28, HUNCH, s);
+              enemy.torsoRoot.rotation.z = THREE.MathUtils.lerp(0.10, 0, s);
+            }
+            if (t >= 1) {
+              // A dropped frame can cross both release and completion; never
+              // lose the shot just because its release window was skipped.
+              if (!enemy._rangedBallReleased && enemy._pendingBossProjectile) {
+                const p = enemy._pendingBossProjectile;
+                spawnBossProjectile(p.ox, p.oy, p.oz, p.dx, p.dy, p.dz, p.damage);
+              }
+              enemy._pendingBossProjectile = null;
+              enemy._rangedBallReleased = false;
+              enemy.bossAnimState = "idle";
+              enemy.bossAnimTimer = 0;
+              enemy.torsoRoot.rotation.x = HUNCH;
+              enemy.torsoRoot.rotation.z = 0;
+            }
+          }
+
           if (!bossAnimOverride && enemy.bossAnimState === "attacking") {
             bossAnimOverride = true;
             const dur = 1.4;
@@ -18247,6 +18679,10 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
               enemy.group.position.y = THREE.MathUtils.lerp(BOSS_BASE_Y + 0.25, BOSS_BASE_Y - 0.10, pow);
               if (pow > 0.7 && !enemy._smashShook) {
                 enemy._smashShook = true;
+                if (enemy._meleeDamagePending) {
+                  enemy._meleeDamagePending = false;
+                  applyCoopZombieDamageToTarget(enemy);
+                }
                 state.camShake = Math.max(state.camShake || 0, 1.0);
                 if (player.health > 0) {
                   const bx = enemy.group.position.x, bz = enemy.group.position.z;
@@ -18302,6 +18738,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
               enemy.bossAnimState = "idle";
               enemy.bossAnimTimer = 0;
               enemy._smashShook = false;
+              enemy._meleeDamagePending = false;
               enemy.torsoRoot.rotation.x = HUNCH;
               enemy.group.position.y = BOSS_BASE_Y;
             }
@@ -18562,8 +18999,11 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
 
     function animate() {
       requestAnimationFrame(animate);
-      const dt = Math.min(clock.getDelta(), 0.033);
+      const rawDt = Math.min(clock.getDelta(), 0.25);
+      const dt = Math.min(rawDt, 0.033);
       if (document.visibilityState === "hidden") return;
+      updateAdaptiveResolution(rawDt);
+      updateAtmosphericFog(dt);
 
       if (_rendererSyncWarmupFrames > 0) {
         _rendererSyncWarmupFrames--;
@@ -19012,6 +19452,8 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
                 if (e.isBoss) {
                   zd.bm = e.bossMode;
                   zd.hell = !!e.isHellBoss;
+                  zd.ba = e.bossAnimState || "idle";
+                  zd.bt = e.bossAnimTimer || 0;
                 }
                 return zd;
               }),
@@ -19240,8 +19682,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         scene.remove(enemy.group);
       }
       state.enemies.length = 0;
-      for (const bp of bossProjectiles) { scene.remove(bp.mesh); }
-      bossProjectiles.length = 0;
+      clearBossProjectileEffects();
 
       if (isTrainingMap(CURRENT_MAP)) {
         rebuildTrainingDummies();
@@ -19392,8 +19833,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         scene.remove(enemy.group);
       }
       state.enemies.length = 0;
-      for (const bp of bossProjectiles) { scene.remove(bp.mesh); }
-      bossProjectiles.length = 0;
+      clearBossProjectileEffects();
       removeAnimationShowcase();
       for (const [id, rp] of remotePlayers) {
         scene.remove(rp.group);
