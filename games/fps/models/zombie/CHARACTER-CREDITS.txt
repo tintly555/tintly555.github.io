@@ -1,0 +1,12 @@
+Zombie cast geometry, fabric, hair, eyes, and skin maps are derived from the
+MakeHuman HM08 base mesh, CC0 anatomy targets, and MakeHuman system assets.
+Sources:
+  https://github.com/makehumancommunity/makehuman/tree/a8bc2d54ff0ac92e78ff71431b1023eda42bf482/makehuman/data
+  https://static.makehumancommunity.org/assets/assetpacks/makehuman_system_assets.html
+  https://github.com/makehumancommunity/makehuman/blob/a8bc2d54ff0ac92e78ff71431b1023eda42bf482/LICENSE.md
+
+MakeHuman core assets are dedicated to the public domain under CC0 1.0.
+The distinct character sculpts, mesh fitting, and texture atlas were built
+for Zone No Light with tools/build-zombie-meshes.py. The game meshes were
+simplified with meshoptimizer 0.25 using tools/simplify-zombie-meshes.mjs.
+The skeleton and animation clips retain the attribution in LICENSE.txt.

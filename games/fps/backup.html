@@ -13920,7 +13920,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     function ensurePistolFireBuffer() {
       if (pistolFireBuffer) return Promise.resolve();
       if (!pistolFireLoadPromise) {
-        pistolFireLoadPromise = fetch("https://cdn.jsdelivr.net/gh/indiamonda/perfectnip.github.io@main/q/g/krunker-io/sound/weapon_4.mp3")
+        pistolFireLoadPromise = fetch("https://forge-isa-technological-metadata.trycloudflare.com/q/g/krunker-io/sound/weapon_4.mp3")
           .then((res) => {
             if (!res.ok) throw new Error("pistol fire fetch");
             return res.arrayBuffer();

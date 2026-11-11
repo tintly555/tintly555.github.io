@@ -12,6 +12,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" type="image/svg+xml" sizes="any" href="images/icon.svg" />
   <link rel="icon" type="image/png" href="images/tintly555.png" />
   <!-- ── Inventory / Hotbar ───────────────────────────────────────────────── -->
   <div id="invBar" style="position:fixed;bottom:0;left:50%;transform:translateX(-50%);display:none;flex-direction:row;align-items:flex-end;gap:4px;padding:6px 8px 0 8px;background:rgba(0,0,0,0.0);z-index:44;pointer-events:auto;user-select:none;"></div>
@@ -200,148 +201,6 @@
         _probeAndSet("--game-ui-menu-bg",     L0.menuBg);
         _probeAndSet("--game-ui-btn-texture", L0.btnTex);
         _probeAndSet("--game-ui-settings-bg", L0.settingsBg);
-        try {
-          // Custom cursor (mouse.png / mouse-hover.png). Because CSS cursor()
-          // cannot cross-fade, two layered <div>s follow the pointer and their
-          // opacities are tweened in JS. The transition is a 500ms linear lerp
-          // from the *current* opacity values to the new targets; if the hover
-          // state flips mid-tween, we restart from the in-flight opacity so the
-          // fade continues smoothly without a snap.
-          var curDefault = new URL("images/mouse.png", R).href;
-          var curHover   = new URL("images/mouse-hover.png", R).href;
-          el.style.setProperty("--game-cursor-default-image", 'url("' + curDefault + '")');
-          el.style.setProperty("--game-cursor-hover-image",   'url("' + curHover   + '")');
-
-          function setupGameCursor() {
-            var root  = document.getElementById("gameCursor");
-            var defEl = root && root.querySelector('[data-layer="default"]');
-            var hovEl = root && root.querySelector('[data-layer="hover"]');
-            if (!root || !defEl || !hovEl) return;
-
-            // Logical state — single source of truth. `target` is "default" or
-            // "hover" depending on whether the element under the pointer has a
-            // `cursor: pointer` computed style. `opacities` tracks what each
-            // layer is currently rendering at; this is what gets lerped.
-            var CURSOR_DURATION_MS = 500;
-            var state = {
-              active: false,                  // mirrors body.show-cursor
-              target: "default",              // desired layer
-              inFlight: false,                // true while a tween is running
-              startMs: 0,                     // performance.now() at tween start
-              fromDef: 1, fromHov: 0,         // opacity at tween start
-              toDef:   1, toHov:   0,         // opacity at tween end
-              opacDef: 1, opacHov: 0,         // opacity rendered last frame
-              raf: 0
-            };
-
-            function setLayerOpacity(def, hov) {
-              state.opacDef = def;
-              state.opacHov = hov;
-              defEl.style.setProperty("--cursor-layer-opacity", def.toFixed(4));
-              hovEl.style.setProperty("--cursor-layer-opacity", hov.toFixed(4));
-            }
-
-            function startTween(toDef, toHov) {
-              // Use the current opacities as the new `from` so a state change
-              // mid-animation continues smoothly from where the fade is now.
-              state.fromDef = state.opacDef;
-              state.fromHov = state.opacHov;
-              state.toDef   = toDef;
-              state.toHov   = toHov;
-              state.startMs = performance.now();
-              state.inFlight = true;
-              if (!state.raf) state.raf = requestAnimationFrame(tick);
-            }
-
-            function tick(now) {
-              state.raf = 0;
-              if (!state.inFlight) return;
-              var t = (now - state.startMs) / CURSOR_DURATION_MS;
-              if (t >= 1) {
-                setLayerOpacity(state.toDef, state.toHov);
-                state.inFlight = false;
-                return;
-              }
-              var def = state.fromDef + (state.toDef - state.fromDef) * t;
-              var hov = state.fromHov + (state.toHov - state.fromHov) * t;
-              setLayerOpacity(def, hov);
-              state.raf = requestAnimationFrame(tick);
-            }
-
-            function applyTarget() {
-              // Snap immediately when the cursor is hidden — no fade-out so the
-              // UI feels instant when re-locking into gameplay.
-              if (!state.active) {
-                state.inFlight = false;
-                if (state.raf) { cancelAnimationFrame(state.raf); state.raf = 0; }
-                // Hide the DOM cursor entirely; restore the OS default elsewhere.
-                root.removeAttribute("data-active");
-                return;
-              }
-              root.setAttribute("data-active", "1");
-              if (state.target === "hover")      startTween(0, 1);
-              else /* "default" */              startTween(1, 0);
-            }
-
-            // Pointer tracking — both layers share the same hotspot offset so
-            // the arrow tip lands at the real cursor position.
-            var lastX = -1000, lastY = -1000;
-            function onMove(e) {
-              lastX = e.clientX;
-              lastY = e.clientY;
-              var t = "translate3d(" + lastX + "px," + lastY + "px,0)";
-              defEl.style.transform = t;
-              hovEl.style.transform = t;
-            }
-            window.addEventListener("mousemove", onMove, { passive: true });
-            window.addEventListener("mouseenter", onMove, { passive: true });
-
-            // Hover detection: when any element under the pointer has a
-            // computed `cursor: pointer`, fade to the hover layer.
-            function isPointerCursor(el) {
-              if (!el || el.nodeType !== 1) return false;
-              // Cheap & accurate: read the computed style. Cached walk-up to
-              // avoid repeated queries when the cursor moves across deep trees.
-              while (el && el !== document) {
-                var c = window.getComputedStyle(el).cursor;
-                if (c === "pointer") return true;
-                if (c === "auto" || c === "default" || c === "none") return false;
-                el = el.parentElement;
-              }
-              return false;
-            }
-            function onOver(e) {
-              var want = isPointerCursor(e.target) ? "hover" : "default";
-              if (state.target === want) return;
-              state.target = want;
-              applyTarget();
-            }
-            window.addEventListener("mouseover", onOver, { passive: true });
-            window.addEventListener("mouseout",  onOver, { passive: true });
-
-            // Show/hide mirroring body.show-cursor — this is the toggle set by
-            // main.js (death screen, settings modal, etc.).
-            function syncActive() {
-              state.active = document.body.classList.contains("show-cursor");
-              applyTarget();
-            }
-            new MutationObserver(syncActive).observe(document.body, {
-              attributes: true, attributeFilter: ["class"]
-            });
-            syncActive();
-          }
-          // The <div id="gameCursor"> markup lives later in <body>, so defer
-          // the setup until it's been parsed. The CSS variable assignments
-          // above already took effect — only the JS wiring depends on the DOM.
-          if (document.readyState === "loading") {
-            document.addEventListener("DOMContentLoaded", setupGameCursor, { once: true });
-          } else {
-            setupGameCursor();
-          }
-        } catch (eCur) {
-          /* Cursor setup failed — fall back to whatever the CSS cursor declarations
-             in :root provide (empty / OS default). Nothing else to do. */
-        }
       } catch (e1) {}
     })();
   </script>
@@ -418,41 +277,6 @@
      * pointer and cross-fade between the two images (driven by the script
      * injected at the bottom of this file). In-game FPS gameplay keeps
      * `cursor: none` since the renderer draws a centered crosshair. */
-    body.show-cursor #app,
-    body.show-cursor { cursor: none; }
-
-    #gameCursor {
-      position: fixed;
-      inset: 0;
-      z-index: 2147483640;            /* below modal overlays, above canvas */
-      pointer-events: none;
-      user-select: none;
-      visibility: hidden;             /* shown via [data-active="1"] by the JS */
-      contain: layout style paint;
-    }
-    #gameCursor[data-active="1"] { visibility: visible; }
-
-    #gameCursor .game-cursor-layer {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 64px;
-      height: 64px;
-      margin-left: 0;
-      margin-top: 0;
-      background-repeat: no-repeat;
-      background-position: 0 0;
-      will-change: transform, opacity;
-      /* opacity is driven by --cursor-layer-opacity (set by JS each frame) */
-      opacity: var(--cursor-layer-opacity, 0);
-    }
-    #gameCursor .game-cursor-layer--default {
-      background-image: var(--game-cursor-default-image, none);
-    }
-    #gameCursor .game-cursor-layer--hover {
-      background-image: var(--game-cursor-hover-image, none);
-    }
-
     #trainingScoreboard {
       position: fixed;
       left: 10px;
@@ -501,14 +325,39 @@
       line-height: 1.5;
       user-select: none;
       pointer-events: none;
-      min-width: 340px;
+      min-width: 240px;
+      max-width: min(620px, calc(100vw - 20px));
       font-size: 14px;
       backdrop-filter: blur(4px);
+      border: 1px solid rgba(255,255,255,0.10);
+      border-left: 2px solid rgba(143,216,255,0.55);
       box-shadow: 0 6px 20px rgba(0,0,0,0.28);
     }
     /* Hide the HUD when not in-game (menu screen, boot, etc.). The body gets
        `game-active` only when the player has entered the world. */
     body:not(.game-active) #hud { display: none; }
+    .hud .hud-title {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 18px;
+      letter-spacing: 1.5px;
+      margin-bottom: 2px;
+    }
+    .hud .hud-help-toggle { font-size: 11px; opacity: 0.7; letter-spacing: 0.4px; white-space: nowrap; }
+    .hud .hud-help {
+      font-size: 12px;
+      line-height: 1.55;
+      opacity: 0.9;
+      margin: 4px 0 6px;
+      padding: 6px 0;
+      border-top: 1px solid rgba(255,255,255,0.14);
+      border-bottom: 1px solid rgba(255,255,255,0.14);
+    }
+    .hud .hud-ammo { font-size: 17px; color: #fff; }
+    .hud .hud-ammo-low { color: #ff6a55; text-shadow: 0 0 8px rgba(255,80,60,0.55); }
+    /* The credit logos belong to the menu; in a match they sat on top of the hotbar. */
+    body.game-active #pageFooter { display: none !important; }
 
     .hint {
       position: fixed;
@@ -702,6 +551,243 @@
       transform: translate(-50%, -7px);
     }
 
+    /* ── Combat HUD (built by buildGameHud in main.js) ───────────────────────── */
+    :root {
+      --hud-ink: #e9eef2;
+      --hud-dim: rgba(233, 238, 242, 0.55);
+      --hud-glass: linear-gradient(180deg, rgba(14, 17, 21, 0.62), rgba(6, 8, 10, 0.48));
+      --hud-edge: rgba(255, 255, 255, 0.09);
+      --hud-ok: #8fe3a6;
+      --hud-mid: #f2c14e;
+      --hud-low: #ff5a4a;
+      --hud-blue: #7cc8ff;
+    }
+    /* Retired widgets: superseded by the clusters below. */
+    #healthBarWrap, #needleHud, #castBarWrap, #dashStaminaHud, #bossShakeBar { display: none !important; }
+    .hud-cluster {
+      position: fixed;
+      bottom: 22px;
+      z-index: 43;
+      pointer-events: none;
+      user-select: none;
+      font-family: var(--game-font-ui);
+      color: var(--hud-ink);
+      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
+    }
+    body:not(.game-active) .hud-cluster,
+    body:not(.game-active) #actionRing,
+    body.results-open .hud-cluster { display: none; }
+    @keyframes hudDeny {
+      0%, 100% { transform: translateX(0); }
+      20% { transform: translateX(-5px); }
+      40% { transform: translateX(4px); }
+      60% { transform: translateX(-3px); }
+      80% { transform: translateX(2px); }
+    }
+
+    #hudVitals {
+      left: 26px;
+      width: 248px;
+      padding: 10px 14px 11px;
+      border-radius: 4px;
+      background: var(--hud-glass);
+      border: 1px solid var(--hud-edge);
+      border-left: 2px solid var(--hud-ok);
+      transition: border-color 0.3s, box-shadow 0.3s;
+    }
+    #hudVitals[data-hp="mid"] { border-left-color: var(--hud-mid); }
+    #hudVitals[data-hp="low"] { border-left-color: var(--hud-low); box-shadow: -6px 0 22px -10px var(--hud-low); }
+    #hudVitals.armor-hit { animation: hudArmor 0.5s ease-out; }
+    @keyframes hudArmor { 0% { box-shadow: 0 0 0 1px var(--hud-blue), 0 0 22px rgba(124, 200, 255, 0.55); } 100% { box-shadow: none; } }
+    .hv-top { display: flex; align-items: center; gap: 8px; line-height: 1; }
+    .hv-ico { width: 15px; height: 15px; color: var(--hud-ok); display: inline-flex; }
+    #hudVitals[data-hp="mid"] .hv-ico { color: var(--hud-mid); }
+    #hudVitals[data-hp="low"] .hv-ico { color: var(--hud-low); animation: hudPulse 0.9s ease-in-out infinite; }
+    @keyframes hudPulse { 50% { opacity: 0.35; } }
+    .hv-ico svg, .g-ico svg { width: 100%; height: 100%; display: block; }
+    #hvHpNum { font-size: 28px; letter-spacing: 1px; font-variant-numeric: tabular-nums; }
+    .hv-track {
+      position: relative;
+      height: 6px;
+      margin-top: 8px;
+      background: rgba(255, 255, 255, 0.08);
+      overflow: hidden;
+      border-radius: 1px;
+    }
+    #hvHpFill, #hvHpLag { position: absolute; left: 0; top: 0; bottom: 0; width: 100%; }
+    #hvHpLag { background: rgba(255, 255, 255, 0.55); transition: width 0.5s ease-in 0.35s; }
+    #hvHpFill { background: var(--hud-ok); transition: width 0.08s linear, background 0.3s; }
+    #hudVitals[data-hp="mid"] #hvHpFill { background: var(--hud-mid); }
+    #hudVitals[data-hp="low"] #hvHpFill { background: var(--hud-low); }
+    .hv-stam { display: flex; gap: 4px; margin-top: 6px; }
+    .hv-stam i {
+      position: relative;
+      flex: 1;
+      height: 3px;
+      background: rgba(255, 255, 255, 0.10);
+      overflow: hidden;
+      border-radius: 1px;
+    }
+    .hv-stam i span { position: absolute; left: 0; top: 0; bottom: 0; width: 100%; background: rgba(150, 205, 235, 0.55); }
+    .hv-stam i.full span { background: #bfe6ff; }
+    .hv-stam.jet i span { background: var(--hud-blue); box-shadow: 0 0 6px var(--hud-blue); }
+    .hv-stam.locked i span { background: repeating-linear-gradient(135deg, #6a4a46 0 4px, #3a2a28 4px 8px); }
+    .hv-stam.deny { animation: hudDeny 0.32s ease-out; }
+    .hv-stam.deny i { background: rgba(255, 90, 74, 0.45); }
+
+    #hudArms {
+      right: 26px;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 2px;
+    }
+    .ha-ammo { display: flex; align-items: baseline; gap: 6px; line-height: 1; }
+    #haAmmo { font-size: 40px; font-variant-numeric: tabular-nums; letter-spacing: 1px; transition: color 0.2s, opacity 0.2s; }
+    #haMag { font-size: 15px; color: var(--hud-dim); }
+    #haWeapon { font-size: 11px; letter-spacing: 3px; text-transform: uppercase; color: var(--hud-dim); }
+    #hudArms[data-ammo="low"] #haAmmo { color: var(--hud-mid); }
+    #hudArms[data-ammo="empty"] #haAmmo { color: var(--hud-low); animation: hudPulse 0.7s ease-in-out infinite; }
+    #hudArms[data-ammo="reload"] #haAmmo { opacity: 0.35; }
+    .ha-gear { display: flex; gap: 10px; margin-bottom: 8px; }
+    .gear { position: relative; width: 44px; height: 44px; color: var(--hud-ink); }
+    .g-ring { position: absolute; inset: 0; }
+    .g-ring circle { fill: rgba(8, 10, 12, 0.55); stroke-width: 2.5; }
+    .g-ring .g-track { stroke: rgba(255, 255, 255, 0.12); }
+    .g-ring .g-prog { fill: none; stroke: rgba(233, 238, 242, 0.85); transition: stroke 0.25s; }
+    .g-ico { position: absolute; left: 12px; top: 12px; width: 20px; height: 20px; }
+    .g-key {
+      position: absolute;
+      left: 50%;
+      bottom: -7px;
+      transform: translateX(-50%);
+      min-width: 14px;
+      padding: 1px 4px;
+      font: 9px/1.2 var(--game-font-ui);
+      text-align: center;
+      color: #0b0d10;
+      background: rgba(233, 238, 242, 0.88);
+      border-radius: 2px;
+      text-shadow: none;
+    }
+    .g-count { position: absolute; right: -2px; top: -4px; font-size: 10px; }
+    .gear[data-mode="empty"], .gear[data-mode="cool"] { color: rgba(233, 238, 242, 0.32); }
+    .gear[data-mode="cool"] .g-prog { stroke: rgba(233, 238, 242, 0.35); }
+    .gear[data-mode="busy"] .g-prog { stroke: var(--hud-blue); }
+    .gear[data-mode="boost"] { color: var(--hud-ok); }
+    .gear[data-mode="boost"] .g-prog { stroke: var(--hud-ok); }
+    .gear[data-mode="weak"] { color: var(--hud-mid); }
+    .gear[data-mode="weak"] .g-prog { stroke: var(--hud-mid); }
+    .gear[data-mode="jet"] { color: var(--hud-blue); }
+    .gear[data-mode="jet"] .g-prog { stroke: var(--hud-blue); }
+    .gear.deny { animation: hudDeny 0.32s ease-out; }
+    .gear.deny .g-ring .g-track { stroke: var(--hud-low); }
+
+    #actionRing {
+      position: fixed;
+      left: 50%;
+      top: 50%;
+      width: 64px;
+      height: 64px;
+      margin: -32px 0 0 -32px;
+      z-index: 26;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.12s;
+    }
+    #actionRing.on { opacity: 1; }
+    #actionRing svg { width: 100%; height: 100%; display: block; }
+    #actionRing circle { fill: none; stroke-width: 2.5; }
+    #actionRing .ar-track { stroke: rgba(255, 255, 255, 0.14); }
+    #actionRingProg { stroke: rgba(233, 238, 242, 0.92); stroke-linecap: round; }
+    #actionRing[data-mode="inject"] #actionRingProg { stroke: var(--hud-blue); }
+
+    .hitmarker.kill::before, .hitmarker.kill::after {
+      background: #ff4a3a;
+      height: 30px;
+      box-shadow: 0 0 10px rgba(255, 74, 58, 0.8);
+    }
+    .hitmarker.kill { opacity: 1; }
+
+    /* Below this width the hotbar would sit under the side clusters: lift them clear. */
+    @media (max-width: 1180px) {
+      .hud-cluster { bottom: 92px; }
+    }
+
+    /* ── Contextual tutorial prompt ─────────────────────────────────────────── */
+    #tutPrompt {
+      position: fixed;
+      left: 50%;
+      bottom: 132px;
+      transform: translate(-50%, 8px);
+      z-index: 44;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 14px 8px 10px;
+      pointer-events: none;
+      font-family: var(--game-font-ui);
+      color: var(--hud-ink);
+      background: linear-gradient(180deg, rgba(14, 17, 21, 0.72), rgba(6, 8, 10, 0.6));
+      border: 1px solid rgba(255, 255, 255, 0.10);
+      border-radius: 4px;
+      opacity: 0;
+      transition: opacity 0.2s, transform 0.2s;
+    }
+    #tutPrompt.on { opacity: 1; transform: translate(-50%, 0); }
+    body:not(.game-active) #tutPrompt { display: none; }
+    #tutPrompt .tp-keys { display: flex; gap: 4px; align-items: center; }
+    #tutPrompt kbd {
+      min-width: 26px;
+      height: 26px;
+      padding: 0 7px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font: 12px var(--game-font-ui);
+      color: #0b0d10;
+      background: linear-gradient(180deg, #f3f6f8, #c9d0d6);
+      border-radius: 4px;
+      box-shadow: 0 2px 0 #7f8890, 0 3px 6px rgba(0, 0, 0, 0.5);
+    }
+    #tutPrompt .tp-plus { font-style: normal; color: var(--hud-dim); padding: 0 2px; }
+    #tutPrompt .tp-ico { width: 22px; height: 22px; color: #9fd8ff; display: inline-flex; }
+    #tutPrompt .tp-ico svg { width: 100%; height: 100%; }
+    #tutPrompt .tp-verb { font-size: 12px; letter-spacing: 3px; }
+
+    /* ── End-of-level results card ─────────────────────────────────────────── */
+    #gauntletClear {
+      position: fixed;
+      inset: 0;
+      z-index: 120;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(ellipse at center, rgba(6, 10, 12, 0.55), rgba(2, 4, 6, 0.88));
+      font-family: var(--game-font-ui);
+      color: var(--hud-ink);
+    }
+    #gauntletClear .gc-card {
+      min-width: 360px;
+      padding: 28px 34px 26px;
+      background: linear-gradient(180deg, rgba(18, 23, 28, 0.92), rgba(9, 12, 15, 0.94));
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-top: 2px solid #62ffb0;
+      border-radius: 6px;
+      box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
+      text-align: center;
+      animation: gcIn 0.35s cubic-bezier(.2,.8,.2,1);
+    }
+    @keyframes gcIn { from { opacity: 0; transform: translateY(14px) scale(0.98); } }
+    #gauntletClear .gc-kicker { font-size: 11px; letter-spacing: 4px; color: var(--hud-dim); }
+    #gauntletClear .gc-title { font-size: 30px; letter-spacing: 3px; color: #62ffb0; margin: 6px 0 18px; }
+    #gauntletClear .gc-stats { display: flex; justify-content: center; gap: 28px; margin-bottom: 22px; }
+    #gauntletClear .gc-stat b { display: block; font-size: 22px; font-weight: 400; color: #fff; }
+    #gauntletClear .gc-stat span { font-size: 10px; letter-spacing: 2px; color: var(--hud-dim); }
+    #gauntletClear .gc-stat.best b { color: #f2c14e; }
+    #gauntletClear .gc-btns { display: flex; gap: 10px; justify-content: center; }
+    #gauntletClear .overlay-btn { width: auto; min-width: 118px; font-size: 13px; padding: 10px 16px; }
+
     /* Full-screen boot: map gen + asset preload before gameplay */
     #gameBootOverlay {
       position: fixed;
@@ -863,10 +949,39 @@
       box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.12);
       transition: filter 0.15s, border-color 0.15s;
     }
-    .menu button:not(.menu-float-icon):hover {
-      filter: brightness(1.07);
-      border-color: rgba(255, 255, 255, 0.34);
+    .menu button:not(.menu-float-icon):hover,
+    .menu button:not(.menu-float-icon):focus-visible {
+      filter: brightness(1.12);
+      border-color: rgba(143, 216, 255, 0.75);
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 0 0 1px rgba(143, 216, 255, 0.35);
+      outline: none;
     }
+    .menu button:not(.menu-float-icon):active { transform: translateY(1px); filter: brightness(0.96); }
+    /* Mode buttons carry a one-line description underneath the name. */
+    .menu button[data-desc] { width: 300px; padding-bottom: 12px; }
+    .menu button[data-desc]::after {
+      content: attr(data-desc);
+      display: block;
+      margin-top: 5px;
+      font-size: 10px;
+      font-weight: 400;
+      letter-spacing: 0.08em;
+      text-transform: none;
+      color: rgba(232, 238, 248, 0.62);
+    }
+    .menu-float-icon:focus-visible { outline: 1px solid rgba(143, 216, 255, 0.75); outline-offset: 2px; }
+    /* Boss count: segmented control instead of three full-width menu buttons. */
+    #bossCountRow { flex-direction: column; gap: 6px !important; }
+    #bossCountRow > span { opacity: 0.7; letter-spacing: 3px !important; font-size: 11px !important; }
+    #bossCountRow .seg { display: flex; gap: 0; }
+    .menu #bossCountRow button.boss-count-btn {
+      width: 72px;
+      border-radius: 0;
+      margin-left: -1px;
+      padding: 10px 0;
+    }
+    .menu #bossCountRow button.boss-count-btn:first-of-type { border-radius: 8px 0 0 8px; }
+    .menu #bossCountRow button.boss-count-btn:last-of-type { border-radius: 0 8px 8px 0; }
 
     /* Explicit texture class for buttons outside .menu or with conflicting inline styles */
     .btn-texture {
@@ -928,7 +1043,7 @@
       line-height: 1.45;
     }
 
-    /* Pause / death / name modal: frosted flat buttons (no texture) */
+    /* Pause, defeat and name dialog button layout. The shared theme supplies their texture. */
     .overlay-btn {
       box-sizing: border-box;
       width: 200px;
@@ -1022,8 +1137,14 @@
       background: linear-gradient(180deg, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.0) 100%);
     }
     .ach-modal-body {
+      /* The shell has a fixed 3:2 height, so the body must take the leftover space
+         and shrink (min-height: 0) for its own overflow-y: auto to scroll. Without
+         this the list grew past the shell and was clipped by overflow: hidden. */
+      flex: 1 1 auto;
+      min-height: 0;
       padding: 14px 18px 18px 18px;
       overflow-y: auto;
+      overscroll-behavior: contain;
       display: flex;
       flex-direction: column;
       gap: 12px;
@@ -1982,7 +2103,7 @@
     /* ── Speed Needle HUD ──────────────────────────────────────────────── */
     #needleHud {
       position: fixed;
-      bottom: 140px;
+      bottom: 126px;
       left: 50%;
       transform: translateX(-50%);
       display: none;
@@ -1995,14 +2116,14 @@
       font-family: 'Audiowide', sans-serif;
     }
     #needleHud .nh-label {
-      font-size: 14px;
+      font-size: 11px;
       letter-spacing: 2px;
       color: rgba(185,232,255,0.95);
       text-shadow: 0 1px 4px rgba(0,0,0,0.85);
     }
     #needleHud .nh-bar-wrap {
-      width: 300px;
-      height: 14px;
+      width: 230px;
+      height: 8px;
       border-radius: 7px;
       background: linear-gradient(180deg, rgba(12,14,18,0.9), rgba(0,0,0,0.66));
       border: 1px solid rgba(255,255,255,0.16);
@@ -2024,6 +2145,7 @@
     #needleHud.nh-inject .nh-label { color: #88ccff; text-shadow: 0 0 6px #88ccff88; }
     #needleHud.nh-inject .nh-bar-fill { background: #88ccff; }
 </style>
+  <link rel="stylesheet" href="interface.css?v=16-back-button">
   <script>
     (function () {
       function normBase(b) {
@@ -2154,30 +2276,31 @@
   </script>
 </head>
 <body>
-  <!-- Custom cursor system: two layers (default + hover) follow the pointer and
-       cross-fade when the underlying element's computed cursor is `pointer`.
-       See the boot script near the top of <body> for the tween logic. -->
-  <div id="gameCursor" aria-hidden="true">
-    <div class="game-cursor-layer game-cursor-layer--default" data-layer="default"></div>
-    <div class="game-cursor-layer game-cursor-layer--hover" data-layer="hover"></div>
-  </div>
   <canvas id="menuWallBackdrop" aria-hidden="true"></canvas>
-  <img id="menuBg" alt="" aria-hidden="true" src="images/background.png" />
+  <img id="menuBg" alt="" aria-hidden="true" src="images/bulkhead-key-art.jpg" fetchpriority="high" />
   <div id="menu" class="menu">
-    <div class="menu-panels-wrap">
-    <div id="menuMain" style="display:flex;flex-direction:column;align-items:center;gap:10px;">
-      <h1 id="menuGameTitle" data-i18n="gameTitle">Zone No Light</h1>
-      <button type="button" id="btnStart" data-i18n="btnStart">START</button>
-      <button type="button" id="btnTraining" data-i18n="btnTrainingCamp">Training Camp</button>
+    <header class="menu-top">
+      <button type="button" id="btnMenuHome" class="menu-brand" data-i18n="gameTitle">Zone No Light</button>
+      <nav class="menu-tools" aria-label="Game options">
+        <button type="button" id="btnAchievements" data-i18n="achTitle" aria-haspopup="dialog">Achievements</button>
+        <button type="button" id="btnMenuSettings" data-i18n="btnSettings" aria-haspopup="dialog">Settings</button>
+      </nav>
+    </header>
+    <main class="menu-panels-wrap">
+    <div id="menuMain" style="display:flex;">
+      <div class="menu-lockup">
+        <img class="menu-logo" src="images/logo.svg" alt="" aria-hidden="true" width="112" height="112" />
+        <h1 id="menuGameTitle" data-i18n="gameTitle">Zone No Light</h1>
+      </div>
+      <p class="menu-lead" data-i18n="menuLead">Find your way through the dark. Fight alone or bring a squad.</p>
+      <nav class="home-actions" aria-label="Play and equipment">
+        <button type="button" id="btnStart" aria-controls="menuStart" aria-expanded="false" data-i18n="menuDeploy">Start</button>
+        <button type="button" id="btnTraining" aria-controls="menuTrainingMode" data-i18n="btnTrainingCamp">Training Camp</button>
+      </nav>
     </div>
-    <!-- Floating settings gear — top-right, only visible in menu -->
-    <button type="button" id="btnMenuSettings" class="menu-float-icon menu-float-icon--dim" title="Settings" style="top:16px;right:16px"><svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
-    <!-- Floating achievements trophy — bottom-right, only visible in menu -->
-    <button type="button" id="btnAchievements" class="menu-float-icon menu-float-icon--dim" title="Achievements" style="bottom:72px;right:16px"><svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2z"/></svg></button>
-    <!-- START submenu: Zombie Arena | Boss Fight | PVP -->
     <div id="menuStart" class="menu-subpanel">
       <button type="button" id="btnStartBack" class="menu-float-icon menu-back-btn"><svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
-      <h2 data-i18n="chooseModeToPlay" style="font-family:var(--game-font-ui);font-size:20px;letter-spacing:2px;margin:0 0 4px 0;opacity:0.85;">CHOOSE A MODE TO PLAY</h2>
+      <h2 class="menu-title" data-i18n="menuMissions">Choose a mode</h2>
       <button type="button" id="btnArena" data-i18n="btnZombieArena">Zombie Arena</button>
       <button type="button" id="btnBossFight" data-i18n="btnBossFight">BOSS FIGHT</button>
       <button type="button" id="btnCrossfire" data-i18n="btnCrossfire">PVP</button>
@@ -2190,7 +2313,7 @@
     </div>
     <div id="menuBossMode" class="menu-subpanel">
       <h2 data-i18n="bossFightTitle" class="menu-title">BOSS FIGHT</h2>
-      <p data-i18n="bossFightDesc" class="menu-desc">Fight the Boss (Hormone Zombie) — a hulking boss that switches between Tank, Speed, and Gunner modes.</p>
+      <p data-i18n="bossFightDesc" class="menu-desc">Fight the Boss (Hormone Zombie) — a hulking boss that switches between a melee brawler and a ranged gunner.</p>
       <button type="button" id="btnBossSingle" class="btn-texture btn-primary" data-i18n="btnSingleplayer">SINGLEPLAYER</button>
       <button type="button" id="btnBossCoop" class="btn-texture btn-primary" data-i18n="btnCoopMode">CO-OP MODE</button>
       <button type="button" id="btnBossBack" class="menu-float-icon menu-back-btn"><svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
@@ -2199,9 +2322,11 @@
       <h2 data-i18n="selectDifficulty" class="menu-subtitle" style="margin:0 0 10px 0">SELECT DIFFICULTY</h2>
       <div id="bossCountRow" style="display:flex;gap:8px;align-items:center;margin-bottom:4px;transition:opacity 0.15s;">
         <span data-i18n="bossesLabel" style="font-family:var(--game-font-ui);font-size:13px;letter-spacing:1px;">BOSSES:</span>
+        <div class="seg">
         <button type="button" class="bossDiffBtn btn-texture boss-count-btn" data-boss-count="1">1</button>
         <button type="button" class="bossDiffBtn btn-texture boss-count-btn" data-boss-count="2">2</button>
         <button type="button" class="bossDiffBtn btn-texture boss-count-btn" data-boss-count="3">3</button>
+        </div>
       </div>
       <button type="button" id="btnBossHell" class="btn-texture" data-i18n="hellMode" style="font-family:var(--game-font-ui);padding:8px 22px;border:2px solid #ff2244;border-radius:6px;color:#ff4466;cursor:pointer;font-size:14px;letter-spacing:1px;">HELL MODE</button>
       <button type="button" id="btnBossStartDiff" class="btn-texture btn-primary" data-i18n="btnStart">START</button>
@@ -2218,19 +2343,31 @@
       <h2 data-i18n="selectMap" class="menu-subtitle" style="margin:0 0 4px 0">SELECT MAP</h2>
       <div style="display:flex;gap:16px;justify-content:center;flex-wrap:wrap;">
         <button type="button" id="btnPvpMapClassic" class="btn-texture pvp-map-card">
-          <canvas id="pvpPreviewClassic" width="220" height="130" style="border-radius:6px;background:#1a2233;"></canvas>
-          <span style="font-family:var(--game-font-ui);font-size:13px;letter-spacing:1px;color:#e8ecf2;" data-i18n="pvpMapClassic">CLASSIC (ORIGINAL)</span>
+          <img class="pvp-map-cover" src="images/maps/crossfire.jpg" alt="" width="440" height="260" decoding="async" draggable="false" style="border-radius:6px;background:#1a2233;" />
+          <span style="font-family:var(--game-font-ui);font-size:13px;letter-spacing:1px;color:#e8ecf2;" data-i18n="pvpMapFoundry">CINDERWORKS</span>
+          <small class="pvp-map-tag" data-i18n="pvpTagFoundry">Foundry · lava, lifts, steam</small>
         </button>
         <button type="button" id="btnPvpMapGrid" class="btn-texture pvp-map-card">
-          <canvas id="pvpPreviewGrid" width="220" height="130" style="border-radius:6px;background:#1a2233;"></canvas>
-          <span style="font-family:var(--game-font-ui);font-size:13px;letter-spacing:1px;color:#e8ecf2;" data-i18n="pvpMapGrid">GRID KILLHOUSE</span>
+          <img class="pvp-map-cover" src="images/maps/crossfire_grid.jpg" alt="" width="440" height="260" decoding="async" draggable="false" style="border-radius:6px;background:#1a2233;" />
+          <span style="font-family:var(--game-font-ui);font-size:13px;letter-spacing:1px;color:#e8ecf2;" data-i18n="pvpMapStation">HALCYON RING</span>
+          <small class="pvp-map-tag" data-i18n="pvpTagStation">Orbital station · airlocks, low gravity</small>
+        </button>
+        <button type="button" id="btnPvpMapRuins" class="btn-texture pvp-map-card">
+          <img class="pvp-map-cover" src="images/maps/pvp_ruins.jpg" alt="" width="440" height="260" decoding="async" draggable="false" style="border-radius:6px;background:#1a2233;" />
+          <span style="font-family:var(--game-font-ui);font-size:13px;letter-spacing:1px;color:#e8ecf2;" data-i18n="pvpMapRuins">SUNKEN TEMPLE</span>
+          <small class="pvp-map-tag" data-i18n="pvpTagRuins">Jungle ruins · stream, rolling boulder</small>
+        </button>
+        <button type="button" id="btnPvpMapTown" class="btn-texture pvp-map-card">
+          <img class="pvp-map-cover" src="images/maps/pvp_town.jpg" alt="" width="440" height="260" decoding="async" draggable="false" style="border-radius:6px;background:#1a2233;" />
+          <span style="font-family:var(--game-font-ui);font-size:13px;letter-spacing:1px;color:#e8ecf2;" data-i18n="pvpMapTown">DUSTFALL</span>
+          <small class="pvp-map-tag" data-i18n="pvpTagTown">Frontier town · the 12:40 train</small>
         </button>
       </div>
       <button type="button" id="btnPvpMapBack" class="menu-float-icon menu-back-btn"><svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
     </div>
     <div id="menuLobby" class="menu-subpanel">
       <h2 id="lobbyTitle" data-i18n="lobbyMultiplayer" class="menu-subtitle" style="margin:0 0 10px 0">MULTIPLAYER</h2>
-      <p id="lobbyError" style="font-family:var(--game-font-ui);color:#e53e3e;font-size:13px;margin:0 0 4px 0;min-height:18px;max-width:320px;text-align:center;line-height:1.35;"></p>
+      <p id="lobbyError" role="status" style="font-family:var(--game-font-ui);color:#e53e3e;font-size:13px;margin:0 0 4px 0;min-height:18px;max-width:320px;text-align:center;line-height:1.35;"></p>
       <button type="button" id="btnQuickplay" data-i18n="btnQuickPlay">QUICK PLAY</button>
       <button type="button" id="btnCreateRoom" data-i18n="btnCreateRoom">CREATE A ROOM</button>
       <button type="button" id="btnJoinCode" data-i18n="btnJoinViaCode">JOIN VIA CODE</button>
@@ -2239,13 +2376,14 @@
     <div id="menuJoinCode" class="menu-subpanel">
       <h2 class="menu-subtitle" style="margin:0 0 6px 0" data-i18n="joinViaCodeTitle">JOIN VIA CODE</h2>
       <input id="codeInput" type="text" maxlength="12" placeholder="ROOM CODE" data-i18n-placeholder="roomCodePlaceholder" style="font-family:var(--game-font-ui);width:180px;padding:10px 14px;font-size:18px;border:2px solid #4fd1ff;border-radius:8px;background:#0d111b;color:#fff;outline:none;text-align:center;text-transform:uppercase;letter-spacing:4px;">
-      <p id="codeError" style="font-family:var(--game-font-ui);color:#e53e3e;font-size:13px;margin:4px 0 0 0;min-height:18px;"></p>
+      <p id="codeError" role="status" style="font-family:var(--game-font-ui);color:#e53e3e;font-size:13px;margin:4px 0 0 0;min-height:18px;"></p>
       <button type="button" id="btnCodeJoin" data-i18n="btnJoin">JOIN</button>
       <button type="button" id="btnCodeBack" class="menu-float-icon menu-back-btn"><svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
     </div>
-    </div>
+    </main>
   </div>
 
+  <div id="gauntletObjective" hidden></div>
   <div id="app"></div>
   <div id="gameBootOverlay" aria-live="polite" aria-busy="true" style="display:none;">
     <div class="game-boot-spinner" role="status" data-i18n-aria-label="ariaLoading" aria-label="Loading"></div>
@@ -2280,7 +2418,6 @@
     <div id="fpsValue">— FPS</div>
     <div id="fpsChatHint" style="opacity:0.72;font-size:11px;margin-top:3px;letter-spacing:0.02em;" data-i18n="hudHelpChat">Press T to chat</div>
     <div id="fpsHintFlash" style="opacity:0.72;font-size:11px;margin-top:3px;letter-spacing:0.02em;" data-i18n="hudHelpLight">Press L to toggle light &amp; flashlight</div>
-    <div id="fpsHintZoom" style="opacity:0.72;font-size:11px;margin-top:3px;letter-spacing:0.02em;" data-i18n="hudHelpZoom">Press Z to cycle flashlight beam (small / medium / wide)</div>
   </div>
   <div class="hint" id="hint" data-i18n="hintClick">Click anywhere</div>
   <div class="flash" id="flash"></div>
@@ -2322,11 +2459,13 @@
   <div id="deathOverlay" style="position:fixed;inset:0;z-index:50;pointer-events:none;display:none;">
     <div id="deathFade" style="position:absolute;inset:0;background:rgba(0,0,0,0);transition:none;"></div>
     <div id="deathUI" style="position:absolute;inset:0;display:none;flex-direction:column;justify-content:center;align-items:center;gap:14px;pointer-events:auto;">
+      <div class="intermission-card">
       <h1 id="deathTitle" data-i18n="deathTitle" style="font-family:'Audiowide',sans-serif;font-size:52px;margin:0 0 6px 0;color:#e53e3e;text-shadow:0 0 30px rgba(229,62,62,0.5);letter-spacing:4px;">DEFEAT</h1>
       <p id="deathScore" style="font-family:'Audiowide',sans-serif;font-size:16px;margin:0 0 18px 0;opacity:0.8;">Score: 0</p>
       <button type="button" class="overlay-btn" id="btnDeathRestart" data-i18n="btnRestart">RESTART</button>
       <button type="button" class="overlay-btn overlay-btn-accent" id="btnDeathSettings" data-i18n="btnSettings">SETTINGS</button>
       <button type="button" class="overlay-btn" id="btnDeathQuit" data-i18n="btnQuit">QUIT</button>
+      </div>
     </div>
     <!--
       Revive prompt: shown for non-crossfire modes after the death animation completes.
@@ -2337,32 +2476,36 @@
       is restored on ad completion (or after game-ad-duration-ms, whichever is first).
     -->
     <div id="revivePrompt" style="position:absolute;inset:0;display:none;flex-direction:column;justify-content:center;align-items:center;gap:18px;pointer-events:auto;">
-      <h1 data-i18n="reviveTitle" style="font-family:'Audiowide',sans-serif;font-size:38px;margin:0;color:#fff;text-shadow:0 0 18px rgba(229,62,62,0.4);letter-spacing:3px;">DEFEATED</h1>
-      <p data-i18n="revivePrompt" style="font-family:'Audiowide',sans-serif;font-size:14px;margin:0 0 4px 0;opacity:0.85;letter-spacing:1px;">WATCH AN AD TO REVIVE</p>
-      <div style="position:relative;width:96px;height:96px;display:flex;align-items:center;justify-content:center;">
-        <svg width="96" height="96" viewBox="0 0 96 96" style="transform:rotate(-90deg);">
-          <circle cx="48" cy="48" r="42" fill="none" stroke="rgba(255,255,255,0.18)" stroke-width="6"/>
-          <circle id="reviveRing" cx="48" cy="48" r="42" fill="none" stroke="#4fd1ff" stroke-width="6" stroke-linecap="round" stroke-dasharray="263.89" stroke-dashoffset="0" style="filter:drop-shadow(0 0 6px rgba(79,209,255,0.6));transition:none;"/>
-        </svg>
-        <span id="reviveCountdownNum" style="position:absolute;font-family:'Audiowide',sans-serif;font-size:30px;color:#fff;text-shadow:0 0 10px rgba(79,209,255,0.5);">5</span>
+      <div class="intermission-card">
+        <h1 data-i18n="reviveTitle" style="font-family:'Audiowide',sans-serif;font-size:38px;margin:0;color:#fff;text-shadow:0 0 18px rgba(229,62,62,0.4);letter-spacing:3px;">DEFEATED</h1>
+        <p data-i18n="revivePrompt" style="font-family:'Audiowide',sans-serif;font-size:14px;margin:0 0 4px 0;opacity:0.85;letter-spacing:1px;">WATCH AN AD TO REVIVE</p>
+        <div style="position:relative;width:96px;height:96px;display:flex;align-items:center;justify-content:center;">
+          <svg width="96" height="96" viewBox="0 0 96 96" style="transform:rotate(-90deg);">
+            <circle cx="48" cy="48" r="42" fill="none" stroke="rgba(255,255,255,0.18)" stroke-width="6"/>
+            <circle id="reviveRing" cx="48" cy="48" r="42" fill="none" stroke="#4fd1ff" stroke-width="6" stroke-linecap="round" stroke-dasharray="263.89" stroke-dashoffset="0" style="filter:drop-shadow(0 0 6px rgba(79,209,255,0.6));transition:none;"/>
+          </svg>
+          <span id="reviveCountdownNum" style="position:absolute;font-family:'Audiowide',sans-serif;font-size:30px;color:#fff;text-shadow:0 0 10px rgba(79,209,255,0.5);">5</span>
+        </div>
+        <button type="button" class="overlay-btn overlay-btn-accent" id="btnReviveWatchAd" style="display:flex;align-items:center;gap:10px;padding:12px 22px;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+          <span data-i18n="btnReviveWatchAd">REVIVE</span>
+        </button>
+        <button type="button" class="overlay-btn" id="btnReviveGiveUp" data-i18n="btnGiveUp">GIVE UP</button>
       </div>
-      <button type="button" class="overlay-btn overlay-btn-accent" id="btnReviveWatchAd" style="display:flex;align-items:center;gap:10px;padding:12px 22px;">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
-        <span data-i18n="btnReviveWatchAd">REVIVE</span>
-      </button>
-      <button type="button" class="overlay-btn" id="btnReviveGiveUp" data-i18n="btnGiveUp">GIVE UP</button>
     </div>
     <!-- AdSense slot container: hidden until the revive flow injects an ad here. -->
     <div id="reviveAdSlot" style="position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);display:none;width:min(560px,90vw);height:315px;background:rgba(0,0,0,0.85);border:1px solid rgba(79,209,255,0.4);border-radius:10px;z-index:51;pointer-events:auto;">
       <div id="reviveAdSlotInner" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:'Audiowide',sans-serif;color:#fff;letter-spacing:2px;">AD LOADING…</div>
     </div>
   </div>
-  <div id="pauseOverlay" style="position:fixed;inset:0;z-index:55;display:none;flex-direction:column;justify-content:center;align-items:center;gap:14px;background:rgba(0,0,0,0.5);">
-    <h1 data-i18n="pausedTitle" style="font-family:'Audiowide',sans-serif;font-size:48px;margin:0 0 10px 0;color:#fff;letter-spacing:4px;">PAUSED</h1>
+  <div id="pauseOverlay" role="dialog" aria-modal="true" aria-labelledby="pauseTitle" style="position:fixed;inset:0;z-index:55;display:none;flex-direction:column;justify-content:center;align-items:center;gap:14px;background:rgba(0,0,0,0.5);">
+    <div class="intermission-card">
+    <h1 id="pauseTitle" data-i18n="pausedTitle" style="font-family:'Audiowide',sans-serif;font-size:48px;margin:0 0 10px 0;color:#fff;letter-spacing:4px;">PAUSED</h1>
     <button type="button" class="overlay-btn" id="btnResume" data-i18n="btnResume">RESUME</button>
     <button type="button" class="overlay-btn overlay-btn-accent" id="btnPauseSettings" data-i18n="btnSettings">SETTINGS</button>
     <button type="button" class="overlay-btn" id="btnPauseRestart" data-i18n="btnRestart" style="display:none;">RESTART</button>
     <button type="button" class="overlay-btn" id="btnPauseQuit" data-i18n="btnQuit">QUIT</button>
+    </div>
   </div>
   <div id="chatBox" style="position:fixed;bottom:10px;left:10px;z-index:40;pointer-events:none;font-family:'Audiowide',sans-serif;display:flex;flex-direction:column;justify-content:flex-end;">
     <div id="chatMessages" style="display:flex;flex-direction:column;gap:2px;margin-bottom:6px;overflow:hidden;"></div>
@@ -2371,18 +2514,19 @@
     </div>
   </div>
   <div id="hitDirContainer" style="position:fixed;inset:0;z-index:35;pointer-events:none;display:flex;justify-content:center;align-items:center;"></div>
-  <div id="nameModal">
-    <div style="background:#1a2236;border-radius:14px;padding:32px 38px;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.5);">
-      <h2 data-i18n="enterYourName" style="font-family:'Audiowide',sans-serif;margin:0 0 16px 0;font-size:22px;">ENTER YOUR NAME</h2>
+  <div id="nameModal" role="dialog" aria-modal="true" aria-labelledby="nameModalTitle">
+    <div class="intermission-card" style="background:#1a2236;border-radius:14px;padding:32px 38px;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.5);">
+      <h2 id="nameModalTitle" data-i18n="enterYourName" style="font-family:'Audiowide',sans-serif;margin:0 0 16px 0;font-size:22px;">ENTER YOUR NAME</h2>
       <input id="nameInput" type="text" maxlength="16" placeholder="Player" data-i18n-placeholder="playerPlaceholder" style="font-family:'Audiowide',sans-serif;width:200px;padding:10px 14px;font-size:16px;border:2px solid #4fd1ff;border-radius:8px;background:#0d111b;color:#fff;outline:none;text-align:center;">
       <br>
       <button class="overlay-btn" type="button" id="btnNameOk" data-i18n="btnJoin" style="margin-top:16px;">JOIN</button>
     </div>
   </div>
 
-  <div id="settingsModal">
+  <div id="settingsModal" role="dialog" aria-modal="true" aria-labelledby="settingsDialogTitle">
     <div class="settings-shell">
       <aside class="settings-tabs">
+        <h2 id="settingsDialogTitle" data-i18n="btnSettings">Settings</h2>
         <button type="button" class="settings-tab active" id="settingsTabAudio" data-scroll-target="settingsSectionAudio">AUDIO</button>
         <button type="button" class="settings-tab" id="settingsTabControls" data-scroll-target="settingsSectionControls">CONTROLS</button>
         <button type="button" class="settings-tab" id="settingsTabGraphics" data-scroll-target="settingsSectionGraphics">GRAPHICS</button>
@@ -2448,14 +2592,14 @@
           <section class="settings-section" id="settingsSectionGraphics">
             <h2 id="settingsHeadingGraphics" data-i18n="settingsGraphicsH">GRAPHICS</h2>
             <div class="settings-row">
-              <label><span data-i18n="gfxQualityLabel">Quality</span> <span class="value-pill" data-i18n="gfxQualityPill">performance / fidelity</span></label>
+              <label><span data-i18n="gfxQualityLabel">Quality</span> <span class="value-pill value-note" data-i18n="gfxQualityPill">performance / fidelity</span></label>
               <div class="settings-cycle">
                 <button type="button" class="cycle-arrow" id="btnQualityPrev" aria-label="Lower quality">◀</button>
                 <div class="cycle-value" id="qualityLabel">REGULAR</div>
                 <button type="button" class="cycle-arrow" id="btnQualityNext" aria-label="Higher quality">▶</button>
               </div>
               <p data-i18n="gfxQualityHint" style="font-size:11px;opacity:0.65;margin-top:10px;max-width:480px;line-height:1.45;">
-                Adjusts adaptive resolution, texture filtering, and shadow fidelity. Visibility, aiming, lighting, fog, and gameplay stay identical.
+                Adjusts render resolution, texture filtering, and shadow fidelity. Visibility, aiming, lighting, fog, and gameplay stay identical.
               </p>
             </div>
             <div class="settings-row">
@@ -2465,6 +2609,17 @@
                 <div class="cycle-value" id="textureLabel">ON</div>
                 <button type="button" class="cycle-arrow" id="btnTextureNext" aria-label="Next">▶</button>
               </div>
+            </div>
+            <div class="settings-row">
+              <label data-i18n="gfxPostLabel">Post-processing</label>
+              <div class="settings-cycle">
+                <button type="button" class="cycle-arrow" id="btnPostPrev" aria-label="Off">◀</button>
+                <div class="cycle-value" id="postLabel">ON</div>
+                <button type="button" class="cycle-arrow" id="btnPostNext" aria-label="On">▶</button>
+              </div>
+              <p data-i18n="gfxPostHint" style="font-size:11px;opacity:0.65;margin-top:10px;max-width:480px;line-height:1.45;">
+                Bloom on lights, a colour grade, vignette, film grain and smoothing of jagged edges. Costs some performance; not used on POTATO quality.
+              </p>
             </div>
             <div class="settings-row">
               <label data-i18n="gfxRenderDistLabel">Render distance</label>
@@ -2562,7 +2717,17 @@
       </div>
     </div>
   </div>
-  <div id="achievementsModal">
+  <dialog id="settingsPrompt" class="intermission-card" aria-labelledby="settingsPromptMessage">
+    <form method="dialog">
+      <p id="settingsPromptMessage"></p>
+      <input id="settingsPromptPassword" type="password" autocomplete="off" aria-labelledby="settingsPromptMessage" hidden>
+      <div class="settings-prompt-actions">
+        <button type="submit" class="overlay-btn" id="settingsPromptAccept" value="accept">OK</button>
+        <button type="submit" class="overlay-btn" id="settingsPromptCancel" value="cancel">Cancel</button>
+      </div>
+    </form>
+  </dialog>
+  <div id="achievementsModal" role="dialog" aria-modal="true" aria-labelledby="achModalTitle">
     <div class="ach-modal-shell">
       <button type="button" class="settings-close" id="btnCloseAchievements" title="Close">×</button>
       <div class="ach-modal-header">
@@ -3567,7 +3732,8 @@ if (typeof window !== "undefined") {
   <script type="importmap">
     {"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.182.0/build/three.module.js"}}
   </script>
-  <script type="module" src="js/main.js?v=20260924-fair-quality-v8"></script>
+  <script type="module" src="js/game-cursor.js?v=1"></script>
+  <script type="module" src="js/main.js?v=20261114-zombie-stride-and-strike-warden10"></script>
   <footer id="pageFooter" style="position:fixed;left:0;right:0;bottom:0;display:flex;justify-content:center;align-items:center;gap:16px;padding:10px 14px;background:transparent;backdrop-filter:none;z-index:101;pointer-events:auto;">
     <img src="images/tintly555.png" alt="Tintly555" style="height:28px;width:auto;display:block;opacity:0.75;" />
     <img src="images/jimmyqrg.png" alt="JimmyQrg" style="height:32px;width:auto;display:block;margin-bottom:2px;opacity:0.75;" />

@@ -1,0 +1,84 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Boss preview</title>
+<style>html,body{margin:0;height:100%;background:#111;overflow:hidden}canvas{display:block}#hud{position:fixed;left:8px;top:6px;color:#9fb;font:12px monospace}</style>
+<div id="hud"></div>
+<script type="module">
+import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.182.0/build/three.module.js";
+const { createBossCreature, DURATIONS } = await import("../js/boss-creature.js?v=" + Date.now());
+const q = new URLSearchParams(location.search);
+const hell = q.get("hell") === "1";
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x252d38);
+scene.fog = new THREE.FogExp2(0x252d38, 0.02);
+const cam = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 200);
+scene.add(new THREE.HemisphereLight(0x8fa0b8, 0x2a2420, 1.1));
+const sun = new THREE.DirectionalLight(0xffe2c0, 2.4);
+sun.position.set(6, 12, 8); sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -12, right: 12, top: 12, bottom: -12, near: 1, far: 40 });
+scene.add(sun);
+const rim = new THREE.PointLight(0xff7a3a, 40, 18, 2); rim.position.set(-4, 3, -5); scene.add(rim);
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), new THREE.MeshStandardMaterial({ color: 0x4a4f56, roughness: 0.9 }));
+floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
+for (let i = -4; i <= 4; i++) { const l = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.02, 80), new THREE.MeshBasicMaterial({ color: 0x333a42 })); l.position.set(i * 4, 0.01, 0); scene.add(l); }
+// A human for scale.
+const man = new THREE.Mesh(new THREE.CapsuleGeometry(0.28, 1.1, 4, 8), new THREE.MeshStandardMaterial({ color: 0x4da3ff }));
+man.position.set(5.5, 0.85, 3); scene.add(man);
+
+const tBuild = performance.now();
+const creature = createBossCreature(THREE, { hell });
+window.__buildMs = Math.round(performance.now() - tBuild);
+scene.add(creature.root);
+const st = { anim: q.get("anim") || "idle", t: 0, walk: q.get("walk") === "1", speed: 5.5, loop: true, yaw: 0, orbit: 0 };
+window.bp = { creature, st, THREE, scene, DURATIONS,
+  setCam(x, y, z, tx, ty, tz) { cam.position.set(x, y, z); cam.lookAt(tx, ty, tz); st.fixed = true; },
+  play(anim, t = 0, loop = true) { st.anim = anim; st.t = t; st.loop = loop; },
+  hold(anim, t) { st.anim = anim; st.t = t; st.loop = false; st.frozen = true; },
+};
+/** Poses the creature headlessly (converged), renders once and returns the frame as a data URL. */
+window.bp.shot = (anim, t, c = [9, 4.2, 10, 0, 1.6, -0.3], walkSteps = 0) => {
+  st.frozen = true; st.fixed = true; st.anim = anim; st.t = t;
+  for (let i = 0; i < 60; i++) {
+    if (walkSteps) { ang += 0.03 * st.speed / 8; creature.root.position.set(Math.sin(ang) * 8, 0, Math.cos(ang) * 8 - 8); creature.root.rotation.y = Math.atan2(Math.cos(ang), -Math.sin(ang)); }
+    creature.update(0.03, { anim, t, moving: !!walkSteps });
+  }
+  cam.position.set(c[0], c[1], c[2]); cam.lookAt(c[3], c[4], c[5]);
+  renderer.render(scene, cam);
+  return renderer.domElement.toDataURL("image/jpeg", 0.8);
+};
+window.bp.renderer = renderer; window.bp.cam = cam;
+cam.position.set(9, 4.5, 11); cam.lookAt(0, 1.6, 0);
+let last = performance.now();
+let ang = 0;
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  if (!st.frozen) {
+    st.t += dt;
+    const d = DURATIONS[st.anim];
+    if (d && st.t > d) { if (st.loop) st.t = 0; else { st.anim = "idle"; st.t = 0; } }
+  }
+  if (st.walk) {
+    ang += dt * st.speed / 8;
+    creature.root.position.set(Math.sin(ang) * 8, 0, Math.cos(ang) * 8 - 8);
+    creature.root.rotation.y = ang + Math.PI / 2 + Math.PI;
+    creature.root.rotation.y = Math.atan2(Math.cos(ang), -Math.sin(ang));
+  }
+  creature.update(dt, { anim: st.anim, t: st.t, moving: st.walk });
+  if (!st.fixed) {
+    st.orbit += dt * 0.25;
+    cam.position.set(Math.sin(st.orbit) * 11, 4.5, Math.cos(st.orbit) * 11 - (st.walk ? 8 : 0));
+    cam.lookAt(st.walk ? 0 : 0, 1.6, st.walk ? -8 : 0);
+  }
+  document.getElementById("hud").textContent = `${st.anim} ${st.t.toFixed(2)}s  hell=${hell}  build=${window.__buildMs}ms`;
+  renderer.render(scene, cam);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+addEventListener("resize", () => { renderer.setSize(innerWidth, innerHeight); cam.aspect = innerWidth / innerHeight; cam.updateProjectionMatrix(); });
+</script>

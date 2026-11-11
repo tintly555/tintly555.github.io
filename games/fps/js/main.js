@@ -1,12 +1,31 @@
     import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.182.0/build/three.module.js";
     import { GLTFLoader } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/loaders/GLTFLoader.js";
+    import { RoundedBoxGeometry } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/geometries/RoundedBoxGeometry.js";
+    import { mergeGeometries, toCreasedNormals } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/utils/BufferGeometryUtils.js";
     import { clone as cloneSkinnedModel } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/utils/SkeletonUtils.js";
+    import { createPvpMaps } from "./pvp-maps.js?v=33";
+    import { createPvpWorld } from "./pvp-world.js?v=2";
+    import { createBossNavigation } from "./boss-navigation.js?v=1";
+    import { BOSS_ARENA_HALF, createCombatEnvironment } from "./combat-environments.js?v=5";
+    import { createBossCreature, BOSS_RADIUS, CLAW_STRIKE_S, QUAKE_SLAM_S, LOB_RELEASE_S, DURATIONS as BOSS_DURATIONS } from "./boss-creature.js?v=8";
+    import { buildOperatorShell } from "./operator-model.js?v=1";
+    import { createMissionConsole } from "./mission-console.js?v=2";
+    import { extendGauntletCourses, GAUNTLET_CHAPTERS, GAUNTLET_CHAPTER_SIZE } from "./gauntlet-courses.js?v=5";
+    import { createGauntletRuntime } from "./gauntlet-runtime.js?v=15";
+    import { createWorldAudio } from "./world-audio.js?v=4";
+    import { createGauntletThemes } from "./gauntlet-themes.js?v=8";
+    import { createPostFx } from "./post-fx.js?v=2";
+    import { poseZombieVariant } from "./zombie-variants.js?v=5";
+    import { BOSS_IMPACT, ZOMBIE_MELEE, zombieStrikeClipPhase, zombieGait } from "./zombie-motion.js";
+    import { ZOMBIE_LOOK_COUNT, loadZombieCharacterMeshes } from "./zombie-character-meshes.js?v=1";
+    import { Footprints, slabBoxes, sampleAt, forwardOf, createPathGeometry } from "./gauntlet-path.js?v=2";
+    import { layoutSeg, composeLeg, lengthenSegs, FIXED, mulberry32 as legRng } from "./gauntlet-legs.js?v=4";
     // The deployed file is translation.js (not translate.js — earlier versions of this HTML had the
     // wrong path and 404'd, which aborted the whole module and left Start unresponsive). The dynamic
     // import + catch is kept so a missing/renamed i18n file still lets the menu boot with a minimal stub.
     let GAME_I18N, LANG_META, translateGame;
     try {
-      const _i18n = await import("./translation.js?v=20260924-fair-quality-v8");
+      const _i18n = await import("./translation.js?v=20261113-pvp-tags-v1");
       GAME_I18N     = _i18n.GAME_I18N;
       LANG_META     = _i18n.LANGUAGE_OPTIONS;
       translateGame = _i18n.translate;
@@ -50,6 +69,8 @@
     const menuPvpMaps = document.getElementById("menuPvpMaps");
     const btnPvpMapClassic = document.getElementById("btnPvpMapClassic");
     const btnPvpMapGrid = document.getElementById("btnPvpMapGrid");
+    const btnPvpMapRuins = document.getElementById("btnPvpMapRuins");
+    const btnPvpMapTown = document.getElementById("btnPvpMapTown");
     const btnPvpMapBack = document.getElementById("btnPvpMapBack");
     const gameBootOverlay = document.getElementById("gameBootOverlay");
     const gameBootLabel = document.getElementById("gameBootLabel");
@@ -114,6 +135,7 @@
       "settingsSectionLanguage",
       "settingsSectionData",
       "settingsSectionServer",
+      "settingsSectionHotbar",
     ];
     const btnCloseSettings = document.getElementById("btnCloseSettings");
     const rngMasterVol = document.getElementById("rngMasterVol");
@@ -154,22 +176,22 @@
      * scale independently; visibility and player/camera behavior never do.
      */
     const QUALITY_PRESETS = {
-      potato:  { label: "POTATO",  dpr: 0.65, minDpr: 0.50, targetFps: 52, aniso: 2,  shadowSz: 256,  shadowDist: 28, shadowSoft: false, bias: -0.0009,  normalBias: 0.018 },
-      regular: { label: "REGULAR", dpr: 0.85, minDpr: 0.64, targetFps: 56, aniso: 6,  shadowSz: 512,  shadowDist: 40, shadowSoft: false, bias: -0.0008,  normalBias: 0.015 },
-      high:    { label: "HIGH",    dpr: 1.00, minDpr: 0.78, targetFps: 58, aniso: 12, shadowSz: 1024, shadowDist: 55, shadowSoft: true,  bias: -0.00065, normalBias: 0.012 },
-      extreme: { label: "EXTREME", dpr: 1.25, minDpr: 0.92, targetFps: 60, aniso: 16, shadowSz: 2048, shadowDist: 72, shadowSoft: true,  bias: -0.00055, normalBias: 0.008 },
+      potato:  { label: "POTATO",  dpr: 0.65, aniso: 2,  shadowSz: 256,  shadowDist: 28, shadowSoft: false, bias: -0.0009,  normalBias: 0.018 },
+      regular: { label: "REGULAR", dpr: 0.85, aniso: 6,  shadowSz: 512,  shadowDist: 40, shadowSoft: false, bias: -0.0008,  normalBias: 0.015 },
+      high:    { label: "HIGH",    dpr: 1.00, aniso: 12, shadowSz: 1024, shadowDist: 55, shadowSoft: true,  bias: -0.00065, normalBias: 0.012 },
+      extreme: { label: "EXTREME", dpr: 1.25, aniso: 16, shadowSz: 2048, shadowDist: 72, shadowSoft: true,  bias: -0.00055, normalBias: 0.008 },
     };
     // Fairness-critical presentation is intentionally identical on every tier.
     // Quality may change fidelity and cost, never visibility, brightness, camera
     // motion, fog obstruction, or the number of lights revealing an enemy.
     const FAIR_PRESENTATION = Object.freeze({
       exposure: 1.05,
-      fog: Object.freeze({ near: 17, far: 82 }),
+      fog: Object.freeze({ near: 12, far: 62 }),
       fogParticles: 32,
       fogOpacity: 0.048,
       fogSize: 10,
-      pointLights: 12,
-      spotLights: 8,
+      pointLights: 8,
+      spotLights: 4,
       warFilm: "0.035",
       shade: "0.06",
     });
@@ -322,8 +344,8 @@
       { id: "speedNeedle", label: "Speed needle",      def: "KeyQ" },
       { id: "jetHarness",  label: "Jet harness",       def: "KeyP" },
       { id: "questHud",    label: "Toggle quest HUD",  def: "KeyM" },
+      { id: "hudHelp",     label: "Toggle controls help", def: "KeyH" },
       { id: "flashlight",  label: "Flashlight",        def: "KeyL" },
-      { id: "flashBeam",   label: "Flashlight beam",   def: "KeyZ" },
       { id: "chat",        label: "Chat",              def: "KeyT" },
     ];
     function defaultKeyBindings() {
@@ -339,6 +361,7 @@
       musicVolume: 1,
       soundVolume: 1,
       qualityIndex: 1,
+      postFx: true,
       texturesOn: true,
       renderDistanceIndex: 2,
       mouseDpi: MOUSE_DPI_DEFAULT,
@@ -364,6 +387,7 @@
         if (typeof o.masterVolume === "number") gameSettings.masterVolume = THREE.MathUtils.clamp(o.masterVolume, 0, 1);
         if (typeof o.musicVolume === "number") gameSettings.musicVolume = THREE.MathUtils.clamp(o.musicVolume, 0, 1);
         if (typeof o.soundVolume === "number") gameSettings.soundVolume = THREE.MathUtils.clamp(o.soundVolume, 0, 1);
+        if (typeof o.postFx === "boolean") gameSettings.postFx = o.postFx;
         if (typeof o.qualityIndex === "number") gameSettings.qualityIndex = THREE.MathUtils.clamp(o.qualityIndex | 0, 0, QUALITY_LEVELS.length - 1);
         if (typeof o.texturesOn === "boolean") gameSettings.texturesOn = o.texturesOn;
         if (typeof o.renderDistanceIndex === "number") {
@@ -491,7 +515,8 @@
     let _freeLookHasLast = false;
 
     function controlsInputReady() {
-      if (!gameWorldReady || player.health <= 0 || paused) return false;
+      if (!gameWorldReady || player.health <= 0 || paused || chatOpen || settingsModalOpen
+          || gauntletClearOpen || bossResultsOpen) return false;
       return state.locked || !!gameSettings.skipClickToPlay;
     }
 
@@ -531,7 +556,7 @@
 
     // v96: hoisted above updateHud to avoid TDZ on initial load (updateHud runs before the
     // INVENTORY block lower in the file would have initialized these).
-    const WEAPON_NAMES_INV     = ["Pistol","AR","Shotgun","SMG","MedKit","AMR","Dart","Knife","???","AS Val"];
+    const WEAPON_NAMES_INV     = ["Pistol","AR","Shotgun","SMG","MedKit","Anti-Materiel Rifle","Dart","Knife","???","AS Val"];
     const WEAPON_NAMES_INV_ZH  = ["手枪","突击步枪","霰弹枪","冲锋枪","医疗包","反器材","麻痹镖","匕首","???","AS Val"];
     const WEAPON_I18N_KEYS     = ["weaponPistol","weaponAR","weaponShotgun","weaponSMG","weaponMedKit","weaponAMR","weaponDart","weaponKnife","weaponDev","weaponAsVal"];
     function weaponDisplayName(widx) {
@@ -539,6 +564,56 @@
       const fallback = WEAPON_NAMES_INV[widx] || "";
       return k ? tr(k, fallback) : fallback;
     }
+
+    /**
+     * One line under each mode button saying what it is, so picking a mode does not take
+     * trial and error. Drawn with ::after from data-desc because data-i18n rewrites the
+     * button's text content on every language change.
+     */
+    function applyMenuDescriptions() {
+      const d = {
+        btnArena: tr("descArena", "Endless dark maze · survive the horde"),
+        btnBossFight: tr("descBoss", "Arena duel against the Hormone Zombie"),
+        btnCrossfire: tr("descPvp", "Online duels against other players"),
+        btnGauntlet: tr("gauntletCourseCount", "{n} obstacle courses").replace("{n}", String(GAUNTLET_LEVEL_COUNT)),
+        btnTraining: tr("descTraining", "Practice range · every weapon unlocked"),
+      };
+      for (const id in d) {
+        const el = document.getElementById(id);
+        if (el) el.dataset.desc = d[id];
+      }
+    }
+
+    /**
+     * Keyboard menu navigation: Esc / Backspace goes back a level, arrow keys move
+     * between the buttons on the current panel, Enter / Space activates.
+     */
+    function visibleMenuButtons() {
+      if (!menuEl || menuEl.style.display === "none" || settingsModalOpen) return [];
+      const panel = document.getElementById(menuEl.dataset.route || "menuMain");
+      return [...(panel?.querySelectorAll("button") || [])].filter((b) =>
+        b.offsetParent !== null && !b.classList.contains("menu-back-btn") && !b.disabled);
+    }
+    document.addEventListener("keydown", (e) => {
+      if (!menuEl || menuEl.style.display === "none" || settingsModalOpen || gameWorldReady) return;
+      if (document.getElementById("achievementsModal").classList.contains("open") || nameModal.style.display === "flex") return;
+      const editing = /INPUT|TEXTAREA|SELECT/.test(e.target?.tagName || "");
+      if (e.key === "Escape" || (e.key === "Backspace" && !editing)) {
+        const back = [...menuEl.querySelectorAll(".menu-back-btn")].find((b) => b.offsetParent !== null);
+        if (back) { e.preventDefault(); back.click(); }
+        return;
+      }
+      if (editing) return;
+      if (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "ArrowLeft" || e.key === "ArrowRight") {
+        const btns = visibleMenuButtons();
+        if (!btns.length) return;
+        e.preventDefault();
+        const cur = btns.indexOf(document.activeElement);
+        const step = e.key === "ArrowDown" || e.key === "ArrowRight" ? 1 : -1;
+        const next = cur < 0 ? (step > 0 ? 0 : btns.length - 1) : (cur + step + btns.length) % btns.length;
+        btns[next].focus();
+      }
+    });
 
     function applyLanguageUI() {
       try {
@@ -577,17 +652,13 @@
         if (el) el.textContent = tr(key, el.textContent);
       }
       if (btnCrossfire) btnCrossfire.textContent = tr("btnCrossfire", btnCrossfire.textContent);
-      const menuSettingsBtn = document.getElementById("btnMenuSettings");
       const pvpTitle = document.querySelector("#menuPvpMaps h2");
       const pvpDesc = document.querySelector("#menuPvpMaps p");
-      /* btnMenuSettings is now a gear SVG icon — no text update needed */
       if (pvpTitle) pvpTitle.textContent = tr("pvpMapTitle", pvpTitle.textContent);
       if (pvpDesc) pvpDesc.textContent = tr("pvpMapDesc", pvpDesc.textContent);
       if (btnArenaSingle) btnArenaSingle.textContent = tr("btnSingleplayer", btnArenaSingle.textContent);
       if (btnArenaCoop) btnArenaCoop.textContent = tr("btnCoopMode", btnArenaCoop.textContent);
       /* btnArenaBack is now an SVG back icon — no text update needed */
-      if (btnPvpMapClassic) btnPvpMapClassic.textContent = tr("pvpMapClassic", btnPvpMapClassic.textContent);
-      if (btnPvpMapGrid) btnPvpMapGrid.textContent = tr("pvpMapGrid", btnPvpMapGrid.textContent);
       /* btnPvpMapBack is now an SVG back icon — no text update needed */
       if (btnQuickplay) btnQuickplay.textContent = tr("btnQuickPlay", btnQuickplay.textContent);
       if (btnCreateRoom) btnCreateRoom.textContent = tr("btnCreateRoom", btnCreateRoom.textContent);
@@ -600,10 +671,8 @@
       /* btnCodeBack is now an SVG back icon — no text update needed */
       const fpsChat = document.getElementById("fpsChatHint");
       const fpsLight = document.getElementById("fpsHintFlash");
-      const fpsZoom = document.getElementById("fpsHintZoom");
       if (fpsChat) fpsChat.textContent = tr("hudHelpChat", fpsChat.textContent);
       if (fpsLight) fpsLight.textContent = tr("hudHelpLight", fpsLight.textContent);
-      if (fpsZoom) fpsZoom.textContent = tr("hudHelpZoom", fpsZoom.textContent);
       const hintEl = document.getElementById("hint");
       if (hintEl) hintEl.textContent = tr("hintClick", hintEl.textContent || "Click anywhere");
       const medkitHoldEl = document.querySelector(".medkit-hold-txt");
@@ -642,8 +711,6 @@
       const pSkip = document.getElementById("skipClickToPlayHint");
       if (lSkip) lSkip.textContent = tr("settingsSkipClickLabel", lSkip.textContent);
       if (pSkip) pSkip.textContent = tr("settingsSkipClickHint", pSkip.textContent);
-      const btnAch = document.getElementById("btnAchievements");
-      /* btnAchievements is now a trophy SVG icon — no text update needed */
       const achTitle = document.getElementById("achMenuTitle");
       const achHint = document.getElementById("achMenuHint");
       if (achTitle) achTitle.textContent = tr("achTitle", achTitle.textContent);
@@ -696,6 +763,8 @@
       // v96: rebuild hotbar + inv bar so weapon names follow the new language.
       try { if (typeof _buildHotbarSettings === "function") _buildHotbarSettings(); } catch (_) {}
       try { if (typeof _buildInvBar === "function") _buildInvBar(); } catch (_) {}
+      applyMenuDescriptions();
+      for (const back of menuEl.querySelectorAll(".menu-back-btn")) back.setAttribute("aria-label", tr("menuBack", "Back"));
     }
 
     let CURRENT_MAP = "arena";
@@ -736,7 +805,8 @@
     };
     let _lastPvpSpawnIdx = -1;
     function pickPvpSpawn(mapName) {
-      const pts = PVP_SPAWN_POINTS[mapName];
+      const themed = pvpMaps.MAPS[mapName];
+      const pts = themed ? themed.spawns.map(([x, z]) => ({ x, z })) : PVP_SPAWN_POINTS[mapName];
       if (!pts || pts.length === 0) return { x: 0, z: 22 };
       let idx;
       do { idx = (Math.random() * pts.length) | 0; } while (idx === _lastPvpSpawnIdx && pts.length > 1);
@@ -744,77 +814,11 @@
       return pts[idx];
     }
 
-    function drawPvpMapPreviews() {
-      const classic = document.getElementById("pvpPreviewClassic");
-      const grid = document.getElementById("pvpPreviewGrid");
-      if (classic && !classic._drawn) {
-        const c = classic.getContext("2d");
-        const w = classic.width, h = classic.height;
-        // Dark concrete arena with atmospheric fog.
-        const sky = c.createLinearGradient(0, 0, 0, h * 0.45);
-        sky.addColorStop(0, "#1a1e2a");
-        sky.addColorStop(1, "#2c3040");
-        c.fillStyle = sky;
-        c.fillRect(0, 0, w, h * 0.45);
-        c.fillStyle = "#22272e";
-        c.fillRect(0, h * 0.45, w, h * 0.55);
-        // Walls and pillars silhouettes.
-        c.fillStyle = "#181c24";
-        c.fillRect(20, h * 0.18, 28, h * 0.55);
-        c.fillRect(70, h * 0.12, 22, h * 0.6);
-        c.fillRect(140, h * 0.22, 26, h * 0.5);
-        c.fillRect(180, h * 0.15, 20, h * 0.58);
-        // Floor grid lines.
-        c.strokeStyle = "rgba(80,95,120,0.25)";
-        c.lineWidth = 1;
-        for (let y = h * 0.5; y < h; y += 12) {
-          c.beginPath(); c.moveTo(0, y); c.lineTo(w, y); c.stroke();
-        }
-        // Atmospheric glow.
-        const glow = c.createRadialGradient(w / 2, h * 0.35, 10, w / 2, h * 0.35, 90);
-        glow.addColorStop(0, "rgba(100,140,200,0.12)");
-        glow.addColorStop(1, "rgba(0,0,0,0)");
-        c.fillStyle = glow;
-        c.fillRect(0, 0, w, h);
-        classic._drawn = true;
-      }
-      if (grid && !grid._drawn) {
-        const c = grid.getContext("2d");
-        const w = grid.width, h = grid.height;
-        // Bright textile-toned killhouse.
-        const sky = c.createLinearGradient(0, 0, 0, h * 0.45);
-        sky.addColorStop(0, "#c8d0da");
-        sky.addColorStop(1, "#a0aab8");
-        c.fillStyle = sky;
-        c.fillRect(0, 0, w, h * 0.45);
-        c.fillStyle = "#8a94a4";
-        c.fillRect(0, h * 0.45, w, h * 0.55);
-        // Grid walls.
-        c.fillStyle = "#6a7488";
-        for (let x = 30; x < w; x += 44) {
-          const wh = 20 + Math.random() * 30;
-          c.fillRect(x, h * 0.25, 16, h * 0.48);
-        }
-        // Floor grid.
-        c.strokeStyle = "rgba(60,70,90,0.3)";
-        c.lineWidth = 1;
-        for (let y = h * 0.48; y < h; y += 10) {
-          c.beginPath(); c.moveTo(0, y); c.lineTo(w, y); c.stroke();
-        }
-        for (let x = 10; x < w; x += 22) {
-          c.beginPath(); c.moveTo(x, h * 0.48); c.lineTo(x, h); c.stroke();
-        }
-        // Daylight glow.
-        const glow = c.createRadialGradient(w / 2, h * 0.2, 20, w / 2, h * 0.2, 110);
-        glow.addColorStop(0, "rgba(255,255,240,0.18)");
-        glow.addColorStop(1, "rgba(0,0,0,0)");
-        c.fillStyle = glow;
-        c.fillRect(0, 0, w, h);
-        grid._drawn = true;
-      }
-    }
+    /** The four themed PVP maps (see js/pvp-maps.js): crossfire, crossfire_grid, pvp_ruins, pvp_town. */
+    const pvpMaps = createPvpMaps(THREE);
+    const pvpDef = (m) => pvpMaps.MAPS[m] || null;
     function isPvpCrossfireMap(m) {
-      return m === "crossfire" || m === "crossfire_grid" || m === "pvp_bright";
+      return !!pvpMaps.MAPS[m] || m === "pvp_bright";
     }
     function isTrainingMap(m) {
       return m === "training";
@@ -826,7 +830,8 @@
       return m === "boss_arena";
     }
     function isBrightIndoorMap(m) {
-      return m === "crossfire_grid" || m === "training" || m === "pvp_bright";
+      const d = pvpMaps.MAPS[m];
+      return m === "training" || m === "pvp_bright" || !!(d && d.env.bright);
     }
     let TRAINING_COOP = false;
     const TRAINING_POINTS = { head: 100, body: 50, leg: 25 };
@@ -881,10 +886,22 @@
     let _pendingServerMode = "";
     let BOSS_FIGHT_COUNT = 1;
     let BOSS_HELL_MODE = false;
+    // Hormone Zombie health pools per mode. A fight should be won in a few minutes with a
+    // rifle, not spent in a 30-minute sponge. Hell is harder through its attacks, not its
+    // health: it has about twice the pool of normal, not five times.
+    const BOSS_HP = Object.freeze({ normalTank: 6000, normalGunner: 4000, hellTank: 12000, hellGunner: 8000 });
+    /** Obstacle margin the boss pathing grid keeps, a little over the hell creature's body radius (2.0). */
+    const BOSS_NAV_RADIUS = 2.1;
+    // The creature's moves. Damage is per landed hit on a 100 HP player; cooldowns are seconds from the
+    // start of the move. Hell is faster and more frequent, not a bigger health bar.
+    const BOSS_TUNING = Object.freeze({
+      normal: Object.freeze({ speed: 5.4, claw: 36, charge: 46, ball: 24, quake: 30, quakeR: 12, clawReach: 5.6,
+        cdClaw: 1.6, cdCharge: 9.5, cdLob: 4.6, cdQuake: 10, chargeSpeed: 23, stun: 3.0 }),
+      hell: Object.freeze({ speed: 6.3, claw: 55, charge: 70, ball: 34, quake: 44, quakeR: 15, clawReach: 5.6,
+        cdClaw: 1.1, cdCharge: 7.0, cdLob: 3.2, cdQuake: 7.5, chargeSpeed: 27, stun: 2.3 }),
+    });
     let DEV_GUN_UNLOCKED = false;
     let CREATOR_UNLOCKED = false;
-    let BOSS_ROUND = 1;
-    let BOSS_ROUND_ACTIVE = false;
     let bossDeathPickupPos = null;
     // ── Boss 震 cycle mechanic ──────────────────────────────────────────────
     const BOSS_SHAKE_CYCLE_MS = 15000;  // 15s per cycle
@@ -901,18 +918,16 @@
     // horizontal. The dash covers the SAME distance at every angle because the direction is
     // a unit vector and updatePlayer integrates `dashRemainingDist` along it — straight up
     // travels exactly as far as straight ahead.
-    const JET_STRAP_MS        = 3000;   // ms: strapping the harness on
-    const JET_ACTIVE_MS       = 10000;  // ms: flight window once it is on
+    const JET_STRAP_MS        = 1700;   // ms: strapping the harness on
+    const JET_ACTIVE_MS       = 6200;  // ms: flight window once it is on
     /**
-     * Cooldown after the flight window closes. Flight costs NO stamina — the harness never
-     * eats into your ground mobility. What limits it is this: once the 10 s window ends you
-     * wait another 10 s before you can strap in again.
+     * Powered bursts spend the same dash charge as a ground dash. The harness
+     * cools down when its flight window closes.
      */
     const JET_COOLDOWN_MS     = 10000;
-    /** Drop (world units) that turns a landing lethal. One vertical dash climbs JET_DASH_DIST. */
-    const JET_FATAL_FALL_DROP = 12.0;
-    /** Warn once the player is this far above the surface they last stood on. */
-    const JET_FALL_WARN_DROP  = 9.0;
+    const SAFE_FALL_DROP = 3;
+    const FATAL_FALL_DROP = 12;
+    const JET_BRAKED_FALL_SPEED = -6;
     let hellLootRing = null;       // 地狱boss死亡光圈
 
     function clearHellLootRing() {
@@ -938,8 +953,8 @@
     /** Chevron points upward in viewBox (+y down); ring offset uses forward-relative bearing so front→top, back→bottom. */
     const HIT_DIR_SVG_PATH =
       "M133.333 13.0913C184.371 14.8246 229.131 41.3388 256 81C226.143 45.1073 179.905 22.0718 128 22.0718C76.096 22.0718 29.8567 45.107 0 81C26.8684 41.339 71.6293 14.8249 122.666 13.0913L128 0L133.333 13.0913Z";
-    let deathAnimTime = 0;
-    const DEATH_ANIM_DURATION = 2.0;
+    let deathAnimStartedAt = null;
+    const DEATH_ANIM_DURATION_MS = 480;
     // Revive flow: 5-second countdown ring; clicking WATCH AD or GIVE UP cancels it.
     // reviveAdWatchedThisLife persists so the second death in the same match goes
     // straight to the existing DEFEAT UI. reviveFlowActive gates the rest of the
@@ -953,8 +968,6 @@
     let reviveAdInProgress = false;
     let reviveAdTimerHandle = null;
     let reviveAdSuccessHandle = null;
-    const lastPlayerHitWorld = new THREE.Vector3();
-    let localDeathGhostGroup = null;
     let deathCamYaw = 0;
     let deathCamPitch = 0;
     let deathBaseFov = 75;
@@ -972,28 +985,13 @@
       }
     }
 
-    const PLAYER_LIGHT_COLOR = 0xfff0d4;
-    // Soft body halo (local camera only) — stronger so it still reads in the arena next to many maze lights.
-    const PLAYER_BODY_INTENSITY = 10;
-    const PLAYER_BODY_DISTANCE = 300;
-
-    // Dual-cone flashlight: narrower cones + lower penumbra so the beam stays tight instead of flooding.
-    const FLASH_OUTER_INTENSITY = 30;
-    const FLASH_OUTER_DISTANCE = 350;
-    const FLASH_OUTER_ANGLE = Math.PI / 6;
-    const FLASH_OUTER_PEN = 0.32;
-
-    const FLASH_INNER_INTENSITY = 150;
-    const FLASH_INNER_DISTANCE = 100;
-    const FLASH_INNER_ANGLE = Math.PI / 16;
-    const FLASH_INNER_PEN = 0.08;
-
-    /** Z cycles 小→中→大 (narrow beam / default / wide flood). Index 1 matches FLASH_OUTER_* defaults. */
-    const FLASH_BEAM_LEVELS = [
-      { outerA: Math.PI / 10, innerA: Math.PI / 26, outerP: 0.2, innerP: 0.045 },
-      { outerA: FLASH_OUTER_ANGLE, innerA: FLASH_INNER_ANGLE, outerP: FLASH_OUTER_PEN, innerP: FLASH_INNER_PEN },
-      { outerA: Math.PI / 4.0, innerA: Math.PI / 11, outerP: 0.48, innerP: 0.16 },
-    ];
+    const FLASH_COLOR = 0xf4f7ff;
+    const FLASH_POWER = 96;
+    const ARENA_FLASH_POWER = 56;
+    const ARENA_FLASH_SURFACE_LIMIT = 12;
+    const FLASH_RANGE = 43;
+    const FLASH_ANGLE = Math.PI / 10;
+    const FLASH_PENUMBRA = .62;
 
     /**
      * Punctual lights only (Point / Spot). Hemisphere & directional lights have no decay in Three.js.
@@ -1026,7 +1024,7 @@
             return;
           }
           if (_ev === "quickplay" || _ev === "createRoom") {
-            const mode = String(args[0] || "arena");
+            const mode = String(args[0]?.mode || args[0] || "arena");
             const code = (Math.random().toString(36).slice(2, 8) + "XX").slice(0, 6).toUpperCase();
             reply({ roomKey: `${mode}:${code}`, room: code, code });
             return;
@@ -1182,7 +1180,7 @@
           ),
         };
       }
-      return { roomKey, roomCode: roomCode || roomKey };
+      return { roomKey, roomCode: roomCode || roomKey, map: inner.map, options: inner.options };
     }
 
     function getMultiplayerOrigin() {
@@ -1230,6 +1228,26 @@
 
     let activeRoomId = "";
     let _joinRoomGeneration = 0;
+    let lastPlayerSyncAt = -Infinity;
+
+    function requestMatchSnapshot() {
+      if (!MULTIPLAYER || !activeRoomId || !gameWorldReady) return;
+      const room = activeRoomId;
+      socket.emit("matchSnapshot", snapshot => {
+        if (!snapshot?.ok || room !== activeRoomId || snapshot.roomKey !== room || !gameWorldReady) return;
+        for (const remote of snapshot.players || []) applyRemotePlayerState(remote);
+        if (snapshot.world && (ARENA_COOP || TRAINING_COOP) && (!ZOMBIE_AUTHORITY || snapshot.world.hostId !== socket.id)) {
+          applyZombieSyncPayload(snapshot.world, true);
+        }
+        if (snapshot.training) applyTrainingTeamState(snapshot.training);
+      });
+    }
+
+    function broadcastPlayerAction(action) {
+      if (!MULTIPLAYER || !gameWorldReady) return;
+      const { x, y, z } = player.position;
+      socket.emit("playerAction", { action, weapon: state.weaponIndex, x, y, z });
+    }
 
     /** Sets zombie sim authority from server ack (works even if `zombieHost` broadcast is delayed or dropped). */
     function emitJoinRoomWithAck() {
@@ -1239,7 +1257,8 @@
       socket.emit("joinRoom", activeRoomId, (ack) => {
         if (gen !== _joinRoomGeneration) return;
         if (!ack || !ack.ok) return;
-        if (MULTIPLAYER && ARENA_COOP && (isArenaLikeMap(CURRENT_MAP) || isBossArenaMap(CURRENT_MAP))) {
+        requestMatchSnapshot();
+        if (MULTIPLAYER && (ARENA_COOP || TRAINING_COOP)) {
           ZOMBIE_HOST_KNOWN = true;
           if (ack.hostId != null) {
             ZOMBIE_AUTHORITY = String(ack.hostId) === String(socket.id);
@@ -1264,7 +1283,8 @@
     socket.on("connect_error", (err) => {
       console.warn("Socket connect_error:", err?.message || err);
     });
-    socket.on("enemyMove", (data) => {
+    function applyRemotePlayerState(data) {
+      if (!MULTIPLAYER || !data?.id || data.id === socket.id) return;
       let rp = remotePlayers.get(data.id);
       if (!rp) {
         rp = createRemotePlayer(data.name);
@@ -1313,18 +1333,41 @@
         typeof data.pitch === "number"
           ? THREE.MathUtils.clamp(data.pitch, -1.15, 1.15)
           : 0;
-      if (rp.isDown) {
-        // Body came back alive (server respawn or new round) — clear prediction.
-        const sinceDown = performance.now() - (rp.downAt || 0);
-        if (sinceDown > 1200) {
-          rp.isDown = false;
-          rp.hpEstimate = 100;
-          rp.group.visible = true;
-        }
-      } else {
-        rp.group.visible = true;
+      rp.remoteReload = data.reload;
+      rp.healProgress = data.heal ?? 0;
+      rp.dashing = !!data.dash;
+      rp.grounded = data.grounded;
+      rp.lightOn = data.light;
+      rp.needlePhase = data.needle;
+      rp.remoteHealth = data.health;
+      rp.remoteAmmo = data.ammo;
+      rp.remoteSlow = data.slow;
+      if (typeof data.health === "number") rp.hpEstimate = data.health;
+      if (typeof data.down === "boolean") {
+        rp.isDown = data.down;
+      } else if (rp.isDown && performance.now() - (rp.downAt || 0) > 1200) {
+        rp.isDown = false;
+        rp.hpEstimate = 100;
+      }
+      rp.group.visible = !rp.isDown;
+    }
+    socket.on("enemyMove", applyRemotePlayerState);
+
+    socket.on("playerAction", data => {
+      if (!MULTIPLAYER || !gameWorldReady || !data) return;
+      const rp = remotePlayers.get(data.id);
+      if (!rp || rp.isDown) return;
+      const now = performance.now();
+      if (data.action === "fire") {
+        rp.firedAt = now;
+        playNetworkShot({ id: data.id, sx: data.x, sy: data.y, sz: data.z });
+      } else if (data.action === "knife") {
+        rp.swungAt = now;
+      } else if (data.action === "heal") {
+        rp.healProgress = Math.max(rp.healProgress || 0, 0.1);
       }
     });
+
 
     /** PvP: optional relay event — remote body hidden immediately on death; `enemyMove` shows again on respawn. */
     socket.on("playerDown", (data) => {
@@ -1525,8 +1568,11 @@
     socket.on("playerBlind", handleIncomingDartSlowEvent);
     socket.on("blind", handleIncomingDartSlowEvent);
 
-    socket.on("shoot", (data) => {
-      if (!data) return;
+    function applyRemoteShot(data) {
+      if (!MULTIPLAYER || !data) return;
+      const rp = remotePlayers.get(data.id);
+      if (rp && performance.now() - (rp.firedAt ?? -Infinity) > 55) rp.firedAt = performance.now();
+      if (String(extractShooterId(data)) !== String(socket.id)) playNetworkShot(data);
       if (shootDataLooksLikeDart(data)) {
         const sid = extractShooterId(data);
         if (sid && sid !== String(socket.id)) {
@@ -1568,28 +1614,9 @@
       } else if (data.type === "blind" || data.type === "dartSlow") {
         createSparks(pt, 0x6bd4ff);
       }
-    });
-
-    socket.on("enemyShoot", (data) => {
-      if (data.sx != null && data.sy != null && data.sz != null
-          && data.x != null && data.y != null && data.z != null) {
-        createBulletTrail(
-          new THREE.Vector3(data.sx, data.sy, data.sz),
-          new THREE.Vector3(data.x, data.y, data.z),
-          data.color ?? 0xffffff
-        );
-      }
-      if (data.type === "miss") return;
-
-      const pt = new THREE.Vector3(data.x, data.y, data.z);
-      if (data.type === "blood") {
-        createBlood(pt);
-      } else if (data.type === "spark") {
-        createSparks(pt, data.color || 0xffdd88);
-        const n = new THREE.Vector3(data.nx, data.ny, data.nz);
-        if (n.lengthSq() > 0) createBulletMark(pt, n);
-      }
-    });
+    }
+    socket.on("shoot", applyRemoteShot);
+    socket.on("enemyShoot", applyRemoteShot);
 
     socket.on("chat", (data) => {
       if (data.id === "system") {
@@ -1747,9 +1774,6 @@
       player.health = Math.max(0, player.health - netDmg);
       player.regenTimer = 0;
       state.flashTimer = 0.14;
-      if (data.x != null && data.z != null) {
-        lastPlayerHitWorld.set(+data.x, player.position.y + 1.05, +data.z);
-      }
       addHitIndicator(data.x || 0, data.z || 0);
       triggerCamShake(0.085);
       playReceivedDamageSound(data.hitKind === "melee" ? "melee" : "bullet");
@@ -1761,27 +1785,57 @@
 
     socket.on("zombieHost", (data) => {
       ZOMBIE_HOST_KNOWN = true;
+      const hadAuthority = ZOMBIE_AUTHORITY;
       ZOMBIE_AUTHORITY = !!(data && String(data.hostId) === String(socket.id));
+      if (ZOMBIE_AUTHORITY && !hadAuthority) requestMatchSnapshot();
     });
 
     socket.on("zombieSync", (data) => {
-      if (!MULTIPLAYER || !ARENA_COOP || !(isArenaLikeMap(CURRENT_MAP) || isBossArenaMap(CURRENT_MAP))) return;
+      if (!MULTIPLAYER || !(ARENA_COOP || TRAINING_COOP)) return;
       if (ZOMBIE_AUTHORITY) return;
       applyZombieSyncPayload(data);
     });
 
+    socket.on("zombieShotTrail", data => {
+      if (!MULTIPLAYER || !gameWorldReady || !data) return;
+      const from = new THREE.Vector3(data.sx, data.sy, data.sz);
+      createBulletTrail(from, new THREE.Vector3(data.x, data.y, data.z), 0xff6666);
+      if (worldAudioReady()) worldAudio.play("shot", from, { volume: 0.58 });
+    });
+
+    socket.on("bossProjectileHit", data => {
+      if (!MULTIPLAYER || !ARENA_COOP || !ZOMBIE_AUTHORITY || data?.by === socket.id) return;
+      const bp = bossProjectiles.find(projectile => projectile.netId === data?.id);
+      const w = weapons[data?.weapon];
+      if (bp && w) bp.hp -= w.damageBody;
+    });
+
     socket.on("zombieDamaged", (data) => {
       // v33: previously rejected boss_arena, breaking boss co-op damage from joiners.
-      if (!MULTIPLAYER || !ARENA_COOP) return;
-      if (!(isArenaLikeMap(CURRENT_MAP) || isBossArenaMap(CURRENT_MAP))) return;
+      if (!MULTIPLAYER || !(ARENA_COOP || TRAINING_COOP)) return;
       if (!ZOMBIE_AUTHORITY || !data) return;
       if (data.by === socket.id) return;
       const ei = data.ei | 0;
       if (ei < 0 || ei >= state.enemies.length) return;
       const enemy = state.enemies[ei];
+      if (!enemy?.alive) return;
       let wi = ((data.weaponIndex | 0) % weapons.length + weapons.length) % weapons.length;
       if (wi === 4) wi = 0;
       const w = weapons[wi];
+      if (enemy.trainingDummy) {
+        enemy.hp = Math.max(0, enemy.hp - (data.zone === "head" ? w.damageHead : data.zone === "leg" ? w.damageLegs : w.damageBody));
+        if (enemy.hp === 0) {
+          enemy.alive = false;
+          enemy.group.visible = false;
+          enemy.respawnTimer = zombieRespawnDelay();
+        }
+        drawEnemyHp(enemy);
+        return;
+      }
+      if (wi === 6) {
+        enemy.slowUntil = performance.now() + (data.slowDuration || w.slowDuration || 5) * 1000;
+        return;
+      }
       applyDamage(enemy, data.zone, w);
       drawEnemyHp(enemy);
       if (enemy.hp <= 0 && enemy.alive) {
@@ -1966,15 +2020,15 @@
         ctx.font = "bold 18px Audiowide, Arial";
         ctx.textBaseline = "middle";
         ctx.fillStyle = achDef.color || "#ffd700";
-        ctx.fillText(achName(achDef).slice(0, 12), w * 0.5, 18);
+        ctx.fillText(achName(achDef), w * 0.5, 18, w - 16);
         ctx.font = "bold 24px Audiowide, Arial";
         ctx.fillStyle = "#fff";
-        ctx.fillText((name || "Player").slice(0, 16), w * 0.5, 50);
+        ctx.fillText(name || "Player", w * 0.5, 50, w - 16);
       } else {
         ctx.font = "bold 28px Audiowide, Arial";
         ctx.textBaseline = "middle";
         ctx.fillStyle = "#fff";
-        ctx.fillText((name || "Player").slice(0, 16), w * 0.5, h * 0.5);
+        ctx.fillText(name || "Player", w * 0.5, h * 0.5, w - 16);
       }
     }
 
@@ -2030,7 +2084,48 @@
       return out;
     }
 
+    /**
+     * Third-person guns reuse the first-person geometry (no hands), scaled to the avatar and
+     * shifted so the pistol grip lands where the old grip block was — the remote-player hand
+     * grip sockets still line up.
+     */
+    const TP_GUN_FIT = {
+      0: { s: 0.85, grip: [0, -0.1, 0.08] },
+      1: { s: 0.62, grip: [0, -0.12, 0.08] },
+      2: { s: 0.62, grip: [0, -0.03, 0.12] },
+      3: { s: 0.7, grip: [0, -0.1, 0.06] },
+      5: { s: 0.62, grip: [0, -0.1, 0.1] },
+      9: { s: 0.62, grip: [0, -0.12, 0.08] },
+    };
     function makeThirdPersonGun(type) {
+      if (type === 4) {
+        const { pack, lid } = makeMedpackCase();
+        pack.userData.medLid = lid;
+        pack.userData.primaryGrip = new THREE.Vector3(...MEDPACK_GRIP.r);
+        pack.userData.gripSpec = MEDPACK_GRIP;
+        return pack;
+      }
+      const fit = TP_GUN_FIT[type];
+      if (fit) {
+        const vm = makeWeaponModel(type, { noHands: true });
+        const gun = vm.userData.gun;
+        const spec = VIEW_HAND_GRIPS[type];
+        const out = new THREE.Group();
+        gun.position.set(
+          fit.grip[0] - spec.r[0] * fit.s,
+          fit.grip[1] - spec.r[1] * fit.s,
+          fit.grip[2] - spec.r[2] * fit.s
+        );
+        gun.scale.setScalar(fit.s);
+        out.add(gun);
+        out.userData.primaryGrip = new THREE.Vector3(...fit.grip);
+        out.userData.gripSpec = spec;
+        out.userData.muzzle = vm.userData.muzzleNode;
+        out.userData.slide = vm.userData.animSlide || vm.userData.animBolt || vm.userData.animPump;
+        out.userData.magazine = vm.userData.animMag;
+        out.userData.magazineRest = vm.userData.animMag?.position.clone();
+        return out;
+      }
       const g = new THREE.Group();
       const mDark = new THREE.MeshStandardMaterial({ color: 0x1a1f28, roughness: 0.6, metalness: 0.4 });
       const mMetal = new THREE.MeshStandardMaterial({ color: 0x3a4455, roughness: 0.5, metalness: 0.5 });
@@ -2075,16 +2170,6 @@
         addMeshPart(g, new THREE.ConeGeometry(0.015, 0.05, 8), mLight, 0, 0.04, -0.27, bz, 0, 0);
         addMeshPart(g, new THREE.BoxGeometry(0.05, 0.14, 0.07), mDark, 0, -0.10, 0.10);
         addMeshPart(g, new THREE.BoxGeometry(0.04, 0.08, 0.06), mBlack, 0, -0.07, 0.04);
-      } else if (type === 4) {
-        // Med kit — white case with a red cross, unmistakable at a distance.
-        const mCase = new THREE.MeshStandardMaterial({ color: 0xf2f2f2, roughness: 0.55 });
-        const mCross = new THREE.MeshStandardMaterial({ color: 0xd42020, roughness: 0.5 });
-        const mStrap = new THREE.MeshStandardMaterial({ color: 0x4a3a22, roughness: 0.85 });
-        addMeshPart(g, new THREE.BoxGeometry(0.22, 0.17, 0.13), mCase, 0, 0, 0);
-        addMeshPart(g, new THREE.BoxGeometry(0.115, 0.032, 0.005), mCross, 0, 0, -0.068);
-        addMeshPart(g, new THREE.BoxGeometry(0.032, 0.115, 0.005), mCross, 0, 0, -0.068);
-        addMeshPart(g, new THREE.BoxGeometry(0.23, 0.03, 0.135), mStrap, 0, 0.055, 0);
-        addMeshPart(g, new THREE.BoxGeometry(0.05, 0.022, 0.03), mStrap, 0, 0.098, 0);
       } else if (type === 7) {
         // Combat knife — short blade, held point-down in one fist.
         const mBlade = new THREE.MeshStandardMaterial({ color: 0xd8dee6, roughness: 0.2, metalness: 0.85 });
@@ -2133,20 +2218,6 @@
       }
     }
 
-    /**
-     * Fore-grip anchor on the third-person weapon mesh so the support-hand glove can be parented
-     * and stay visually welded while the primary arm drives recoil/reload.
-     */
-    /** Left (support) glove — sits on foregrip after the gun's Y=PI flip, lining up with the crossed-over left wrist. */
-    const REMOTE_SUPPORT_SOCKET_LOCAL = {
-      0: { x: 0.075, y: -0.10, z: -0.04 },
-      1: { x: 0.080, y: -0.105, z: -0.06 },
-      2: { x: 0.082, y: -0.108, z: -0.05 },
-      3: { x: 0.076, y: -0.102, z: -0.05 },
-      5: { x: 0.082, y: -0.108, z: -0.08 },
-      6: { x: 0.076, y: -0.102, z: -0.04 },
-      8: { x: 0.090, y: -0.115, z: -0.07 },
-    };
     /** Right (primary) glove — sits on pistol grip after Y=PI flip, lining up with the right wrist in the shoulder pocket. */
     const REMOTE_PRIMARY_GRIP_LOCAL = {
       0: { x: -0.045, y: -0.10, z: -0.02 },
@@ -2205,12 +2276,12 @@
     function applyRemoteAvatarPalette(opts) {
       const duelBright = !!opts.duelBright;
       const hueShift = typeof opts.hueShift === "number" ? opts.hueShift : 0;
-      const camoA = duelBright ? 0x4a6d55 : 0x3b5a3e;
-      const camoB = duelBright ? 0x355f42 : 0x2d4a30;
-      const helm = duelBright ? 0x5f7386 : 0x4a5a4e;
-      const vest = duelBright ? 0x6f8270 : 0x5c6b54;
-      const pants = duelBright ? 0x454842 : 0x3a3d32;
-      const emissive = duelBright ? 0x223024 : 0x000000;
+      const camoA = duelBright ? 0x4c5b61 : 0x3a4549;
+      const camoB = duelBright ? 0x36464b : 0x293638;
+      const helm = duelBright ? 0x65777d : 0x526264;
+      const vest = duelBright ? 0x657476 : 0x535f60;
+      const pants = duelBright ? 0x465256 : 0x383f43;
+      const emissive = duelBright ? 0x222d2f : 0x000000;
       const emissiveIntensity = duelBright ? 0.22 : 0;
       const mk = (hex, rough, metal) => {
         const col = tintHexColor(hex, hueShift * 0.08);
@@ -2232,49 +2303,33 @@
       };
     }
 
-    function attachRemoteSupportHand(gunModel, weaponType, gloveMat) {
-      const wt = weaponType | 0;
-      if (wt === 4) return null;
-      const sockPos = REMOTE_SUPPORT_SOCKET_LOCAL[wt] || REMOTE_SUPPORT_SOCKET_LOCAL[1];
+    function attachRemoteSupportHand(gunModel, weaponType) {
+      const offsets = { 0: 0.045, 1: 0.23, 2: 0.24, 3: 0.14, 5: 0.25, 6: 0.08, 8: 0.17, 9: 0.21 };
+      const grip = gunModel.userData.primaryGrip || new THREE.Vector3(0, -0.10, 0.08);
       const socket = new THREE.Group();
-      socket.name = "remoteSupportSocket";
-      socket.position.set(sockPos.x, sockPos.y, sockPos.z);
-      socket.rotation.order = "YXZ";
-      socket.rotation.x = wt === 2 ? 0.32 : wt === 5 ? 0.22 : 0.2;
-      socket.rotation.y = wt === 2 ? -0.08 : -0.04;
-      socket.rotation.z = 0.02;
-      addRemoteGripGlove(socket, gloveMat);
+      socket.position.copy(grip);
+      socket.position.z -= offsets[weaponType] || 0.15;
+      socket.position.y += weaponType === 0 ? -0.014 : 0.09;
+      if (weaponType === 0) socket.position.x += 0.039;
+      socket.rotation.set(-Math.PI / 2, 0, -0.26);
+      const kit = new GunKit();
+      const wrist = buildGloveParts(kit, socket, "L", weaponType === 0 ? 0.017 : 0.028);
+      kit.flush();
+      socket.userData.wrist = new THREE.Vector3(...wrist);
       gunModel.add(socket);
       return socket;
     }
 
-    function addRemoteGripGlove(socket, gloveMat) {
-      const palm = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.1, 0.11), gloveMat);
-      palm.castShadow = true;
-      palm.receiveShadow = true;
-      socket.add(palm);
-      const thumb = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.045, 0.055), gloveMat);
-      thumb.position.set(-0.055, -0.025, 0.045);
-      thumb.castShadow = true;
-      socket.add(thumb);
-      const wrap = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.07, 0.13), gloveMat);
-      wrap.position.set(0, 0.02, -0.02);
-      wrap.castShadow = true;
-      socket.add(wrap);
-    }
-
-    function attachRemotePrimaryHand(gunModel, weaponType, gloveMat) {
-      const wt = weaponType | 0;
-      if (wt === 4) return null;
-      const sockPos = REMOTE_PRIMARY_GRIP_LOCAL[wt] || REMOTE_PRIMARY_GRIP_LOCAL[1];
+    function attachRemotePrimaryHand(gunModel, weaponType) {
       const socket = new THREE.Group();
-      socket.name = "remotePrimarySocket";
-      socket.position.set(sockPos.x, sockPos.y, sockPos.z);
-      socket.rotation.order = "YXZ";
-      socket.rotation.x = 0.16;
-      socket.rotation.y = 0.05;
-      socket.rotation.z = -0.04;
-      addRemoteGripGlove(socket, gloveMat);
+      const fallback = REMOTE_PRIMARY_GRIP_LOCAL[weaponType] || REMOTE_PRIMARY_GRIP_LOCAL[1];
+      socket.position.copy(gunModel.userData.primaryGrip || fallback);
+      const spec = gunModel.userData.gripSpec;
+      socket.rotation.x = spec?.rRot[0] || -0.17;
+      const kit = new GunKit();
+      const wrist = buildGripGlove(kit, socket, "R", spec?.ga ?? 0.019, spec?.gb ?? 0.025);
+      kit.flush();
+      socket.userData.wrist = new THREE.Vector3(...wrist);
       gunModel.add(socket);
       return socket;
     }
@@ -2362,65 +2417,155 @@
     }
 
     function equipRemotePlayerWeapon(rp, weaponType) {
-      // Was `% 7`: the knife folded onto the pistol, the dev gun onto the AR, and the med
-      // kit just hid the hold group so the opponent appeared empty-handed. All nine slots
-      // now have a distinct silhouette.
-      const wt = THREE.MathUtils.clamp(weaponType | 0, 0, weapons.length - 1);
-      const gloveMat =
-        rp.gloveMat ||
-        new THREE.MeshStandardMaterial({ color: 0x3a3528, roughness: 0.9 });
-      if (!rp.gloveMat) rp.gloveMat = gloveMat;
+      const type = THREE.MathUtils.clamp(weaponType | 0, 0, weapons.length - 1);
+      if (rp.gunModel && rp.currentWeapon === type) return;
       const hold = getOrCreateRemoteWeaponHold(rp.group);
       rp.weaponHold = hold;
+      rp.weaponCache ||= new Map();
       if (rp.gunModel) {
+        rp.weaponCache.set(rp.currentWeapon, {
+          model: rp.gunModel,
+          support: rp.supportSocket,
+          primary: rp.primarySocket,
+        });
         hold.remove(rp.gunModel);
-        rp.gunModel = null;
-        rp.supportSocket = null;
-        rp.primarySocket = null;
+      }
+      let equipped = rp.weaponCache.get(type);
+      if (!equipped) {
+        const model = makeThirdPersonGun(type);
+        applyThirdPersonGunToChestHold(model, type);
+        equipped = {
+          model,
+          primary: attachRemotePrimaryHand(model, type),
+          support: isRemoteOneHandItem(type) ? null : attachRemoteSupportHand(model, type),
+        };
+        rp.weaponCache.set(type, equipped);
       }
       hold.visible = true;
-      if (isRemoteOneHandItem(wt)) {
-        const item = makeThirdPersonGun(wt);
-        applyThirdPersonGunToChestHold(item, wt);
-        hold.add(item);
-        rp.gunModel = item;
-        rp.supportSocket = null;
-        rp.primarySocket = attachRemotePrimaryHand(item, wt, gloveMat);
-        rp.currentWeapon = wt;
-        return;
-      }
-      const gunModel = makeThirdPersonGun(wt);
-      applyThirdPersonGunToChestHold(gunModel, wt);
-      hold.add(gunModel);
-      rp.gunModel = gunModel;
-      rp.supportSocket = attachRemoteSupportHand(gunModel, wt, gloveMat);
-      rp.primarySocket = attachRemotePrimaryHand(gunModel, wt, gloveMat);
-      rp.currentWeapon = wt;
+      hold.add(equipped.model);
+      rp.gunModel = equipped.model;
+      rp.primarySocket = equipped.primary;
+      rp.supportSocket = equipped.support;
+      rp.currentWeapon = type;
     }
 
-    function applyRemoteTwoHandStance(rp, dt, moving, wSin, idlePhase, adsBlend) {
-      const wt = rp.currentWeapon | 0;
-      const stance = REMOTE_TWO_HAND_STANCE[wt] || REMOTE_ONE_HAND_STANCE[wt];
-      if (!stance) return;
-      const breathe = Math.sin(idlePhase) * (moving ? 0.018 : 0.028);
-      const holdY = stance.holdY - adsBlend * 0.04 + breathe * 0.15;
-      const holdZ = stance.holdZ + adsBlend * 0.05;
-      const holdX = typeof stance.holdX === "number" ? stance.holdX : 0;
-      if (rp.weaponHold) {
-        rp.weaponHold.position.y = dampScalar(rp.weaponHold.position.y, holdY, dt, 11);
-        rp.weaponHold.position.z = dampScalar(rp.weaponHold.position.z, holdZ, dt, 11);
-        rp.weaponHold.position.x = dampScalar(rp.weaponHold.position.x, holdX, dt, 11);
+    const armDown = new THREE.Vector3(0, -1, 0);
+    const armReach = new THREE.Vector3(), armBend = new THREE.Vector3(), armJoint = new THREE.Vector3();
+    const armFore = new THREE.Vector3(), armPoint = new THREE.Vector3(), armRotation = new THREE.Quaternion();
+
+    function socketWrist(rp, socket, out) {
+      out.copy(socket.userData.wrist);
+      socket.localToWorld(out);
+      return rp.group.worldToLocal(out);
+    }
+
+    function poseOperatorArm(shoulder, elbow, wrist, side) {
+      const upper = 0.36, lower = 0.35;
+      armReach.subVectors(wrist, shoulder.position);
+      const length = Math.max(0.08, Math.min(upper + lower - 0.005, armReach.length()));
+      armReach.normalize();
+      armBend.set(side * 0.75, -1, -0.12);
+      armBend.addScaledVector(armReach, -armBend.dot(armReach)).normalize();
+      const along = (upper * upper - lower * lower + length * length) / (2 * length);
+      const out = Math.sqrt(Math.max(0, upper * upper - along * along));
+      armJoint.copy(armReach).multiplyScalar(along).addScaledVector(armBend, out);
+      shoulder.quaternion.setFromUnitVectors(armDown, armFore.copy(armJoint).normalize());
+      armFore.copy(armReach).multiplyScalar(length).sub(armJoint).normalize();
+      armFore.applyQuaternion(armRotation.copy(shoulder.quaternion).invert());
+      elbow.quaternion.setFromUnitVectors(armDown, armFore);
+    }
+
+    function updateRemoteOperator(rp, dt, stride, walk, aim, now) {
+      const type = rp.currentWeapon | 0;
+      const stance = REMOTE_TWO_HAND_STANCE[type] || REMOTE_ONE_HAND_STANCE[type] || REMOTE_TWO_HAND_STANCE[1];
+      const model = rp.gunModel;
+      if (!model || !rp.primarySocket) return;
+      const age = Math.max(0, now - (rp.firedAt ?? -Infinity)) * 0.001;
+      const kick = Math.exp(-age * 18) * (type === 2 || type === 5 ? 1 : 0.56);
+      const reload = rp.isReloading ? rp.remoteReload ?? Math.min(1, (rp.reloadPhase += dt) / (weapons[type].reloadTime / 1000)) : 0;
+      if (!rp.isReloading) rp.reloadPhase = 0;
+      const service = Math.sin(reload * Math.PI);
+      rp.healBlend = dampScalar(rp.healBlend || 0, type === 4 ? rp.healProgress || 0 : 0, dt, 14);
+      const heal = rp.healBlend;
+      const treatment = Math.sin(heal * Math.PI);
+      const carry = Math.sin(rp.idlePhase) * 0.011 * (1 - aim);
+      const dash = rp.dashing ? 1 : 0;
+      const slash = Math.max(0, 1 - (now - (rp.swungAt ?? -Infinity)) / 450);
+      const hold = rp.weaponHold;
+      if (rp.carrier) {
+        rp.carrier.rotation.set(stride * 0.13 + (rp.crouchDrop || 0) * 0.25 + treatment * 0.12,
+          walk * 0.11, -walk * 0.026);
       }
-      const rs = stance.r;
-      const ls = stance.l;
-      const rx = rs.x + (moving ? wSin * 0.08 : breathe * 0.35);
-      const lx = ls.x + (moving ? wSin * 0.07 : breathe * 0.3);
-      rp.rightArm.rotation.x = dampScalar(rp.rightArm.rotation.x, rx, dt, 12);
-      rp.rightArm.rotation.y = dampScalar(rp.rightArm.rotation.y, rs.y + (moving ? wSin * 0.04 : 0), dt, 11);
-      rp.rightArm.rotation.z = dampScalar(rp.rightArm.rotation.z, rs.z, dt, 11);
-      rp.leftArm.rotation.x = dampScalar(rp.leftArm.rotation.x, lx, dt, 12);
-      rp.leftArm.rotation.y = dampScalar(rp.leftArm.rotation.y, ls.y - (moving ? wSin * 0.04 : 0), dt, 11);
-      rp.leftArm.rotation.z = dampScalar(rp.leftArm.rotation.z, ls.z, dt, 11);
+      hold.position.set(
+        stance.holdX - aim * 0.11 - service * 0.05 - treatment * 0.10 + walk * 0.018,
+        stance.holdY + aim * 0.15 - service * 0.12 + treatment * 0.18 - dash * 0.10 + carry - (rp.crouchDrop || 0),
+        stance.holdZ - 0.11 + aim * 0.035 - kick * 0.065 - service * 0.035 + slash * 0.13
+      );
+      hold.rotation.set(-(rp.remotePitch || 0) * 0.90 - kick * 0.10 + service * 0.14 + dash * 0.19,
+        slash * -0.9, service * 0.61 + walk * 0.033 - treatment * 0.24, "YXZ");
+      if (model.userData.slide) model.userData.slide.position.z = kick * 0.055;
+      if (model.userData.magazine) {
+        model.userData.magazine.position.copy(model.userData.magazineRest);
+        model.userData.magazine.position.y -= service * 0.15;
+      }
+      if (model.userData.medLid) model.userData.medLid.rotation.x = -treatment * 1.20;
+
+      rp.group.updateWorldMatrix(true, true);
+      rp.primarySocket.visible = true;
+      if (rp.rightFreeHand) rp.rightFreeHand.visible = false;
+      poseOperatorArm(rp.rightArm, rp.rightElbow, socketWrist(rp, rp.primarySocket, armPoint), 1);
+      const support = rp.supportSocket && !rp.isReloading;
+      if (rp.supportSocket) rp.supportSocket.visible = !!support;
+      if (rp.leftFreeHand) rp.leftFreeHand.visible = !support;
+      if (support) {
+        socketWrist(rp, rp.supportSocket, armPoint);
+      } else if (service > 0.01 || treatment > 0.01) {
+        armPoint.set(hold.position.x - 0.07, hold.position.y - 0.15 + treatment * 0.13,
+          hold.position.z + 0.02 - treatment * 0.14);
+      } else {
+        armPoint.set(-0.37, 0.78 - (rp.crouchDrop || 0) + dash * 0.21 + Math.abs(walk) * 0.07, 0.14 + walk * 0.18 + slash * 0.10);
+      }
+      poseOperatorArm(rp.leftArm, rp.leftElbow, armPoint, -1);
+
+      if (rp.muzzleFlash) {
+        rp.muzzleFlash.visible = age < 0.053 && type !== 4 && type !== 7;
+        if (rp.muzzleFlash.visible) {
+          if (model.userData.muzzle) model.userData.muzzle.getWorldPosition(armPoint);
+          else model.localToWorld(armPoint.set(0, 0, -0.34));
+          rp.group.worldToLocal(armPoint);
+          rp.muzzleFlash.position.copy(armPoint);
+          rp.muzzleFlash.scale.setScalar(0.24 + kick * 0.20);
+          rp.muzzleFlash.material.opacity = Math.max(0, 1 - age / 0.053);
+        }
+      }
+    }
+
+    let operatorFlashTexture;
+
+    function batchOperatorShell(parent) {
+      const byMaterial = new Map();
+      for (const mesh of parent.children) {
+        if (!mesh.isMesh || mesh.material.transparent || Array.isArray(mesh.material)) continue;
+        const parts = byMaterial.get(mesh.material) || [];
+        parts.push(mesh);
+        byMaterial.set(mesh.material, parts);
+      }
+      for (const [material, parts] of byMaterial) {
+        if (parts.length < 2) continue;
+        const baked = parts.map(mesh => {
+          mesh.updateMatrix();
+          const geometry = mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry.clone();
+          geometry.applyMatrix4(mesh.matrix);
+          geometry.clearGroups();
+          return geometry;
+        });
+        const merged = mergeGeometries(baked);
+        for (const geometry of baked) geometry.dispose();
+        if (!merged) continue;
+        parent.remove(...parts);
+        for (const geometry of new Set(parts.map(mesh => mesh.geometry))) geometry.dispose();
+        parent.add(new THREE.Mesh(merged, material));
+      }
     }
 
     function createRemotePlayer(name) {
@@ -2428,122 +2573,24 @@
       const duelBright = isBrightIndoorMap(CURRENT_MAP);
       const hueShift = hashRemoteTint(name || "player");
       const pal = applyRemoteAvatarPalette({ duelBright, hueShift });
-      const mCamo1 = pal.mCamo1;
-      const mCamo2 = pal.mCamo2;
-      const mSkin = new THREE.MeshStandardMaterial({ color: 0xe0b890, roughness: 0.7 });
-      const mSkinD = new THREE.MeshStandardMaterial({ color: 0xc49a70, roughness: 0.7 });
-      const mPants = pal.mPants;
-      const mBoot = new THREE.MeshStandardMaterial({ color: 0x2a2218, roughness: 0.9 });
-      const mBootS = new THREE.MeshStandardMaterial({ color: 0x1a1610, roughness: 0.9 });
-      const mHelm = pal.mHelm;
-      const mVisor = new THREE.MeshStandardMaterial({
-        color: duelBright ? 0xa8e8ff : 0x80ddff,
-        transparent: true,
-        opacity: duelBright ? 0.52 : 0.45,
-        roughness: 0.2,
-        metalness: 0.82,
-      });
-      const mVest = pal.mVest;
-      const mGear = new THREE.MeshStandardMaterial({ color: 0x2e3028, roughness: 0.9 });
-      const mMetal = new THREE.MeshStandardMaterial({ color: 0x7a7a7a, roughness: 0.4, metalness: 0.6 });
-      const mGlove = new THREE.MeshStandardMaterial({ color: 0x3a3528, roughness: 0.9 });
-      const mKnee = new THREE.MeshStandardMaterial({ color: 0x505548, roughness: 0.8 });
-
-      const chest = new THREE.Mesh(new THREE.BoxGeometry(0.50, 0.48, 0.30), mCamo1);
-      chest.position.y = 1.24; group.add(chest);
-      const belly = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.24, 0.28), mCamo2);
-      belly.position.y = 0.90; group.add(belly);
-      const vestF = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.44, 0.06), mVest);
-      vestF.position.set(0, 1.20, 0.17); group.add(vestF);
-      const vestB = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.44, 0.05), mVest);
-      vestB.position.set(0, 1.20, -0.16); group.add(vestB);
-      const vestS1 = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.36, 0.24), mVest);
-      vestS1.position.set(0.25, 1.20, 0); group.add(vestS1);
-      const vestS2 = vestS1.clone(); vestS2.position.x = -0.25; group.add(vestS2);
-      for (let px of [-0.16, 0, 0.16]) {
-        const p = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.10, 0.05), mGear);
-        p.position.set(px, 1.04, 0.21); group.add(p);
-      }
-      const collar = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.07, 0.26), mCamo2);
-      collar.position.set(0, 1.50, 0); group.add(collar);
-      const belt = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.06, 0.32), mGear);
-      belt.position.y = 0.76; group.add(belt);
-      const buckle = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.05, 0.03), mMetal);
-      buckle.position.set(0, 0.76, 0.17); group.add(buckle);
-      const pelvis = new THREE.Mesh(new THREE.BoxGeometry(0.40, 0.16, 0.27), mPants);
-      pelvis.position.set(0, 0.68, 0); group.add(pelvis);
-      const holster = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.14, 0.08), mGear);
-      holster.position.set(0.23, 0.68, 0.06); group.add(holster);
-
-      const headGroup = new THREE.Group();
-      const skull = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.38, 0.36), mSkin);
-      headGroup.add(skull);
-      const jaw = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.10, 0.28), mSkinD);
-      jaw.position.set(0, -0.18, 0.02); headGroup.add(jaw);
-      const brow = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.04, 0.06), mSkinD);
-      brow.position.set(0, 0.10, 0.17); headGroup.add(brow);
-      const ewMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-      const epMat = new THREE.MeshBasicMaterial({ color: 0x1a1208 });
-      const ewL = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.05, 0.02), ewMat);
-      ewL.position.set(-0.08, 0.04, 0.185); headGroup.add(ewL);
-      const ewR = ewL.clone(); ewR.position.x = 0.08; headGroup.add(ewR);
-      const epL = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.04, 0.01), epMat);
-      epL.position.set(-0.08, 0.04, 0.195); headGroup.add(epL);
-      const epR = epL.clone(); epR.position.x = 0.08; headGroup.add(epR);
-      const nose = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.05, 0.05), mSkinD);
-      nose.position.set(0, -0.04, 0.19); headGroup.add(nose);
-      const earL = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.08, 0.05), mSkin);
-      earL.position.set(-0.20, 0.02, 0); headGroup.add(earL);
-      const earR = earL.clone(); earR.position.x = 0.20; headGroup.add(earR);
-      const helmShell = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.22, 0.42), mHelm);
-      helmShell.position.set(0, 0.22, -0.01); headGroup.add(helmShell);
-      const helmRim = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.04, 0.46), mHelm);
-      helmRim.position.set(0, 0.13, -0.02); headGroup.add(helmRim);
-      const helmBand = new THREE.Mesh(new THREE.BoxGeometry(0.43, 0.04, 0.43), mGear);
-      helmBand.position.set(0, 0.18, -0.01); headGroup.add(helmBand);
-      if (duelBright) {
-        const helmStripe = new THREE.Mesh(new THREE.BoxGeometry(0.48, 0.034, 0.48), mMetal);
-        helmStripe.position.set(0, 0.265, -0.02);
-        headGroup.add(helmStripe);
-      }
-      const visor = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.08, 0.03), mVisor);
-      visor.position.set(0, 0.07, 0.20); headGroup.add(visor);
-      const neck = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.10, 0.16), mSkin);
-      neck.position.set(0, -0.26, 0); headGroup.add(neck);
-      headGroup.position.y = 1.80; group.add(headGroup);
+      const { carrier, waist, headGroup, armShell, legShell } = buildOperatorShell(pal);
+      group.add(carrier, waist, headGroup);
 
       const rightArm = new THREE.Group();
       const leftArm = new THREE.Group();
-      // Returns the elbow group so the animator can bend it. It used to be created, frozen
-      // at -0.5 rad and never touched again, which is a big part of why everyone moved like
-      // a mannequin — arms swung from the shoulder as one rigid rod.
-      const makePlayerArm = (ag, showHand) => {
-        const sh = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.10, 0.18), mCamo2);
-        sh.position.set(0, -0.02, 0); ag.add(sh);
-        const pad = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.10, 0.20), mKnee);
-        pad.position.set(0, -0.02, 0); ag.add(pad);
-        const up = new THREE.Mesh(new THREE.BoxGeometry(0.17, 0.32, 0.17), mCamo1);
-        up.position.set(0, -0.22, 0); ag.add(up);
-        const elbow = new THREE.Group();
-        elbow.name = "elbow";
-        elbow.position.set(0, -0.38, 0.06);
-        elbow.rotation.order = "YXZ";
-        elbow.rotation.x = -0.5;
-        ag.add(elbow);
-        const elbPad = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.08, 0.10), mKnee);
-        elbPad.position.set(0, 0, 0); elbow.add(elbPad);
-        const fa = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.30, 0.15), mCamo2);
-        fa.position.set(0, -0.12, 0); elbow.add(fa);
-        if (showHand) {
-          const glv = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.13, 0.16), mGlove);
-          glv.position.set(0, -0.32, 0.04); elbow.add(glv);
-          const fng = new THREE.Mesh(new THREE.BoxGeometry(0.10, 0.04, 0.08), mGlove);
-          fng.position.set(0, -0.40, 0.06); elbow.add(fng);
-        }
-        return elbow;
+      const makePlayerArm = (arm, side) => {
+        const elbow = armShell(arm, side);
+        const hand = new THREE.Group();
+        hand.position.set(0, -0.355, 0.012);
+        const kit = new GunKit();
+        buildGripGlove(kit, hand, side, 0.013, 0.015);
+        kit.flush();
+        elbow.add(hand);
+        return { elbow, hand };
       };
-      const rightElbow = makePlayerArm(rightArm, false);
-      const leftElbow = makePlayerArm(leftArm, false);
+      const rArm = makePlayerArm(rightArm, "R");
+      const lArm = makePlayerArm(leftArm, "L");
+      const rightElbow = rArm.elbow, leftElbow = lArm.elbow;
       rightArm.position.set(0.30, 1.42, 0.06);
       leftArm.position.set(-0.30, 1.42, 0.06);
       rightArm.rotation.order = "YXZ";
@@ -2552,34 +2599,8 @@
       leftArm.rotation.set(-0.85, 0.55, 0.00);
       group.add(rightArm, leftArm);
 
-      // The leg is now hip → knee → (shin, boot). It used to be one rigid block from hip to
-      // sole, so walking was two straight poles pivoting at the hip. Everything below the
-      // knee keeps its old world offset, just re-parented and re-based on the knee group.
-      const makePlayerLeg = (px) => {
-        const lg = new THREE.Group();
-        const th = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.38, 0.20), mPants);
-        th.position.set(0, -0.19, 0); lg.add(th);
-        const knee = new THREE.Group();
-        knee.name = "knee";
-        knee.rotation.order = "YXZ";
-        knee.position.set(0, -0.38, 0);
-        lg.add(knee);
-        const kp = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.10, 0.12), mKnee);
-        kp.position.set(0, 0, 0.06); knee.add(kp);
-        const sh = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.34, 0.18), mPants);
-        sh.position.set(0, -0.16, 0); knee.add(sh);
-        const bt = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.16, 0.28), mBoot);
-        bt.position.set(0, -0.40, 0.03); knee.add(bt);
-        const sl = new THREE.Mesh(new THREE.BoxGeometry(0.20, 0.04, 0.30), mBootS);
-        sl.position.set(0, -0.50, 0.04); knee.add(sl);
-        const lace = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.10, 0.02), mGear);
-        lace.position.set(0, -0.36, 0.15); knee.add(lace);
-        lg.position.set(px, 0.62, 0);
-        lg.userData.knee = knee;
-        return lg;
-      };
-      const legR = makePlayerLeg(0.15);
-      const legL = makePlayerLeg(-0.15);
+      const legR = legShell(0.15);
+      const legL = legShell(-0.15);
       group.add(legR, legL);
 
       const rightHandGrip = new THREE.Group();
@@ -2593,8 +2614,8 @@
       const gunModel = makeThirdPersonGun(1);
       applyThirdPersonGunToChestHold(gunModel, 1);
       weaponHold.add(gunModel);
-      const supportSocket = attachRemoteSupportHand(gunModel, 1, mGlove);
-      const primarySocket = attachRemotePrimaryHand(gunModel, 1, mGlove);
+      const supportSocket = attachRemoteSupportHand(gunModel, 1);
+      const primarySocket = attachRemotePrimaryHand(gunModel, 1);
 
       const ns = makeNameSprite(name || "Player", null);
       ns.sprite.position.set(0, 2.55, 0);
@@ -2602,36 +2623,32 @@
 
       const flashTarget = new THREE.Object3D();
       // Avatar mesh faces +Z; group uses yaw+π so forward is +Z here — unlike camera flash (-Z).
-      flashTarget.position.set(0, 0, 1);
-      const flashOuter = createPhysicalSpotLight(
-        PLAYER_LIGHT_COLOR,
-        FLASH_OUTER_INTENSITY,
-        FLASH_OUTER_DISTANCE,
-        FLASH_OUTER_ANGLE,
-        FLASH_OUTER_PEN,
-        FLASHLIGHT_LIGHT_DECAY
-      );
-      const flashInner = createPhysicalSpotLight(
-        PLAYER_LIGHT_COLOR,
-        FLASH_INNER_INTENSITY,
-        FLASH_INNER_DISTANCE,
-        FLASH_INNER_ANGLE,
-        FLASH_INNER_PEN,
-        FLASHLIGHT_LIGHT_DECAY
-      );
-      flashOuter.position.set(0, 0.16, 0.14);
-      flashInner.position.set(0, 0.16, 0.14);
+      const arenaTorch = CURRENT_MAP === "arena";
+      flashTarget.position.set(arenaTorch ? 0 : .11, arenaTorch ? .12 : .04, 20);
+      const flashPower = arenaTorch ? ARENA_FLASH_POWER : FLASH_POWER;
+      const flash = createPhysicalSpotLight(FLASH_COLOR, flashPower * .68, FLASH_RANGE, FLASH_ANGLE, FLASH_PENUMBRA, 2);
+      flash.position.set(flashTarget.position.x, flashTarget.position.y, arenaTorch ? .06 : .18);
       const flashMount = new THREE.Group();
-      flashMount.position.set(0, 1.62, 0);
-      flashMount.add(flashOuter);
-      flashMount.add(flashInner);
-      flashMount.add(flashTarget);
-      flashOuter.target = flashTarget;
-      flashInner.target = flashTarget;
+      flashMount.position.set(0, 1.54, 0);
+      flashMount.add(flash, flashTarget);
+      flash.target = flashTarget;
       group.add(flashMount);
-      flashMount.visible = !duelBright;
+      flashMount.visible = !duelBright && !isTrainingMap(CURRENT_MAP) && !isBossArenaMap(CURRENT_MAP);
 
-      group.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+      operatorFlashTexture ||= createFogParticleTexture();
+      const muzzleFlash = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: operatorFlashTexture, color: 0xffc075, transparent: true,
+        depthWrite: false, blending: THREE.AdditiveBlending,
+      }));
+      muzzleFlash.visible = false;
+      group.add(muzzleFlash);
+
+      for (const part of [carrier, waist, headGroup, rightArm, leftArm, rightElbow, leftElbow,
+        legR, legL, legR.userData.knee, legL.userData.knee, legR.userData.ankle, legL.userData.ankle]) {
+        batchOperatorShell(part);
+      }
+      group.userData.operator = true;
+      group.traverse(o => { if (o.isMesh) { o.castShadow = !isTrainingMap(CURRENT_MAP); o.receiveShadow = true; } });
       group.visible = false;
       return {
         group,
@@ -2650,6 +2667,9 @@
         leftArm,
         rightElbow,
         leftElbow,
+        rightFreeHand: rArm.hand,
+        leftFreeHand: lArm.hand,
+        muzzleFlash,
         rightHandGrip,
         rightLeg: legR,
         leftLeg: legL,
@@ -2666,13 +2686,12 @@
         currentWeapon: 1,
         isReloading: false,
         reloadPhase: 0,
-        torsoMesh: chest,
+        carrier,
+        waist,
         headGroup,
         flashMount,
-        flashOuter,
-        flashInner,
+        flash,
         duelBright,
-        gloveMat: mGlove,
         ads: false,
         adsBlend: 0,
         remotePitch: 0,
@@ -2775,24 +2794,40 @@
       stencil: false,
       depth: true,
     });
+    const _initialRendererDpr = Math.min(window.devicePixelRatio || 1, 1);
+    renderer.setPixelRatio(_initialRendererDpr);
     renderer.setSize(_vpInit.w, _vpInit.h);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1));
+    let appliedRendererWidth = Math.floor(_vpInit.w);
+    let appliedRendererHeight = Math.floor(_vpInit.h);
+    let appliedRendererDpr = _initialRendererDpr;
+    let resolutionScale = 1;
+    let slowRenderTime = 0;
+    let steadyRenderTime = 0;
+    let appliedCameraAspect = _vpInit.w / _vpInit.h;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.shadowMap.enabled = true;
     renderer.sortObjects = false;
     app.appendChild(renderer.domElement);
 
     /** Precompile programs after scene/map changes so gameplay avoids shader hitch spikes. */
+    let shaderCompileQueued = false;
     function compileSceneShaders() {
-      renderer.compile(scene, camera);
+      if (shaderCompileQueued) return;
+      shaderCompileQueued = true;
+      queueMicrotask(() => {
+        shaderCompileQueued = false;
+        if (typeof renderer.compileAsync === "function") {
+          void renderer.compileAsync(scene, camera).catch(error => console.warn("[shader preload]", error));
+        }
+      });
     }
 
     // Same luminance as pre–r155 legacy lights: physically correct shading drops ~π× vs old scaling.
     const _LEGACY_L = Math.PI;
-    const hemi = new THREE.HemisphereLight(0x524838, 0x141008, 0.14 * _LEGACY_L);
+    const hemi = new THREE.HemisphereLight(0x56677e, 0x171c24, 0.14 * _LEGACY_L);
     scene.add(hemi);
 
-    const moon = new THREE.DirectionalLight(0xc8b078, 0.11 * _LEGACY_L);
+    const moon = new THREE.DirectionalLight(0xa3b6cf, 0.11 * _LEGACY_L);
     moon.position.set(28, 34, 22);
     moon.castShadow = true;
     moon.shadow.camera.left = -100;
@@ -2805,59 +2840,15 @@
     const fallbackWallColor = "#020202";
     let wallTexture = null;
     let wallTextureLoaded = false;
+    let facilityWallTexture;
 
     function getQualityPreset() {
       return QUALITY_PRESETS[getQualityId()] || QUALITY_PRESETS.regular;
     }
 
-    let adaptivePixelRatio = null;
-    let adaptivePerfTime = 0;
-    let adaptivePerfFrames = 0;
-    let adaptivePerfCooldown = 2.5;
-
     function getPixelRatioForQuality() {
       const dpr = window.devicePixelRatio || 1;
-      const p = getQualityPreset();
-      const requested = adaptivePixelRatio == null ? p.dpr : adaptivePixelRatio;
-      return Math.min(requested, dpr);
-    }
-
-    function resetAdaptiveResolution() {
-      const p = getQualityPreset();
-      adaptivePixelRatio = Math.min(p.dpr, window.devicePixelRatio || 1);
-      adaptivePerfTime = 0;
-      adaptivePerfFrames = 0;
-      adaptivePerfCooldown = 2.5;
-    }
-
-    /**
-     * Slowly adjust internal resolution inside the selected tier's bounds. This
-     * reacts to sustained load only, preventing rapid resolution pumping during
-     * explosions, map streaming, or a single shader compilation frame.
-     */
-    function updateAdaptiveResolution(frameDt) {
-      if (!started || paused || document.visibilityState === "hidden") return;
-      const p = getQualityPreset();
-      adaptivePerfCooldown = Math.max(0, adaptivePerfCooldown - frameDt);
-      adaptivePerfTime += Math.min(frameDt, 0.1);
-      adaptivePerfFrames++;
-      if (adaptivePerfTime < 1.5 || adaptivePerfCooldown > 0) return;
-
-      const fps = adaptivePerfFrames / Math.max(0.001, adaptivePerfTime);
-      const maxDpr = Math.min(p.dpr, window.devicePixelRatio || 1);
-      const minDpr = Math.min(maxDpr, p.minDpr);
-      const current = adaptivePixelRatio == null ? maxDpr : adaptivePixelRatio;
-      let next = current;
-      if (fps < p.targetFps - 5) next = Math.max(minDpr, next - 0.08);
-      else if (fps > p.targetFps + 3) next = Math.min(maxDpr, next + 0.04);
-
-      adaptivePerfTime = 0;
-      adaptivePerfFrames = 0;
-      if (Math.abs(next - current) >= 0.015) {
-        adaptivePixelRatio = next;
-        adaptivePerfCooldown = 2.0;
-        syncGameRendererSize();
-      }
+      return Math.min(getQualityPreset().dpr, dpr);
     }
 
     /** Camera motion cannot depend on quality: lower settings must not make aiming easier. */
@@ -2879,16 +2870,18 @@
     }
 
     function getMapEnvColors() {
-      // Training keeps the stock concrete palette but gets an actual blue sky overhead.
-      // The fog stays close to the shared bright-map grey so distance doesn't tint blue —
-      // only the sky itself is coloured.
-      if (isTrainingMap(CURRENT_MAP)) return { fog: 0x9db4cc, bg: 0x6fa8dc };
+      if (pvpMaps.MAPS[CURRENT_MAP]) { const e = pvpMaps.MAPS[CURRENT_MAP].env; return { fog: e.fog, bg: e.bg }; }
+      if (isTrainingMap(CURRENT_MAP)) return { fog: 0xa8b8bf, bg: 0xb7c6ce };
       if (isBrightIndoorMap(CURRENT_MAP)) return { fog: 0x8ea6c6, bg: 0xa9c3e6 };
-      if (isBossArenaMap(CURRENT_MAP)) return { fog: 0x1a1a22, bg: 0x1a1a22 };
+      if (isBossArenaMap(CURRENT_MAP)) return { fog: 0x252d38, bg: 0x252d38 };
+      if (CURRENT_MAP === "crossfire" || CURRENT_MAP === "arena") return { fog: 0x101820, bg: 0x101820 };
       // The gauntlet is a platforming course: with the stock near-black fog the next
       // platform edge simply is not visible, which turns every gap into a guess. Slate
       // instead of black keeps the mood without hiding the thing you have to jump to.
-      if (isGauntletMap(CURRENT_MAP)) return { fog: 0x2b3542, bg: 0x18202b };
+      if (isGauntletMap(CURRENT_MAP)) {
+        const theme = currentGauntletTheme();
+        return { fog: theme.fog, bg: theme.bg };
+      }
       return { fog: 0x070504, bg: 0x070504 };
     }
 
@@ -2897,10 +2890,30 @@
       return Math.sqrt(-Math.log(0.02)) / Math.max(1, far);
     }
 
+    /**
+     * Without post-processing three.js tone-maps and sRGB-encodes a surface and only then blends in the fog,
+     * so fog mixes in display space with the raw fog colour: distant walls sink into a deep, dark haze.
+     * With post-processing the blend happens in linear light before tone mapping and reads far thinner.
+     * The zombie arena and boss fight were tuned on the plain path, so on the post path we emulate it:
+     * (1 - f) ** 2.2 in linear light equals (1 - f) in display space, and the colour is decoded the same way.
+     */
+    const FOG_DISPLAY_GAMMA = 2.2;
+    let fogDisplayLook = false;
+    function mapKeepsPlainFog() {
+      return CURRENT_MAP === "arena" || isBossArenaMap(CURRENT_MAP);
+    }
+    function wantFogDisplayLook() {
+      return mapKeepsPlainFog() && postFxWanted() && gameWorldReady;
+    }
     function setSceneFogVisibility(near, far, color) {
       if (!scene.fog || !scene.fog.isFogExp2) scene.fog = new THREE.FogExp2(color, 0.02);
       scene.fog.color.set(color);
       scene.fog.density = fogDensityForFar(far);
+      if (fogDisplayLook) {
+        const c = scene.fog.color;
+        c.setRGB(Math.pow(c.r, FOG_DISPLAY_GAMMA), Math.pow(c.g, FOG_DISPLAY_GAMMA), Math.pow(c.b, FOG_DISPLAY_GAMMA));
+        scene.fog.density *= Math.sqrt(FOG_DISPLAY_GAMMA);
+      }
       // Keep readable metadata for culling and the scripted boss-victory transition.
       scene.fog.near = near;
       scene.fog.far = far;
@@ -2975,7 +2988,7 @@
       atmosphericFog.material.opacity = FAIR_PRESENTATION.fogOpacity;
       atmosphericFog.material.size = FAIR_PRESENTATION.fogSize;
       atmosphericFog.material.needsUpdate = true;
-      atmosphericFog.visible = FAIR_PRESENTATION.fogParticles > 0;
+      atmosphericFog.visible = !isBrightIndoorMap(CURRENT_MAP) && FAIR_PRESENTATION.fogParticles > 0;
     }
 
     function updateAtmosphericFog(dt) {
@@ -3005,12 +3018,22 @@
       const scale = RENDER_DISTANCE_LEVELS[rdIdx].scale;
       let far;
       let near;
-      if (isBrightIndoorMap(CURRENT_MAP)) {
+      const themedPvp = pvpMaps.MAPS[CURRENT_MAP];
+      if (themedPvp) {
+        far = Math.max(40, themedPvp.env.fogFar * scale);
+        near = THREE.MathUtils.clamp(themedPvp.env.fogNear * scale, 4, far - 12);
+      } else if (isBrightIndoorMap(CURRENT_MAP)) {
         far = Math.max(140, 210 * scale);
         near = THREE.MathUtils.clamp(28 * scale, 14, far - 28);
       } else if (isBossArenaMap(CURRENT_MAP)) {
-        far = Math.max(50, 80 * scale);
+        far = Math.max(70, 96 * scale);
         near = THREE.MathUtils.clamp(8 * scale, 4, far - 12);
+      } else if (isGauntletMap(CURRENT_MAP)) {
+        // Gauntlet: thick enough that the course drops away into haze, but the next platform
+        // stays readable inside it.
+        const theme = currentGauntletTheme();
+        far = Math.max(22, theme.fogFar * scale);
+        near = THREE.MathUtils.clamp(theme.fogNear * scale, 3, far - 12);
       } else {
         const base = getQualityFogBase();
         far = Math.max(22, base.far * scale);
@@ -3023,22 +3046,96 @@
       // Pad the far plane by ~2 wall thicknesses, not 48 units: beyond fog.far the
       // maze is 100% fogged (pixel-identical to the background), so the old +48 band
       // only added invisible overdraw. Only shrink where fog fully engages.
-      camera.far = isBrightIndoorMap(CURRENT_MAP)
+      camera.far = themedPvp
+        ? THREE.MathUtils.clamp(far + 30, 60, 400)
+        : isBrightIndoorMap(CURRENT_MAP)
         ? THREE.MathUtils.clamp(far + 48, 52, 280)
-        : THREE.MathUtils.clamp(far + 8, 52, 280);
+        : isGauntletMap(CURRENT_MAP)
+          ? Math.max(far + 8, currentGauntletTheme().camFar || 0)
+          : THREE.MathUtils.clamp(far + 8, 52, 280);
       camera.updateProjectionMatrix();
       if (atmosphericFog) applyAtmosphericFogQuality();
     }
 
+    // ── Post-processing (bloom, grade, anti-aliasing; see js/post-fx.js) ──────────────────
+    let postFx = null, postFxBroken = false, _postW = 0, _postH = 0, _postDpr = 0, _postLookKey = "";
+    const POST_LOOKS = {
+      "ashen-city": { tint: 0xfff2e4, vignette: 0.38, bloom: 0.4 },
+      foundry: { tint: 0xffe8d0, vignette: 0.4, bloom: 0.55, threshold: 0.85 },
+      switchyard: { tint: 0xeaf2ff, vignette: 0.34, bloom: 0.4 },
+      "frozen-dam": { tint: 0xeef6ff, vignette: 0.26, bloom: 0.22, threshold: 1.6, saturation: 0.98 },
+      "orbital-relay": { tint: 0xf4f8ff, vignette: 0.3, bloom: 0.4, threshold: 1.2, contrast: 1.1 },
+      "maze-causeway": { tint: 0xe8fff8, vignette: 0.4, bloom: 0.42 },
+      "missile-silos": { tint: 0xffe6dc, vignette: 0.4, bloom: 0.5, threshold: 0.9 },
+      "alien-outpost": { tint: 0xfff0e0, vignette: 0.3, bloom: 0.35, threshold: 1.1, saturation: 1.12 },
+      "starship-hangar": { tint: 0xe8f4ff, vignette: 0.32, bloom: 0.45, threshold: 1.1 },
+      "weapon-factory": { tint: 0xfff4e6, vignette: 0.36, bloom: 0.5, threshold: 0.9 },
+    };
+    function postFxWanted() {
+      return gameSettings.postFx !== false && !postFxBroken && getQualityId() !== "potato";
+    }
+    function renderWorld(dt) {
+      if (showcaseRp?.group.visible) {
+        const tag = showcaseRp.nameSprite;
+        const at = showcaseRp.group.position;
+        const distance = Math.hypot(camera.position.x - at.x,
+          camera.position.y - at.y - tag.position.y, camera.position.z - at.z);
+        const pixelCap = Math.min(165, appliedRendererWidth * .20);
+        const worldCap = distance * 2 * Math.tan(camera.getEffectiveFOV() * Math.PI / 360)
+          * pixelCap / Math.max(1, appliedRendererHeight);
+        // Keep the badge from growing into the surrounding HUD when inspecting the demo.
+        const width = Math.min(2.75, worldCap);
+        tag.scale.set(width, width * .1875, 1);
+      }
+      const fogLook = wantFogDisplayLook();
+      if (fogLook !== fogDisplayLook) { fogDisplayLook = fogLook; applySceneFogAndCameraFar(); }
+      if (!postFxWanted() || !gameWorldReady) { renderer.render(scene, camera); return; }
+      try {
+        const size = renderer.getSize(_postSizeVec), dpr = renderer.getPixelRatio();
+        if (!postFx) {
+          postFx = createPostFx(THREE, renderer, scene, camera, { width: size.x, height: size.y, pixelRatio: dpr });
+          _postW = size.x; _postH = size.y; _postDpr = dpr;
+        } else if (size.x !== _postW || size.y !== _postH || dpr !== _postDpr) {
+          postFx.setSize(size.x, size.y, dpr);
+          _postW = size.x; _postH = size.y; _postDpr = dpr;
+        }
+        const key = CURRENT_MAP + (isGauntletMap(CURRENT_MAP) ? currentGauntletTheme().id : "");
+        if (key !== _postLookKey) {
+          _postLookKey = key;
+          if (isGauntletMap(CURRENT_MAP)) postFx.look(POST_LOOKS[currentGauntletTheme().id] || {});
+          else if (pvpDef(CURRENT_MAP)) postFx.look(pvpDef(CURRENT_MAP).env.look || {});
+          else if (CURRENT_MAP === "arena") postFx.look({ vignette: 0.35, bloom: 0.10, threshold: 1.55, contrast: 1.03 });
+          else if (isBossArenaMap(CURRENT_MAP)) postFx.look({ vignette: 0.14, bloom: 0.16, threshold: 1.45, contrast: 0.95 });
+          else if (isBrightIndoorMap(CURRENT_MAP) || isTrainingMap(CURRENT_MAP)) postFx.look({ vignette: 0.22, bloom: 0.2, threshold: 1.4 });
+          else postFx.look({ vignette: 0.42, bloom: 0.4, contrast: 1.08 });
+        }
+        const hurt = player.health > 0 ? THREE.MathUtils.clamp((0.4 - player.health / player.maxHealth) / 0.4, 0, 1) : 1;
+        postFx.update(dt, { hurt, fringe: performance.now() < state.dashActiveUntil ? 0.004 : 0 });
+        postFx.render(dt);
+      } catch (e) {
+        console.warn("[post-fx] disabled:", e);
+        postFxBroken = true;
+        renderer.render(scene, camera);
+      }
+    }
+    const _postSizeVec = new THREE.Vector2();
+
+    /**
+     * The torch only refreshes its shadow map while it is lit, so until it is first switched on it has
+     * none, and every lit material that expects it fails to draw: whole scenes go invisible (it showed
+     * up on POTATO, and as black PVP maps). Ask for one refresh so the map always exists.
+     */
+    function ensureTorchShadowMap() {
+      try { flashlight.shadow.needsUpdate = true; } catch (_) { /* not created yet: the first map build asks again */ }
+    }
     /** Local rendering: tone mapping, capped resolution, shadows, fog distance, textures — each step should look more realistic, not just heavier. */
     function applyGraphicsQuality() {
       const p = getQualityPreset();
-      resetAdaptiveResolution();
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
       renderer.toneMappingExposure = FAIR_PRESENTATION.exposure;
-      renderer.setPixelRatio(getPixelRatioForQuality());
       renderer.shadowMap.type = p.shadowSoft ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
-      moon.shadow.mapSize.set(p.shadowSz, p.shadowSz);
+      const themedSun = pvpMaps.MAPS[CURRENT_MAP] && pvpMaps.MAPS[CURRENT_MAP].env.shadow;
+      moon.shadow.mapSize.set(themedSun ? Math.max(p.shadowSz, 2048) : p.shadowSz, themedSun ? Math.max(p.shadowSz, 2048) : p.shadowSz);
       moon.shadow.bias = p.bias;
       moon.shadow.normalBias = p.normalBias;
       moon.shadow.radius = p.shadowSoft ? 2 : 1;
@@ -3047,6 +3144,7 @@
         moon.shadow.map = null;
       }
       renderer.shadowMap.needsUpdate = true;
+      ensureTorchShadowMap();
 
       applySceneFogAndCameraFar();
       applyAtmosphericFogQuality();
@@ -3089,11 +3187,22 @@
         h = Math.max(2, Math.min(8192, h));
         const aspect = w / h;
         if (!Number.isFinite(aspect) || aspect <= 0) return;
-        camera.aspect = aspect;
-        camera.updateProjectionMatrix();
-        renderer.setPixelRatio(getPixelRatioForQuality());
+        const desiredDpr = getPixelRatioForQuality() * resolutionScale;
+        const sizeChanged = w !== appliedRendererWidth || h !== appliedRendererHeight;
+        const dprChanged = Math.abs(desiredDpr - appliedRendererDpr) > 0.001;
+        if (Math.abs(aspect - appliedCameraAspect) > 0.000001) {
+          camera.aspect = aspect;
+          camera.updateProjectionMatrix();
+          appliedCameraAspect = aspect;
+        }
+        if (dprChanged) renderer.setPixelRatio(desiredDpr);
         /** updateStyle=false: #app canvas uses 100% CSS; inline px from setSize(true) caused black/wrong size until DevTools resize. */
-        renderer.setSize(w, h, false);
+        if (sizeChanged || dprChanged) {
+          renderer.setSize(w, h, false);
+          appliedRendererWidth = w;
+          appliedRendererHeight = h;
+          appliedRendererDpr = desiredDpr;
+        }
         try {
           renderer.domElement.style.display = "block";
           renderer.domElement.style.width = "100%";
@@ -3416,6 +3525,12 @@
     }
 
     function setGameActiveUi(active) {
+      // Each time a match starts the controls list shows for a few seconds, then folds away.
+      if (active) {
+        hudHelpPinned = false; hudHelpAutoUntilMs = performance.now() + HUD_HELP_AUTO_MS;
+        tutState._movedThisMatch = false;
+        _tutMoveStart = null;
+      }
       document.body.classList.toggle("game-active", !!active);
       setMenuWallBackdropVisible(!active);
     }
@@ -3644,6 +3759,7 @@
           tex.generateMipmaps = true;
           tex.anisotropy = getMaxTextureAnisotropy();
           wallTexture = tex;
+          wallNormalTexture = buildNormalMapFromTexture(tex);
           wallTextureLoaded = true;
           _wallTextureCache.clear();
           _wallMaterialCache.clear();
@@ -3665,13 +3781,148 @@
 
     const _wallTextureCache = new Map();
     const _wallMaterialCache = new Map();
+    const _wallNormalCache = new Map();
+    let wallNormalTexture = null;
+
+    /**
+     * Height → normal map, generated once from the wall photo's luminance (Sobel). The
+     * photo alone is flat: under a moving flashlight every mortar line and chip stayed
+     * painted on. With a normal map the light rakes across the relief.
+     */
+    function buildNormalMapFromTexture(tex) {
+      try {
+        const img = tex.image;
+        const N = 1024;
+        const c = document.createElement("canvas");
+        c.width = N; c.height = N;
+        const g = c.getContext("2d", { willReadFrequently: true });
+        g.drawImage(img, 0, 0, N, N);
+        const src = g.getImageData(0, 0, N, N);
+        const d = src.data;
+        const h = new Float32Array(N * N);
+        for (let i = 0, p = 0; i < h.length; i++, p += 4) {
+          h[i] = (d[p] * 0.299 + d[p + 1] * 0.587 + d[p + 2] * 0.114) / 255;
+        }
+        const out = g.createImageData(N, N);
+        const o = out.data;
+        const strength = 5.5;
+        const at = (x, y) => h[((y + N) % N) * N + ((x + N) % N)];
+        for (let y = 0; y < N; y++) {
+          for (let x = 0; x < N; x++) {
+            const dx = (at(x + 1, y - 1) + 2 * at(x + 1, y) + at(x + 1, y + 1))
+                     - (at(x - 1, y - 1) + 2 * at(x - 1, y) + at(x - 1, y + 1));
+            const dy = (at(x - 1, y + 1) + 2 * at(x, y + 1) + at(x + 1, y + 1))
+                     - (at(x - 1, y - 1) + 2 * at(x, y - 1) + at(x + 1, y - 1));
+            let nx = -dx * strength, ny = dy * strength, nz = 1;
+            const l = 1 / Math.hypot(nx, ny, nz);
+            const p = (y * N + x) * 4;
+            o[p] = (nx * l * 0.5 + 0.5) * 255;
+            o[p + 1] = (ny * l * 0.5 + 0.5) * 255;
+            o[p + 2] = (nz * l * 0.5 + 0.5) * 255;
+            o[p + 3] = 255;
+          }
+        }
+        g.putImageData(out, 0, 0);
+        const nt = new THREE.CanvasTexture(c);
+        nt.wrapS = nt.wrapT = THREE.RepeatWrapping;
+        nt.colorSpace = THREE.NoColorSpace;
+        nt.anisotropy = getMaxTextureAnisotropy();
+        return nt;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    /**
+     * Fine grain that tiles every ~0.75 m and is multiplied over the photo. At arm's
+     * length the photo alone is a smear (≈200 texels per metre); the grain keeps
+     * the surface crisp when you walk right up to a wall.
+     */
+    let _detailTexture = null;
+    function getWallDetailTexture() {
+      if (_detailTexture) return _detailTexture;
+      const N = 256;
+      const c = document.createElement("canvas");
+      c.width = N; c.height = N;
+      const g = c.getContext("2d");
+      const img = g.createImageData(N, N);
+      const rnd = mulberry32(0x5eed);
+      // Tileable value noise, three octaves, plus sparse pits.
+      const octave = (cells) => {
+        const grid = new Float32Array(cells * cells);
+        for (let i = 0; i < grid.length; i++) grid[i] = rnd();
+        return (x, y) => {
+          const fx = (x / N) * cells, fy = (y / N) * cells;
+          const x0 = Math.floor(fx), y0 = Math.floor(fy);
+          const tx = fx - x0, ty = fy - y0;
+          const sx = tx * tx * (3 - 2 * tx), sy = ty * ty * (3 - 2 * ty);
+          const v = (a, b) => grid[((b % cells) * cells) + (a % cells)];
+          const a = v(x0, y0) + (v(x0 + 1, y0) - v(x0, y0)) * sx;
+          const b = v(x0, y0 + 1) + (v(x0 + 1, y0 + 1) - v(x0, y0 + 1)) * sx;
+          return a + (b - a) * sy;
+        };
+      };
+      const o1 = octave(8), o2 = octave(32), o3 = octave(128);
+      for (let y = 0; y < N; y++) {
+        for (let x = 0; x < N; x++) {
+          let v = o1(x, y) * 0.35 + o2(x, y) * 0.35 + o3(x, y) * 0.30;
+          if (rnd() < 0.012) v *= 0.55;
+          const b = Math.max(0, Math.min(255, v * 255));
+          const p = (y * N + x) * 4;
+          img.data[p] = img.data[p + 1] = img.data[p + 2] = b;
+          img.data[p + 3] = 255;
+        }
+      }
+      g.putImageData(img, 0, 0);
+      _detailTexture = new THREE.CanvasTexture(c);
+      _detailTexture.wrapS = _detailTexture.wrapT = THREE.RepeatWrapping;
+      _detailTexture.colorSpace = THREE.NoColorSpace;
+      _detailTexture.anisotropy = getMaxTextureAnisotropy();
+      return _detailTexture;
+    }
+
+    function getWallNormalCached(rx, ry) {
+      if (!wallNormalTexture) return null;
+      const key = `${rx}x${ry}`;
+      let t = _wallNormalCache.get(key);
+      if (!t) {
+        t = wallNormalTexture.clone();
+        t.needsUpdate = true;
+        t.wrapS = t.wrapT = THREE.RepeatWrapping;
+        t.repeat.set(rx, ry);
+        t.anisotropy = getMaxTextureAnisotropy();
+        _wallNormalCache.set(key, t);
+      }
+      return t;
+    }
 
     /** One cloned texture per (repeat) — shared by every material using the same repeat scale (was a fresh clone per wall face). */
-    function getWallTextureCached(rx, ry) {
-      const key = `${rx}x${ry}`;
+    let neutralWallSource = null;
+    function getNeutralWallTexture() {
+      if (neutralWallSource?.source === wallTexture) return neutralWallSource.texture;
+      const c = document.createElement("canvas");
+      c.width = c.height = 1024;
+      const g = c.getContext("2d", { willReadFrequently: true });
+      g.drawImage(wallTexture.image, 0, 0, 1024, 1024);
+      const image = g.getImageData(0, 0, 1024, 1024);
+      for (let i = 0; i < image.data.length; i += 4) {
+        const l = image.data[i] * 0.26 + image.data[i + 1] * 0.63 + image.data[i + 2] * 0.11;
+        image.data[i] = l * 0.94;
+        image.data[i + 1] = l * 0.99;
+        image.data[i + 2] = l * 1.04;
+      }
+      g.putImageData(image, 0, 0);
+      const texture = new THREE.CanvasTexture(c);
+      texture.colorSpace = THREE.SRGBColorSpace;
+      neutralWallSource = { source: wallTexture, texture };
+      return texture;
+    }
+
+    function getWallTextureCached(rx, ry, neutral = false) {
+      const key = `${rx}x${ry}|${neutral}`;
       let t = _wallTextureCache.get(key);
       if (!t) {
-        t = wallTexture.clone();
+        t = (neutral ? getNeutralWallTexture() : wallTexture).clone();
         t.needsUpdate = true;
         t.wrapS = THREE.RepeatWrapping;
         t.wrapT = THREE.RepeatWrapping;
@@ -3683,11 +3934,12 @@
     }
 
     /** One material per (repeat, tint, texturesOn) — shared by every wall/floor/ceiling with the same key. */
-    function getWallMaterialCached(repeatX, repeatY, color) {
-      const key = `${repeatX}|${repeatY}|${color}|${gameSettings.texturesOn && wallTexture ? 1 : 0}`;
+    function getWallMaterialCached(repeatX, repeatY, color, surface = "") {
+      const textured = gameSettings.texturesOn && (surface === "facility" || wallTexture);
+      const key = `${repeatX}|${repeatY}|${color}|${surface}|${CURRENT_MAP}|${textured ? 1 : 0}`;
       let mat = _wallMaterialCache.get(key);
       if (!mat) {
-        mat = makeWallMaterial(repeatX, repeatY, color);
+        mat = makeWallMaterial(repeatX, repeatY, color, surface);
         mat.userData = mat.userData || {};
         mat.userData._cachedShared = true;
         _wallMaterialCache.set(key, mat);
@@ -3765,41 +4017,182 @@
       return geo;
     }
 
-    function makeWallMaterial(repeatX, repeatY, color) {
+    const mazeSlabTextures = new Map();
+
+    function getMazeSlabTexture(surface, repeatX, repeatY) {
+      let texture = mazeSlabTextures.get(surface);
+      if (texture) return texture;
+      const canvas = document.createElement("canvas");
+      canvas.width = canvas.height = 256;
+      const ctx = canvas.getContext("2d");
+      const ceiling = surface === "ceiling";
+      ctx.fillStyle = ceiling ? "#96958c" : "#a09d90";
+      ctx.fillRect(0, 0, 256, 256);
+      ctx.globalAlpha = ceiling ? 0.13 : 0.24;
+      ctx.drawImage(getWallDetailTexture().image, 0, 0);
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = ceiling ? "#818078" : "#77746a";
+      ctx.fillRect(0, 0, 256, 2);
+      ctx.fillRect(0, 0, 2, 256);
+      ctx.fillStyle = "#adab9f";
+      ctx.fillRect(2, 2, 254, 1);
+      ctx.fillRect(2, 2, 1, 254);
+      texture = new THREE.CanvasTexture(canvas);
+      texture.colorSpace = THREE.SRGBColorSpace;
+      texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+      texture.repeat.set(repeatX, repeatY);
+      texture.anisotropy = getMaxTextureAnisotropy();
+      mazeSlabTextures.set(surface, texture);
+      return texture;
+    }
+
+    function getFacilityWallTexture() {
+      if (facilityWallTexture) return facilityWallTexture;
+      const canvas = document.createElement("canvas");
+      canvas.width = canvas.height = 256;
+      const ctx = canvas.getContext("2d");
+      const rng = mulberry32(1535);
+      ctx.fillStyle = "#c7c9ca";
+      ctx.fillRect(0, 0, 256, 256);
+      for (let i = 0; i < 2400; i++) {
+        ctx.fillStyle = i % 3 ? "rgba(44,51,56,.09)" : "rgba(241,245,248,.13)";
+        ctx.fillRect(rng() * 256, rng() * 256, 1 + rng() * 2, 1 + rng() * 13);
+      }
+      ctx.fillStyle = "#8f9699";
+      ctx.fillRect(0, 0, 2, 256);
+      ctx.fillRect(0, 0, 256, 2);
+      ctx.fillStyle = "#d6dbdd";
+      ctx.fillRect(2, 0, 1, 256);
+      ctx.fillRect(0, 2, 256, 1);
+      facilityWallTexture = new THREE.CanvasTexture(canvas);
+      facilityWallTexture.colorSpace = THREE.SRGBColorSpace;
+      facilityWallTexture.wrapS = facilityWallTexture.wrapT = THREE.RepeatWrapping;
+      facilityWallTexture.anisotropy = getMaxTextureAnisotropy();
+      return facilityWallTexture;
+    }
+
+    function makeWallMaterial(repeatX, repeatY, color, surface = "") {
+      if (surface === "facility") {
+        const on = gameSettings.texturesOn;
+        return new THREE.MeshStandardMaterial({
+          color: on ? color : new THREE.Color(color).multiply(averageTextureColor(getFacilityWallTexture().image, false)),
+          map: on ? getFacilityWallTexture() : null,
+          roughness: .81, metalness: .09,
+        });
+      }
       // When textures are on, use the brick-wall texture at the caller's tint. When
       // textures are OFF, switch to a brighter material that reflects more light —
       // the wall reads as a smooth painted surface rather than a dark void. The
       // emissive component keeps it from going completely black in shadows.
       if (wallTextureLoaded && wallTexture && gameSettings.texturesOn) {
-        return new THREE.MeshLambertMaterial({
-          map: getWallTextureCached(repeatX, repeatY),
+        if (surface === "floor" || surface === "ceiling") {
+          return new THREE.MeshStandardMaterial({
+            map: getMazeSlabTexture(surface, repeatX, repeatY),
+            color,
+            roughness: surface === "floor" ? 0.78 : 0.94,
+          });
+        }
+        const mazeWall = surface === "mazeWall";
+        const mat = new THREE.MeshStandardMaterial({
+          map: getWallTextureCached(repeatX, repeatY, mazeWall || CURRENT_MAP === "crossfire"),
+          normalMap: getWallNormalCached(repeatX, repeatY),
+          normalScale: new THREE.Vector2(mazeWall ? 0.48 : 0.9, mazeWall ? 0.48 : 0.9),
           color: color || 0xaaaaaa,
+          roughness: 0.92,
+          metalness: 0.0,
         });
+        // Fade the small-scale relief down the corridor and vary the larger concrete
+        // tones in world space, so a long wall reads as a continuous surface.
+        const detail = getWallDetailTexture();
+        mat.onBeforeCompile = (shader) => {
+          shader.uniforms.wallDetailMap = { value: detail };
+          shader.vertexShader = shader.vertexShader
+            .replace("#include <common>", "#include <common>\nvarying vec3 vWallWorld;")
+            .replace("#include <begin_vertex>", "#include <begin_vertex>\nvWallWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;");
+          shader.fragmentShader = shader.fragmentShader
+            .replace("#include <common>", "#include <common>\nuniform sampler2D wallDetailMap;\nvarying vec3 vWallWorld;")
+            .replace(
+              "#include <map_fragment>",
+              "#include <map_fragment>\n" +
+              "  float wallDistance = length(cameraPosition - vWallWorld);\n" +
+              "  float detailFade = 1.0 - smoothstep(3.0, 16.0, wallDistance);\n" +
+              "  #ifdef USE_MAP\n" +
+              "  float dg = texture2D(wallDetailMap, vMapUv * 13.0).r;\n" +
+              "  diffuseColor.rgb *= 1.0 + (dg - 0.5) * 0.55 * detailFade;\n" +
+              "  #endif"
+            )
+            .replace("#include <normal_fragment_maps>",
+              "vec3 wallBaseNormal = normal;\n#include <normal_fragment_maps>\n" +
+              "normal = normalize(mix(wallBaseNormal, normal, 0.22 + 0.78 * detailFade));"
+            );
+        };
+        mat.customProgramCacheKey = () => mazeWall ? "mazeWallDetailV3" : "wallDetailV2";
+        return mat;
       }
-      // No texture: MeshStandardMaterial with high roughness + emissive base so the
-      // wall reflects the scene's lights more strongly than a matte Lambert surface.
+      // No texture: the same tint the textured wall would have, times the texture's own average
+      // colour, so turning texture detail off changes the detail and not the brightness. (A flat
+      // pale colour here used to read several times brighter than the textured surface.)
+      const floorLike = surface === "floor" || surface === "ceiling";
+      const neutral = surface === "mazeWall" || CURRENT_MAP === "crossfire";
+      const source = floorLike ? getMazeSlabTexture(surface, 1, 1).image : (wallTexture && wallTexture.image);
+      const avg = averageTextureColor(source, floorLike ? false : neutral);
       return new THREE.MeshStandardMaterial({
-        color: 0xc8c4b8,
-        roughness: 0.55,
+        color: new THREE.Color(color || 0xaaaaaa).multiply(avg),
+        roughness: surface === "floor" ? 0.78 : surface === "ceiling" ? 0.94 : 0.92,
         metalness: 0.0,
-        emissive: 0x1a1812,
-        emissiveIntensity: 1.0,
       });
     }
 
+    /** Mean colour of a texture image in linear light (`neutral` applies the desaturating wall grade). */
+    const _meanColorCache = new WeakMap();
+    function averageTextureColor(image, neutral) {
+      const fallback = new THREE.Color(0.2, 0.2, 0.2);
+      if (!image) return fallback;
+      const key = neutral ? "n" : "c";
+      let perImage = _meanColorCache.get(image);
+      if (perImage && perImage[key]) return perImage[key];
+      let out = fallback;
+      try {
+        const N = 16;
+        const c = document.createElement("canvas");
+        c.width = c.height = N;
+        const g = c.getContext("2d", { willReadFrequently: true });
+        g.drawImage(image, 0, 0, N, N);
+        const d = g.getImageData(0, 0, N, N).data;
+        const lin = (v) => { v /= 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+        let r = 0, gg = 0, b = 0;
+        for (let i = 0; i < d.length; i += 4) {
+          let pr = d[i], pg = d[i + 1], pb = d[i + 2];
+          if (neutral) {
+            const l = pr * 0.26 + pg * 0.63 + pb * 0.11;
+            pr = Math.min(255, l * 0.94); pg = Math.min(255, l * 0.99); pb = Math.min(255, l * 1.04);
+          }
+          r += lin(pr); gg += lin(pg); b += lin(pb);
+        }
+        const n = d.length / 4;
+        out = new THREE.Color(r / n, gg / n, b / n);
+      } catch (_) { /* unreadable image: keep the fallback */ }
+      if (!perImage) { perImage = {}; _meanColorCache.set(image, perImage); }
+      perImage[key] = out;
+      return out;
+    }
+
     function applyWallTexture() {
-      if (!wallTexture) return;
-      for (const t of _wallTextureCache.values()) {
+      if (!wallTexture && !facilityWallTexture) return;
+      const textures = [..._wallTextureCache.values(), ..._wallNormalCache.values(), ...mazeSlabTextures.values()];
+      if (facilityWallTexture) textures.push(facilityWallTexture);
+      for (const t of textures) {
         t.anisotropy = getMaxTextureAnisotropy();
         t.needsUpdate = true; // re-upload so a live quality change takes effect immediately
       }
       for (const entry of _texturedMeshes) {
-        const { mesh, rx, ry, tint } = entry;
+        const { mesh, rx, ry, tint, surface } = entry;
+        if (!wallTexture && surface !== "facility") continue;
         const m = mesh.material;
         if (m && !Array.isArray(m)) {
           // Walls bake their UV repeat into the geometry, so a single shared material
           // covers every wall face; just swap in the textured / plain variant.
-          mesh.material = getWallMaterialCached(rx, ry, tint);
+          mesh.material = getWallMaterialCached(rx, ry, tint, surface);
         }
       }
     }
@@ -3898,7 +4291,7 @@
       return c.getHex();
     }
 
-    function addWallBox(w, h, d, x, y, z, color = 0x6b7384) {
+    function addWallBox(w, h, d, x, y, z, color = 0x6b7384, surface = "") {
       const faceRepeats = [
         wallFaceUvs(d, h), wallFaceUvs(d, h),
         wallFaceUvs(w, d), wallFaceUvs(w, d),
@@ -3909,7 +4302,7 @@
       // for every wall — 6 draw calls + 6 material/texture instances became 1 + 1.
       const geometry = new THREE.BoxGeometry(w, h, d);
       bakeWallUvs(geometry, faceRepeats);
-      const mesh = new THREE.Mesh(geometry, getWallMaterialCached(1, 1, tint));
+      const mesh = new THREE.Mesh(geometry, getWallMaterialCached(1, 1, tint, surface));
       mesh.position.set(x, y, z);
       mesh.castShadow = true;
       mesh.receiveShadow = true;
@@ -3918,7 +4311,7 @@
       const wallBox = new THREE.Box3().setFromObject(mesh);
       mesh.userData.wallBox = wallBox;
       wallBoxes.push(wallBox);
-      _texturedMeshes.push({ mesh, rx: 1, ry: 1, tint });
+      _texturedMeshes.push({ mesh, rx: 1, ry: 1, tint, surface });
       return mesh;
     }
 
@@ -3930,15 +4323,16 @@
     const MAZE_WALL_THICK = 0.42;
     /** Ceiling tiles + point lights: shared Y so lamps aren’t offset below fixtures or floating mid-room. */
     const MAZE_CEILING_LIGHT_Y = MAZE_WALL_H - 0.08;
-    /** Match moon/hemi π convention; punctual lights scaled separately from global brightness. */
-    const MAZE_LIGHT_INTENSITY_SCALE = Math.PI;
     let mazeChunks = new Map();
     const mazeGridCache = new Map();
     let mazeWorldSeed = 2166136261;
     let mazeChunkPollAcc = 0;
     let mazeNavRebuildRow = 0;
-    /** WebGL forward shading has a hard limit on fragment light uniforms — register maze lamps and cull visibility each frame. */
+    // Maze fixtures feed a fixed set of renderer lights so streaming chunks doesn't
+    // generate a new shader for every combination of visible point and spot lights.
     const mazeCullableLights = [];
+    const mazePointLights = [];
+    const mazeSpotLights = [];
     let mazeLightCullDirty = true;
     let mazeLightCullX = Infinity;
     let mazeLightCullZ = Infinity;
@@ -4029,18 +4423,45 @@
       return cnt;
     }
 
+    /**
+     * Guarantees every cell is reachable from the chunk centre. Floods from the centre, then
+     * opens one wall on the frontier between the reached and unreached regions and repeats.
+     * Each pass joins at least one new cell, so it always terminates fully connected — the
+     * old version knocked out random walls and hoped, which could leave sealed pockets
+     * (zombies spawning where they can never reach you) and opened far more than needed.
+     */
     function mazeKnockDownWallsUntilConnected(vert, horiz, w, h, rng) {
-      for (let attempt = 0; attempt < 180; attempt++) {
-        if (mazeReachableCount(vert, horiz, w, h) >= w * h) return;
-        if (rng() < 0.5) {
-          const ix = 1 + ((rng() * (w - 1)) | 0);
-          const iy = (rng() * h) | 0;
-          vert[ix][iy] = false;
-        } else {
-          const ix = (rng() * w) | 0;
-          const iy = 1 + ((rng() * (h - 1)) | 0);
-          horiz[ix][iy] = false;
+      const seen = new Uint8Array(w * h);
+      const stack = [];
+      const flood = (sx, sy) => {
+        seen[sy * w + sx] = 1;
+        stack.push(sx, sy);
+        while (stack.length) {
+          const gy = stack.pop(), gx = stack.pop();
+          if (gy > 0 && !horiz[gx][gy] && !seen[(gy - 1) * w + gx]) { seen[(gy - 1) * w + gx] = 1; stack.push(gx, gy - 1); }
+          if (gy < h - 1 && !horiz[gx][gy + 1] && !seen[(gy + 1) * w + gx]) { seen[(gy + 1) * w + gx] = 1; stack.push(gx, gy + 1); }
+          if (gx > 0 && !vert[gx][gy] && !seen[gy * w + gx - 1]) { seen[gy * w + gx - 1] = 1; stack.push(gx - 1, gy); }
+          if (gx < w - 1 && !vert[gx + 1][gy] && !seen[gy * w + gx + 1]) { seen[gy * w + gx + 1] = 1; stack.push(gx + 1, gy); }
         }
+      };
+      flood(Math.floor(w / 2), Math.floor(h / 2));
+      for (let guard = 0; guard < w * h; guard++) {
+        // Walls with a reached cell on one side and an unreached one on the other.
+        const frontier = [];
+        for (let gy = 0; gy < h; gy++) {
+          for (let gx = 0; gx < w; gx++) {
+            if (!seen[gy * w + gx]) continue;
+            if (gx < w - 1 && !seen[gy * w + gx + 1]) frontier.push(0, gx + 1, gy, gx + 1, gy);
+            if (gx > 0 && !seen[gy * w + gx - 1]) frontier.push(0, gx, gy, gx - 1, gy);
+            if (gy < h - 1 && !seen[(gy + 1) * w + gx]) frontier.push(1, gx, gy + 1, gx, gy + 1);
+            if (gy > 0 && !seen[(gy - 1) * w + gx]) frontier.push(1, gx, gy, gx, gy - 1);
+          }
+        }
+        if (!frontier.length) return;
+        const i = ((rng() * (frontier.length / 5)) | 0) * 5;
+        if (frontier[i] === 0) vert[frontier[i + 1]][frontier[i + 2]] = false;
+        else horiz[frontier[i + 1]][frontier[i + 2]] = false;
+        flood(frontier[i + 3], frontier[i + 4]);
       }
     }
 
@@ -4238,68 +4659,57 @@
       return true;
     }
 
-    /**
-     * Large chamber luminaire mesh: recessed ceiling troffer — flush trim ring, metal bezel, frosted diffuser,
-     * inner accent ring (commercial LED panel / high-bay aesthetic). Composite primitives only (Three.js guides).
-     * @see https://threejs.org/docs/#api/en/geometries/CylinderGeometry
-     * @see https://threejs.org/docs/#api/en/geometries/TorusGeometry
-     */
-    function createMazeAreaLightFixture(px, ceilingY, pz, cw) {
-      const g = new THREE.Group();
-      const outerR = cw * 0.44;
-      const diffR = cw * 0.37;
-
-      const housingMat = new THREE.MeshStandardMaterial({
-        color: 0x343b48,
-        metalness: 0.78,
-        roughness: 0.38,
+    function createMazeAreaLightFixture(px, ceilingY, pz) {
+      const fixture = new THREE.Group();
+      const housing = new THREE.MeshStandardMaterial({ color: 0x323a40, roughness: .72, metalness: .26 });
+      const diffuser = new THREE.MeshStandardMaterial({
+        color: 0x79848b, roughness: .92, emissive: 0xb4c6d2, emissiveIntensity: .54,
       });
-      const bezel = new THREE.Mesh(
-        new THREE.CylinderGeometry(outerR, outerR * 0.93, 0.065, 26, 1),
-        housingMat
-      );
-      bezel.position.y = -0.036;
+      addMeshPart(fixture, new THREE.BoxGeometry(1.53, .11, .61), housing, 0, -.055, 0);
+      for (const z of [-.145, .145]) {
+        addMeshPart(fixture, new THREE.BoxGeometry(1.34, .022, .165), diffuser, 0, -.107, z);
+      }
+      fixture.position.set(px, ceilingY - .015, pz);
+      return fixture;
+    }
 
-      const diffuserMat = new THREE.MeshStandardMaterial({
-        color: 0xfff8f2,
-        emissive: 0xfff0e6,
-        emissiveIntensity: 1.15,
-        roughness: 0.82,
-        metalness: 0.03,
-      });
-      const diffuser = new THREE.Mesh(
-        new THREE.CylinderGeometry(diffR, diffR * 0.985, 0.042, 30, 1),
-        diffuserMat
-      );
-      diffuser.position.y = -0.118;
-
-      const trim = new THREE.Mesh(
-        new THREE.TorusGeometry(outerR * 0.99, 0.028, 8, 30),
-        new THREE.MeshStandardMaterial({
-          color: 0x4a5568,
-          metalness: 0.55,
-          roughness: 0.48,
-        })
-      );
-      trim.rotation.x = Math.PI / 2;
-      trim.position.y = -0.008;
-
-      const chipRing = new THREE.Mesh(
-        new THREE.TorusGeometry(diffR * 0.38, 0.016, 8, 24),
-        new THREE.MeshStandardMaterial({
-          color: 0xffe8d8,
-          emissive: 0xffb088,
-          emissiveIntensity: 0.75,
-          roughness: 0.4,
-          metalness: 0.22,
-        })
-      );
-      chipRing.rotation.x = Math.PI / 2;
-      chipRing.position.y = -0.104;
-
-      g.add(trim, bezel, diffuser, chipRing);
-      g.position.set(px, ceilingY - 0.015, pz);
-      return g;
+    function createMazeWallSconce() {
+      const fixture = new THREE.Group();
+      fixture.name = "Maze wall sconce";
+      const shellParts = [];
+      function shellPart(geometry, x, y, z, color) {
+        geometry.translate(x, y, z);
+        const tint = new THREE.Color(color);
+        const colors = new Float32Array(geometry.attributes.position.count * 3);
+        for (let i = 0; i < colors.length; i += 3) tint.toArray(colors, i);
+        geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+        shellParts.push(geometry);
+      }
+      // The backplate sits flush with the wall. Side rails and the hood recess the lens.
+      shellPart(new THREE.BoxGeometry(.246, .51, .027), 0, 0, .014, 0x41474a);
+      shellPart(new THREE.BoxGeometry(.19, .432, .084), 0, 0, .066, 0x2b3031);
+      shellPart(new THREE.BoxGeometry(.216, .057, .14), 0, .195, .078, 0x414648);
+      shellPart(new THREE.BoxGeometry(.186, .040, .114), 0, -.19, .072, 0x353937);
+      for (const x of [-.079, .079]) {
+        shellPart(new THREE.BoxGeometry(.025, .32, .043), x, -.008, .119, 0x434949);
+      }
+      for (const y of [-.061, .044]) {
+        shellPart(new THREE.BoxGeometry(.14, .013, .026), 0, y, .126, 0x383d3c);
+      }
+      for (const y of [-.234, .234]) {
+        shellPart(new THREE.CylinderGeometry(.013, .013, .006, 8).rotateX(Math.PI / 2), 0, y, .031, 0x696d6c);
+      }
+      const shell = new THREE.Mesh(mergeGeometries(shellParts), new THREE.MeshStandardMaterial({
+        vertexColors: true, roughness: .78, metalness: .31,
+        // Light reflected onto the lip and cage by the recessed diffuser.
+        emissive: 0x5e574b, emissiveIntensity: .13,
+      }));
+      fixture.add(shell);
+      for (const geometry of shellParts) geometry.dispose();
+      addMeshPart(fixture, new THREE.BoxGeometry(.124, .294, .013), new THREE.MeshStandardMaterial({
+        color: 0x827c6f, roughness: .84, emissive: 0xd8bd91, emissiveIntensity: .21,
+      }), 0, -.01, .113);
+      return fixture;
     }
 
     function buildMazeChunk(cx, cz) {
@@ -4314,15 +4724,11 @@
       const h = MAZE_CELLS;
 
       const chunkMeshes = [];
-      const chunkLights = [];
+      const slabRepeat = Math.round(MAZE_CHUNK_WORLD / FLOOR_CEILING_METERS_PER_REPEAT);
 
       const floorPl = new THREE.Mesh(
-        new THREE.PlaneGeometry(MAZE_CHUNK_WORLD - 0.02, MAZE_CHUNK_WORLD - 0.02),
-        getWallMaterialCached(
-          MAZE_CHUNK_WORLD / FLOOR_CEILING_METERS_PER_REPEAT,
-          MAZE_CHUNK_WORLD / FLOOR_CEILING_METERS_PER_REPEAT,
-          0x666670
-        )
+        new THREE.PlaneGeometry(MAZE_CHUNK_WORLD, MAZE_CHUNK_WORLD),
+        getWallMaterialCached(slabRepeat, slabRepeat, 0x727a84, "floor")
       );
       floorPl.rotation.x = -Math.PI / 2;
       floorPl.position.set(ox + MAZE_CHUNK_WORLD / 2, 0, oz + MAZE_CHUNK_WORLD / 2);
@@ -4331,20 +4737,14 @@
       chunkMeshes.push(floorPl);
       _texturedMeshes.push({
         mesh: floorPl,
-        rx: MAZE_CHUNK_WORLD / FLOOR_CEILING_METERS_PER_REPEAT,
-        ry: MAZE_CHUNK_WORLD / FLOOR_CEILING_METERS_PER_REPEAT,
-        tint: 0x666670,
+        rx: slabRepeat, ry: slabRepeat, tint: 0x727a84, surface: "floor",
       });
 
       // v93: ceiling plane now spans the full chunk (no 0.02 inset). Previously each chunk
       // had a 0.04u gap to its neighbor, letting the sky show through arena (zombie map).
       const ceilPl = new THREE.Mesh(
         new THREE.PlaneGeometry(MAZE_CHUNK_WORLD, MAZE_CHUNK_WORLD),
-        getWallMaterialCached(
-          MAZE_CHUNK_WORLD / FLOOR_CEILING_METERS_PER_REPEAT,
-          MAZE_CHUNK_WORLD / FLOOR_CEILING_METERS_PER_REPEAT,
-          0x5c6272
-        )
+        getWallMaterialCached(slabRepeat, slabRepeat, 0x606b75, "ceiling")
       );
       ceilPl.rotation.x = Math.PI / 2;
       ceilPl.position.set(ox + MAZE_CHUNK_WORLD / 2, MAZE_WALL_H, oz + MAZE_CHUNK_WORLD / 2);
@@ -4353,9 +4753,7 @@
       chunkMeshes.push(ceilPl);
       _texturedMeshes.push({
         mesh: ceilPl,
-        rx: MAZE_CHUNK_WORLD / FLOOR_CEILING_METERS_PER_REPEAT,
-        ry: MAZE_CHUNK_WORLD / FLOOR_CEILING_METERS_PER_REPEAT,
-        tint: 0x5c6272,
+        rx: slabRepeat, ry: slabRepeat, tint: 0x606b75, surface: "ceiling",
       });
 
       // All maze walls share one box material (repeat 1,1) and are merged into a single
@@ -4366,10 +4764,12 @@
       const chunkWallBoxes = [];
       const pushWall = (mw, mh, md, px, py, pz) => {
         const g = new THREE.BoxGeometry(mw, mh, md);
+        const scale = WALL_TEXTURE_METERS_PER_REPEAT;
+        const sideUv = (width, start) => ({ ...wallFaceUvs(width, mh), ox: start / scale });
         bakeWallUvs(g, [
-          wallFaceUvs(md, mh), wallFaceUvs(md, mh),
+          sideUv(md, -pz - md / 2), sideUv(md, pz - md / 2),
           wallFaceUvs(mw, md), wallFaceUvs(mw, md),
-          wallFaceUvs(mw, mh), wallFaceUvs(mw, mh),
+          sideUv(mw, px - mw / 2), sideUv(mw, -px - mw / 2),
         ]);
         g.translate(px, py, pz);
         wallGeos.push(g);
@@ -4401,14 +4801,14 @@
 
       if (wallGeos.length) {
         const mergedGeo = mergeBufferGeometries(wallGeos);
-        const wallMesh = new THREE.Mesh(mergedGeo, getWallMaterialCached(1, 1, 0x6b7384));
+        const wallMesh = new THREE.Mesh(mergedGeo, getWallMaterialCached(1, 1, 0x8b9298, "mazeWall"));
         wallMesh.castShadow = true;
         wallMesh.receiveShadow = true;
         wallMesh.userData.mazeChunkKey = key;
         scene.add(wallMesh);
         chunkMeshes.push(wallMesh);
         wallMeshes.push(wallMesh);
-        _texturedMeshes.push({ mesh: wallMesh, rx: 1, ry: 1, tint: 0x6b7384 });
+        _texturedMeshes.push({ mesh: wallMesh, rx: 1, ry: 1, tint: 0x8b9298, surface: "mazeWall" });
         for (const box of chunkWallBoxes) wallBoxes.push(box);
         mazeWallBoxBuckets.set(key, chunkWallBoxes);
       }
@@ -4422,23 +4822,18 @@
         const pz = wzMid(gx, gy);
 
         if (kind === "roof") {
-          const L = createPhysicalPointLight(
-            0xffecd0,
-            108 * MAZE_LIGHT_INTENSITY_SCALE,
-            MAZE_CHUNK_WORLD * 0.62
-          );
-          L.position.set(px, MAZE_CEILING_LIGHT_Y, pz);
+          const L = createPhysicalPointLight(0xdbe9ff, 70, 15, 2);
+          // Recess the emitter above the ceiling so a jumping player cannot enter its hot core.
+          L.position.set(px, MAZE_WALL_H + 1.12, pz);
           L.castShadow = false;
-          scene.add(L);
-          chunkLights.push(L);
           registerMazeCullLight(L, key);
 
           const bulb = new THREE.Mesh(
             new THREE.CylinderGeometry(0.14, 0.18, 0.12, 8),
             new THREE.MeshStandardMaterial({
-              color: 0xfff2de,
-              emissive: 0xfff0d0,
-              emissiveIntensity: 0.9,
+              color: 0x85949f,
+              emissive: 0xbccbd7,
+              emissiveIntensity: 0.58,
               roughness: 0.35,
               metalness: 0.2,
             })
@@ -4448,9 +4843,17 @@
           scene.add(bulb);
           chunkMeshes.push(bulb);
         } else if (kind === "wall") {
-          const edge = mazeHashSeed(cx, cz, gx * 9973 + gy * 7919)();
-          const face = edge % 4;
-          const inset = cw * 0.42;
+          // Mount the sconce on a wall that actually exists. It used to pick a face at
+          // random and sit 1.5u in from the cell edge, so most sconces hung in mid-air.
+          const edge = Math.floor(mazeHashSeed(cx, cz, gx * 9973 + gy * 7919)() * 4);
+          const hasWall = [horiz[gx][gy], vert[gx + 1][gy], horiz[gx][gy + 1], vert[gx][gy]];
+          let face = -1;
+          for (let k = 0; k < 4; k++) {
+            const f = (edge + k) % 4;
+            if (hasWall[f]) { face = f; break; }
+          }
+          if (face < 0) continue;
+          const inset = MAZE_WALL_THICK / 2;
           let lx = px;
           let lz = pz;
           let yaw = 0;
@@ -4459,82 +4862,42 @@
             yaw = 0;
           } else if (face === 1) {
             lx = ox + (gx + 1) * cw - inset;
-            yaw = Math.PI / 2;
+            yaw = -Math.PI / 2;
           } else if (face === 2) {
             lz = oz + (gy + 1) * cw - inset;
             yaw = Math.PI;
           } else {
             lx = ox + gx * cw + inset;
-            yaw = -Math.PI / 2;
+            yaw = Math.PI / 2;
           }
 
-          const sconce = new THREE.Mesh(
-            new THREE.BoxGeometry(0.22, 0.55, 0.14),
-            new THREE.MeshStandardMaterial({
-              color: 0x8a93a5,
-              emissive: 0xffe8cc,
-              emissiveIntensity: 0.35,
-              roughness: 0.55,
-            })
-          );
+          const sconce = createMazeWallSconce();
           sconce.position.set(lx, 2.05, lz);
           sconce.rotation.y = yaw;
-          sconce.castShadow = false;
           scene.add(sconce);
           chunkMeshes.push(sconce);
 
-          const spot = createPhysicalSpotLight(
-            0xffe4c8,
-            220 * MAZE_LIGHT_INTENSITY_SCALE,
-            56,
-            Math.PI / 4.2,
-            0.52
-          );
-          spot.position.set(lx, 2.25, lz);
-          spot.target.position.set(px, 0.15, pz);
-          spot.castShadow = false;
-          scene.add(spot);
-          scene.add(spot.target);
-          chunkLights.push(spot);
+          const spot = createPhysicalSpotLight(0xead8bf, 9.5, 6, .67, .82, 1);
+          sconce.localToWorld(spot.position.set(0, -.228, .164));
+          sconce.localToWorld(spot.target.position.set(0, -1.90, .24));
           registerMazeCullLight(spot, key);
-          // (sconceFill removed — the weakest light here; the sconce's own emissive +
-          // the SpotLight preserve the visual at a fraction of the fragment cost)
         } else if (kind === "area") {
-          const ceilingY = MAZE_CEILING_LIGHT_Y;
-          const fill = createPhysicalPointLight(
-            0xfff0e4,
-            200 * MAZE_LIGHT_INTENSITY_SCALE,
-            MAZE_CHUNK_WORLD * 0.88
-          );
-          fill.position.set(px, ceilingY - 0.14, pz);
-          fill.castShadow = false;
-          scene.add(fill);
-          chunkLights.push(fill);
-          registerMazeCullLight(fill, key);
-
-          const wideDown = createPhysicalSpotLight(
-            0xffebd8,
-            320 * MAZE_LIGHT_INTENSITY_SCALE,
-            MAZE_CHUNK_WORLD * 0.95,
-            Math.PI / 2.05,
-            0.5
-          );
-          wideDown.position.set(px, ceilingY - 0.02, pz);
+          // The recessed troffer uses one downward source. Its former point fill
+          // illuminated the visible ceiling and diffuser from a very short distance.
+          const wideDown = createPhysicalSpotLight(0xe3ecf7, 168, 19, 1.01, .67, 2);
+          wideDown.position.set(px, MAZE_WALL_H + 1.35, pz);
           wideDown.target.position.set(px, 0.12, pz);
           wideDown.castShadow = false;
-          scene.add(wideDown);
-          scene.add(wideDown.target);
-          chunkLights.push(wideDown);
           registerMazeCullLight(wideDown, key);
 
-          const fixture = createMazeAreaLightFixture(px, ceilingY, pz, cw);
+          const fixture = createMazeAreaLightFixture(px, MAZE_CEILING_LIGHT_Y, pz);
           fixture.traverse((o) => { if (o.isMesh) o.castShadow = false; });
           scene.add(fixture);
           chunkMeshes.push(fixture);
         }
       }
 
-      mazeChunks.set(key, { meshes: chunkMeshes, lights: chunkLights, wallBoxes: chunkWallBoxes });
+      mazeChunks.set(key, { meshes: chunkMeshes, wallBoxes: chunkWallBoxes });
       invalidateArenaNavGrid();
     }
 
@@ -4552,53 +4915,45 @@
     }
 
     function cullMazeLightsNearCamera() {
-      if (!mazeCullableLights.length) return;
-      const cx = camera.position.x;
-      const cy = camera.position.y;
-      const cz = camera.position.z;
-      const cdx = cx - mazeLightCullX;
-      const cdz = cz - mazeLightCullZ;
-      if (!mazeLightCullDirty && cdx * cdx + cdz * cdz < 4) return;
-      // Light count is fairness-critical: every tier illuminates the same enemies
-      // and corridors. Keep each shader's point/spot counts frame-invariant too.
-      const K_POINT = FAIR_PRESENTATION.pointLights;
-      const K_SPOT = FAIR_PRESENTATION.spotLights;
-      const selected = new Set();
-      const addNearest = (wantSpot, k, bias) => {
-        const top = [];
-        for (let li = 0; li < mazeCullableLights.length; li++) {
-          const L = mazeCullableLights[li];
-          if (L.isSpotLight !== wantSpot) continue;
-          const p = L.position;
-          const dx = p.x - cx;
-          const dy = p.y - cy;
-          const dz = p.z - cz;
-          let d2 = dx * dx + dz * dz + dy * dy * 0.45;
-          if (bias) d2 *= bias;
-          if (top.length < k) {
-            top.push({ L, d2 });
-            if (top.length === k) top.sort((a, b) => a.d2 - b.d2);
-          } else if (d2 < top[k - 1].d2) {
-            top[k - 1] = { L, d2 };
-            let i = k - 1;
-            while (i > 0 && top[i].d2 < top[i - 1].d2) {
-              const swap = top[i];
-              top[i] = top[i - 1];
-              top[i - 1] = swap;
-              i--;
-            }
+      const { x, y, z } = camera.position;
+      if (!mazeLightCullDirty && (x - mazeLightCullX) ** 2 + (z - mazeLightCullZ) ** 2 < 4) return;
+
+      const points = [], spots = [];
+      for (const light of mazeCullableLights) {
+        const p = light.position;
+        const distance = (p.x - x) ** 2 + (p.z - z) ** 2 + (p.y - y) ** 2 * 0.45;
+        (light.isSpotLight ? spots : points).push({ light, distance });
+      }
+
+      function updateLights(pool, sources, count, spot) {
+        sources.sort((a, b) => a.distance - b.distance);
+        while (pool.length < count) {
+          const light = spot ? new THREE.SpotLight(0xffffff, 0) : new THREE.PointLight(0xffffff, 0);
+          scene.add(light);
+          if (spot) scene.add(light.target);
+          pool.push(light);
+        }
+        for (const [index, light] of pool.entries()) {
+          const source = sources[index]?.light;
+          light.intensity = source?.intensity ?? 0;
+          if (!source) continue;
+          light.position.copy(source.position);
+          light.color.copy(source.color);
+          light.distance = source.distance;
+          light.decay = source.decay;
+          if (spot) {
+            light.target.position.copy(source.target.position);
+            light.angle = source.angle;
+            light.penumbra = source.penumbra;
           }
         }
-        for (const t of top) selected.add(t.L);
-      };
-      addNearest(false, K_POINT, null);
-      addNearest(true, K_SPOT, 0.5);
-      for (let li = 0; li < mazeCullableLights.length; li++) {
-        mazeCullableLights[li].visible = selected.has(mazeCullableLights[li]);
       }
+
+      updateLights(mazePointLights, points, FAIR_PRESENTATION.pointLights, false);
+      updateLights(mazeSpotLights, spots, FAIR_PRESENTATION.spotLights, true);
       mazeLightCullDirty = false;
-      mazeLightCullX = cx;
-      mazeLightCullZ = cz;
+      mazeLightCullX = x;
+      mazeLightCullZ = z;
     }
 
     function unloadMazeChunk(cx, cz) {
@@ -4635,16 +4990,18 @@
           }
         });
       }
-      for (const L of ch.lights) {
-        scene.remove(L);
-        if (L.target) scene.remove(L.target);
-        if (L.dispose) L.dispose();
-      }
       mazeChunks.delete(key);
       invalidateArenaNavGrid();
     }
 
     function clearAllMazeChunks() {
+      for (const light of [...mazePointLights, ...mazeSpotLights]) {
+        scene.remove(light);
+        if (light.target) scene.remove(light.target);
+        light.dispose();
+      }
+      mazePointLights.length = 0;
+      mazeSpotLights.length = 0;
       mazeCullableLights.length = 0;
       mazeLightCullDirty = true;
       mazeLightCullX = Infinity;
@@ -4779,10 +5136,33 @@
      * cyan bars, which read exactly like platform edges that are not there.
      */
     const gauntletProps = [];
+    let combatScenery = null;
+
+    function buildCombatScenery(kind, targets) {
+      combatScenery = createCombatEnvironment(kind, (...args) => addWallBox(...args, "facility"), targets);
+      scene.add(combatScenery);
+      floor.visible = false;
+      ceiling.visible = false;
+    }
+
     function clearMap() {
+      clearPvpThemed();
+      // Boss Fight uses arena lighting and does not enable the player flashlight.
+      flashlight.castShadow = !isBossArenaMap(CURRENT_MAP);
+      ensureTorchShadowMap();
       clearAllMazeChunks();
       clearPvpMapLights();
       clearGauntletProps();
+      if (combatScenery) {
+        scene.remove(combatScenery);
+        combatScenery.traverse(mesh => {
+          mesh.geometry?.dispose();
+          mesh.material?.map?.dispose();
+          mesh.material?.dispose();
+          if (mesh.isInstancedMesh) mesh.dispose();
+        });
+        combatScenery = null;
+      }
       while (wallMeshes.length) {
         const mesh = wallMeshes.pop();
         scene.remove(mesh);
@@ -4838,6 +5218,9 @@
       mazeNavAnchorCz = null;
       mazeNavRebuildRow = 0;
       clearMazeGridCache();
+      const reflectedLight = new THREE.AmbientLight(0xa9b6c8, .42);
+      scene.add(reflectedLight);
+      pvpMapLights.push(reflectedLight);
       buildMazeChunk(0, 0);
     }
 
@@ -4875,95 +5258,113 @@
       }
     }
 
-    function buildMapCrossfire() {
-      clearPvpMapLights();
-      const H = 4.5;
-
-      addWallBox(90, H, 1.0, 0, H / 2, -45);
-      addWallBox(90, H, 1.0, 0, H / 2,  45);
-      addWallBox(1.0, H, 90, -45, H / 2, 0);
-      addWallBox(1.0, H, 90,  45, H / 2, 0);
-
-      addWindowWallX(0, 0, 24, H, 1.0, 8, 1.4, 3.1);
-      addWindowWallZ(0, 0, 24, H, 1.0, 8, 1.4, 3.1);
-
-      addWallBox(18, 2.4, 1.0, -22, 1.2, -14, 0x70798a);
-      addWallBox(18, 2.4, 1.0,  22, 1.2,  14, 0x70798a);
-
-      addWallBox(1.0, 2.4, 18, -14, 1.2, 22, 0x70798a);
-      addWallBox(1.0, 2.4, 18,  14, 1.2,-22, 0x70798a);
-
-      addWindowWallX(-28, 28, 14, H, 1.0, 4, 1.2, 3.0);
-      addWindowWallX( 28,-28, 14, H, 1.0, 4, 1.2, 3.0);
-
-      const cfAmb = new THREE.AmbientLight(0xaabccf, 1.15);
-      scene.add(cfAmb);
-      pvpMapLights.push(cfAmb);
-      const cfHemi = new THREE.HemisphereLight(0xc9d6ea, 0x2a2218, 2.4);
-      scene.add(cfHemi);
-      pvpMapLights.push(cfHemi);
-      const cfSun = new THREE.DirectionalLight(0xffecd8, 4.2);
-      cfSun.position.set(10, 38, 18);
-      cfSun.castShadow = false;
-      scene.add(cfSun);
-      pvpMapLights.push(cfSun);
+    /** ── Themed PVP maps (js/pvp-maps.js) ─────────────────────────────────────────────── */
+    let pvpWorld = null, pvpMapRoot = null;
+    /** The sun of a themed map is the game's moon light, with a static shadow baked over the whole map. */
+    let pvpMoonSaved = null;
+    function setMoonShadowSize(size) {
+      moon.shadow.mapSize.set(size, size);
+      if (moon.shadow.map) { moon.shadow.map.dispose(); moon.shadow.map = null; }
+      renderer.shadowMap.needsUpdate = true;
     }
-
-    /** Bright open duel: compact 60×60 perimeter, standing-height cover (no crouch) — no inner maze corridors. */
-    function buildMapCrossfireGrid() {
+    function restoreMoon() {
+      if (!pvpMoonSaved) return;
+      const m = pvpMoonSaved;
+      moon.color.setHex(m.color); moon.intensity = m.intensity; moon.position.copy(m.position);
+      const c = moon.shadow.camera;
+      c.left = m.cam[0]; c.right = m.cam[1]; c.top = m.cam[2]; c.bottom = m.cam[3]; c.near = m.cam[4]; c.far = m.cam[5]; c.updateProjectionMatrix();
+      moon.shadow.autoUpdate = true;
+      pvpMoonSaved = null;
+      const p = getQualityPreset();
+      setMoonShadowSize(p.shadowSz);
+    }
+    function clearPvpThemed() {
+      scene.environment = null; scene.environmentIntensity = 1;
+      restoreMoon();
+      if (pvpMapRoot) {
+        try { flashlight.castShadow = true; } catch (_) {}   // other maps use it as before
+        scene.remove(pvpMapRoot);
+        pvpMapRoot.traverse((o) => {
+          if (o.geometry) o.geometry.dispose();
+          const mats = Array.isArray(o.material) ? o.material : o.material ? [o.material] : [];
+          for (const m of mats) {
+            if (m.userData && m.userData._cachedShared) continue;
+            m.map?.dispose(); m.normalMap?.dispose(); m.dispose();
+          }
+        });
+        pvpMapRoot = null;
+      }
+      if (pvpWorld) { pvpWorld.clear(); pvpWorld = null; }
+    }
+    function buildPvpThemed(id) {
       clearPvpMapLights();
-      const H = 4.5;
-      const thick = 1.0;
-      const trim = 0x929bab;
-      const EYE_Y = 1.65;
-
-      const half = 30;
-      addWallBox(half * 2, H, thick, 0, H / 2, -half);
-      addWallBox(half * 2, H, thick, 0, H / 2, half);
-      addWallBox(thick, H, half * 2, -half, H / 2, 0);
-      addWallBox(thick, H, half * 2, half, H / 2, 0);
-
-      function pillar(px, pz, s = 2.4) {
-        const coverH = EYE_Y + 1.55;
-        addWallBox(s, coverH, s, px, coverH / 2, pz, trim);
+      clearPvpThemed();
+      pvpWorld = createPvpWorld(THREE, {
+        time: () => Date.now() / 1000,
+        player: () => (player.health > 0 ? { x: player.position.x, z: player.position.z, feet: player.position.y - 1.65, onGround: player.onGround } : null),
+        damage: (amount) => damagePlayer(amount, null, "body", -1, true),
+        launch(vertical, x, z) {
+          player.velocityY = vertical;
+          player.onGround = false;
+          state.jumpedSinceGround = true;
+          state.velX += x || 0;
+          state.velZ += z || 0;
+          addCamKick({ fov: 6, pitch: 0.02 });
+        },
+        shift(dx, dy, dz) { player.position.x += dx; player.position.y += dy; player.position.z += dz; },
+      });
+      pvpMapRoot = new THREE.Group();
+      scene.add(pvpMapRoot);
+      const host = {
+        scene: pvpMapRoot, world: pvpWorld, renderer,
+        tier: () => ({ potato: 0, regular: 1, high: 2, extreme: 3 })[getQualityId()] ?? 1,
+        quality: () => ({ potato: 0, regular: 1, high: 2, extreme: 2 })[getQualityId()] ?? 1,
+        environment(texture, intensity) {
+          scene.environment = texture;
+          scene.environmentIntensity = intensity;
+        },
+        solid(w, h, d, x, y, z, material) {
+          const mesh = addWallBox(w, h, d, x, y, z, 0x888888);
+          const tracked = _texturedMeshes.findIndex((e) => e.mesh === mesh);
+          if (tracked !== -1) _texturedMeshes.splice(tracked, 1);   // keep the map's own material
+          mesh.geometry.dispose();
+          mesh.geometry = pvpMaps.boxUv(new THREE.BoxGeometry(w, h, d), w, h, d, (material.userData && material.userData.tile) || 3);
+          mesh.material = material;
+          return mesh;
+        },
+        light(l) {
+          // Every material compiles with every point light in the scene; past about eight the shader
+          // fails and lit surfaces vanish, so a map gets six and the rest stay scenery.
+          if (l.isPointLight && pvpMapLights.filter((x) => x.isPointLight).length >= 6) return;
+          scene.add(l); pvpMapLights.push(l);
+        },
+      };
+      // The torch's shadow map is only created once it is lit; until then any lit material that expects it
+      // fails to draw (the whole map goes black). The themed maps are lit by the map, so it casts none.
+      try { flashlight.castShadow = false; } catch (_) {}
+      const buildStart = performance.now();
+      const def = pvpMaps.build(id, host);
+      console.info(`[pvp] built ${id} in ${(performance.now() - buildStart).toFixed(0)} ms`);
+      const env = def.env;
+      if (env.hemi) { const h = new THREE.HemisphereLight(env.hemi[0], env.hemi[1], env.hemi[2]); scene.add(h); pvpMapLights.push(h); }
+      if (env.ambient) { const a = new THREE.AmbientLight(env.ambient[0], env.ambient[1]); scene.add(a); pvpMapLights.push(a); }
+      if (env.sun && env.shadow) {
+        const c = moon.shadow.camera;
+        pvpMoonSaved = { color: moon.color.getHex(), intensity: moon.intensity, position: moon.position.clone(), cam: [c.left, c.right, c.top, c.bottom, c.near, c.far] };
+        moon.color.set(env.sun[0]); moon.intensity = env.sun[1];
+        moon.position.set(...env.sun[2]).normalize().multiplyScalar(120);
+        const e = env.shadow;
+        c.left = -e; c.right = e; c.top = e; c.bottom = -e; c.near = 20; c.far = 300; c.updateProjectionMatrix();
+        // Nothing but doors and lifts moves, and those cast none: one render of the shadows serves the whole match.
+        moon.shadow.autoUpdate = false;
+        setMoonShadowSize(2048);
+        moon.shadow.needsUpdate = true;
+      } else if (env.sun) {
+        const sun = new THREE.DirectionalLight(env.sun[0], env.sun[1]);
+        sun.position.set(...env.sun[2]);
+        scene.add(sun); pvpMapLights.push(sun);
       }
-
-      const posts = [
-        [-22, -22], [22, -22], [-22, 22], [22, 22],
-        [-16, 0], [16, 0], [0, -16], [0, 16],
-        [-10, 10], [10, -10], [-6, -18], [6, 18],
-        [-2, 0], [2, 0],
-      ];
-      for (const [px, pz] of posts) pillar(px, pz);
-
-      const lightPos = [
-        [-20, -20], [0, -20], [20, -20],
-        [-20, 0], [0, 0], [20, 0],
-        [-20, 20], [0, 20], [20, 20],
-      ];
-      for (const [lx, lz] of lightPos) {
-        const L = createPhysicalPointLight(0xfff6ee, 520, 150, 2.2);
-        L.position.set(lx, H + 1.2, lz);
-        L.castShadow = false;
-        scene.add(L);
-        pvpMapLights.push(L);
-      }
-      const rimTop = createPhysicalPointLight(0xeaf6ff, 380, 180, 2.4);
-      rimTop.position.set(0, H + 8, 0);
-      rimTop.castShadow = false;
-      scene.add(rimTop);
-      pvpMapLights.push(rimTop);
-      const ambFill = new THREE.AmbientLight(0xd4e2f5, 2.1);
-      scene.add(ambFill);
-      pvpMapLights.push(ambFill);
-      const hemiFill = new THREE.HemisphereLight(0xeef6ff, 0x5c5348, 4.2);
-      scene.add(hemiFill);
-      pvpMapLights.push(hemiFill);
-      const sunFill = new THREE.DirectionalLight(0xfff6ea, 9.5);
-      sunFill.position.set(18, 42, 14);
-      sunFill.castShadow = false;
-      scene.add(sunFill);
-      pvpMapLights.push(sunFill);
+      floor.visible = false;
       ceiling.visible = false;
     }
 
@@ -5007,34 +5408,17 @@
 
     function buildMapBossArena() {
       clearPvpMapLights();
-      const H = 6;
-      const half = 50;
+      buildCombatScenery("boss");
 
-      addWallBox(half * 2, H, 1.0, 0, H / 2, -half);
-      addWallBox(half * 2, H, 1.0, 0, H / 2, half);
-      addWallBox(1.0, H, half * 2, -half, H / 2, 0);
-      addWallBox(1.0, H, half * 2, half, H / 2, 0);
-
-      const coverH = 2.0;
-      const coverColor = 0x5a6a55;
-      addWallBox(3.0, coverH, 1.2, -20, coverH / 2, -18, coverColor);
-      addWallBox(1.2, coverH, 3.0, 22, coverH / 2, 15, coverColor);
-      addWallBox(2.5, coverH, 1.0, 10, coverH / 2, -30, coverColor);
-      addWallBox(1.0, coverH, 2.5, -30, coverH / 2, 8, coverColor);
-      addWallBox(4.0, coverH, 1.5, 0, coverH / 2, 35, coverColor);
-
-      floor.visible = true;
-
-      const amb = new THREE.AmbientLight(0x708090, 2.2);
+      const amb = new THREE.AmbientLight(0xb0bece, 3.6);
       scene.add(amb); pvpMapLights.push(amb);
-      const hemi = new THREE.HemisphereLight(0x607080, 0x201818, 2.8);
+      const hemi = new THREE.HemisphereLight(0x9daec2, 0x504143, 3.8);
       scene.add(hemi); pvpMapLights.push(hemi);
-      const dim = new THREE.DirectionalLight(0xa0b0d0, 3.5);
+      const dim = new THREE.DirectionalLight(0xd0dcef, 4.6);
       dim.position.set(20, 40, 30);
       dim.castShadow = false;
       scene.add(dim); pvpMapLights.push(dim);
 
-      ceiling.visible = false;
     }
 
     function resetTrainingSession() {
@@ -5069,12 +5453,20 @@
       if (trainYouAcc) trainYouAcc.textContent = trainingAccuracyPct(y);
     }
 
+    function applyTrainingTeamState(data) {
+      if (!TRAINING_COOP || !data) return;
+      for (const key of ["shots", "hits", "points", "head", "body", "leg"]) {
+        if (Number.isFinite(data[key])) trainingStats.team[key] = data[key];
+      }
+      updateTrainingScoreboardUI();
+    }
+    socket.on("trainingState", applyTrainingTeamState);
+
     function registerTrainingShot() {
       if (!isTrainingMap(CURRENT_MAP)) return;
       trainingStats.you.shots++;
-      if (!MULTIPLAYER || !TRAINING_COOP) {
-        trainingStats.team.shots++;
-      }
+      if (MULTIPLAYER && TRAINING_COOP) socket.emit("trainingShot");
+      else trainingStats.team.shots++;
       updateTrainingScoreboardUI();
     }
 
@@ -5086,9 +5478,11 @@
       y.points += pts;
       y.hits++;
       y[z]++;
-      trainingStats.team.points += pts;
-      trainingStats.team.hits++;
-      trainingStats.team[z]++;
+      if (!MULTIPLAYER || !TRAINING_COOP) {
+        trainingStats.team.points += pts;
+        trainingStats.team.hits++;
+        trainingStats.team[z]++;
+      }
       updateTrainingScoreboardUI();
       if (MULTIPLAYER && TRAINING_COOP) {
         try {
@@ -5163,6 +5557,8 @@
 
       // Strip the AI state so a target never chases or shoots — updateTrainingDummies owns it.
       dummy.trainingDummy = true;
+      setEnemyShadows(dummy.group, false);
+      if (dummy.flashMount) dummy.flashMount.visible = false;
       dummy.alive = true;
       dummy.aware = false;
       dummy.moving = false;
@@ -5241,11 +5637,30 @@
     function spawnAnimationShowcase() {
       removeAnimationShowcase();
       const rp = createRemotePlayer(tr("showcaseName", "ANIMATION DEMO"));
+      rp.lightOn = false;
+      rp.flashMount.visible = false;
+      for (const type of new Set(SHOWCASE_SCRIPT.map(step => step.weapon))) equipRemotePlayerWeapon(rp, type);
+      equipRemotePlayerWeapon(rp, SHOWCASE_SCRIPT[0].weapon);
       rp.x = SHOWCASE_HOME.x;
       rp.z = SHOWCASE_HOME.z;
       rp.y = 1.65;
-      rp.yaw = Math.PI; // face the firing line
+      rp.yaw = Math.atan2(rp.x, rp.z - 22);
       rp.group.position.set(rp.x, 0, rp.z);
+      rp.group.rotation.y = rp.yaw + Math.PI;
+      rp.nameSprite.scale.set(2.75, .515, 1);
+      rp.nameSprite.position.y = 2.19;
+      rp.showcaseHitMeshes = [];
+      for (const [zone, groups] of [
+        ["head", [rp.headGroup]],
+        ["body", [rp.carrier, rp.waist, rp.leftArm, rp.rightArm]],
+        ["leg", [rp.leftLeg, rp.rightLeg]],
+      ]) {
+        for (const group of groups) group.traverse(mesh => {
+          if (!mesh.isMesh) return;
+          mesh.userData.showcaseZone = zone;
+          rp.showcaseHitMeshes.push(mesh);
+        });
+      }
       // createRemotePlayer() returns a HIDDEN group on purpose: a networked avatar only
       // unhides once its first `move` packet lands. The showcase never receives one, so
       // without this it stays permanently invisible — the bug that made v10's demo a
@@ -5260,28 +5675,24 @@
       // stood on or shot.
       const pad = new THREE.Group();
       const padBase = new THREE.Mesh(
-        new THREE.CylinderGeometry(1.5, 1.7, 0.16, 28),
+        new THREE.CylinderGeometry(1.5, 1.53, 0.025, 28),
         new THREE.MeshStandardMaterial({ color: 0x243040, roughness: 0.7, metalness: 0.25 })
       );
-      padBase.position.y = 0.08;
+      padBase.position.y = -0.010;
       pad.add(padBase);
       const padRing = new THREE.Mesh(
-        new THREE.TorusGeometry(1.5, 0.05, 10, 36),
+        new THREE.TorusGeometry(1.5, 0.023, 8, 36),
         new THREE.MeshStandardMaterial({
           color: 0x7ec8ff, emissive: 0x2f86c8, emissiveIntensity: 1.1, roughness: 0.4,
         })
       );
       padRing.rotation.x = -Math.PI / 2;
-      padRing.position.y = 0.17;
+      padRing.position.y = 0.013;
       pad.add(padRing);
       pad.position.set(SHOWCASE_HOME.x, 0, SHOWCASE_HOME.z);
       pad.traverse((o) => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = true; } });
       scene.add(pad);
-      const padLight = createPhysicalPointLight(0xbfe4ff, 260, 26, 2.0);
-      padLight.position.set(SHOWCASE_HOME.x, 4.2, SHOWCASE_HOME.z);
-      padLight.castShadow = false;
-      scene.add(padLight);
-      showcaseProps = [pad, padLight];
+      showcaseProps = [pad];
       showcaseStep = 0;
       showcaseT = 0;
       showcaseFireT = 0;
@@ -5293,8 +5704,8 @@
       const spr = new THREE.Sprite(
         new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false, fog: false })
       );
-      spr.scale.set(4.4, 0.69, 1);
-      spr.position.set(0, 3.1, 0);
+      spr.scale.set(3.7, 0.58, 1);
+      spr.position.set(0, 2.73, 0);
       spr.renderOrder = 999;
       spr.raycast = () => {};
       rp.group.add(spr);
@@ -5322,8 +5733,35 @@
         ctx.font = `bold ${px}px Audiowide, Arial`;
       }
       ctx.fillStyle = "#ffd34d";
-      ctx.fillText(text, canvas.width / 2, canvas.height / 2);
+      ctx.fillText(text, canvas.width / 2, canvas.height / 2, maxW);
       showcaseLabel.tex.needsUpdate = true;
+    }
+
+    const showcaseRayCenter = new THREE.Vector3();
+    const showcaseRayClosest = new THREE.Vector3();
+    function hitAnimationShowcase(ray) {
+      if (!showcaseRp?.group.visible) return null;
+      const center = showcaseRayCenter.copy(showcaseRp.group.position);
+      center.y += .98;
+      const closest = THREE.MathUtils.clamp(
+        showcaseRayClosest.subVectors(center, ray.ray.origin).dot(ray.ray.direction), ray.near, ray.far,
+      );
+      if (ray.ray.at(closest, showcaseRayClosest).distanceToSquared(center) > 1.4 ** 2) return null;
+      showcaseRp.group.updateMatrixWorld(true);
+      const hits = ray.intersectObjects(showcaseRp.showcaseHitMeshes, false);
+      return hits.find(hit => {
+        for (let node = hit.object; node !== showcaseRp.group; node = node.parent) {
+          if (!node?.visible) return false;
+        }
+        return true;
+      }) || null;
+    }
+
+    function showAnimationShowcaseHit(hit) {
+      const zone = hit.object.userData.showcaseZone;
+      registerTrainingHit(zone);
+      createSparks(hit.point, 0x98deed);
+      triggerHitFeedback(false, zone === "head");
     }
 
     function updateAnimationShowcase(dt) {
@@ -5346,6 +5784,8 @@
         try { equipRemotePlayerWeapon(rp, wantW); } catch (_) {}
       }
       rp.isReloading = !!cur.reload;
+      rp.remoteReload = cur.reload ? showcaseT / cur.dur : 0;
+      rp.healProgress = wantW === 4 ? showcaseT / cur.dur : 0;
       rp.ads = !!cur.ads;
       rp.crouch = cur.crouch ? 1 : 0;
       rp.remotePitch = cur.ads ? -0.05 : 0;
@@ -5354,10 +5794,10 @@
       if (cur.move) {
         const span = cur.range || 3;
         rp.x = SHOWCASE_HOME.x + Math.sin(showcaseT * (cur.move / span)) * span;
-        rp.yaw = Math.cos(showcaseT * (cur.move / span)) > 0 ? Math.PI * 0.5 : -Math.PI * 0.5;
+        rp.yaw = Math.cos(showcaseT * (cur.move / span)) > 0 ? -Math.PI * 0.5 : Math.PI * 0.5;
       } else {
         rp.x += (SHOWCASE_HOME.x - rp.x) * Math.min(1, dt * 4);
-        rp.yaw = Math.PI;
+        rp.yaw = Math.atan2(rp.x, rp.z - 22);
       }
       rp.z = SHOWCASE_HOME.z;
 
@@ -5382,9 +5822,14 @@
         showcaseFireT -= dt;
         if (showcaseFireT <= 0) {
           showcaseFireT = cur.fire;
+          rp.firedAt = performance.now();
           const w = weapons[wantW] || weapons[1];
-          const from = new THREE.Vector3(rp.visX ?? rp.x, (rp.visY ?? rp.y) - 0.35, rp.visZ ?? rp.z);
-          const to = from.clone().add(new THREE.Vector3(0, 0.1, -18));
+          const from = new THREE.Vector3();
+          const muzzle = rp.gunModel.userData.muzzle;
+          if (muzzle) muzzle.getWorldPosition(from);
+          else rp.group.localToWorld(from.set(0.1, 1.25, 0.6));
+          const forward = new THREE.Vector3(0, 0, 1).applyQuaternion(rp.group.quaternion);
+          const to = from.clone().addScaledVector(forward, 18);
           createBulletTrail(from, to, w.color);
           createSparks(from.clone(), w.color);
         }
@@ -5435,10 +5880,9 @@
         // intentionally bypass updateEnemies(). This keeps the same idle/walk/death clips
         // visible in the range instead of leaving the mesh in its bind pose.
         enemy.moving = !!(enemy.alive && enemy.lane && enemy.dissolveTimer <= 0);
-        updateRealZombieAnimation(enemy, dt);
-
         // Downed: run out the dissolve, then stand back up at full HP on the home spot.
         if (!enemy.alive) {
+          updateZombieVisual(enemy, dt);
           if (enemy.dissolveTimer > 0) enemy.dissolveTimer = Math.max(0, enemy.dissolveTimer - dt);
           enemy.respawnTimer -= dt;
           if (enemy.respawnTimer <= 0) {
@@ -5454,22 +5898,25 @@
         }
 
         if (enemy.dissolveTimer > 0) {
+          updateZombieVisual(enemy, dt);
           enemy.dissolveTimer = Math.max(0, enemy.dissolveTimer - dt);
           continue;
         }
 
         if (!enemy.lane) {
           // Static target: just a slow idle sway so it doesn't look frozen.
-          animateTrainingDummyLimbs(enemy, dt, false);
+          if (enemy.type === "recruit") animateTrainingDummyLimbs(enemy, dt, false);
           enemy.walkPhase += dt * 1.1;
           enemy.group.position.y = enemy.baseY + Math.sin(enemy.walkPhase) * 0.02;
           enemy.group.rotation.y = 0;
+          updateZombieVisual(enemy, dt);
           continue;
         }
 
         const lane = enemy.lane;
-        animateTrainingDummyLimbs(enemy, dt, true);
-        let x = enemy.group.position.x + enemy.patrolDir * enemy.patrolSpeed * dt;
+        if (enemy.type === "recruit") animateTrainingDummyLimbs(enemy, dt, true);
+        const previousX = enemy.group.position.x;
+        let x = previousX + enemy.patrolDir * enemy.patrolSpeed * dt;
         if (x >= lane.xMax) {
           x = lane.xMax;
           enemy.patrolDir = -1;
@@ -5481,76 +5928,20 @@
         enemy.walkPhase += dt * (2.4 + enemy.patrolSpeed * 0.35);
         enemy.group.position.y = enemy.baseY + Math.sin(enemy.walkPhase) * 0.04;
         enemy.group.rotation.y = 0;
+        updateZombieVisual(enemy, dt, Math.abs(x - previousX));
       }
     }
 
     function buildMapTraining() {
       clearPvpMapLights();
-      const H = 4.5;
-      const thick = 1.0;
-      const trim = 0x929bab;
-      // v5: the range grew from 56×56 to 96×96 so the mid zombie line, the far moving line
-      // and the boss bay at the back all fit down-range of the original lanes. The player
-      // still spawns at (0, 22) facing -Z, so the firing line is unchanged — everything new
-      // is added beyond the old back wall.
-      const halfX = 34;
-      const zBack = -48;
-      const zFront = 26;
-      addWallBox(halfX * 2, H, thick, 0, H / 2, zBack);
-      addWallBox(halfX * 2, H, thick, 0, H / 2, zFront);
-      addWallBox(thick, H, zFront - zBack, -halfX, H / 2, (zFront + zBack) / 2);
-      addWallBox(thick, H, zFront - zBack, halfX, H / 2, (zFront + zBack) / 2);
-      // Waist-high cover on the near lanes (unchanged) …
-      addWallBox(8, 2.2, thick, -12, 1.1, -10, trim);
-      addWallBox(8, 2.2, thick, 12, 1.1, -10, trim);
-      addWallBox(8, 2.2, thick, -4, 1.1, -20, trim);
-      addWallBox(8, 2.2, thick, 8, 1.1, -20, trim);
-      // … plus barricades framing the new mid and far lines.
-      addWallBox(6, 1.5, thick, -26, 0.75, -23, trim);
-      addWallBox(6, 1.5, thick, 26, 0.75, -23, trim);
-      addWallBox(5, 1.8, thick, 0, 0.9, -31, trim);
-      addWallBox(thick, 2.4, 7, -30, 1.2, -36, trim);
-      addWallBox(thick, 2.4, 7, 30, 1.2, -36, trim);
-      // Boss bay at the very back: two side buttresses so it reads as its own alcove.
-      addWallBox(thick, 3.2, 9, -11, 1.6, -41, trim);
-      addWallBox(thick, 3.2, 9, 11, 1.6, -41, trim);
-      // Lighting rig scaled up with the room — the far half was pitch black on the first pass.
-      const lightPos = [
-        [-14, -12], [0, -12], [14, -12], [-8, -18], [8, -18], [0, -8],
-        [-24, -6], [24, -6], [0, 4], [-22, 14], [22, 14],
-        [-19, -27], [0, -27], [19, -27], [-28, -30], [28, -30],
-        [-20, -34], [0, -34], [20, -34],
-        [0, -40], [-9, -44], [9, -44], [-24, -42], [24, -42],
-      ];
-      // v8: stock colours, only ~15 % brighter than the original. (v7 doubled the light and
-      // tinted everything warm, which turned the concrete brown — reverted.) The only real
-      // change to the look is the blue sky from getMapEnvColors().
-      for (const [lx, lz] of lightPos) {
-        const L = createPhysicalPointLight(0xfff6ee, 550, 145, 2.2);
-        L.position.set(lx, H + 1.1, lz);
-        L.castShadow = false;
-        scene.add(L);
-        pvpMapLights.push(L);
-      }
-      const ambFill = new THREE.AmbientLight(0xd4e2f5, 2.4);
-      scene.add(ambFill);
-      pvpMapLights.push(ambFill);
-      const hemiFill = new THREE.HemisphereLight(0xeef6ff, 0x5c5348, 4.8);
-      scene.add(hemiFill);
-      pvpMapLights.push(hemiFill);
-      const sunFill = new THREE.DirectionalLight(0xfff6ea, 11.0);
-      sunFill.position.set(18, 42, 14);
-      sunFill.castShadow = false;
-      scene.add(sunFill);
-      pvpMapLights.push(sunFill);
-      // The range is now 96 units deep, so the far end needs its own fill or it goes black.
-      // Neutral white and deliberately weak — this is a fill, not a second sun.
-      const backFill = new THREE.DirectionalLight(0xf2f6ff, 3.0);
-      backFill.position.set(-14, 16, -46);
-      backFill.castShadow = false;
-      scene.add(backFill);
-      pvpMapLights.push(backFill);
-      ceiling.visible = false;
+      buildCombatScenery("training", TRAINING_TARGETS);
+      const sky = new THREE.HemisphereLight(0xe4f2ff, 0x545b64, 2.7);
+      const sun = new THREE.DirectionalLight(0xfff7e9, 3.2);
+      sun.position.set(18, 42, 14);
+      const fill = new THREE.DirectionalLight(0xc9dfff, 0.9);
+      fill.position.set(-14, 16, -46);
+      scene.add(sky, sun, fill);
+      pvpMapLights.push(sky, sun, fill);
     }
 
     /**
@@ -5561,15 +5952,21 @@
      * server room (plain code) AND learns which map to build — so both sides always match.
      * Classic code stays the raw server code (back-compatible); grid gets a "-G" tag.
      */
+    /** Which map a shared room code names (the relay only knows the one "crossfire" mode). */
+    const PVP_SHARE_TAGS = { crossfire_grid: "G", pvp_ruins: "R", pvp_town: "T" };
     function makePvpShareCode(realCode, variant) {
       const c = String(realCode || "");
       if (!c) return c;
-      return variant === "crossfire_grid" ? `${c}-G` : c;
+      const tag = PVP_SHARE_TAGS[variant];
+      return tag ? `${c}-${tag}` : c;
     }
 
     /** Split a shared PVP code back into the real server code + map variant ("" = unspecified). */
     function parsePvpShareCode(input) {
       const up = String(input || "").trim().toUpperCase();
+      for (const [variant, tag] of Object.entries(PVP_SHARE_TAGS)) {
+        if (up.endsWith("-" + tag)) return { code: up.slice(0, -2), variant };
+      }
       if (up.endsWith("-G")) return { code: up.slice(0, -2), variant: "crossfire_grid" };
       if (up.endsWith("-C")) return { code: up.slice(0, -2), variant: "crossfire" };
       return { code: up, variant: "" };
@@ -5584,7 +5981,7 @@
 
 
     /* ══════════════════════════════════════════════════════════════════════
-     * GAUNTLET — 20-level movement course
+     * GAUNTLET — movement and combat courses
      *
      * Deliberately NOT the boss mode. There is no clear condition tied to killing
      * anything: the only objective is to reach the exit pad. Zombies and the boss are
@@ -5600,11 +5997,10 @@
      * ═════════════════════════════════════════════════════════════════════ */
     function isGauntletMap(m) { return m === "gauntlet"; }
 
-    const GAUNTLET_LEVEL_COUNT = 20;
     /** Eye Y below which you are considered fallen. Platform tops sit at 0 and up. */
-    const GAUNTLET_VOID_Y = -6;
+    const GAUNTLET_VOID_MARGIN = 7.5;
     /** The implicit "floor everywhere" is pushed far under the course so pits are real. */
-    const GAUNTLET_FLOOR_EYE_Y = -40;
+    const GAUNTLET_FLOOR_EYE_Y = -80;
     const GAUNTLET_W = 12;            // standard corridor width
     const GAUNTLET_PROGRESS_KEY = "fps_gauntlet_progress";
 
@@ -5620,27 +6016,27 @@
      *   dash   {gap}             dash-only pit
      *   crawl  {len}             platform under a low slab — must crouch
      *   beam   {len, w}          narrow platform over the void
-     *   steps  {n, rise, len}    ascending pads
+     *   steps  {n, rise, len}    ascending pads (rise must stay under the 1.2u jump apex)
      *   pads   {n, len, gap, w}  islands separated by pits
      *   room   {len, w, spots}   open arena; `spots` zombie spawn points
      */
-    const GAUNTLET_LEVELS = [
+    const GAUNTLET_LEVELS = extendGauntletCourses([
       // ── 1–5: movement only ──────────────────────────────────────────────
       { name: "FIRST STEPS",  segs: [{t:"run",len:16},{t:"jump"},{t:"run",len:12},{t:"jump"},{t:"run",len:14}] },
       { name: "THE GAP",      segs: [{t:"run",len:12},{t:"jump"},{t:"run",len:8},{t:"dash"},{t:"run",len:14}] },
       { name: "DUCK",         segs: [{t:"run",len:10},{t:"crawl",len:10},{t:"jump"},{t:"crawl",len:8},{t:"run",len:12}] },
       { name: "NARROW",       segs: [{t:"run",len:10},{t:"beam",len:18,w:2.4},{t:"jump"},{t:"beam",len:14,w:2.0},{t:"run",len:12}] },
-      { name: "STAIRWAY",     segs: [{t:"run",len:10},{t:"steps",n:4,rise:1.6,len:4},{t:"dash"},{t:"pads",n:3,len:3.5,gap:GAP_JUMP,w:4},{t:"run",len:12}] },
+      { name: "STAIRWAY",     segs: [{t:"run",len:10},{t:"steps",n:6,rise:0.95,len:4},{t:"dash"},{t:"pads",n:3,len:3.5,gap:GAP_JUMP,w:4},{t:"run",len:12}] },
 
       // ── 6–15: zombies + movement ────────────────────────────────────────
       { name: "WELCOMING PARTY", z:4,  segs: [{t:"run",len:10},{t:"room",len:22},{t:"jump"},{t:"run",len:14}] },
       { name: "CROSSING",        z:5,  segs: [{t:"run",len:10},{t:"room",len:18},{t:"dash"},{t:"beam",len:16,w:2.6},{t:"run",len:12}] },
       { name: "LOW ROADS",       z:6,  segs: [{t:"run",len:10},{t:"crawl",len:12},{t:"room",len:18},{t:"crawl",len:10},{t:"run",len:12}] },
-      { name: "STEPPING OUT",    z:7,  segs: [{t:"run",len:10},{t:"pads",n:4,len:3.5,gap:GAP_JUMP,w:4},{t:"room",len:20},{t:"dash"},{t:"run",len:12}] },
+      { name: "FREIGHT LIFT", segs: [{t:"run",len:12},{t:"lift",rise:4.0},{t:"run",len:10},{t:"beam",len:12,w:2.2},{t:"jump",gap:3.2},{t:"run",len:12}] },
       { name: "THE LONG DROP",   z:8,  segs: [{t:"run",len:10},{t:"dash"},{t:"beam",len:20,w:2.2},{t:"dash"},{t:"room",len:20},{t:"run",len:12}] },
-      { name: "SWARM",           z:10, segs: [{t:"run",len:10},{t:"room",len:26},{t:"crawl",len:10},{t:"room",len:18},{t:"run",len:12}] },
-      { name: "HIGH GROUND",     z:10, segs: [{t:"run",len:10},{t:"steps",n:4,rise:1.7,len:4},{t:"beam",len:14,w:2.6},{t:"steps",n:4,rise:-1.7,len:4},{t:"room",len:20},{t:"dash"},{t:"run",len:12}] },
-      { name: "PINCH",           z:11, segs: [{t:"run",len:10},{t:"beam",len:16,w:2.0},{t:"room",len:22},{t:"beam",len:16,w:2.0},{t:"run",len:12}] },
+      { name: "FERRY", segs: [{t:"run",len:10},{t:"shuttle",gap:11.5},{t:"run",len:10},{t:"pads",n:4,len:3.2,gap:3.0,w:2.8},{t:"run",len:12}] },
+      { name: "HIGH GROUND",     z:10, segs: [{t:"run",len:10},{t:"steps",n:6,rise:0.95,len:4},{t:"beam",len:14,w:2.6},{t:"steps",n:6,rise:-0.95,len:4},{t:"room",len:20},{t:"dash"},{t:"run",len:12}] },
+      { name: "PINCH", segs: [{t:"run",len:10},{t:"beam",len:12,w:1.8},{t:"shuttle",gap:11.2,drift:2.6},{t:"run",len:8},{t:"crawl",len:9},{t:"run",len:12}] },
       { name: "NO FLOOR",        z:12, segs: [{t:"run",len:10},{t:"pads",n:5,len:3.2,gap:GAP_JUMP,w:3.6},{t:"room",len:22},{t:"dash"},{t:"pads",n:3,len:3.2,gap:GAP_JUMP,w:3.6},{t:"run",len:12}] },
       { name: "GRINDER",         z:14, segs: [{t:"run",len:10},{t:"room",len:22},{t:"crawl",len:12},{t:"dash"},{t:"room",len:22},{t:"beam",len:14,w:2.4},{t:"run",len:12}] },
 
@@ -5648,20 +6044,78 @@
       { name: "HORMONE",         z:8,  boss:1, segs: [{t:"run",len:10},{t:"room",len:20},{t:"dash"},{t:"room",len:28,boss:true},{t:"run",len:14}] },
       { name: "BOSS + BEAMS",    z:9,  boss:1, segs: [{t:"run",len:10},{t:"beam",len:18,w:2.6},{t:"room",len:28,boss:true},{t:"dash"},{t:"run",len:14}] },
       { name: "CRAWLSPACE",      z:10, boss:1, segs: [{t:"run",len:10},{t:"crawl",len:12},{t:"room",len:28,boss:true},{t:"crawl",len:12},{t:"run",len:14}] },
-      { name: "THE CLIMB",       z:12, boss:1, segs: [{t:"run",len:10},{t:"steps",n:4,rise:1.7,len:4},{t:"beam",len:14,w:2.6},{t:"steps",n:4,rise:-1.7,len:4},{t:"room",len:28,boss:true},{t:"dash"},{t:"pads",n:3,len:3.4,gap:GAP_JUMP,w:4},{t:"run",len:14}] },
+      { name: "THE CLIMB",       z:12, boss:1, segs: [{t:"run",len:10},{t:"steps",n:6,rise:0.95,len:4},{t:"beam",len:14,w:2.6},{t:"steps",n:6,rise:-0.95,len:4},{t:"room",len:28,boss:true},{t:"dash"},{t:"pads",n:3,len:3.4,gap:GAP_JUMP,w:4},{t:"run",len:14}] },
       { name: "HELL",            z:14, boss:1, hell:true,
         segs: [{t:"run",len:10},{t:"dash"},{t:"beam",len:18,w:2.4},{t:"room",len:24},{t:"crawl",len:10},{t:"room",len:32,boss:true},{t:"run",len:14}] },
-    ];
+    ]);
+
+    const GAUNTLET_LEVEL_COUNT = GAUNTLET_LEVELS.length;
+    const movingGauntletPlatforms = [];
+    let gauntletRuntime = null;
+    let gauntletMotionTime = 0;
+
+    /** Clear-the-room doors: { room, mesh, lamp, box, baseY, amount, open }. See addClearDoor. */
+    const gauntletDoors = [];
+    let gauntletDoorLast = 0;
+    const gauntletThemes = createGauntletThemes(THREE);
+    const gauntletPath = createPathGeometry(THREE);
+    let gauntletGrid = null;   // spatial index of the course's collision slabs: { cells: Map<number, Box3[]>, always: Box3[] }
+    const currentGauntletTheme = () => gauntletThemes.themeFor(gauntletLevel, GAUNTLET_CHAPTER_SIZE);
+    /** Per-frame work registered by the current theme's scenery (falling ash, robot arms, ...). */
+    const gauntletTicks = [];
+    /** Decks that sag when landed on and float back (hover chapters): { mesh, box, x, z, w, d, offset, vel, wasOn }. */
+    const gauntletHover = [];
+    function updateGauntletHover(dt) {
+      if (!gauntletHover.length) return;
+      const feet = player.position.y - 1.65, px = player.position.x, pz = player.position.z;
+      for (const h of gauntletHover) {
+        let onIt = false;
+        if (h.boxes) {
+          // A drawn chunk of ribbon deck; its slabs sink and rise with it. Far-off chunks that have
+          // settled need no work at all.
+          const far = Math.abs(h.cx - px) > h.reach + 30 || Math.abs(h.cz - pz) > h.reach + 30;
+          if (far && Math.abs(h.offset) < 1e-4 && Math.abs(h.vel) < 1e-3) continue;
+          onIt = !far && player.onGround && h.boxes.some((b) => Math.abs(feet - b.max.y) < 0.14
+            && px >= b.min.x - 0.1 && px <= b.max.x + 0.1 && pz >= b.min.z - 0.1 && pz <= b.max.z + 0.1);
+        } else {
+          onIt = player.onGround && Math.abs(feet - h.box.max.y) < 0.14
+            && Math.abs(px - h.x) <= h.w / 2 + 0.1 && Math.abs(pz - h.z) <= h.d / 2 + 0.1;
+        }
+        if (onIt && !h.wasOn) h.vel -= 0.9;   // landing presses the deck down
+        h.wasOn = onIt;
+        const target = onIt ? -0.1 : 0;
+        h.vel += (-34 * (h.offset - target) - 6 * h.vel) * dt;
+        const delta = h.vel * dt;
+        h.offset += delta;
+        if (Math.abs(delta) < 1e-6) continue;
+        h.mesh.position.y += delta;
+        if (h.boxes) for (const b of h.boxes) { b.min.y += delta; b.max.y += delta; }
+        else { h.box.min.y += delta; h.box.max.y += delta; }
+        if (onIt) player.position.y += delta;
+      }
+    }
 
     function clearGauntletProps() {
+      gauntletGrid = null;
+      clearBulletMarks();
+      gauntletDoors.length = 0;
+      gauntletTicks.length = 0;
+      gauntletHover.length = 0;
+      movingGauntletPlatforms.length = 0;
+      gauntletRuntime = null;
+      gauntletMotionTime = 0;
       while (gauntletProps.length) {
         const o = gauntletProps.pop();
         scene.remove(o);
-        if (o.geometry) o.geometry.dispose();
-        if (o.material) {
-          const ms = Array.isArray(o.material) ? o.material : [o.material];
-          for (const m of ms) m.dispose();
-        }
+        o.traverse((node) => {
+          if (node.geometry) node.geometry.dispose();
+          if (!node.material) return;
+          for (const m of Array.isArray(node.material) ? node.material : [node.material]) {
+            if (m.userData.shared) continue;
+            m.map?.dispose();
+            m.dispose();
+          }
+        });
       }
     }
 
@@ -5683,147 +6137,843 @@
 
     function gauntletRespawnAtCheckpoint() {
       if (!gauntletCourse) return;
-      const cp = gauntletCourse.checkpoints[gauntletState.checkpointIdx]
-        || gauntletCourse.checkpoints[0];
+      const cp = gauntletCourse.checkpoints[gauntletState.checkpointIdx] || gauntletCourse.checkpoints[0];
       if (!cp) return;
+      gauntletRuntime?.resetAfter(cp.arc);
+      gauntletState.progressIdx = gauntletIndexAtArc(cp.arc);
+      gauntletState.arc = cp.arc;
       player.position.set(cp.x, cp.y, cp.z);
       player.velocityY = 0;
       player.onGround = true;
+      player.fallApexY = null;
+      state.velX = state.velZ = 0;
       state.dashActiveUntil = 0;
+      state.dashWasActive = false;
       state.dashRemainingDist = 0;
+      state.stamina = STAMINA_MAX;
+      state.jet.phase = "idle";
+      state.jet.netState = 0;
+      state.jet.cooldownUntil = 0;
+      jetRoot.visible = false;
       camera.position.copy(player.position);
     }
 
-    function updateGauntlet(dt) {
-      if (!isGauntletMap(CURRENT_MAP) || !gauntletCourse || !gameWorldReady) return;
-      if (player.health <= 0) return;
-
-      // Advance the checkpoint as you pass each platform. -Z is forward, so "passed" means
-      // the player's z has dropped below the marker's.
-      const cps = gauntletCourse.checkpoints;
-      while (
-        gauntletState.checkpointIdx + 1 < cps.length &&
-        player.position.z <= cps[gauntletState.checkpointIdx + 1].z
-      ) gauntletState.checkpointIdx++;
-
-      // Fell off the course. Not a death — the run continues from the last checkpoint,
-      // which is what keeps a 20-level movement mode playable instead of infuriating.
-      if (player.position.y < GAUNTLET_VOID_Y) {
-        gauntletState.deaths++;
-        damagePlayer(12, null);
-        if (player.health > 0) {
-          gauntletRespawnAtCheckpoint();
-          showCombatFeedback(tr("gauntletFell", "FELL — BACK TO CHECKPOINT"), "#ffb21f", 0.6);
+    /**
+     * Portal openings: render the view from the far end into each portal's render target. The
+     * virtual camera is the player's camera shifted by the portal offset (same orientation and
+     * projection), so the opening lines up with the world around it.
+     */
+    const portalCamera = new THREE.PerspectiveCamera();
+    const _portalBuffer = new THREE.Vector2();
+    const _portalOffset = new THREE.Vector3();
+    const _portalForward = new THREE.Vector3();
+    function renderPortalViews() {
+      if (!gauntletRuntime || !gauntletRuntime.portals || !gauntletRuntime.portals.length) return;
+      renderer.getDrawingBufferSize(_portalBuffer);
+      const w = Math.max(64, Math.floor(_portalBuffer.x * 0.5)), h = Math.max(64, Math.floor(_portalBuffer.y * 0.5));
+      portalCamera.fov = camera.fov;
+      portalCamera.aspect = camera.aspect;
+      portalCamera.near = camera.near;
+      portalCamera.far = camera.far;
+      portalCamera.projectionMatrix.copy(camera.projectionMatrix);
+      portalCamera.projectionMatrixInverse.copy(camera.projectionMatrixInverse);
+      portalCamera.quaternion.copy(camera.quaternion);
+      camera.getWorldDirection(_portalForward);
+      const autoUpdate = renderer.shadowMap.autoUpdate;
+      for (const portal of gauntletRuntime.portals) {
+        portal.uniforms.uRes.value.copy(_portalBuffer);
+        portal.uniforms.uTime.value = performance.now() / 1000;
+        _portalOffset.copy(portal.center).sub(camera.position);
+        const dist = _portalOffset.length();
+        if (dist > 48 || _portalForward.dot(_portalOffset) < -2) continue;
+        if (!portal.rt || portal.rt.width !== w || portal.rt.height !== h) {
+          if (portal.rt) portal.rt.dispose();
+          portal.rt = new THREE.WebGLRenderTarget(w, h, { depthBuffer: true });
+          portal.uniforms.tView.value = portal.rt.texture;
         }
-        return;
-      }
-
-      if (gauntletState.cleared) return;
-      const dx = player.position.x - gauntletCourse.finishX;
-      const dz = player.position.z - gauntletCourse.finishZ;
-      if (dx * dx + dz * dz < 5.5 * 5.5) {
-        gauntletState.cleared = true;
-        gauntletState.finishedMs = performance.now();
-        saveGauntletProgress(gauntletLevel);
-        showGauntletClear();
+        portalCamera.position.copy(camera.position).add(_portalOffset.copy(portal.partner).sub(portal.center));
+        portalCamera.updateMatrixWorld(true);
+        portal.disc.visible = false;
+        renderer.shadowMap.autoUpdate = false;
+        renderer.setRenderTarget(portal.rt);
+        renderer.render(scene, portalCamera);
+        renderer.setRenderTarget(null);
+        renderer.shadowMap.autoUpdate = autoUpdate;
+        portal.disc.visible = true;
       }
     }
 
+    /** A trap, laser or heat field hurting a zombie: same flinch, bar and death as a bullet, no score from the player. */
+    function hurtEnemyByTrap(enemy, amount, x, y, z) {
+      if (!enemy.alive) return;
+      const dmg = enemy.isBoss ? amount * 0.12 : amount;
+      enemy.hp -= dmg;
+      enemy.playerHit = true;   // a bar appears: you can see the trap working
+      enemy._flinchMs = 260;
+      enemy._flinchUntil = performance.now() + enemy._flinchMs;
+      enemy._flinchAmt = enemy.isBoss ? 0.06 : 0.4;
+      enemy._staggerUntil = performance.now() + 260;
+      drawEnemyHp(enemy);
+      createSparks(new THREE.Vector3(x, y, z), 0xffb060);
+      if (enemy.hp <= 0 && enemy.alive) {
+        enemy.alive = false;
+        enemy.respawnTimer = zombieRespawnDelay();
+        enemy.dissolveTimer = DISSOLVE_DURATION + 0.12;
+        spawnHumanoidDissolve(enemy.group, new THREE.Vector3(x, y, z));
+        enemy.group.visible = false;
+        registerEnemyKill(enemy);
+        if (enemy.isBoss) checkAllBossesDead(enemy.group.position.clone());
+      }
+    }
+
+    /** A short line in the middle of the screen (pickup feedback), plus a live timer while shielded. */
+    let _gNoticeEl = null, _gNoticeUntil = 0, _gShieldEl = null;
+    function showGauntletNotice(text, seconds = 1.6) {
+      if (!_gNoticeEl) {
+        _gNoticeEl = document.createElement("div");
+        _gNoticeEl.style.cssText = "position:fixed;left:50%;top:26%;transform:translateX(-50%);z-index:60;padding:10px 22px;"
+          + "font:700 22px/1 'Audiowide',sans-serif;letter-spacing:.08em;color:#bff7d8;background:rgba(8,16,14,.72);"
+          + "border:1px solid rgba(120,255,190,.55);border-radius:6px;pointer-events:none;transition:opacity .25s;opacity:0";
+        document.body.appendChild(_gNoticeEl);
+      }
+      _gNoticeEl.textContent = text;
+      _gNoticeEl.style.opacity = "1";
+      _gNoticeUntil = performance.now() + Math.min(2.4, seconds) * 1000;
+    }
+    function updateGauntletStatus() {
+      if (_gNoticeEl && _gNoticeEl.style.opacity === "1" && performance.now() > _gNoticeUntil) _gNoticeEl.style.opacity = "0";
+      const left = gauntletRuntime && gauntletRuntime.shieldLeft ? gauntletRuntime.shieldLeft() : 0;
+      if (left > 0) {
+        if (!_gShieldEl) {
+          _gShieldEl = document.createElement("div");
+          _gShieldEl.style.cssText = "position:fixed;left:50%;bottom:19%;transform:translateX(-50%);z-index:60;padding:6px 16px;"
+            + "font:700 18px/1 'Audiowide',sans-serif;color:#7dffb4;background:rgba(6,20,14,.75);border:1px solid #3fe08a;"
+            + "border-radius:4px;pointer-events:none;box-shadow:0 0 18px rgba(60,255,150,.35)";
+          document.body.appendChild(_gShieldEl);
+        }
+        _gShieldEl.style.display = "block";
+        _gShieldEl.textContent = "HEAT SHIELD  " + left.toFixed(1) + "s";
+      } else if (_gShieldEl) _gShieldEl.style.display = "none";
+    }
+
+    function updateGauntletDoors() {
+      if (!gauntletDoors.length) return;
+      const now = performance.now();
+      const dt = Math.min(0.05, (now - (gauntletDoorLast || now)) / 1000);
+      gauntletDoorLast = now;
+      for (const door of gauntletDoors) {
+        if (!door.open && state.enemies.length
+            && !state.enemies.some((e) => e.gauntletRoom === door.room && e.alive)) {
+          door.open = true;
+          door.lamp.material.color.setHex(0x5dffa6);
+          if (worldAudioReady()) playCheckpointSound();
+        }
+        if (door.open && door.amount < 1) {
+          door.amount = Math.min(1, door.amount + dt / 2.2);
+          const e = door.amount * door.amount * (3 - 2 * door.amount);
+          door.mesh.position.y = door.baseY + e * 9.8;
+          door.box.setFromObject(door.mesh);
+          door.barrier.min.y = door.barrierBase.min.y + e * 200;
+          door.barrier.max.y = door.barrierBase.max.y + e * 200;
+        }
+      }
+    }
+
+    function gauntletIndexAtArc(arc) {
+      const route = gauntletCourse.path;
+      let lo = 0, hi = route.length - 1;
+      while (lo < hi) {
+        const mid = (lo + hi) >> 1;
+        if (route[mid].arc < arc) lo = mid + 1; else hi = mid;
+      }
+      return lo;
+    }
+    /** Where along the course the player is: the nearest centre-line sample near the last one. */
+    function updateGauntletProgress() {
+      const route = gauntletCourse.path, st = gauntletState, p = player.position;
+      const near = (from, to) => {
+        let best = st.progressIdx, bestD = Infinity;
+        for (let i = from; i <= to; i++) {
+          const c = route[i];
+          const d = (c.x - p.x) ** 2 + (c.z - p.z) ** 2 + ((c.y + 1.65 - p.y) * 1.6) ** 2;
+          if (d < bestD) { bestD = d; best = i; }
+        }
+        return { best, bestD };
+      };
+      let r = near(Math.max(0, st.progressIdx - 14), Math.min(route.length - 1, st.progressIdx + 70));
+      // Lost (portal, respawn, long fall onto another stretch): look at the whole course, but
+      // only once standing on something so a fall cannot snap progress to the wrong layer.
+      if (r.bestD > 40 * 40 && player.onGround) r = near(0, route.length - 1);
+      st.progressIdx = r.best;
+      st.arc = route[r.best].arc;
+    }
+
+    function updateGauntlet() {
+      if (!isGauntletMap(CURRENT_MAP) || !gauntletCourse || !controlsInputReady() || gauntletState.cleared) return;
+      gauntletState.startMs ||= performance.now();
+      updateGauntletDoors();
+      updateGauntletStatus();
+      const { checkpoints, spec } = gauntletCourse;
+      const next = checkpoints[gauntletState.checkpointIdx + 1];
+      const pos = player.position;
+      const route = gauntletCourse.path;
+      updateGauntletProgress();
+      const here = route[gauntletState.progressIdx];
+      if (next && player.onGround && Math.abs(pos.y - 1.65 - here.y) < 1.1) {
+        // Progress is measured along the course itself, so a checkpoint counts once you are past
+        // it however the road bends — anywhere on the deck, not only on its centre line.
+        for (let i = checkpoints.length - 1; i > gauntletState.checkpointIdx; i--) {
+          const cp = checkpoints[i];
+          if (gauntletState.arc >= cp.arc) {
+            gauntletState.checkpointIdx = i;
+            if (cp.indicator) cp.indicator.material.color.setHex(0x7effc4);
+            if (spec.checkpoints && worldAudioReady()) playCheckpointSound();
+            break;
+          }
+        }
+      }
+
+      // Fallen: well below the lowest deck of the stretch you are on (a long climb or descent
+      // has decks at many heights, so the whole neighbourhood counts, not just the last checkpoint).
+      let lowestAround = Infinity;
+      for (let i = Math.max(0, gauntletState.progressIdx - 25); i <= Math.min(route.length - 1, gauntletState.progressIdx + 45); i++) {
+        if (route[i].y < lowestAround) lowestAround = route[i].y;
+      }
+      if (pos.y < lowestAround + 1.65 - GAUNTLET_VOID_MARGIN) {
+        gauntletState.deaths++;
+        gauntletRespawnAtCheckpoint();
+        return;
+      }
+
+      const dx = pos.x - gauntletCourse.finishX;
+      const dz = pos.z - gauntletCourse.finishZ;
+      if (!player.onGround || Math.abs(pos.y - 1.65 - gauntletCourse.finishY) > .55 || dx * dx + dz * dz >= 5.5 ** 2) return;
+      // Reaching the exit pad is all that counts: no checkpoint is ever required.
+      gauntletState.cleared = true;
+      gauntletState.finishedMs = performance.now();
+      saveGauntletProgress(gauntletLevel);
+      showGauntletClear();
+    }
+
+    function playNoiseSweep({ dur = 0.3, from = 2000, to = 400, gain = 0.2, type = "bandpass", q = 1 } = {}) {
+      if (!audioCtx || !audioSfx) return;
+      const at = audioCtx.currentTime;
+      const buffer = audioCtx.createBuffer(1, Math.floor(audioCtx.sampleRate * dur), audioCtx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / data.length) ** 1.5;
+      const source = audioCtx.createBufferSource();
+      source.buffer = buffer;
+      const filter = audioCtx.createBiquadFilter();
+      filter.type = type;
+      filter.Q.value = q;
+      filter.frequency.setValueAtTime(from, at);
+      filter.frequency.exponentialRampToValueAtTime(Math.max(30, to), at + dur);
+      const level = audioCtx.createGain();
+      level.gain.value = gain;
+      source.connect(filter);
+      filter.connect(level);
+      level.connect(audioSfx);
+      source.start(at);
+    }
+    function playSubThump({ from = 140, to = 40, dur = 0.4, gain = 0.5 } = {}) {
+      if (!audioCtx || !audioSfx) return;
+      const at = audioCtx.currentTime;
+      const osc = audioCtx.createOscillator();
+      const level = audioCtx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(from, at);
+      osc.frequency.exponentialRampToValueAtTime(to, at + dur);
+      level.gain.setValueAtTime(gain, at);
+      level.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+      osc.connect(level);
+      level.connect(audioSfx);
+      osc.start(at);
+      osc.stop(at + dur + 0.05);
+    }
+    const playBoomSound = () => { playNoiseSweep({ dur: 0.9, from: 1400, to: 60, gain: 0.8, type: "lowpass" }); playSubThump({ from: 110, to: 32, dur: 0.7, gain: 0.9 }); };
+    const playLaunchSound = () => { playNoiseSweep({ dur: 0.35, from: 2200, to: 500, gain: 0.25 }); playSubThump({ from: 190, to: 55, dur: 0.28, gain: 0.45 }); };
+    const playSplashSound = () => playNoiseSweep({ dur: 0.45, from: 3400, to: 800, gain: 0.26, q: 0.6 });
+    const playSizzleSound = () => playNoiseSweep({ dur: 0.2, from: 5200, to: 3200, gain: 0.07, type: "highpass" });
+
+    /** Short-lived billboard effects (explosion flashes, smoke, steam, splashes). */
+    const transientFx = [];
+    let _fxGlowTexture = null;
+    function spawnFx({ x, y, z, vx = 0, vy = 0, vz = 0, size = 1, grow = 1, life = 0.5, color = 0xffffff, opacity = 1, additive = true, drag = 0 }) {
+      if (!_fxGlowTexture) {
+        const canvas = document.createElement("canvas");
+        canvas.width = canvas.height = 64;
+        const g = canvas.getContext("2d");
+        const r = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+        r.addColorStop(0, "rgba(255,255,255,1)");
+        r.addColorStop(0.4, "rgba(255,255,255,0.45)");
+        r.addColorStop(1, "rgba(255,255,255,0)");
+        g.fillStyle = r;
+        g.fillRect(0, 0, 64, 64);
+        _fxGlowTexture = new THREE.CanvasTexture(canvas);
+      }
+      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: _fxGlowTexture, color, transparent: true, opacity, depthWrite: false,
+        blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
+      }));
+      sprite.position.set(x, y, z);
+      sprite.scale.setScalar(size);
+      sprite.raycast = () => {};
+      scene.add(sprite);
+      transientFx.push({ sprite, vx, vy, vz, size, grow, life, age: 0, opacity, drag });
+    }
+    function updateTransientFx(dt) {
+      for (let i = transientFx.length - 1; i >= 0; i--) {
+        const f = transientFx[i];
+        f.age += dt;
+        const t = f.age / f.life;
+        if (t >= 1) {
+          scene.remove(f.sprite);
+          f.sprite.material.dispose();
+          transientFx.splice(i, 1);
+          continue;
+        }
+        const damp = Math.exp(-f.drag * dt);
+        f.vx *= damp; f.vy *= damp; f.vz *= damp;
+        f.sprite.position.x += f.vx * dt;
+        f.sprite.position.y += f.vy * dt;
+        f.sprite.position.z += f.vz * dt;
+        f.sprite.scale.setScalar(f.size * (1 + (f.grow - 1) * t));
+        f.sprite.material.opacity = f.opacity * (1 - t) ** 1.5;
+      }
+    }
+    function spawnBurstFx(x, y, z, { color = 0xdfe6ee, count = 8, speed = 2.4, size = 0.9, life = 0.8, additive = false, up = 1, opacity = 0.6 } = {}) {
+      for (let i = 0; i < count; i++) {
+        spawnFx({
+          x, y, z, vx: (Math.random() - 0.5) * speed, vy: up * (0.5 + Math.random()) * speed * 0.6, vz: (Math.random() - 0.5) * speed,
+          size: size * (0.6 + Math.random() * 0.6), grow: 2.6, life: life * (0.7 + Math.random() * 0.6), color, opacity, additive, drag: 1.2,
+        });
+      }
+    }
+    function spawnExplosionFx(x, y, z) {
+      spawnFx({ x, y, z, size: 2, grow: 5, life: 0.22, color: 0xffe0a0, opacity: 1 });
+      spawnFx({ x, y, z, size: 3, grow: 3, life: 0.45, color: 0xff7a2a, opacity: 0.85 });
+      for (let i = 0; i < 9; i++) {
+        spawnFx({
+          x: x + (Math.random() - 0.5), y, z: z + (Math.random() - 0.5), vx: (Math.random() - 0.5) * 7, vy: 2 + Math.random() * 5, vz: (Math.random() - 0.5) * 7,
+          size: 0.45, grow: 0.3, life: 0.5 + Math.random() * 0.3, color: 0xffb060, drag: 1.4,
+        });
+      }
+      spawnBurstFx(x, y + 0.2, z, { color: 0x2c2a28, count: 8, speed: 3.2, size: 1.8, life: 1.2, additive: false, up: 1.4, opacity: 0.6 });
+      createSparks(new THREE.Vector3(x, y, z), 0xffaa55);
+      const dist = Math.hypot(player.position.x - x, player.position.z - z);
+      addQuake(Math.max(0, 0.8 * (1 - dist / 14)));
+      triggerCamShake(0.12);
+      playBoomSound();
+    }
+
+    function playPortalSound() {
+      if (!audioCtx || !audioSfx) return;
+      const at = audioCtx.currentTime;
+      const sweep = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      sweep.type = "sine";
+      sweep.frequency.setValueAtTime(980, at);
+      sweep.frequency.exponentialRampToValueAtTime(120, at + 0.42);
+      gain.gain.setValueAtTime(0.0001, at);
+      gain.gain.exponentialRampToValueAtTime(0.16, at + 0.04);
+      gain.gain.exponentialRampToValueAtTime(0.0001, at + 0.46);
+      sweep.connect(gain);
+      gain.connect(audioSfx);
+      sweep.start(at);
+      sweep.stop(at + 0.5);
+      const hiss = audioCtx.createBufferSource();
+      const buffer = audioCtx.createBuffer(1, Math.floor(audioCtx.sampleRate * 0.4), audioCtx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / data.length) ** 2;
+      hiss.buffer = buffer;
+      const band = audioCtx.createBiquadFilter();
+      band.type = "bandpass";
+      band.frequency.setValueAtTime(2400, at);
+      band.frequency.exponentialRampToValueAtTime(500, at + 0.4);
+      const hissGain = audioCtx.createGain();
+      hissGain.gain.value = 0.22;
+      hiss.connect(band);
+      band.connect(hissGain);
+      hissGain.connect(audioSfx);
+      hiss.start(at);
+    }
+
+    function playCheckpointSound() {
+      const at = audioCtx.currentTime;
+      const sound = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      sound.type = "sine";
+      sound.frequency.setValueAtTime(480, at);
+      sound.frequency.exponentialRampToValueAtTime(760, at + .10);
+      gain.gain.setValueAtTime(.065, at);
+      gain.gain.exponentialRampToValueAtTime(.001, at + .20);
+      sound.connect(gain);
+      gain.connect(audioSfx);
+      sound.start(at);
+      sound.stop(at + .22);
+    }
+
     let _gClearEl = null;
+    /** True while the results card is up. Leaving pointer lock must not open Pause on top of it. */
+    let gauntletClearOpen = false;
+    const GAUNTLET_BEST_KEY = "fps_gauntlet_best";
+    function gauntletBestTimes() {
+      try { return JSON.parse(localStorage.getItem(GAUNTLET_BEST_KEY) || "{}") || {}; } catch (_) { return {}; }
+    }
+    function hideGauntletClear() {
+      gauntletClearOpen = false;
+      document.body.classList.remove("results-open");
+      if (_gClearEl) _gClearEl.style.display = "none";
+    }
     function showGauntletClear() {
       if (!_gClearEl) {
         const el = document.createElement("div");
         el.id = "gauntletClear";
-        el.style.cssText =
-          "position:fixed;inset:0;z-index:120;display:none;flex-direction:column;" +
-          "align-items:center;justify-content:center;gap:14px;background:rgba(4,8,12,0.82);" +
-          "font-family:var(--game-font-ui);color:#dff6ff;text-align:center;";
         el.innerHTML =
-          '<div id="gClearTitle" style="font-size:38px;letter-spacing:4px;color:#62ffb0;text-shadow:0 2px 18px rgba(60,255,170,0.5);"></div>' +
-          '<div id="gClearSub" style="font-size:15px;opacity:0.85;letter-spacing:1px;"></div>' +
-          '<div style="display:flex;gap:10px;margin-top:10px;">' +
-          '<button type="button" id="gClearNext" class="btn-texture btn-primary" style="min-width:150px;padding:10px 18px;"></button>' +
-          '<button type="button" id="gClearRetry" class="btn-texture" style="min-width:120px;padding:10px 18px;"></button>' +
-          '<button type="button" id="gClearMenu" class="btn-texture" style="min-width:120px;padding:10px 18px;"></button>' +
-          "</div>";
+          '<div class="gc-card">' +
+          '<div class="gc-kicker" id="gClearKicker"></div>' +
+          '<div class="gc-title" id="gClearTitle"></div>' +
+          '<div class="gc-stats">' +
+          '<div class="gc-stat"><b id="gClearTime"></b><span id="gClearTimeLbl"></span></div>' +
+          '<div class="gc-stat best"><b id="gClearBest"></b><span id="gClearBestLbl"></span></div>' +
+          '<div class="gc-stat"><b id="gClearFalls"></b><span id="gClearFallsLbl"></span></div>' +
+          '</div>' +
+          '<div class="gc-btns">' +
+          '<button type="button" id="gClearNext" class="overlay-btn overlay-btn-accent"></button>' +
+          '<button type="button" id="gClearRetry" class="overlay-btn"></button>' +
+          '<button type="button" id="gClearMenu" class="overlay-btn"></button>' +
+          '</div></div>';
         document.body.appendChild(el);
         el.querySelector("#gClearNext").addEventListener("click", () => {
-          _gClearEl.style.display = "none";
+          hideGauntletClear();
           startGauntletLevel(Math.min(GAUNTLET_LEVEL_COUNT, gauntletLevel + 1));
         });
         el.querySelector("#gClearRetry").addEventListener("click", () => {
-          _gClearEl.style.display = "none";
+          hideGauntletClear();
           startGauntletLevel(gauntletLevel);
         });
         el.querySelector("#gClearMenu").addEventListener("click", () => {
-          _gClearEl.style.display = "none";
+          hideGauntletClear();
           goToMenu();
         });
         _gClearEl = el;
       }
-      const secs = ((gauntletState.finishedMs - gauntletState.startMs) / 1000).toFixed(1);
+      const secsNum = (gauntletState.finishedMs - gauntletState.startMs) / 1000;
+      const bests = gauntletBestTimes();
+      const prevBest = typeof bests[gauntletLevel] === "number" ? bests[gauntletLevel] : Infinity;
+      const best = Math.min(prevBest, secsNum);
+      if (secsNum < prevBest) {
+        bests[gauntletLevel] = secsNum;
+        try { localStorage.setItem(GAUNTLET_BEST_KEY, JSON.stringify(bests)); } catch (_) {}
+      }
       const last = gauntletLevel >= GAUNTLET_LEVEL_COUNT;
-      _gClearEl.querySelector("#gClearTitle").textContent = last
+      const q = (id) => _gClearEl.querySelector(id);
+      q("#gClearKicker").textContent = (GAUNTLET_LEVELS[gauntletLevel - 1] || {}).name || "";
+      q("#gClearTitle").textContent = last
         ? tr("gauntletAllClear", "GAUNTLET COMPLETE")
         : tr("gauntletClear", "LEVEL {n} CLEAR").replace("{n}", String(gauntletLevel));
-      _gClearEl.querySelector("#gClearSub").textContent =
-        tr("gauntletTime", "Time") + " " + secs + "s  ·  " +
-        tr("gauntletFalls", "Falls") + " " + gauntletState.deaths;
-      const nextBtn = _gClearEl.querySelector("#gClearNext");
+      q("#gClearTime").textContent = secsNum.toFixed(1) + "s";
+      q("#gClearTimeLbl").textContent = tr("gauntletTime", "Time").toUpperCase();
+      q("#gClearBest").textContent = best.toFixed(1) + "s";
+      q("#gClearBestLbl").textContent = (secsNum <= prevBest ? tr("gauntletNewBest", "New best") : tr("gauntletBest", "Best")).toUpperCase();
+      q("#gClearFalls").textContent = String(gauntletState.deaths);
+      q("#gClearFallsLbl").textContent = tr("gauntletFalls", "Falls").toUpperCase();
+      const nextBtn = q("#gClearNext");
       nextBtn.textContent = tr("gauntletNext", "NEXT LEVEL");
       nextBtn.style.display = last ? "none" : "";
-      _gClearEl.querySelector("#gClearRetry").textContent = tr("gauntletRetry", "RETRY");
-      _gClearEl.querySelector("#gClearMenu").textContent = tr("gauntletMenu", "MENU");
+      q("#gClearRetry").textContent = tr("gauntletRetry", "RETRY");
+      q("#gClearMenu").textContent = tr("gauntletMenu", "MENU");
+      gauntletClearOpen = true;
+      document.body.classList.add("results-open");
+      releaseAllInput();
       _gClearEl.style.display = "flex";
       try { document.exitPointerLock(); } catch (_) {}
+    }
+
+    /** Shared, lazily built materials for gauntlet edge trim and hazard paint. */
+    let _gauntletEdgeMats = null;
+    function getGauntletEdgeMaterials() {
+      if (_gauntletEdgeMats) return _gauntletEdgeMats;
+      const c = document.createElement("canvas");
+      c.width = 256; c.height = 32;
+      const g = c.getContext("2d");
+      g.fillStyle = "#d9a21b";
+      g.fillRect(0, 0, 256, 32);
+      g.fillStyle = "#16130f";
+      for (let i = -2; i < 10; i++) {
+        g.beginPath();
+        g.moveTo(i * 32, 32); g.lineTo(i * 32 + 16, 32); g.lineTo(i * 32 + 48, 0); g.lineTo(i * 32 + 32, 0);
+        g.fill();
+      }
+      // Wear: scuffs and grime so the paint does not read as a flat graphic.
+      for (let i = 0; i < 260; i++) {
+        g.fillStyle = `rgba(${40 + Math.random() * 40},${30 + Math.random() * 30},20,${0.08 + Math.random() * 0.22})`;
+        g.fillRect(Math.random() * 256, Math.random() * 32, 1 + Math.random() * 6, 1 + Math.random() * 2);
+      }
+      const base = new THREE.CanvasTexture(c);
+      base.colorSpace = THREE.SRGBColorSpace;
+      base.wrapS = THREE.RepeatWrapping;
+      base.anisotropy = getMaxTextureAnisotropy();
+      const hazardCache = new Map();
+      _gauntletEdgeMats = {
+        lip: new THREE.MeshStandardMaterial({ color: 0x5b6168, metalness: 0.75, roughness: 0.42 }),
+        exit: new THREE.MeshStandardMaterial({ color: 0x2c5a3f, metalness: 0.4, roughness: 0.5 }),
+        hazard(len) {
+          const k = Math.max(1, Math.round(len / 2));
+          if (!hazardCache.has(k)) {
+            const tex = base.clone();
+            tex.repeat.set(k, 1);
+            tex.needsUpdate = true;
+            const hm = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.78, metalness: 0.05 });
+            hm.userData.shared = true;
+            hazardCache.set(k, hm);
+          }
+          return hazardCache.get(k);
+        },
+      };
+      _gauntletEdgeMats.lip.userData.shared = true;
+      _gauntletEdgeMats.exit.userData.shared = true;
+      return _gauntletEdgeMats;
+    }
+
+    function placeGauntletSign(x, y, z, label, tint) {
+      const canvas = document.createElement("canvas");
+      canvas.width = 512;
+      canvas.height = 104;
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#171c1d";
+      ctx.fillRect(0, 0, 512, 104);
+      ctx.strokeStyle = "#666e6a";
+      ctx.lineWidth = 5;
+      ctx.strokeRect(6, 6, 500, 92);
+      ctx.fillStyle = "#" + tint.toString(16).padStart(6, "0");
+      ctx.font = "bold 53px sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(label, 256, 55, 470);
+      const map = new THREE.CanvasTexture(canvas);
+      map.colorSpace = THREE.SRGBColorSpace;
+      const sign = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 0.65),
+        new THREE.MeshBasicMaterial({ map, side: THREE.DoubleSide }));
+      sign.position.set(x, y, z);
+      sign.raycast = () => {};
+      scene.add(sign);
+      gauntletProps.push(sign);
+    }
+
+    function addMovingGauntletPlatform(x, y, z, w, d, travel, seconds) {
+      const deck = addWallBox(w, 0.44, d, x, y - 0.22, z, 0x667f82);
+      const box = deck.userData.wallBox;
+      box.wideTop = true;
+      const markerMaterial = getGauntletEdgeMaterials().hazard(w);
+      for (const edge of [-1, 1]) {
+        const marker = new THREE.Mesh(new THREE.BoxGeometry(w - 0.06, 0.026, 0.19), markerMaterial);
+        marker.position.set(0, 0.227, edge * (d / 2 - 0.12));
+        marker.raycast = () => {};
+        deck.add(marker);
+      }
+      movingGauntletPlatforms.push({
+        deck, box, x, y, z, w, d, travel, seconds,
+      });
+    }
+
+    function updateGauntletPlatforms(dt) {
+      if (!isGauntletMap(CURRENT_MAP) || !gameWorldReady || !controlsInputReady() || gauntletClearOpen) return;
+      gauntletMotionTime += dt;
+      gauntletRuntime?.update(dt, player);
+      for (const platform of movingGauntletPlatforms) {
+        const { deck, box, x, y, z, w, d, travel, seconds } = platform;
+        const phase = (gauntletMotionTime % seconds) / seconds;
+        const triangle = phase < 0.5 ? phase * 2 : (1 - phase) * 2;
+        const t = THREE.MathUtils.smoothstep(triangle, 0.16, 0.84);
+        const nx = x + travel.x * t, ny = y + travel.y * t, nz = z + travel.z * t;
+        const feet = player.position.y - 1.65;
+        if (player.onGround && Math.abs(feet - box.max.y) < 0.12
+            && centreOverBoxTop(box, player.position.x, player.position.z)) {
+          player.position.x += nx - deck.position.x;
+          player.position.y += ny - box.max.y;
+          player.position.z += nz - deck.position.z;
+        }
+        deck.position.set(nx, ny - 0.22, nz);
+        box.min.set(nx - w / 2, ny - 0.44, nz - d / 2);
+        box.max.set(nx + w / 2, ny, nz + d / 2);
+      }
     }
 
     function buildMapGauntlet() {
       clearPvpMapLights();
       clearGauntletProps();
       const spec = GAUNTLET_LEVELS[THREE.MathUtils.clamp(gauntletLevel, 1, GAUNTLET_LEVEL_COUNT) - 1];
+      // Every chapter has its own environment: materials, sky and fog, lighting and scenery.
+      const theme = currentGauntletTheme();
+      const style = gauntletThemes.styleFor(theme);
+      const meshStart = wallMeshes.length;
+      const themed = (mesh, w, h, d, material) => {
+        // The texture-quality pass re-assigns materials for everything in _texturedMeshes, which
+        // would overwrite the themed one, so themed meshes opt out of it.
+        const tracked = _texturedMeshes.findIndex((e) => e.mesh === mesh);
+        if (tracked !== -1) _texturedMeshes.splice(tracked, 1);
+        mesh.geometry.dispose();
+        mesh.geometry = gauntletThemes.boxUv(new THREE.BoxGeometry(w, h, d), w, h, d, theme.tile);
+        mesh.material = material;
+        return mesh;
+      };
+      const themedSolid = (w, h, d, x, y, z, color) => {
+        const mesh = addWallBox(w, h, d, x, y, z, color);
+        return themed(mesh, w, h, d, color === 0x546573 ? style.deck(0x6bbbc7, 0) : style.wall(color));
+      };
+      if (spec.checkpoints) {
+        gauntletRuntime = createGauntletRuntime(THREE, themedSolid, mesh => {
+          scene.add(mesh);
+          gauntletProps.push(mesh);
+        }, {
+          dashing: () => performance.now() < state.dashActiveUntil,
+          crouchDrop: () => CROUCH_EYE_DROP * crouchAmt,
+          jumpPressed: () => keys.space,
+          forwardPressed: () => keys.w,
+          launch(vertical, x, z) {
+            player.velocityY = vertical;
+            player.onGround = false;
+            state.jumpedSinceGround = true;
+            state.velX += x;
+            state.velZ += z;
+          },
+          teleport(destination) {
+            player.position.copy(destination);
+            player.velocityY = 0;
+            player.onGround = false;
+            state.velX = state.velZ = 0;
+            state.dashActiveUntil = 0;
+            state.dashWasActive = false;
+            player.fallApexY = null;
+          },
+          fuel(airborne) {
+            if (airborne && !isJetActive()) return false;
+            state.jet.cooldownUntil = 0;
+            if (isJetActive()) state.jet.endMs = performance.now() + JET_ACTIVE_MS;
+            state.stamina = STAMINA_MAX;
+            return true;
+          },
+          refill: () => { state.stamina = STAMINA_MAX; },
+          notice: (text, seconds) => showGauntletNotice(text, seconds),
+          // Zombies standing in a trap are hurt by it exactly like the player.
+          bodies: () => {
+            const out = [];
+            for (const e of state.enemies) {
+              if (!e.alive || e.trainingDummy || !e.group || !e.group.visible) continue;
+              out.push({ ref: e, x: e.group.position.x, y: e.group.position.y, z: e.group.position.z });
+            }
+            return out;
+          },
+          hurtBody: (enemy, amount, x, y, z) => hurtEnemyByTrap(enemy, amount, x, y, z),
+          push(x, z) { state.velX += x; state.velZ += z; },
+          zone(flags) {
+            const now = performance.now();
+            if (flags.heat) state.heatUntil = now + 140;
+            if (flags.air) state.airUntil = now + 140;
+          },
+          explode(x, y, z) { spawnExplosionFx(x, y, z); },
+          shift(dx, dy, dz) {
+            // Portal crossing: a pure translation, so the view is continuous. Velocity is kept.
+            player.position.x += dx;
+            player.position.y += dy;
+            player.position.z += dz;
+            player.fallApexY = null;
+            state.camBaseY = undefined;
+            addCamKick({ fov: 9, pitch: 0.012 });
+          },
+          damage: amount => damagePlayer(amount, null, "body", -1, true),
+          signal: kind => {
+            if (kind === "launch") {
+              addCamKick({ fov: 7, pitch: 0.03 });
+              spawnBurstFx(player.position.x, player.position.y - 1.5, player.position.z, { count: 10, speed: 2.6, size: 0.9, life: 0.8 });
+              if (worldAudioReady()) playLaunchSound();
+              return;
+            }
+            if (kind === "splash") {
+              addCamKick({ pitch: -0.015 });
+              spawnBurstFx(player.position.x, player.position.y - 1.4, player.position.z, { color: 0xcfe8ff, count: 12, speed: 3, size: 0.7, life: 0.7, up: 1.6, opacity: 0.7 });
+              if (worldAudioReady()) playSplashSound();
+              return;
+            }
+            if (!worldAudioReady()) return;
+            if (kind === "impact") worldAudio.play("zombieStep", player.position, { local: true, volume: .9 });
+            else if (kind === "portal") playPortalSound();
+            else playCheckpointSound();
+          },
+        }, style);
+      }
       const FLOOR = 0x55606e, BEAM = 0x7a6a52, ROOM = 0x4d5a68, EXIT = 0x2f7d4f;
       const checkpoints = [];
       const spots = [];
       let bossSpot = null;
-      let cz = 6;      // leading edge; the start pad hangs off +Z of it
-      let y = 0;       // current platform top
+      let roomCount = 0;
+
+      // ── Course frame ─────────────────────────────────────────────────────────────────────
+      // The course is one continuous path. `pen` is where the next stretch begins: position,
+      // height, heading (0 = straight down -Z, any other angle is fine) and distance walked.
+      // Free stretches (runs, beams, tunnels, pads, stairs, pits) follow the pen at any angle
+      // and slope; set pieces that are axis-aligned by nature (arenas, mechanics, lifts) are
+      // built at the pen with the heading back at 0, offset sideways by `ox`.
+      const DECK_T = 1.4, KERB_H = 1.1;
+      const pen = { x: 0, y: 0, z: 6, th: 0, arc: 0 };
+      const footprints = new Footprints();
+      const centreline = [];       // { x, y, z, arc } about every metre, for progress and scenery
+      const ribbonDecks = [];      // free-form decks: { samples, w, kind, chunks: [{ mesh, boxes }] }
+      const gauntletBoxes = [];    // every collision slab this course added
+      let ox = 0;                  // sideways offset of the axis-aligned piece being built
+      let cz = 6;                  // leading edge (z) of the axis-aligned piece being built
+      let y = 0;                   // top of the platform of the axis-aligned piece being built
+      let fixedY0 = 0;
+
+      const lipMat = getGauntletEdgeMaterials().lip;
+      const hazardMat = (len) => getGauntletEdgeMaterials().hazard(len);
+
+      const RIM_EDGE = 0xffa53a;   // amber: the floor ends here
+      const RIM_SIDE = 0x3fa7d6;   // cyan: ordinary platform
+      const RIM_EXIT = 0x54ffa0;
+
+      /** One collision slab, registered in the world and remembered for the spatial index. */
+      const addSlab = (b, { deck = false, enemyOnly = false } = {}) => {
+        const box = new THREE.Box3(new THREE.Vector3(b.minX, b.minY, b.minZ), new THREE.Vector3(b.maxX, b.maxY, b.maxZ));
+        if (deck) box.wideTop = true;
+        if (enemyOnly) box.enemyOnly = true;
+        wallBoxes.push(box);
+        gauntletBoxes.push(box);
+        return box;
+      };
+      /** A drawn ribbon, in pieces; returns the chunk meshes. */
+      const addRibbon = (samples, options, material, { shadow = false } = {}) => {
+        const chunks = gauntletPath.sweepChunks(samples, { tile: theme.tile, ...options });
+        return chunks.map((c) => {
+          const mesh = new THREE.Mesh(c.geometry, material);
+          mesh.receiveShadow = true;
+          mesh.castShadow = shadow;
+          scene.add(mesh);
+          wallMeshes.push(mesh);
+          return { mesh, from: c.from, to: c.to };
+        });
+      };
+      /** Drawn-only trim (lips, light strips): one mesh, never hit by bullets. */
+      const addTrim = (samples, options, material) => {
+        const mesh = new THREE.Mesh(gauntletPath.sweep(samples, { tile: theme.tile, ...options }), material);
+        mesh.receiveShadow = true;
+        mesh.raycast = () => {};
+        scene.add(mesh);
+        gauntletProps.push(mesh);
+        return mesh;
+      };
+      /** A flat painted marker across the path (checkpoint bars, deck-end hazard bands). */
+      const crossBar = (sample, width, depth, height, material, lift = 0) => {
+        const m = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), material);
+        m.position.set(sample.x, sample.y + lift + height / 2, sample.z);
+        m.rotation.y = -sample.th;
+        m.receiveShadow = true;
+        m.raycast = () => {};
+        scene.add(m);
+        gauntletProps.push(m);
+        return m;
+      };
+      const pushCentreline = (samples, every = 2, w = GAUNTLET_W, kerb = false) => {
+        for (let i = 0; i < samples.length; i += every) {
+          const s = samples[i];
+          centreline.push({ x: s.x, y: s.y, z: s.z, arc: s.arc, w, kerb });
+        }
+      };
 
       /**
-       * Glowing rim around every platform. On a dark map you cannot judge a jump you
-       * cannot see the edge of — lighting alone was not enough, and guessing where the
-       * floor ends is not the kind of difficulty this mode is for. Unlit basic material,
-       * so it stays readable at any distance and through fog. Purely decorative: never
-       * added to wallBoxes, so it has no collision.
+       * A gatehouse right after a combat room: two towers that run down into the abyss, a lintel
+       * with a roll-up shutter housing, and the shutter itself. Around it, out of sight, a wide
+       * and tall invisible barrier means a jump, a jet harness or a dash cannot get past either side.
+       * The shutter lifts only once every zombie from that room is dead.
        */
+      const addClearDoor = (room, doorZ, topY, roomW) => {
+        const gate = (w, h, d, x, y, z, material, solidHit = false) => {
+          x += ox;
+          const mesh = solidHit
+            ? themed(addWallBox(w, h, d, x, y, z, 0x353b43), w, h, d, material)
+            : new THREE.Mesh(gauntletThemes.boxUv(new THREE.BoxGeometry(w, h, d), w, h, d, theme.tile), material);
+          if (!solidHit) {
+            mesh.position.set(x, y, z);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            mesh.raycast = () => {};
+            scene.add(mesh);
+            gauntletProps.push(mesh);
+          }
+          return mesh;
+        };
+        const wall = style.role("wall"), beam = style.role("beam");
+        // Where the chapter has solid ground the towers stand on it; in space and hangar
+        // chapters the frame is simply bolted to the deck.
+        const mounted = theme.support === "hover" || theme.support === "hanger";
+        const half = mounted ? roomW / 2 - 0.7 : roomW / 2 + 1.4;
+        const bottom = mounted ? topY : -theme.groundDepth - 8;
+        for (const side of [-1, 1]) {
+          gate(2.8, topY + 12 - bottom, 3, side * half, (topY + 12 + bottom) / 2, doorZ, wall);   // tower
+          gate(1.2, 15, 3.6, side * (half - 1.7), topY + 5.5, doorZ, beam);                         // inner jamb
+        }
+        gate(half * 2 + 3, 2.2, 3.4, 0, topY + 11.1, doorZ, beam);        // lintel
+        gate(half * 2 + 0.4, 9, 2.6, 0, topY + 15.1, doorZ, wall);        // shutter housing
+        const shutter = gate(half * 2 - 2.8, 9.6, 0.5, 0, topY + 4.8, doorZ, style.door, true);
+        const band = new THREE.Mesh(new THREE.PlaneGeometry(half * 2 - 2.8, 1.4), getGauntletEdgeMaterials().hazard(roomW));
+        band.position.set(0, -3.4, 0.26);
+        band.raycast = () => {};
+        shutter.add(band);
+        const lamp = new THREE.Mesh(new THREE.PlaneGeometry(roomW * 0.6, 0.35), new THREE.MeshBasicMaterial({ color: 0xff4a3a }));
+        lamp.raycast = () => {};
+        const housing = gate(0.01, 0.01, 0.01, 0, 0, 0, wall);
+        housing.add(lamp);
+        lamp.position.set(0, topY + 11.1, doorZ + 1.72);
+        // Invisible collision slab, wider than any way round the gatehouse. Nothing else on the
+        // course is ever planned inside it (see the blockers below).
+        const W = roomW + 64;
+        const barrier = new THREE.Box3(new THREE.Vector3(ox - W / 2, topY - 60, doorZ - 0.8), new THREE.Vector3(ox + W / 2, topY + 120, doorZ + 0.8));
+        barrier.dyn = true;
+        wallBoxes.push(barrier);
+        for (let k = -W / 2; k <= W / 2; k += 9) if (Math.abs(k) > roomW / 2 + 8) footprints.addBlocker(ox + k, doorZ, 6);
+        shutter.userData.wallBox.dyn = true;
+        gauntletDoors.push({
+          room, mesh: shutter, lamp, box: shutter.userData.wallBox, barrier, barrierBase: barrier.clone(),
+          baseY: topY + 4.8, amount: 0, open: false,
+        });
+      };
+
+      // ── Axis-aligned pieces: built at x = ox, advancing cz ─────────────────────────────
       const rim = (w, d, x, z, topY, color) => {
-        const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.85, fog: false });
-        const t = 0.22;
-        const mk = (sw, sd, sx, sz) => {
-          const m = new THREE.Mesh(new THREE.BoxGeometry(sw, 0.06, sd), mat);
-          m.position.set(sx, topY + 0.04, sz);
+        const hazard = color === RIM_EDGE;
+        const exit = color === RIM_EXIT;
+        const t = 0.16, h = 0.05;
+        const mk = (sw, sd, sx, sz, painted, alongX) => {
+          const mat = painted
+            ? getGauntletEdgeMaterials().hazard(alongX ? sw : sd)
+            : exit ? getGauntletEdgeMaterials().exit : lipMat;
+          const m = new THREE.Mesh(new THREE.BoxGeometry(sw, h, sd), mat);
+          m.position.set(sx, topY + h / 2, sz);
+          m.receiveShadow = true;
           m.raycast = () => {};
           scene.add(m);
           gauntletProps.push(m);
         };
-        mk(w, t, x, z + d / 2 - t / 2);   // near end
-        mk(w, t, x, z - d / 2 + t / 2);   // far end
-        mk(t, d, x - w / 2 + t / 2, z);   // left
-        mk(t, d, x + w / 2 - t / 2, z);   // right
+        mk(w, t * 1.6, x, z + d / 2 - t * 0.8, hazard, true);    // near end
+        mk(w, t * 1.6, x, z - d / 2 + t * 0.8, hazard, true);    // far end
+        mk(t, d, x - w / 2 + t / 2, z, hazard && w < 5, false); // left (painted on narrow beams)
+        mk(t, d, x + w / 2 - t / 2, z, hazard && w < 5, false); // right
       };
       const plat = (len, w, topY, color, rimColor) => {
-        const m = addWallBox(w, 4, len, 0, topY - 2, cz - len / 2, color);
+        const m = addWallBox(w, 4, len, ox, topY - 2, cz - len / 2, color);
+        themed(m, w, 4, len, style.role(color === BEAM ? "beam" : color === ROOM ? "room" : color === EXIT ? "exit" : "deck"));
         if (m.userData.wallBox) m.userData.wallBox.wideTop = true;
-        rim(w, len, 0, cz - len / 2, topY, rimColor || 0x3fa7d6);
+        rim(w, len, ox, cz - len / 2, topY, rimColor || 0x3fa7d6);
         cz -= len;
       };
+      const color_kerb = 0x3d4652;
       const rails = (len, w, topY) => {
         // Waist-high kerbs so a "run" segment reads as a corridor and you don't walk off
         // sideways by accident. Beams and pads deliberately get none.
-        addWallBox(0.5, 1.1, len, w / 2 + 0.25, topY + 0.55, cz + len / 2, color_kerb);
-        addWallBox(0.5, 1.1, len, -w / 2 - 0.25, topY + 0.55, cz + len / 2, color_kerb);
+        themed(addWallBox(0.5, 1.1, len, ox + w / 2 + 0.25, topY + 0.55, cz + len / 2, color_kerb), 0.5, 1.1, len, style.role("wall"));
+        themed(addWallBox(0.5, 1.1, len, ox - w / 2 - 0.25, topY + 0.55, cz + len / 2, color_kerb), 0.5, 1.1, len, style.role("wall"));
       };
-      const color_kerb = 0x3d4652;
       /**
        * Zombie-only fence. enemyCollidesWall() samples a sphere at y=1.0, while the floor
        * platforms top out at y=0 — so nothing stopped a zombie from strolling straight out
@@ -5832,116 +6982,418 @@
        * collision ignores them completely and can still jump/dash the gap.
        */
       const fence = (topY) => {
-        const m = addWallBox(GAUNTLET_W + 8, 1.6, 0.5, 0, topY + 0.8, cz, color_kerb);
+        const m = addWallBox(GAUNTLET_W + 8, 1.6, 0.5, ox, topY + 0.8, cz, color_kerb);
         m.visible = false;
         if (m.userData.wallBox) m.userData.wallBox.enemyOnly = true;
       };
       const pit = (len, topY) => { fence(topY); cz -= len; fence(topY); };
-      const RIM_EDGE = 0xffa53a;   // amber: the floor ends here
-      const RIM_SIDE = 0x3fa7d6;   // cyan: ordinary platform
-      const RIM_EXIT = 0x54ffa0;
-      const mark = () => checkpoints.push({ x: 0, y: y + 1.65, z: cz + 2.5 });
+      const fixedArc = () => pen.arc + (pen.z - cz);
+      const mark = () => {
+        const cp = { x: ox, y: y + 1.65, z: cz + 2.5, width: 4.2, arc: fixedArc() - 2.5 };
+        if (spec.checkpoints && checkpoints.length) {
+          const light = new THREE.Mesh(new THREE.BoxGeometry(cp.width * 2, .035, .18), new THREE.MeshBasicMaterial({ color: 0xf1be78 }));
+          light.position.set(cp.x, y + .035, cp.z);
+          light.raycast = () => {};
+          scene.add(light);
+          gauntletProps.push(light);
+          cp.indicator = light;
+        }
+        checkpoints.push(cp);
+      };
+      const beginFixed = () => { cz = pen.z; y = pen.y; ox = pen.x; fixedY0 = y; };
+      const endFixed = (radius) => {
+        const dz = pen.z - cz;
+        footprints.addStraight(ox, (fixedY0 + y) / 2, pen.z, cz, radius, pen.arc + dz);
+        for (let d = 0; d < dz; d += 1) centreline.push({ x: ox, y: fixedY0 + (y - fixedY0) * (d / dz), z: pen.z - d, arc: pen.arc + d, w: GAUNTLET_W + 4, kerb: false });
+        pen.z = cz; pen.y = y; pen.x = ox; pen.arc += dz;
+      };
+
+      // ── Free-form pieces: follow the pen at any heading and slope ──────────────────────
+      /** Where the tutorial prompts fire: {kind, arcFrom (approach), arcTo (far side)}. */
+      const hints = [];
+      const markFree = (samples) => {
+        const end = samples[samples.length - 1];
+        const s = sampleAt(samples, Math.max(samples[0].arc, end.arc - 2.5));
+        const cp = { x: s.x, y: s.y + 1.65, z: s.z, width: 4.2, arc: s.arc };
+        if (spec.checkpoints && checkpoints.length) {
+          cp.indicator = crossBar(s, cp.width * 2, .18, .035, new THREE.MeshBasicMaterial({ color: 0xf1be78 }), .002);
+        }
+        checkpoints.push(cp);
+      };
+      const paintEnd = (sample, w) => crossBar(sample, w, .26, .05, hazardMat(w));
+      const freeDeck = (part, roleName, { kerbs = false, edgeStart = false, edgeEnd = false, hazardSides = false } = {}) => {
+        const { samples, w } = part;
+        const chunks = addRibbon(samples, { width: w, bottom: -DECK_T, top: 0 }, style.role(roleName));
+        // Each drawn chunk owns the slabs under it, so a hover chapter can sag a chunk at a time.
+        for (const chunk of chunks) {
+          chunk.boxes = slabBoxes(samples.slice(chunk.from, chunk.to + 1), { width: w, bottom: -DECK_T, top: 0 }).map((b) => addSlab(b, { deck: true }));
+        }
+        const length = samples[samples.length - 1].arc - samples[0].arc;
+        // Steel lip along both edges; painted hazard stripes on a narrow beam.
+        const painted = hazardSides && w < 5;
+        for (const side of [-1, 1]) {
+          addTrim(samples, {
+            offset: side * (w / 2 - 0.08), width: 0.16, bottom: 0, top: 0.05, startCap: false, endCap: false,
+            alongLen: painted ? length : 0,
+          }, painted ? hazardMat(length) : lipMat);
+        }
+        if (edgeStart) paintEnd(samples[0], w);
+        if (edgeEnd) paintEnd(samples[samples.length - 1], w);
+        if (kerbs) {
+          for (const side of [-1, 1]) {
+            const band = { offset: side * (w / 2 + 0.25), width: 0.5, bottom: 0, top: KERB_H };
+            addRibbon(samples, band, style.role("wall"));
+            slabBoxes(samples, band).forEach((b) => addSlab(b));
+          }
+        }
+        const entry = { samples, w, kind: part.kind, chunks };
+        ribbonDecks.push(entry);
+        footprints.addTrace(samples, w / 2 + 4, 1);
+        pushCentreline(samples, 2, w, kerbs);
+        return entry;
+      };
+      /** A low tunnel: roof, side walls and strip lights over a deck. Standing height is blocked; crouching clears it. */
+      const freeTunnel = (part) => {
+        const { samples, w } = part;
+        const wallMat = style.role("wall"), roofMat = style.role("room");
+        const roof = { offset: 0, width: w + 2.0, bottom: CRAWL_CLEAR, top: CRAWL_CLEAR + 0.8 };
+        addRibbon(samples, roof, roofMat);
+        slabBoxes(samples, roof).forEach((b) => addSlab(b));
+        for (const side of [-1, 1]) {
+          const band = { offset: side * (w / 2 + 0.5), width: 1.0, bottom: -DECK_T, top: CRAWL_CLEAR + 0.8 };
+          addRibbon(samples, band, wallMat);
+          slabBoxes(samples, band).forEach((b) => addSlab(b));
+        }
+        // Strip light under the roof — drawn only, so it never lowers the clearance.
+        addTrim(samples, { offset: 0, width: 0.3, bottom: CRAWL_CLEAR - 0.04, top: CRAWL_CLEAR, startCap: false, endCap: false },
+          new THREE.MeshBasicMaterial({ color: theme.lamp }));
+        // Ribs across the roof every 3 m.
+        for (let i = 4; i < samples.length - 4; i += 6) {
+          const s = samples[i];
+          const rib = new THREE.Mesh(new THREE.BoxGeometry(w + 2.6, 0.5, 0.4), style.role("beam"));
+          rib.position.set(s.x, s.y + CRAWL_CLEAR + 1.05, s.z);
+          rib.rotation.y = -s.th;
+          rib.raycast = () => {};
+          scene.add(rib);
+          gauntletProps.push(rib);
+        }
+      };
+      /** Enemy-only fence across a pit edge (see fence()). */
+      const pitFence = (sample) => {
+        const mini = [sample, { ...sample, x: sample.x + forwardOf(sample.th)[0] * 0.5, z: sample.z + forwardOf(sample.th)[1] * 0.5, arc: sample.arc + 0.5 }];
+        slabBoxes(mini, { width: GAUNTLET_W + 8, bottom: 0.0, top: 1.6 }).forEach((b) => addSlab({ ...b, minY: b.minY + 0.0, maxY: b.maxY }, { enemyOnly: true }));
+      };
+
+      /** Lay one free segment (any heading, slope, width) onto the course. */
+      let lastDeck = null;       // the deck the pen last left, so its far edge can be painted at a pit
+      let afterPit = false;
+      const freeSeg = (sg) => {
+        const lay = layoutSeg(sg, pen);
+        for (const part of lay.parts) {
+          const first = part.samples[0], last = part.samples[part.samples.length - 1];
+          if (part.kind === "pit") {
+            hints.push({ kind: sg.t === "dash" ? "dash" : "jump", arcFrom: first.arc - 5, arcTo: last.arc });
+            if (lastDeck) paintEnd(first, lastDeck.w);
+            pitFence(first); pitFence(last);
+            footprints.addTrace(part.samples, GAUNTLET_W / 2 + 3, 1);
+            pushCentreline(part.samples);
+            afterPit = true;
+            lastDeck = null;
+            continue;
+          }
+          const isRun = sg.t === "run";
+          const narrow = part.kind === "beam" || (sg.t === "pads");
+          const role = part.kind === "beam" || sg.t === "pads" ? "beam" : "deck";
+          if (part.kind === "tunnel") {
+            hints.push({ kind: "crouch", arcFrom: first.arc - 6, arcTo: first.arc + 1 });
+            freeDeck(part, "deck");
+            freeTunnel(part);
+          } else {
+            freeDeck(part, role, {
+              kerbs: isRun, edgeStart: afterPit || narrow || part.kind === "tread", edgeEnd: narrow || part.kind === "tread",
+              hazardSides: part.kind === "beam" || sg.t === "pads",
+            });
+          }
+          afterPit = false;
+          lastDeck = part;
+        }
+        const allSamples = lay.parts.flatMap((p) => p.samples);
+        const kinds = lay.parts.map((p) => p.kind);
+        pen.x = lay.end.x; pen.y = lay.end.y; pen.z = lay.end.z; pen.th = lay.end.th; pen.arc = lay.end.arc;
+        if (kinds.some((k) => k !== "pit")) markFree(lay.parts.filter((p) => p.kind !== "pit").pop().samples);
+        return allSamples;
+      };
+      const fixedReach = (sg) => {
+        if (sg.t === "room") return { len: sg.len, w: sg.w || (GAUNTLET_W + 10), door: true };
+        if (sg.t === "mechanic") return { len: 26, w: 14 };
+        if (sg.t === "lift") return { len: 10, w: 8 };
+        if (sg.t === "shuttle") return { len: (sg.gap || 11) + 6, w: 8 };
+        return { len: 14, w: GAUNTLET_W + 4 };
+      };
+
+      // Build order. Authored segments stay as written; legs are invented as the course is built.
+      const segList = lengthenSegs(spec.segs, { level: gauntletLevel, tier: Math.min(3, 1 + Math.floor(gauntletLevel / 70)) });
 
       // Start pad
+      beginFixed();
       plat(12, GAUNTLET_W + 4, y, FLOOR);
       mark();
+      endFixed(GAUNTLET_W / 2 + 6);
 
-      for (const sg of spec.segs) {
-        if (sg.t === "run") {
-          plat(sg.len, sg.w || GAUNTLET_W, y, FLOOR, RIM_EDGE);
-          rails(sg.len, sg.w || GAUNTLET_W, y);
+      for (let si = 0; si < segList.length; si++) {
+        let sg = segList[si];
+        if (sg.t === "leg") {
+          const legs = composeLeg(legRng(sg.seed), { ...sg, after: segList[si + 1] ? fixedReach(segList[si + 1]) : fixedReach({}) }, pen, footprints);
+          for (const part of legs) freeSeg(part);
+          continue;
+        }
+        if (!FIXED.has(sg.t)) { freeSeg(sg); continue; }
+        // Axis-aligned set pieces start with the pen heading straight again.
+        beginFixed();
+        let reach = GAUNTLET_W / 2 + 6;
+        if (sg.t === "mechanic") {
+          const plan = gauntletRuntime.build(sg, y, cz, ox, fixedArc());
+          cz -= plan.length;
+          y += plan.exitHeight;
           mark();
-        } else if (sg.t === "jump") {
-          pit(sg.gap || GAP_JUMP, y);
-        } else if (sg.t === "dash") {
-          pit(sg.gap || GAP_DASH, y);
-        } else if (sg.t === "crawl") {
-          const w = sg.w || GAUNTLET_W;
-          plat(sg.len, w, y, FLOOR);
-          // Slab underside at y + CRAWL_CLEAR — too low to walk under, fine to crouch under.
-          addWallBox(w, 3.0, sg.len, 0, y + CRAWL_CLEAR + 1.5, cz + sg.len / 2, 0x6b5b4a);
+          reach = 14;
+        } else if (sg.t === "lift") {
+          const deck = 4.2;
+          addMovingGauntletPlatform(ox, y, cz - deck / 2, 4.6, deck,
+            { x: 0, y: sg.rise, z: 0 }, 8);
+          cz -= deck;
+          y += sg.rise;
+          plat(5.5, GAUNTLET_W, y, FLOOR);
           mark();
-        } else if (sg.t === "beam") {
-          plat(sg.len, sg.w || 2.4, y, BEAM, RIM_EDGE);
-          mark();
-        } else if (sg.t === "steps") {
-          for (let i = 0; i < sg.n; i++) {
-            y += sg.rise;
-            plat(sg.len, sg.w || 6, y, FLOOR, RIM_SIDE);
-          }
-          mark();
-        } else if (sg.t === "pads") {
-          for (let i = 0; i < sg.n; i++) {
-            plat(sg.len, sg.w || 4, y, BEAM, RIM_EDGE);
-            if (i < sg.n - 1) pit(sg.gap || GAP_JUMP, y);
-          }
+        } else if (sg.t === "shuttle") {
+          const deck = 3.45;
+          addMovingGauntletPlatform(ox, y, cz - deck / 2, 4.8, deck,
+            { x: sg.drift || 0, y: 0, z: -(sg.gap - deck) }, 9.2);
+          cz -= sg.gap;
+          plat(5.5, GAUNTLET_W, y, FLOOR);
           mark();
         } else if (sg.t === "room") {
           const w = sg.w || (GAUNTLET_W + 10);
           const zEnd = cz - sg.len;
           plat(sg.len, w, y, ROOM, RIM_SIDE);
           rails(sg.len, w, y);
+          if (sg.cover) {
+            for (const [index, x] of [-4.2, 4.2].entries()) {
+              const h = index ? 1.48 : 2.6;
+              themed(addWallBox(2.2, h, 1.45, ox + x, y + h / 2, cz + sg.len * (.42 + index * .23), 0x6d7882), 2.2, h, 1.45, style.role("wall"));
+            }
+          }
           // Spawn points spread across the room floor, inset from the edges.
-          const cols = 3, rows = Math.max(2, Math.round(sg.len / 8));
+          const cols = 7, rows = Math.max(3, Math.round(sg.len / 5));
           for (let r = 0; r < rows; r++) {
             for (let c = 0; c < cols; c++) {
               spots.push({
-                x: (c - (cols - 1) / 2) * (w * 0.30),
+                x: ox + (c - (cols - 1) / 2) * (w * 0.84 / cols),
                 z: cz + sg.len * ((r + 0.5) / rows),
                 y,
+                room: roomCount,
               });
             }
           }
-          if (sg.boss) bossSpot = { x: 0, z: zEnd + sg.len * 0.35, y };
+          if (sg.boss) bossSpot = { x: ox, z: zEnd + sg.len * 0.35, y, room: roomCount };
+          addClearDoor(roomCount, zEnd + 0.8, y, w);
+          roomCount++;
           mark();
+          reach = w / 2 + 6;
         }
+        endFixed(reach);
+        lastDeck = null; afterPit = false;
       }
 
       // Exit pad — visually distinct, plus a beacon column so it reads from a distance.
+      beginFixed();
       const finishLen = 14;
       const finishZ = cz - finishLen / 2;
       plat(finishLen, GAUNTLET_W + 4, y, EXIT, RIM_EXIT);
-      const beacon = new THREE.Mesh(
-        new THREE.CylinderGeometry(1.6, 1.6, 14, 20, 1, true),
-        new THREE.MeshBasicMaterial({
-          color: 0x54ffa0, transparent: true, opacity: 0.22, side: THREE.DoubleSide, depthWrite: false,
-        })
-      );
-      beacon.position.set(0, y + 7, finishZ);
-      beacon.raycast = () => {};
-      scene.add(beacon);
-      gauntletProps.push(beacon);
+      endFixed(GAUNTLET_W / 2 + 6);
+      const finishX = ox;
+      // Exit gate: two steel posts and a lintel with a lit green panel, so the light at the
+      // finish comes from a fixture you can see instead of a glowing column in the air.
+      {
+        const gateMat = getGauntletEdgeMaterials().lip;
+        const gw = GAUNTLET_W + 2, gh = 5.2;
+        for (const sx of [-gw / 2, gw / 2]) {
+          const post = new THREE.Mesh(new THREE.BoxGeometry(0.45, gh, 0.45), gateMat);
+          post.position.set(finishX + sx, y + gh / 2, finishZ + 3);
+          post.castShadow = true; post.receiveShadow = true;
+          scene.add(post); gauntletProps.push(post);
+        }
+        const lintel = new THREE.Mesh(new THREE.BoxGeometry(gw + 0.45, 0.5, 0.5), gateMat);
+        lintel.position.set(finishX, y + gh, finishZ + 3);
+        lintel.castShadow = true;
+        scene.add(lintel); gauntletProps.push(lintel);
+        const panel = new THREE.Mesh(
+          new THREE.BoxGeometry(gw * 0.6, 0.14, 0.34),
+          new THREE.MeshStandardMaterial({ color: 0x0c1a12, emissive: 0x54ffa0, emissiveIntensity: 2.2, roughness: 0.4 })
+        );
+        panel.position.set(finishX, y + gh - 0.31, finishZ + 3);
+        panel.raycast = () => {};
+        scene.add(panel); gauntletProps.push(panel);
+      }
+      placeGauntletSign(finishX, y + 4.3, finishZ + 3.34, tr("gauntletExit", "EXIT"), 0x9fffd2);
       const beaconLight = createPhysicalPointLight(0x62ffb0, 420, 40, 2.0);
-      beaconLight.position.set(0, y + 4.5, finishZ);
+      beaconLight.position.set(finishX, y + 4.5, finishZ + 3);
       beaconLight.castShadow = false;
       scene.add(beaconLight);
       pvpMapLights.push(beaconLight);
 
+      // Extent of the course, for the scenery, the cloud deck and the supports.
+      const bounds = { x0: Infinity, x1: -Infinity, z0: Infinity, z1: -Infinity, y0: Infinity, y1: -Infinity };
+      for (const c of centreline) {
+        bounds.x0 = Math.min(bounds.x0, c.x); bounds.x1 = Math.max(bounds.x1, c.x);
+        bounds.z0 = Math.min(bounds.z0, c.z); bounds.z1 = Math.max(bounds.z1, c.z);
+        bounds.y0 = Math.min(bounds.y0, c.y); bounds.y1 = Math.max(bounds.y1, c.y);
+      }
+      const lowY = bounds.y0;
+      const highest = bounds.y1;
+
       // Lighting. Without this the course was pitch black — the map builders each own their
       // own lights and this one was only adding the exit beacon. A cool overhead key plus a
       // run of lamps down the course, so you can actually see the next platform edge.
-      const amb = new THREE.AmbientLight(0xc4d6ea, 3.4);
+      const light = theme.light;
+      const amb = new THREE.AmbientLight(light.ambient[0], 3.4 * light.ambient[1]);
       scene.add(amb); pvpMapLights.push(amb);
-      const hemi = new THREE.HemisphereLight(0xdae8ff, 0x39424f, 5.6);
+      const hemi = new THREE.HemisphereLight(light.hemi[0], light.hemi[1], 5.6 * light.hemi[2]);
       scene.add(hemi); pvpMapLights.push(hemi);
-      const key = new THREE.DirectionalLight(0xeaf2ff, 11.0);
-      key.position.set(18, 48, 20); key.castShadow = false;
+      const key = new THREE.DirectionalLight(light.sun[0], 11.0 * light.sun[1]);
+      key.position.set(light.sun[2][0] * 1.5, light.sun[2][1] * 1.5, light.sun[2][2] * 1.5); key.castShadow = false;
       scene.add(key); pvpMapLights.push(key);
-      const fill = new THREE.DirectionalLight(0xbcd4f2, 4.0);
+      const fill = new THREE.DirectionalLight(light.fill[0], 4.0 * light.fill[1]);
       fill.position.set(-22, 30, -40); fill.castShadow = false;
       scene.add(fill); pvpMapLights.push(fill);
-      for (let lz = 4; lz > finishZ - 8; lz -= 15) {
-        const lamp = createPhysicalPointLight(0xbfd8ff, 680, 42, 2.0);
-        lamp.position.set(0, 8.0, lz);
-        lamp.castShadow = false;
-        scene.add(lamp); pvpMapLights.push(lamp);
+      // Floodlight masts beside the course, every 30 m along it. Each one is a visible pole and
+      // head, so the pools of light have a source. A real course is far too long for a spotlight
+      // per mast, so a few lamps follow the player and light whichever masts are nearest.
+      const mastMat = style.role("beam");
+      const mastHeads = [];
+      for (let k = 12; k < centreline.length - 6; k += 30) {
+        const c = centreline[k], n = centreline[Math.min(centreline.length - 1, k + 3)], p = centreline[Math.max(0, k - 3)];
+        let dx = n.x - p.x, dz = n.z - p.z;
+        const dl = Math.hypot(dx, dz) || 1;
+        dx /= dl; dz /= dl;
+        const side = ((k / 30) | 0) % 2 === 0 ? 1 : -1;
+        const mx = c.x + -dz * side * (GAUNTLET_W / 2 + 7), mz = c.z + dx * side * (GAUNTLET_W / 2 + 7);
+        // Never plant a mast through another stretch of the course that folds back beside this one.
+        if (footprints.conflicts([{ x: mx, y: c.y, z: mz, arc: c.arc }], 1.4)) continue;
+        // Tall enough to run down into the cloud deck instead of stopping in mid-air.
+        const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.22, 80, 8), mastMat);
+        mast.position.set(mx, c.y + 8.6 - 40, mz);
+        scene.add(mast); gauntletProps.push(mast);
+        const head = new THREE.Mesh(
+          new THREE.BoxGeometry(1.4, 0.5, 0.7),
+          new THREE.MeshStandardMaterial({ color: 0x1b1f24, emissive: theme.lamp, emissiveIntensity: 1.6, roughness: 0.5 })
+        );
+        head.position.set(mx - -dz * side * 0.5, c.y + 8.1, mz - dx * side * 0.5);
+        head.rotation.y = -Math.atan2(dz, dx) + Math.PI / 2;
+        head.raycast = () => {};
+        scene.add(head); gauntletProps.push(head);
+        const ahead = centreline[Math.min(centreline.length - 1, k + 6)];
+        mastHeads.push({ x: mx - -dz * side * 0.6, y: c.y + 7.8, z: mz - dx * side * 0.6, tx: c.x, ty: c.y, tz: c.z, ax: ahead.x, az: ahead.z });
+      }
+      {
+        const pool = [];
+        for (let i = 0; i < Math.min(5, mastHeads.length); i++) {
+          const lamp = createPhysicalSpotLight(theme.lamp, 2600, 60, Math.PI / 4, 0.55);
+          lamp.castShadow = false;
+          scene.add(lamp); scene.add(lamp.target);
+          pvpMapLights.push(lamp, lamp.target);
+          pool.push(lamp);
+        }
+        let clock = 1;
+        const assign = () => {
+          const px = player.position.x, pz = player.position.z;
+          const nearest = mastHeads.map((m) => ({ m, d: (m.x - px) ** 2 + (m.z - pz) ** 2 })).sort((a, b) => a.d - b.d);
+          pool.forEach((lamp, i) => {
+            const m = nearest[i].m;
+            lamp.position.set(m.x, m.y, m.z);
+            lamp.target.position.set((m.tx + m.ax) / 2, m.ty, (m.tz + m.az) / 2);
+            lamp.target.updateMatrixWorld();
+          });
+        };
+        if (pool.length) {
+          assign();
+          gauntletTicks.push((dt) => { clock += dt; if (clock > 0.25) { clock = 0; assign(); } });
+        }
       }
 
+      // Fog bank: a sea of soft cloud sprites below the course plus drifting mist at deck level.
+      // Flat gradient sheets read as rectangles; sprites give a soft, volumetric haze.
+      const fogCanvas = document.createElement("canvas");
+      fogCanvas.width = 128;
+      fogCanvas.height = 128;
+      const fogCtx = fogCanvas.getContext("2d");
+      const fogPuff = fogCtx.createRadialGradient(64, 64, 0, 64, 64, 64);
+      fogPuff.addColorStop(0, "rgba(255,255,255,0.9)");
+      fogPuff.addColorStop(0.45, "rgba(255,255,255,0.35)");
+      fogPuff.addColorStop(1, "rgba(255,255,255,0)");
+      fogCtx.fillStyle = fogPuff;
+      fogCtx.fillRect(0, 0, 128, 128);
+      const fogTex = new THREE.CanvasTexture(fogCanvas);
+      fogTex.colorSpace = THREE.SRGBColorSpace;
+      const fogMat = new THREE.SpriteMaterial({ map: fogTex, color: new THREE.Color(theme.fog).lerp(new THREE.Color(0xffffff), 0.22), transparent: true, opacity: 0.5, depthWrite: false });
+      const cloudSea = theme.id !== "orbital-relay" && theme.id !== "starship-hangar";
+      if (cloudSea) {
+        const spanX = bounds.x1 - bounds.x0 + 240, spanZ = bounds.z1 - bounds.z0 + 240;
+        const cloudCount = Math.min(240, Math.round(60 + spanX * spanZ / 2600));
+        for (let i = 0; i < cloudCount; i++) {
+          const puff = new THREE.Sprite(fogMat);
+          const size = 34 + Math.random() * 46;
+          puff.scale.set(size, size * 0.55, 1);
+          puff.position.set(bounds.x0 - 120 + Math.random() * spanX, lowY - 10 - Math.random() * 34, bounds.z0 - 120 + Math.random() * spanZ);
+          puff.raycast = () => {};
+          scene.add(puff); gauntletProps.push(puff);
+        }
+        // Mist drifting beside the deck, wherever the course happens to be.
+        for (let i = 0; i < 70; i++) {
+          const c = centreline[Math.floor(Math.random() * centreline.length)];
+          const puff = new THREE.Sprite(fogMat);
+          const size = 14 + Math.random() * 18;
+          puff.scale.set(size, size * 0.7, 1);
+          const a = Math.random() * Math.PI * 2, r = 9 + Math.random() * 22;
+          puff.position.set(c.x + Math.cos(a) * r, c.y - 1.5 + Math.random() * 2.5, c.z + Math.sin(a) * r);
+          puff.raycast = () => {};
+          scene.add(puff); gauntletProps.push(puff);
+        }
+      }
+
+      // Hold the whole course up: piers, columns, hangers or thrusters under every deck.
+      {
+        const decks = [];
+        for (const mesh of wallMeshes.slice(meshStart)) {
+          const box = mesh.userData.wallBox;
+          if (!box || !box.wideTop || !mesh.visible || mesh.userData.moving || box.enemyOnly) continue;
+          decks.push({
+            mesh, box, x: (box.min.x + box.max.x) / 2, z: (box.min.z + box.max.z) / 2,
+            w: box.max.x - box.min.x, d: box.max.z - box.min.z, top: box.max.y, under: box.min.y,
+          });
+        }
+        const supports = gauntletThemes.buildSupports(theme, {
+          decks, ribbons: ribbonDecks, movers: gauntletRuntime ? gauntletRuntime.movers() : [], ramps: gauntletRuntime ? gauntletRuntime.ramps : [],
+          groundY: lowY - theme.groundDepth, lowY, highY: highest, length: Math.abs(bounds.z1 - bounds.z0), mid: (bounds.z0 + bounds.z1) / 2,
+          bounds, add: (obj) => { scene.add(obj); gauntletProps.push(obj); }, tick: (fn) => gauntletTicks.push(fn),
+        });
+        for (const d of supports.hover) gauntletHover.push({ mesh: d.mesh, box: d.box, x: d.x, z: d.z, w: d.w, d: d.d, offset: 0, vel: 0, wasOn: false });
+        for (const c of supports.hoverChunks || []) gauntletHover.push({ mesh: c.mesh, boxes: c.boxes, cx: c.cx, cz: c.cz, reach: c.reach, offset: 0, vel: 0, wasOn: false });
+      }
+      gauntletThemes.buildScenery(
+        theme,
+        { z0: bounds.z1 + 6, z1: bounds.z0, lowY, highY: highest, path: centreline, bounds },
+        gauntletLevel * 7919 + 13,
+        (obj) => { scene.add(obj); gauntletProps.push(obj); },
+        (fn) => gauntletTicks.push(fn)
+      );
+
       gauntletCourse = {
-        finishX: 0, finishZ, finishY: y, length: Math.abs(finishZ),
-        checkpoints, spots, bossSpot, spec,
+        finishX, finishZ, finishY: y, length: pen.arc, finishArc: pen.arc - finishLen / 2,
+        checkpoints, spots, bossSpot, spec, hints, path: centreline, bounds,
       };
-      gauntletState = { cleared: false, deaths: 0, startMs: performance.now(), checkpointIdx: 0, finishedMs: 0 };
+      gauntletState = { cleared: false, deaths: 0, startMs: 0, checkpointIdx: 0, finishedMs: 0, progressIdx: 0, arc: 0 };
+      indexGauntletBoxes();
 
       // bootGame calls positionPlayerForCurrentMap() BEFORE the map builder runs, so the
       // course did not exist yet and the player got the fallback spot. Place them properly
@@ -5959,14 +7411,17 @@
     const MAP_BUILDERS = {
       arena: buildMapArena,
       boss_arena: buildMapBossArena,
-      crossfire: buildMapCrossfire,
-      crossfire_grid: buildMapCrossfireGrid,
+      crossfire: () => buildPvpThemed("crossfire"),
+      crossfire_grid: () => buildPvpThemed("crossfire_grid"),
+      pvp_ruins: () => buildPvpThemed("pvp_ruins"),
+      pvp_town: () => buildPvpThemed("pvp_town"),
       pvp_bright: buildMapPvpBright,
       training: buildMapTraining,
       gauntlet: buildMapGauntlet,
     };
 
-    const ZOMBIE_COUNT = 18;
+    const ZOMBIE_POPULATION_MULTIPLIER = 2;
+    const ZOMBIE_COUNT = 18 * ZOMBIE_POPULATION_MULTIPLIER;
     /** Multiplier for how far from players a zombie must spawn (0.4 = tighter / closer spawns). */
     const ZOMBIE_SPAWN_PLAYER_CLEAR_SCALE = 0.4;
     const SPAWN_MIN_DIST_BASE = 18 * ZOMBIE_SPAWN_PLAYER_CLEAR_SCALE;
@@ -6094,17 +7549,17 @@
           if (tooClose) continue;
           return { x, z, usedDist: dist };
         }
-        const x = px + 14;
-        const z = pz;
-        return { x, z, usedDist: 0 };
+        // Nothing passed. Do not force a spot that may be inside a wall; usedDist 0 tells
+        // callers the placement failed, and the leash simply retries next frame.
+        for (let a = 0; a < 16; a++) {
+          const ang = (a / 16) * Math.PI * 2;
+          const x = px + Math.cos(ang) * 14, z = pz + Math.sin(ang) * 14;
+          if (arenaXZClearForSpawn(x, z, 0.5)) return { x, z, usedDist: SPAWN_MIN_DIST_FLOOR };
+        }
+        return { x: px + 14, z: pz, usedDist: 0 };
       }
 
-      const S =
-        CURRENT_MAP === "crossfire_grid"
-          ? 27
-          : isPvpCrossfireMap(CURRENT_MAP)
-            ? 43
-            : 40;
+      const S = pvpMaps.MAPS[CURRENT_MAP] ? pvpMaps.MAPS[CURRENT_MAP].half - 2 : isPvpCrossfireMap(CURRENT_MAP) ? 43 : 40;
       const players = getAllPlayerPositions();
       let dist = minDist;
       for (let attempt = 0; attempt < 60; attempt++) {
@@ -6167,8 +7622,10 @@
      * A jet dash costs half, otherwise the harness's 10-second window would be spent
      * before you got anywhere.
      */
+    /** Grace window after leaving a ledge in which a jump still registers. */
+    const COYOTE_MS = 110;
     const STAMINA_MAX            = 100;
-    const STAMINA_DASH_COST      = 34;    // → 2 dashes from full, 3rd needs a sliver of regen
+    const STAMINA_DASH_COST      = STAMINA_MAX / 3;
     // Jet dashes are FREE of stamina — the harness has its own window + cooldown instead.
     const STAMINA_REGEN_PER_SEC  = 26;    // full refill ≈ 3.8 s
     const STAMINA_REGEN_DELAY_MS = 900;   // quiet time before the bar starts coming back
@@ -6192,6 +7649,14 @@
       combatFeedbackTimer: 0,
       walkPhase: 0,
       smoothHeadBob: 0,
+      // Smoothed horizontal velocity (world units/s) and the camera-feel terms derived from it.
+      velX: 0,
+      velZ: 0,
+      camRoll: 0,
+      landDip: 0,
+      landDipVis: 0,
+      lastGroundedMs: 0,
+      jumpedSinceGround: false,
       weaponBobX: 0,
       weaponBobY: 0,
       weaponBobRotZ: 0,
@@ -6218,6 +7683,7 @@
       // DASH_DURATION_MS instead of teleporting; direction is captured at press time
       // and integrated each frame in updatePlayer.
       dashActiveUntil: 0,
+      dashWasActive: false,
       dashDirX: 0,
       dashDirZ: 0,
       dashDirY: 0,
@@ -6404,13 +7870,13 @@
         adsSpeed: 7.5,
       },
       {
-        name: "AMR",
+        name: "Anti-Materiel Rifle",
         fireDelay: 1260,
         auto: false,
         pellets: 1,
-        spreadBase: 0.058,
-        spreadBloomAdd: 0.014,
-        spreadBloomMax: 0.098,
+        spreadBase: 0.007,
+        spreadBloomAdd: 0.0028,
+        spreadBloomMax: 0.014,
         recover: 0.032,
         recoil: 0.2,
         damageHead: 220,
@@ -6419,7 +7885,7 @@
         color: 0xd4c4ff,
         magSize: 5,
         ammo: 5,
-        reloadTime: 3400,
+        reloadTime: 1950,
         soundSkin: "dragonOperator",
         adsFov: 26,
         adsSpeed: 3.29,
@@ -6953,7 +8419,7 @@
     }
 
     function checkHellAchievement() {
-      if (BOSS_ROUND >= 4 || BOSS_HELL_MODE) unlockAchievement("light_liberator");
+      if (BOSS_HELL_MODE) unlockAchievement("light_liberator");
     }
 
     function registerPvpKill() {
@@ -7307,6 +8773,10 @@
       detailEl.appendChild(actionsEl);
 
       detailEl.style.display = "block";
+      // The detail is the last child of the scrolling body, below the whole list. Scroll
+      // the body to its end so the detail is in view, not cut off at the panel edge.
+      const scroller = detailEl.parentElement;
+      if (scroller) scroller.scrollTop = scroller.scrollHeight;
 
       // Apply the .active class to the card whose data-id matches.
       // We tagged cards with data-id in _buildAchievementCard; toggle it now.
@@ -7324,12 +8794,35 @@
       renderAchievementsPanel();
     }
 
+    function showSettingsPrompt(message, { password = false, cancel = false, acceptLabel } = {}) {
+      const dialog = document.getElementById("settingsPrompt");
+      const input = document.getElementById("settingsPromptPassword");
+      const accept = document.getElementById("settingsPromptAccept");
+      const cancelButton = document.getElementById("settingsPromptCancel");
+      document.getElementById("settingsPromptMessage").textContent = message;
+      input.hidden = !password;
+      input.value = "";
+      cancelButton.hidden = !cancel;
+      cancelButton.textContent = tr("btnCancel", "Cancel");
+      accept.textContent = acceptLabel || tr("btnOk", "OK");
+      dialog.returnValue = "";
+      return new Promise(resolve => {
+        dialog.addEventListener("close", () => {
+          const value = dialog.returnValue === "accept" ? (password ? input.value : true) : null;
+          input.value = "";
+          resolve(value);
+        }, { once: true });
+        dialog.showModal();
+        (password ? input : cancel ? cancelButton : accept).focus();
+      });
+    }
+
     async function tryCreatorUnlock() {
       if (CREATOR_UNLOCKED) {
-        alert(tr("creatorAlreadyUnlocked", "Creator mode is already unlocked."));
+        await showSettingsPrompt(tr("creatorAlreadyUnlocked", "Creator mode is already unlocked."));
         return;
       }
-      const pw = prompt(tr("creatorPromptPassword", "Enter creator password:"));
+      const pw = await showSettingsPrompt(tr("creatorPromptPassword", "Enter creator password:"), { password: true, cancel: true });
       if (pw === null) return;
       // 密码使用 SHA-256 哈希校验，明文不存储在源码中
       let pwHash = "";
@@ -7338,7 +8831,7 @@
         pwHash = Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, "0")).join("");
       } catch (_) {}
       if (pwHash !== "d3a5eaa0bf51412aedd3c7c3a801c1853f512353f5fb1b996066c93af1078330") {
-        alert(tr("creatorWrongPassword", "Wrong password."));
+        await showSettingsPrompt(tr("creatorWrongPassword", "Wrong password."));
         return;
       }
       CREATOR_UNLOCKED = true;
@@ -7347,7 +8840,7 @@
       persistUnlocks();
       updateQuestHud();
       updateHud();
-      alert(tr("creatorUnlockedMsg", "Creator mode unlocked. All weapons available."));
+      await showSettingsPrompt(tr("creatorUnlockedMsg", "Creator mode unlocked. All weapons available."));
     }
 
     loadUnlocks();
@@ -7386,7 +8879,7 @@
       if (weaponAvailable(idx)) {
         setWeapon(idx);
       } else if (weaponUnlocked[idx] && !weaponInLoadout(idx)) {
-        showCombatFeedback(tr("loadoutNotPacked", "NOT IN YOUR BACKPACK"), "#ff9d3d", 0.3);
+        playHudDenySound();
       }
     }
 
@@ -7398,6 +8891,7 @@
       } else if (!enemy.trainingDummy) {
         sessionKillCount++;
       }
+      if (!enemy.trainingDummy) markKillConfirm();
       checkWeaponUnlocks();
       checkAchievements();
       persistUnlocks();
@@ -7442,10 +8936,21 @@
     }
 
     let _lastHudHtml = "";
+    /**
+     * The controls reference used to be printed permanently, burying the five lines of
+     * actual status under five lines of key bindings. It now shows on entering a match,
+     * folds itself away, and comes back on the hudHelp key.
+     */
+    const HUD_HELP_AUTO_MS = 14000;
+    let hudHelpPinned = false;
+    let hudHelpAutoUntilMs = 0;
+    function isHudHelpVisible() {
+      return hudHelpPinned || performance.now() < hudHelpAutoUntilMs;
+    }
 
     function updateHud() {
       const w = weapon();
-      const bossRoundInfo = CURRENT_MAP === "boss_arena" ? ` [Round ${BOSS_ROUND}]` : "";
+      const bossRoundInfo = CURRENT_MAP === "boss_arena" && BOSS_HELL_MODE ? " · HELL MODE" : "";
       const mapLabel =
         CURRENT_MAP === "boss_arena"
           ? `${tr("mapBossArena", "BOSS FIGHT — Boss")}${bossRoundInfo}`
@@ -7453,8 +8958,8 @@
           ? tr("mapArena", "zombie arena")
           : isTrainingMap(CURRENT_MAP)
             ? tr("mapTraining", "training camp")
-            : CURRENT_MAP === "crossfire_grid"
-              ? tr("mapPvpGrid", "PVP - grid map")
+            : pvpMaps.MAPS[CURRENT_MAP]
+              ? `PVP — ${pvpMaps.MAPS[CURRENT_MAP].name}`
               : isPvpCrossfireMap(CURRENT_MAP)
                 ? tr("mapPvpClassic", "PVP - classic")
                 : CURRENT_MAP;
@@ -7473,9 +8978,8 @@
         ` · ${tr("hudLblReload", "Reload")} ${K("reload")}` +
         ` · ${tr("hudLblHeal", "Heal")} ${K("heal")}`;
       const hudHelpGear = `${tr("hudLblGear", "Gear")}: ${K("speedNeedle")} ${tr("needleName", "Speed Needle")}` +
-        ` · ${K("jetHarness")} ${tr("jetName", "Jet Harness")} <span style="opacity:0.7;">(${tr("hudJetHint", "then dash to fly — mind the drop")})</span>`;
+        ` · ${K("jetHarness")} ${tr("jetName", "Jet Harness")} <span style="opacity:0.7;">(${tr("hudJetHint", "hold Space to climb, Ctrl to sink, dash to burst — mind the drop")})</span>`;
       const hudHelpMisc = `${tr("hudLblLight", "Light")} ${K("flashlight")}` +
-        ` · ${tr("hudLblBeam", "Beam")} ${K("flashBeam")}` +
         ` · ${tr("hudLblChat", "Chat")} ${K("chat")}` +
         ` · ${tr("hudLblQuests", "Quests")} ${K("questHud")}` +
         ` · ${tr("hudLblPause", "Pause")} <b style="color:#8fd8ff;">Esc</b>`;
@@ -7521,16 +9025,20 @@
       } else if (state.weaponIndex === 8) {
         weaponLine = `<b style="color:#ffd700;">∞ | 7500</b><br>`;
       } else {
-        weaponLine = `${hudBulletsLbl}: ${w.ammo} / ${w.magSize}${state.reloading ? `（${hudRefilling}）` : ""}<br>`;
+        const low = !state.reloading && w.ammo <= Math.max(1, Math.floor(w.magSize * 0.25));
+        weaponLine = `${hudBulletsLbl}: <b class="hud-ammo${low ? " hud-ammo-low" : ""}">${w.ammo}</b> / ${w.magSize}${state.reloading ? `（${hudRefilling}）` : ""}<br>`;
       }
+      const helpOpen = isHudHelpVisible();
+      const hudHelpBlock = helpOpen
+        ? `<div class="hud-help">${hudHelpMove}<br>${hudHelpAim}<br>${hudHelpGear}<br>${hudHelpMisc}<br>${hudHelpWeapons}</div>`
+        : "";
+      const hudHelpToggle = `<span class="hud-help-toggle">${K("hudHelp")} ${helpOpen
+        ? tr("hudHelpHide", "hide controls")
+        : tr("hudHelpShow", "controls")}</span>`;
       const hudHtml = `
         ${roomLineTr}
-        ${tr("hudGameTitleLine", "Zone No Light")}<br>
-        ${hudHelpMove}<br>
-        ${hudHelpAim}<br>
-        ${hudHelpGear}<br>
-        ${hudHelpMisc}<br>
-        ${hudHelpWeapons}<br>
+        <div class="hud-title">${tr("hudGameTitleLine", "Zone No Light")}${hudHelpToggle}</div>
+        ${hudHelpBlock}
 ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         ${hudWeaponLbl}: ${weaponDisplayName(state.weaponIndex)}<br>
         ${weaponLine}
@@ -7543,7 +9051,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           tr("hudGauntletLevel", "GAUNTLET {n}/{m}")
             .replace("{n}", String(gauntletLevel)).replace("{m}", String(GAUNTLET_LEVEL_COUNT))
         } — ${tr("hudGauntletGoal", "REACH THE EXIT")}</b> <span style="opacity:0.8;">(${
-          Math.max(0, Math.round(player.position.z - gauntletCourse.finishZ))
+          Math.max(0, Math.round(gauntletCourse.finishArc - (gauntletState.arc || 0)))
         }m)</span>` : ""}
       `;
       // Avoid rewriting the HUD DOM when the rendered string is unchanged (the common case).
@@ -7554,20 +9062,12 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       refreshFpsHelpForMap();
     }
 
-    /** Bright duel map: override corner FPS hints; other maps use applyLanguageUI / defaults. */
     function refreshFpsHelpForMap() {
-      const elL = document.getElementById("fpsHintFlash");
-      const elZ = document.getElementById("fpsHintZoom");
-      if (!elL || !elZ) return;
-      const inGame = gameWorldReady && menuEl && menuEl.style.display === "none";
-      if (isBrightIndoorMap(CURRENT_MAP) && inGame) {
-        elL.textContent = tr("hudBrightDuel", "Bright duel map — flashlight stays off");
-        elZ.style.display = "none";
-      } else {
-        elZ.style.display = "";
-        elL.textContent = tr("hudHelpLight", elL.textContent);
-        elZ.textContent = tr("hudHelpZoom", elZ.textContent);
-      }
+      const lightHint = document.getElementById("fpsHintFlash");
+      if (!lightHint) return;
+      lightHint.hidden = isBrightIndoorMap(CURRENT_MAP) || isBossArenaMap(CURRENT_MAP);
+      const text = `${codeToLabel(kbCode("flashlight"))} · ${tr("hudLblLight", "Light")}`;
+      if (lightHint.textContent !== text) lightHint.textContent = text;
     }
     updateHud();
 
@@ -7575,7 +9075,50 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     /** chunkKey -> Box3[] for arena maze walls — lets collision test only the nearby chunk ring. */
     const mazeWallBoxBuckets = new Map();
 
+    /**
+     * The gauntlet's courses are hundreds of metres of thin collision slabs, far too many to scan
+     * for every query. They go into a coarse grid once the course is built; `always` holds the
+     * boxes that move (doors, lifts, crumbling decks), which never sit still in one cell.
+     */
+    const GAUNTLET_CELL = 12;
+    let _gridStamp = 0;
+    const gridKey = (cx, cz) => (cx + 8192) * 16384 + (cz + 8192);
+    function indexGauntletBoxes() {
+      const cells = new Map(), always = [];
+      for (const box of wallBoxes) {
+        if (box.dyn) { always.push(box); continue; }
+        const x0 = Math.floor(box.min.x / GAUNTLET_CELL), x1 = Math.floor(box.max.x / GAUNTLET_CELL);
+        const z0 = Math.floor(box.min.z / GAUNTLET_CELL), z1 = Math.floor(box.max.z / GAUNTLET_CELL);
+        if ((x1 - x0 + 1) * (z1 - z0 + 1) > 400) { always.push(box); continue; }
+        for (let cx = x0; cx <= x1; cx++) for (let cz = z0; cz <= z1; cz++) {
+          const k = gridKey(cx, cz);
+          let list = cells.get(k);
+          if (!list) cells.set(k, list = []);
+          list.push(box);
+        }
+      }
+      gauntletGrid = { cells, always };
+    }
     function forEachNearbyWallBox(x, z, cb) {
+      if (gauntletGrid && CURRENT_MAP === "gauntlet") {
+        const stamp = ++_gridStamp;
+        const ccx = Math.floor(x / GAUNTLET_CELL), ccz = Math.floor(z / GAUNTLET_CELL);
+        for (let dx = -1; dx <= 1; dx++) {
+          for (let dz = -1; dz <= 1; dz++) {
+            const list = gauntletGrid.cells.get(gridKey(ccx + dx, ccz + dz));
+            if (!list) continue;
+            for (let i = 0; i < list.length; i++) {
+              const box = list[i];
+              if (box._seen === stamp) continue;
+              box._seen = stamp;
+              cb(box);
+            }
+          }
+        }
+        const always = gauntletGrid.always;
+        for (let i = 0; i < always.length; i++) cb(always[i]);
+        return;
+      }
       if (CURRENT_MAP !== "arena" || !mazeWallBoxBuckets.size) {
         for (const box of wallBoxes) cb(box);
         return;
@@ -7658,6 +9201,88 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       return false;
     }
 
+    /**
+     * Camera rig. Impulses (wall jump, landing, dash, hits, recoil) are added as velocity to
+     * damped springs, so the view kicks and settles with a little overshoot; `quake` is a
+     * decaying low-frequency shake for ground slams. Walking adds stride-locked sway and nod.
+     */
+    const camRig = { pitch: 0, vp: 0, roll: 0, vr: 0, yaw: 0, vy: 0, fov: 0, vf: 0, quake: 0, quakeT: 0 };
+    function addCamKick({ pitch = 0, roll = 0, yaw = 0, fov = 0 } = {}) {
+      camRig.vp += pitch * 26; camRig.vr += roll * 26; camRig.vy += yaw * 26; camRig.vf += fov * 26;
+    }
+    function addQuake(amount) {
+      camRig.quake = Math.min(1.4, camRig.quake + amount);
+      camRig.quakeT = 0;
+    }
+    const heatVignette = document.createElement("div");
+    heatVignette.id = "heatVignette";
+    heatVignette.style.cssText = "position:fixed;inset:0;pointer-events:none;z-index:20;opacity:0;mix-blend-mode:screen;"
+      + "background:radial-gradient(ellipse at center, rgba(255,80,20,0) 32%, rgba(255,70,15,0.5) 74%, rgba(190,30,0,0.85) 100%);";
+    document.body.appendChild(heatVignette);
+    function updateCameraRig(dt, stride, grounded, verticalSpeed) {
+      const w = 16, z = 0.55;
+      for (const [k, v] of [["pitch", "vp"], ["roll", "vr"], ["yaw", "vy"], ["fov", "vf"]]) {
+        camRig[v] += (-w * w * camRig[k] - 2 * z * w * camRig[v]) * dt;
+        camRig[k] += camRig[v] * dt;
+      }
+      camRig.quakeT += dt;
+      const nowMs = performance.now();
+      const hot = nowMs < (state.heatUntil || 0), windy = nowMs < (state.airUntil || 0);
+      camRig.clock = (camRig.clock || 0) + dt;
+      camRig.heat = dampScalar(camRig.heat || 0, hot ? 1 : 0, dt, hot ? 5 : 1.6);
+      camRig.air = dampScalar(camRig.air || 0, windy ? 1 : 0, dt, windy ? 4 : 2);
+      const ck = camRig.clock;
+      heatVignette.style.opacity = (camRig.heat * (0.62 + Math.sin(ck * 5.2) * 0.1)).toFixed(3);
+      if (camRig.heat > 0.4 && nowMs - (camRig.sizzleAt || 0) > 280) { camRig.sizzleAt = nowMs; playSizzleSound(); }
+      let qy = 0, qr = 0, qp = 0;
+      if (camRig.quake > 0.002) {
+        const a = camRig.quake;
+        qy = Math.sin(camRig.quakeT * 37) * a * 0.16;
+        qr = Math.sin(camRig.quakeT * 23) * a * 0.05;
+        qp = Math.sin(camRig.quakeT * 29 + 1) * a * 0.035;
+        camRig.quake *= Math.exp(-dt * 2.6);
+      } else camRig.quake = 0;
+      const gait = grounded ? Math.min(1, stride) : 0;
+      const phase = state.walkPhase || 0;
+      const air = grounded ? 0 : THREE.MathUtils.clamp(-verticalSpeed * 0.0022, -0.02, 0.03);
+      return {
+        pitch: camRig.pitch + qp + Math.cos(phase * 2) * 0.0032 * gait + air + Math.sin(ck * 7.7) * 0.005 * camRig.heat + Math.sin(ck * 5.4) * 0.004 * camRig.air,
+        roll: camRig.roll + qr + Math.sin(phase) * 0.0052 * gait + Math.sin(ck * 5.3) * 0.007 * camRig.heat + (Math.sin(ck * 3.1) + Math.sin(ck * 7.9) * 0.5) * 0.006 * camRig.air,
+        yaw: camRig.yaw + Math.sin(phase * 0.5) * 0.0036 * gait,
+        y: qy,
+        fov: camRig.fov + camRig.air * 2 + camRig.heat * 1.2,
+      };
+    }
+
+    /** Ledges, kerbs and stair treads up to this high are stepped onto, never treated as walls. */
+    const STEP_UP = 0.32;
+    const WALLJUMP_PUSH = 7.5;
+    const WALLJUMP_REACH = 0.22;
+    const WALLJUMP_COOLDOWN_MS = 260;
+
+    /**
+     * Wall jump: the outward normal of the nearest wall the body is touching (or within a hand's
+     * reach of), or null. Floors, decks under the feet and low kerbs do not count, so this works
+     * on every real wall in every mode: maze walls, crossfire cover, gauntlet walls.
+     */
+    function findWallJumpNormal() {
+      const px = player.position.x, pz = player.position.z;
+      const feet = player.position.y - 1.65, head = player.position.y;
+      let best = null, bestDist = Infinity;
+      forEachNearbyWallBox(px, pz, (box) => {
+        if (box.enemyOnly) return;
+        if (box.max.y < feet + 0.7 || box.min.y > head - 0.2) return;
+        const cx = Math.max(box.min.x, Math.min(px, box.max.x));
+        const cz = Math.max(box.min.z, Math.min(pz, box.max.z));
+        const dx = px - cx, dz = pz - cz;
+        const dist = Math.hypot(dx, dz);
+        if (dist < 1e-4 || dist > player.radius + WALLJUMP_REACH || dist >= bestDist) return;
+        bestDist = dist;
+        best = { x: dx / dist, z: dz / dist };
+      });
+      return best;
+    }
+
     function collidesWithWalls(pos) {
       _playerWallSphere.radius = player.radius;
       const pBottom = player.position.y - 1.65;
@@ -7670,6 +9295,9 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         if (hit || box.enemyOnly) return;
         // Skip if feet are clearly above this box (stepped / jumped over it)
         if (pBottom > box.max.y + 0.02 || pTop < box.min.y) return;
+        // A low ledge is a step, not a wall. This is what stops walking and dashing catching on
+        // the lip where two floors (or the treads of a slope) meet at slightly different heights.
+        if (box.max.y - pBottom <= STEP_UP && (player.onGround || performance.now() < state.dashActiveUntil)) return;
         // If feet are at or near box top, check whether the player is currently
         // standing ON this box (current x-z within footprint). If so, skip
         // horizontal collision — they're on top and must be free to walk.
@@ -7695,6 +9323,39 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
      */
     function worldFloorEyeY() {
       return isGauntletMap(CURRENT_MAP) ? GAUNTLET_FLOOR_EYE_Y : 1.65;
+    }
+
+    function highestSupportTop(x, z, minY, maxY) {
+      let top = -Infinity;
+      forEachNearbyWallBox(x, z, box => {
+        if (box.enemyOnly || box.max.y <= top || box.max.y < minY || box.max.y > maxY) return;
+        if (centreOverBoxTop(box, x, z)) top = box.max.y;
+      });
+      return top;
+    }
+
+    function fallDamage(drop) {
+      if (drop <= SAFE_FALL_DROP + 1e-5) return 0;
+      const severity = THREE.MathUtils.clamp((drop - SAFE_FALL_DROP) / (FATAL_FALL_DROP - SAFE_FALL_DROP), 0, 1);
+      return Math.ceil(player.maxHealth * severity ** 1.35);
+    }
+
+    /**
+     * True when something solid sits low enough above the player's head that standing up would
+     * bury them in it. Used to hold the crouch: you can only stand again once you are clear.
+     * Only boxes whose underside is above the feet count, so floors and ledges never trigger it.
+     */
+    function lowCeilingAbove() {
+      const px = player.position.x, pz = player.position.z, r = player.radius * 0.9;
+      const feet = player.position.y - 1.65;
+      const standingTop = player.position.y + 0.12;
+      let low = false;
+      forEachNearbyWallBox(px, pz, (box) => {
+        if (low || box.enemyOnly) return;
+        if (px < box.min.x - r || px > box.max.x + r || pz < box.min.z - r || pz > box.max.z + r) return;
+        if (box.min.y > feet + 0.6 && box.min.y < standingTop && box.max.y > feet + 0.6) low = true;
+      });
+      return low;
     }
 
     function resolveVerticalStep(fromY, stepY) {
@@ -7724,21 +9385,24 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       // lands inside an outside corner of a wall. Solution: after the two single-axis tests, re-test
       // the combined position; if still collided, keep only whichever single axis is clear.
       const result = player.position.clone();
+      const limit = isBossArenaMap(CURRENT_MAP) ? BOSS_ARENA_HALF - 0.5 - player.radius : Infinity;
+      const nextX = THREE.MathUtils.clamp(nextPos.x, -limit, limit);
+      const nextZ = THREE.MathUtils.clamp(nextPos.z, -limit, limit);
 
       const tryX = result.clone();
-      tryX.x = nextPos.x;
+      tryX.x = nextX;
       const xClear = !collidesWithWalls(tryX);
       if (xClear) result.x = tryX.x;
 
       const tryZ = result.clone();
-      tryZ.z = nextPos.z;
+      tryZ.z = nextZ;
       const zClear = !collidesWithWalls(tryZ);
       if (zClear) result.z = tryZ.z;
 
       if (xClear && zClear && collidesWithWalls(result)) {
-        const onlyX = player.position.clone(); onlyX.x = nextPos.x;
+        const onlyX = player.position.clone(); onlyX.x = nextX;
         if (!collidesWithWalls(onlyX)) return onlyX;
-        const onlyZ = player.position.clone(); onlyZ.z = nextPos.z;
+        const onlyZ = player.position.clone(); onlyZ.z = nextZ;
         if (!collidesWithWalls(onlyZ)) return onlyZ;
         return player.position.clone();
       }
@@ -7809,7 +9473,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       if (type === "fast") {
         skinColor = 0x9a936f; skinDark = 0x625c43; shirtColor = 0x554c2f;
         pantsColor = 0x353228; woundColor = 0x7a3030; eyeColor = 0xe5513e;
-        hp = 70; speed = 7.4; attackDamage = 9; attackCooldown = 0.18;
+        hp = 64; speed = 5.15; attackDamage = 7; attackCooldown = 1.20;
       } else if (type === "gunner") {
         skinColor = 0x856b6b; skinDark = 0x533e40; shirtColor = 0x4a3030;
         pantsColor = 0x292425; woundColor = 0x812f32; eyeColor = 0xdd5a50;
@@ -8008,8 +9672,8 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       scene.add(root);
 
       const hpCanvas = document.createElement("canvas");
-      hpCanvas.width = 128;
-      hpCanvas.height = 24;
+      hpCanvas.width = 256;
+      hpCanvas.height = 48;
       const hpCtx = hpCanvas.getContext("2d");
       const hpTexture = new THREE.CanvasTexture(hpCanvas);
       const hpSprite = new THREE.Sprite(
@@ -8079,15 +9743,59 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       enemy._hpBarRatio = ratio;
       const ctx = enemy.hpCtx;
       const cw = enemy.hpCanvas.width;
-      const bw = cw - 8;
-      ctx.clearRect(0, 0, cw, 24);
-      ctx.fillStyle = "rgba(0,0,0,0.55)";
-      ctx.fillRect(4, 8, bw, 8);
-      ctx.fillStyle = enemy.isBoss ? "#e040ff" : enemy.type === "tank" ? "#60a5fa" : (enemy.type === "gunner" ? "#f87171" : (enemy.type === "fast" ? "#facc15" : "#22c55e"));
-      ctx.fillRect(4, 8, bw * Math.max(0, enemy.hp) / enemy.maxHp, 8);
-      ctx.strokeStyle = "rgba(255,255,255,0.85)";
-      ctx.lineWidth = 1;
-      ctx.strokeRect(4, 8, bw, 8);
+      const ch = enemy.hpCanvas.height;
+      ctx.clearRect(0, 0, cw, ch);
+      // Rounded track with a drop shadow.
+      const padX = cw * 0.035;
+      const trackW = cw - padX * 2;
+      const trackH = ch * 0.36;
+      const trackY = (ch - trackH) / 2;
+      const r = trackH / 2;
+      const pill = (x, y, w, h, rr) => {
+        const rad = Math.max(0, Math.min(rr, w / 2, h / 2));
+        ctx.beginPath();
+        ctx.moveTo(x + rad, y);
+        ctx.arcTo(x + w, y, x + w, y + h, rad);
+        ctx.arcTo(x + w, y + h, x, y + h, rad);
+        ctx.arcTo(x, y + h, x, y, rad);
+        ctx.arcTo(x, y, x + w, y, rad);
+        ctx.closePath();
+      };
+      ctx.save();
+      ctx.shadowColor = "rgba(0,0,0,0.6)";
+      ctx.shadowBlur = ch * 0.25;
+      ctx.shadowOffsetY = ch * 0.06;
+      pill(padX, trackY, trackW, trackH, r);
+      ctx.fillStyle = "rgba(12,14,18,0.8)";
+      ctx.fill();
+      ctx.restore();
+      // Fill in the type colour (red when low), with a gloss on top and a darker base.
+      const fillW = trackW * ratio;
+      if (fillW > 0.5) {
+        const low = ratio < 0.25 && !enemy.isBoss;
+        const base = enemy.isBoss ? "#e040ff" : low ? "#ef4444" : enemy.type === "tank" ? "#60a5fa" : enemy.type === "gunner" ? "#f87171" : enemy.type === "fast" ? "#facc15" : "#22c55e";
+        pill(padX, trackY, fillW, trackH, r);
+        ctx.fillStyle = base;
+        ctx.fill();
+        const shade = ctx.createLinearGradient(0, trackY, 0, trackY + trackH);
+        shade.addColorStop(0, "rgba(255,255,255,0.45)");
+        shade.addColorStop(0.5, "rgba(255,255,255,0.05)");
+        shade.addColorStop(1, "rgba(0,0,0,0.35)");
+        pill(padX, trackY, fillW, trackH, r);
+        ctx.fillStyle = shade;
+        ctx.fill();
+      }
+      // Quarter ticks so the bar reads as a fraction.
+      ctx.fillStyle = "rgba(0,0,0,0.4)";
+      for (let i = 1; i < 4; i++) ctx.fillRect(padX + trackW * i / 4 - 0.5, trackY + trackH * 0.2, 1, trackH * 0.6);
+      // Dark outer bezel and a light inner edge.
+      pill(padX, trackY, trackW, trackH, r);
+      ctx.strokeStyle = "rgba(0,0,0,0.85)";
+      ctx.lineWidth = Math.max(2, ch * 0.07);
+      ctx.stroke();
+      ctx.strokeStyle = "rgba(255,255,255,0.55)";
+      ctx.lineWidth = Math.max(1, ch * 0.025);
+      ctx.stroke();
       enemy.hpTexture.needsUpdate = true;
     }
 
@@ -8365,8 +10073,8 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         hpTexture,
         hpSprite,
         alive: true,
-        hp: isHell ? 75000 : 15000,
-        maxHp: isHell ? 75000 : 15000,
+        hp: isHell ? BOSS_HP.hellTank : BOSS_HP.normalTank,
+        maxHp: isHell ? BOSS_HP.hellTank : BOSS_HP.normalTank,
         attackCooldownTimer: 0,
         attackCooldown: 1.2,
         attackDamage: isHell ? 250 : 50,
@@ -8399,9 +10107,9 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         isHellBoss: !!isHell,
         bossMode: "tank",
         bossModeSwitchTimer: 5,
-        baseTankHp: isHell ? 75000 : 15000,
+        baseTankHp: isHell ? BOSS_HP.hellTank : BOSS_HP.normalTank,
         baseSpeedHp: isHell ? 40000 : 8000,
-        baseGunnerHp: isHell ? 50000 : 10000,
+        baseGunnerHp: isHell ? BOSS_HP.hellGunner : BOSS_HP.normalGunner,
         summonCooldown: 999,
         summonCount: 0,
         summonTriggered: false,
@@ -8446,52 +10154,29 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       throw lastError || new Error(`Unable to load ${rel}`);
     }
 
+    let realZombieCharacters = null;
+
     async function preloadRealZombieAssets() {
       if (realZombieTemplate && realZombieClips) return;
       if (realZombieAssetsPromise) return realZombieAssetsPromise;
       realZombieAssetsPromise = (async () => {
         const base = "models/zombie/";
-        const [model, idle, walk, run, attack, death, bodyBase, bodyNormal, bodyOrm, outfitBase, outfitNormal, outfitOrm] =
-          await Promise.all([
-            loadGltfFromGameAssets(base + "zombie.glb"),
-            loadGltfFromGameAssets(base + "idle.glb"),
-            loadGltfFromGameAssets(base + "walk.glb"),
-            loadGltfFromGameAssets(base + "run.glb"),
-            loadGltfFromGameAssets(base + "attack.glb"),
-            loadGltfFromGameAssets(base + "death.glb"),
-            loadTextureFromGameAssets(base + "body-base.png", true),
-            loadTextureFromGameAssets(base + "body-normal.png"),
-            loadTextureFromGameAssets(base + "body-orm.png"),
-            loadTextureFromGameAssets(base + "outfit-base.png", true),
-            loadTextureFromGameAssets(base + "outfit-normal.png"),
-            loadTextureFromGameAssets(base + "outfit-orm.png"),
-          ]);
+        const atlas = loadTextureFromGameAssets(base + "character-atlas.webp?v=2", true);
+        const [model, idle, walk, run, attack, death, characters] = await Promise.all([
+          loadGltfFromGameAssets(base + "zombie.glb"),
+          loadGltfFromGameAssets(base + "idle.glb"),
+          loadGltfFromGameAssets(base + "walk.glb"),
+          loadGltfFromGameAssets(base + "run.glb"),
+          loadGltfFromGameAssets(base + "attack.glb"),
+          loadGltfFromGameAssets(base + "death.glb"),
+          atlas.then(texture => loadZombieCharacterMeshes(assetUrlList(base + "character-meshes.bin.gz?v=2"), texture)),
+        ]);
 
-        // GLTFLoader sanitizes FBX namespaces by removing the colon. The animation files
-        // therefore expose `mixamorigHips` while the mesh exposes `CityDeadOutfitHips`.
-        // Rename only that runtime prefix so the authored clips bind to the weighted rig.
-        model.scene.traverse((o) => {
-          if (o.name) o.name = o.name.replace(/^CityDeadOutfit:?/, "mixamorig");
-          if (!o.isMesh) return;
-          const original = Array.isArray(o.material) ? o.material : [o.material];
-          const materials = original.map((source) => {
-            const m = source.clone();
-            const outfit = /outfit/i.test(m.name || "");
-            m.map = outfit ? outfitBase : bodyBase;
-            m.normalMap = outfit ? outfitNormal : bodyNormal;
-            const orm = outfit ? outfitOrm : bodyOrm;
-            m.roughnessMap = orm;
-            m.metalnessMap = orm;
-            m.roughness = 0.92;
-            m.metalness = 0.02;
-            m.needsUpdate = true;
-            return m;
-          });
-          o.material = Array.isArray(o.material) ? materials : materials[0];
-          o.castShadow = true;
-          o.receiveShadow = true;
-          o.frustumCulled = true;
+        // Retarget the FBX-exported bone namespace to the animation tracks.
+        model.scene.traverse(node => {
+          if (node.name) node.name = node.name.replace(/^CityDeadOutfit:?/, "mixamorig");
         });
+        characters.apply(model.scene, "normal", 0);
 
         const clipOf = (gltf, fallback) => {
           const clip = gltf.animations && gltf.animations[0];
@@ -8512,11 +10197,12 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           }
           return clip;
         };
-        realZombieTemplate = model.scene;
         realZombieClips = {
           idle: clipOf(idle, "idle"), walk: clipOf(walk, "walk"), run: clipOf(run, "run"),
           attack: clipOf(attack, "attack"), death: clipOf(death, "death")
         };
+        realZombieTemplate = model.scene;
+        realZombieCharacters = characters;
       })().catch((err) => {
         realZombieAssetsPromise = null;
         console.warn("[enemy-model] authored zombie asset unavailable; using procedural fallback", err);
@@ -8529,53 +10215,186 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       if (!enemy.modelActions) return;
       const next = enemy.modelActions[name] || enemy.modelActions.idle;
       const duration = Math.max(0.01, next.getClip().duration || 0.01);
-      let cycleSeconds = Number(opts.cycleSeconds) > 0 ? Number(opts.cycleSeconds) : duration;
-      if (name === "walk" || name === "run") {
-        // These exported Mixamo clips are unusually long/slow (the walk is nearly 4s).
-        // Match their gait cycle to actual enemy speed so feet do not drift under a
-        // character that is moving several times faster than the source animation.
-        const speed = Math.max(0.65, Number(enemy.speed) || 1.5);
-        cycleSeconds = THREE.MathUtils.clamp(1.7 / speed, name === "run" ? 0.22 : 0.72, name === "run" ? 0.72 : 1.65);
-      } else if (name === "attack" && !(Number(opts.cycleSeconds) > 0)) {
-        // The authored swipe lasts 2.63s, but combat hits land on a much shorter
-        // cooldown. Keep one visible swing close to each gameplay attack beat.
-        cycleSeconds = THREE.MathUtils.clamp(Number(enemy.attackCooldown) || 0.42, 0.18, 1.35);
-      }
-      const timeScale = THREE.MathUtils.clamp(duration / cycleSeconds, 0.5, name === "attack" ? 15 : 8);
-      next.setEffectiveTimeScale(timeScale);
       const token = opts.token || name;
-      if (enemy.modelActionName === name && enemy.modelActionToken === token) return;
-      const prev = enemy.modelActions[enemy.modelActionName];
-      next.enabled = true;
-      next.reset();
-      next.setEffectiveWeight(1);
-      const loopOnce = name === "death" || !!opts.loopOnce;
-      next.setLoop(loopOnce ? THREE.LoopOnce : THREE.LoopRepeat, loopOnce ? 1 : Infinity);
-      next.clampWhenFinished = loopOnce;
-      if (prev && prev !== next) next.crossFadeFrom(prev, fade, true);
-      next.play();
-      enemy.modelActionName = name;
-      enemy.modelActionToken = token;
+      if (enemy.modelActionName !== name || enemy.modelActionToken !== token) {
+        const prev = enemy.modelActions[enemy.modelActionName];
+        next.reset().setEffectiveWeight(1);
+        const loopOnce = name === "death" || !!opts.loopOnce;
+        next.setLoop(loopOnce ? THREE.LoopOnce : THREE.LoopRepeat, loopOnce ? 1 : Infinity);
+        next.clampWhenFinished = loopOnce;
+        if (prev && prev !== next) next.crossFadeFrom(prev, fade, false);
+        next.play();
+        enemy.modelActionName = name;
+        enemy.modelActionToken = token;
+      }
+      if (opts.phase != null) next.time = duration * opts.phase;
+      next.setEffectiveTimeScale(opts.phase != null ? 0 : duration / (opts.cycleSeconds || duration));
+    }
+
+    const zombieBoneAxis = new THREE.Vector3(0, 1, 0);
+    const zombieAim = new THREE.Vector3(), zombieWorldAxis = new THREE.Vector3();
+    const zombieBoneWorld = new THREE.Quaternion(), zombieBoneParent = new THREE.Quaternion();
+    const zombieBoneTwist = new THREE.Quaternion();
+    const zombieGunAim = new THREE.Quaternion();
+    const zombieGunEuler = new THREE.Euler(0, Math.PI, 0, "YXZ");
+    const zombieSupportShoulder = new THREE.Vector3(), zombieSupportElbow = new THREE.Vector3();
+    const zombieSupportGrip = new THREE.Vector3(), zombieSupportReach = new THREE.Vector3();
+
+    function poseZombieBone(enemy, node, x, y, z, blend) {
+      if (!node || blend <= 0.001) return;
+      node.getWorldQuaternion(zombieBoneWorld);
+      zombieWorldAxis.copy(zombieBoneAxis).applyQuaternion(zombieBoneWorld);
+      zombieAim.set(x, y, z).normalize().applyQuaternion(enemy.group.quaternion);
+      zombieBoneTwist.setFromUnitVectors(zombieWorldAxis, zombieAim).multiply(zombieBoneWorld);
+      node.parent.getWorldQuaternion(zombieBoneParent).invert();
+      zombieBoneTwist.premultiply(zombieBoneParent);
+      node.quaternion.slerp(zombieBoneTwist, blend);
+    }
+
+    function braceZombieGun(enemy, blend) {
+      const { poseLeftArm, poseLeftFore, group, gunMount } = enemy;
+      poseLeftArm.getWorldPosition(zombieSupportShoulder);
+      group.worldToLocal(zombieSupportShoulder);
+      gunMount.localToWorld(zombieSupportGrip.set(0, 0.045, -0.135));
+      group.worldToLocal(zombieSupportGrip);
+      zombieSupportReach.subVectors(zombieSupportGrip, zombieSupportShoulder);
+      // Solve the left elbow with a downward bend so the support hand meets the foregrip.
+      const upper = 0.278, fore = 0.260;
+      const reach = THREE.MathUtils.clamp(zombieSupportReach.length(), 0.10, upper + fore - 0.003);
+      zombieSupportReach.normalize();
+      const along = (upper * upper + reach * reach - fore * fore) / (2 * reach);
+      zombieSupportElbow.set(0.25, -1, -0.14);
+      zombieSupportElbow.addScaledVector(zombieSupportReach, -zombieSupportElbow.dot(zombieSupportReach))
+        .normalize().multiplyScalar(Math.sqrt(upper * upper - along * along))
+        .addScaledVector(zombieSupportReach, along);
+      poseZombieBone(enemy, poseLeftArm, zombieSupportElbow.x, zombieSupportElbow.y, zombieSupportElbow.z, blend);
+      zombieSupportReach.multiplyScalar(reach).sub(zombieSupportElbow);
+      poseZombieBone(enemy, poseLeftFore, zombieSupportReach.x, zombieSupportReach.y, zombieSupportReach.z, blend);
+    }
+
+    let _muzzleFlashTexture = null;
+    function makeMuzzleFlash() {
+      if (!_muzzleFlashTexture) {
+        const canvas = document.createElement("canvas");
+        canvas.width = canvas.height = 64;
+        const g = canvas.getContext("2d");
+        const r = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+        r.addColorStop(0, "rgba(255,255,255,1)");
+        r.addColorStop(0.3, "rgba(255,210,140,0.8)");
+        r.addColorStop(1, "rgba(255,150,60,0)");
+        g.fillStyle = r;
+        g.fillRect(0, 0, 64, 64);
+        _muzzleFlashTexture = new THREE.CanvasTexture(canvas);
+      }
+      const flash = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 0.4), new THREE.MeshBasicMaterial({
+        map: _muzzleFlashTexture, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+      }));
+      flash.visible = false;
+      flash.raycast = () => {};
+      return flash;
     }
 
     function updateRealZombieAnimation(enemy, dt) {
       if (!enemy.modelMixer) return;
+      const now = performance.now();
       let next = "idle";
       let actionOpts = {};
       if (!enemy.alive) next = "death";
       else if (enemy.isBoss && ["attacking", "quaking", "rangedAttack", "summoning", "modeSwitch"].includes(enemy.bossAnimState)) {
         next = "attack";
-        const durations = { attacking: 1.4, quaking: 1.5, rangedAttack: 0.9, summoning: 2.5, modeSwitch: 1.4 };
+        const durations = { rangedAttack: 0.9, summoning: 2.5, modeSwitch: 1.4 };
+        const impact = BOSS_IMPACT[enemy.bossAnimState];
         actionOpts = {
           token: `boss-${enemy.bossAnimState}`,
-          cycleSeconds: durations[enemy.bossAnimState] || 1.4,
+          cycleSeconds: impact?.recovery ?? durations[enemy.bossAnimState],
           loopOnce: true,
         };
+        if (impact) {
+          actionOpts.phase = zombieStrikeClipPhase(enemy.bossAnimTimer, impact.contact, impact.recovery);
+        }
       }
-      else if (!enemy.isBoss && enemy.attackPhase > 0.15) next = "attack";
-      else if (enemy.moving) next = (enemy.type === "fast" || enemy.isBoss || enemy._bossSprinting || enemy.speed >= 1.6) ? "run" : "walk";
-      setRealZombieAction(enemy, next, next === "attack" ? 0.07 : 0.16, actionOpts);
+      else if (enemy.meleeElapsed != null) {
+        next = "attack";
+        const { contact, recovery } = ZOMBIE_MELEE[enemy.type];
+        actionOpts = { phase: zombieStrikeClipPhase(enemy.meleeElapsed, contact, recovery), loopOnce: true };
+      } else if (enemy.gaitAction) {
+        next = enemy.gaitAction;
+        actionOpts = { phase: enemy.gaitPhase };
+      }
+      const throwing = enemy.isBoss && enemy.bossAnimState === "rangedAttack";
+      setRealZombieAction(enemy, throwing ? "idle" : next, next === "attack" ? 0.07 : 0.16, throwing ? {} : actionOpts);
+      for (const [node, rotation] of enemy.poseBones) node.quaternion.copy(rotation);
       enemy.modelMixer.update(Math.min(dt, 0.05));
+      enemy.idleBlend = dampScalar(enemy.idleBlend ?? 1, enemy.alive && (next === "idle" || throwing) ? 1 : 0, dt, 13);
+      const idle = enemy.idleBlend;
+      const breath = Math.sin(now * 0.002 + enemy.walkTime);
+      if (enemy.alive && Object.hasOwn(ZOMBIE_MIX, enemy.type)) {
+        poseZombieVariant(enemy, next, poseZombieBone, now, dt);
+      } else if (enemy.alive && idle > 0.005) {
+        const rightLift = throwing ? Math.sin(Math.min(1, enemy.bossAnimTimer / 0.90) * Math.PI) : 0;
+        const release = throwing ? THREE.MathUtils.smoothstep(enemy.bossAnimTimer, 0.30, 0.44) : 0;
+        const side = enemy.isBoss ? -1 : 1;
+        poseZombieBone(enemy, enemy.poseLeftArm, 0.21 * side, -1, 0.10 + breath * 0.08, idle);
+        poseZombieBone(enemy, enemy.poseLeftFore, -0.08 * side, -0.88, 0.26, idle);
+        poseZombieBone(enemy, enemy.poseRightArm, -0.23 * side, -0.91 + rightLift * 1.32,
+          0.29 + breath * 0.06 + rightLift * (release * 1.22 - 0.47), idle);
+        poseZombieBone(enemy, enemy.poseRightFore, 0.12 * side, -0.72 + rightLift * (1 - release),
+          0.59 + release * rightLift, idle);
+        if (enemy.modelSpine) {
+          // Slouch and sway: a shambling stance, not an upright mannequin.
+          enemy.modelSpine.rotation.x += (0.2 + breath * 0.025) * idle;
+          enemy.modelSpine.rotation.z += Math.sin(performance.now() * 0.0011 + enemy.walkTime) * 0.045 * idle;
+        }
+        if (enemy.modelHead) {
+          enemy.modelHead.rotation.z += (0.09 + breath * 0.028) * idle;
+          enemy.modelHead.rotation.y += breath * 0.06 * idle;
+        }
+      }
+      // Gunners shoulder the rifle while they have a line on the target, and kick back on every
+      // shot (the shot time is stamped where the bullet is fired, so the animation matches the fire rate).
+      if (enemy.gunFlash) {
+        const sinceShot = now - (enemy._shotAt || -1e9);
+        const hasSight = enemy._lastGunnerLos !== false && enemy.attackPhase > 0;
+        const aiming = enemy.alive && (sinceShot < 170 || (enemy.aware && hasSight && next === "idle"));
+        enemy.aimBlend = dampScalar(enemy.aimBlend ?? 0, aiming ? 1 : 0, dt, 9);
+        const aim = enemy.aimBlend;
+        const recoil = Math.max(0, 1 - sinceShot / 170);
+        enemy.gunMount.quaternion.copy(enemy.gunRest);
+        enemy.gunFlash.visible = enemy.alive && sinceShot < 75;
+        if (enemy.gunFlash.visible) {
+          enemy.gunFlash.rotation.z = Math.random() * Math.PI * 2;
+          enemy.gunFlash.scale.setScalar(0.7 + Math.random() * 0.6);
+        }
+        if (aim > 0.01) {
+          if (enemy.modelSpine) enemy.modelSpine.rotation.x -= recoil * 0.07 * aim;
+          if (enemy.modelHead) enemy.modelHead.rotation.x -= 0.05 * aim;
+          poseZombieBone(enemy, enemy.poseRightArm, -0.11, -0.65 + recoil * 0.24, 0.30, aim);
+          poseZombieBone(enemy, enemy.poseRightFore, 0.38, 0.55 + recoil * 0.18, 0.88, aim);
+          // Keep the stock upright and the muzzle level while the hand recoils.
+          zombieGunEuler.x = 0.02 + recoil * 0.12;
+          zombieGunAim.setFromEuler(zombieGunEuler).premultiply(enemy.group.quaternion);
+          enemy.gunMount.parent.getWorldQuaternion(zombieBoneParent).invert();
+          enemy.gunMount.quaternion.slerp(zombieGunAim.premultiply(zombieBoneParent), aim);
+          braceZombieGun(enemy, aim);
+        }
+      }
+      // Hit reaction, layered over whatever clip is playing: the torso snaps back from the
+      // impact and settles over ~0.25 s, a headshot whips the head. Bullets now land on a
+      // body instead of passing through a mannequin that ignores them.
+      if (enemy.alive && enemy._flinchUntil > 0) {
+        const left = enemy._flinchUntil - now;
+        if (left > 0) {
+          const k = left / enemy._flinchMs;               // 1 → 0
+          const curve = Math.sin(Math.min(1, (1 - k) * 4) * Math.PI * 0.5) * k; // fast in, slow out
+          if (enemy.modelSpine) {
+            enemy.modelSpine.rotation.x -= enemy._flinchAmt * curve;
+            enemy.modelSpine.rotation.y += enemy._flinchTwist * curve;
+          }
+          if (enemy.modelHead && enemy._flinchHead) enemy.modelHead.rotation.x -= 0.7 * curve;
+        } else {
+          enemy._flinchUntil = 0;
+        }
+      }
     }
 
     // ── Procedural fallback enemy models ──────────────────────────────────────
@@ -8592,6 +10411,85 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         o.castShadow = cast;
         o.receiveShadow = true;
       });
+    }
+
+    function updateZombieGait(enemy, dt, travel) {
+      const speed = dt > 0 ? travel / dt : 0;
+      // Don't count snap corrections or teleporting out of blocked geometry as a step.
+      if (!enemy.alive || speed < 0.07 || speed > Math.max(enemy.patrolSpeed || 0, enemy.speed || 0, 1) * 2.2) {
+        enemy.gaitAction = null;
+        enemy.gaitStepDistance = 0;
+        return;
+      }
+      const gait = zombieGait(enemy, speed);
+      enemy.gaitAction = gait.action;
+      enemy.gaitPhase = ((enemy.gaitPhase ?? 0) + dt / gait.cycle) % 1;
+      enemy.gaitStepDistance = speed * gait.cycle * 0.5;
+    }
+
+    /** Pose the creature boss for what the AI (or, on a joining client, the host) says it is doing. */
+    function updateBossCreatureVisual(enemy, dt) {
+      const left = enemy._flinchUntil - performance.now();
+      enemy.creature.update(dt, {
+        anim: enemy.alive ? (enemy.bossAnimState || "idle") : "idle",
+        t: enemy.bossAnimTimer || 0,
+        moving: enemy.alive,
+        flinch: left > 0 ? Math.min(1, left / Math.max(1, enemy._flinchMs)) : 0,
+      });
+    }
+
+    function updateZombieVisual(enemy, dt, travel = 0) {
+      if (enemy.creature) { updateBossCreatureVisual(enemy, dt); return; }
+      updateZombieGait(enemy, dt, travel);
+      if (enemy.modelMixer) {
+        updateRealZombieAnimation(enemy, dt);
+      } else if (enemy.alive && Object.hasOwn(ZOMBIE_MIX, enemy.type)) {
+        animateProceduralZombie(enemy, dt);
+      }
+    }
+
+    function animateProceduralZombie(enemy, dt) {
+      const fast = enemy.type === "fast", tank = enemy.type === "tank", gunner = enemy.type === "gunner";
+      const step = enemy.gaitAction ? Math.sin(enemy.gaitPhase * 2 * Math.PI) : 0;
+      const now = performance.now();
+      const breath = Math.sin(now * 0.002 + enemy.walkTime);
+      const sinceShot = now - (enemy._shotAt || -1e9);
+      const recoil = gunner ? Math.max(0, 1 - sinceShot / 170) : 0;
+      const aiming = gunner && (recoil > 0 || (!enemy.moving && enemy.aware && enemy.attackPhase > 0 && enemy._lastGunnerLos !== false));
+      let drawBack = 0, melee = 0;
+      if (enemy.meleeElapsed != null) {
+        const { contact, recovery } = ZOMBIE_MELEE[enemy.type];
+        const elapsed = enemy.meleeElapsed;
+        const release = contact * 0.53;
+        drawBack = THREE.MathUtils.smoothstep(elapsed, 0, release)
+          * (1 - THREE.MathUtils.smoothstep(elapsed, release, contact));
+        melee = THREE.MathUtils.smoothstep(elapsed, release, contact)
+          * (1 - THREE.MathUtils.smoothstep(elapsed, contact, recovery));
+      }
+      const armBase = fast ? 0.28 : aiming ? -1.20 : tank ? -0.26 : enemy.aware && !gunner ? -0.82 : -0.19;
+      const swing = fast ? step * 0.56 : tank ? step * 0.18 : gunner ? step * 0.10 : step * 0.27;
+      const leg = step * (fast ? 0.79 : tank ? 0.41 : 0.52);
+      const damp = (angle, target) => dampScalar(angle, target, dt, 16);
+      const leftArm = enemy.leftArmRoot.rotation, rightArm = enemy.rightArmRoot.rotation;
+      leftArm.x = damp(leftArm.x, armBase + swing + (tank ? drawBack * 0.65 - melee * 1.55 : 0));
+      const strike = fast ? melee * 1.82 : tank ? melee * 1.82 : gunner ? recoil * 0.25 : melee * 0.80;
+      rightArm.x = damp(rightArm.x, armBase - swing - strike + drawBack * 0.95);
+      leftArm.z = damp(leftArm.z, tank ? -0.34 : -0.18 + breath * 0.03);
+      rightArm.z = damp(rightArm.z, tank ? 0.39 : 0.16 + breath * 0.03);
+      const leftElbow = enemy.leftForearmRoot.rotation, rightElbow = enemy.rightForearmRoot.rotation;
+      leftElbow.x = damp(leftElbow.x, fast || aiming ? -1.0 : -0.32 + breath * 0.04);
+      rightElbow.x = damp(rightElbow.x, gunner ? -0.74 - recoil * 0.2
+        : (fast ? -1.07 : -0.40) + melee * 0.35 - drawBack * 0.6);
+      const leftLeg = enemy.leftLegRoot.rotation, rightLeg = enemy.rightLegRoot.rotation;
+      leftLeg.x = damp(leftLeg.x, -leg);
+      rightLeg.x = damp(rightLeg.x, leg);
+      enemy.leftShinRoot.rotation.x = damp(enemy.leftShinRoot.rotation.x, 0.08 + Math.max(0, leg) * 0.9);
+      enemy.rightShinRoot.rotation.x = damp(enemy.rightShinRoot.rotation.x, 0.08 + Math.max(0, -leg) * 0.9);
+      enemy.headGroup.rotation.z = 0.06 + breath * 0.04;
+      const torso = enemy.torsoRoot;
+      torso.rotation.x = damp(torso.rotation.x, fast ? 0.30 : tank ? 0.19 - melee * 0.22 : 0.10 - recoil * 0.10);
+      torso.rotation.z = damp(torso.rotation.z, step * (tank ? 0.14 : 0.07) + breath * 0.02);
+      torso.position.y = damp(torso.position.y, Math.abs(step) * (fast ? 0.05 : 0.027));
     }
 
     function addAnatomicalHand(parent, side, skin, nail, scale = 1, anchorY = -0.405) {
@@ -8757,8 +10655,8 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
 
     function createEnemyHpSprite(root, width, scaleX, scaleY, y) {
       const hpCanvas = document.createElement("canvas");
-      hpCanvas.width = width;
-      hpCanvas.height = 24;
+      hpCanvas.width = width * 2;
+      hpCanvas.height = Math.round(hpCanvas.width * scaleY / scaleX);
       const hpCtx = hpCanvas.getContext("2d");
       const hpTexture = new THREE.CanvasTexture(hpCanvas);
       const hpSprite = new THREE.Sprite(new THREE.SpriteMaterial({
@@ -8820,6 +10718,14 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         hair: type !== "fast", jawShift: type === "fast" ? 0.035 : 0.012,
         jawTilt: type === "fast" ? -0.12 : -0.05, mouthTilt: type === "gunner" ? -0.10 : 0.08
       });
+      if (type === "gunner") {
+        const helmet = enemyEllipsoid(0.228, 0.16, 0.217, enemyMaterial(0x424f45), 13);
+        helmet.position.set(0, 0.139, -0.020);
+        headGroup.add(helmet);
+        const visor = new THREE.Mesh(new RoundedBoxGeometry(0.36, 0.074, 0.042, 1, 0.014), enemyMaterial(0x596f68, 0.56));
+        visor.position.set(0, 0.057, 0.187);
+        headGroup.add(visor);
+      }
 
       // Layered damage belongs to the new anatomy and follows the torso naturally.
       const chestWound = enemyEllipsoid(0.105, 0.145, 0.022, wound, 11);
@@ -8861,6 +10767,14 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         shoulderX: type === "tank" ? 0.49 : 0.43, bareUpper: type === "fast", tornSleeve: type !== "fast",
         elbowBend: type === "gunner" ? -0.70 : -0.24
       });
+      if (type === "tank") {
+        const armor = enemyMaterial(0x4b575f, 0.87);
+        for (const arm of [leftArm, rightArm]) {
+          const pad = new THREE.Mesh(new RoundedBoxGeometry(0.27, 0.24, 0.33, 1, 0.048), armor);
+          pad.position.y = 0.012;
+          arm.armRoot.add(pad);
+        }
+      }
       const leftLeg = addZombieLeg(root, -1, skin, skinDark, pants, shoe, { tornLeg: type === "fast" });
       const rightLeg = addZombieLeg(root, 1, skin, skinDark, pants, shoe, { exposedKnee: true });
 
@@ -8890,10 +10804,11 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       scene.add(root);
 
       const hpUi = createEnemyHpSprite(root, 128, 1.7, 0.32, 2.55);
-      let hp = 100, speed = 1.75, attackDamage = 8, attackCooldown = 0.42, ranged = false, rangeDistance = 12;
-      if (type === "fast") { hp = 70; speed = 7.4; attackDamage = 9; attackCooldown = 0.18; }
-      else if (type === "gunner") { hp = 75; speed = 1.10; attackDamage = 4; attackCooldown = 1.6; ranged = true; rangeDistance = 16; }
-      else if (type === "tank") { hp = 180; speed = 1.05; attackDamage = 14; attackCooldown = 0.70; }
+      let hp = 100, speed = 1.75, attackDamage = 8, ranged = false, rangeDistance = 12;
+      const attackCooldown = ZOMBIE_MELEE[type]?.cooldown ?? 1.6;
+      if (type === "fast") { hp = 64; speed = 5.15; attackDamage = 7; }
+      else if (type === "gunner") { hp = 75; speed = 1.10; attackDamage = 4; ranged = true; rangeDistance = 16; }
+      else if (type === "tank") { hp = 180; speed = 1.05; attackDamage = 14; }
 
       return {
         type, group: root, torsoRoot, headGroup,
@@ -9034,7 +10949,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       scene.add(root);
 
       const hpUi = createEnemyHpSprite(root, 256, isHell ? 4.0 : 3.2, isHell ? 0.6 : 0.5, isHell ? 3.6 : 3.2);
-      const hp = isHell ? 75000 : 15000;
+      const hp = isHell ? BOSS_HP.hellTank : BOSS_HP.normalTank;
       return {
         type: "boss", group: root, torsoRoot, headGroup,
         leftArmRoot: leftArm.armRoot, rightArmRoot: rightArm.armRoot,
@@ -9050,13 +10965,13 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         targetId: null, retargetTimer: 0, moveYaw: 0, rangedLosAcquireTimer: 0,
         isBoss: true, isHormoneZombie: true, isHellBoss: !!isHell,
         bossMode: "tank", bossModeSwitchTimer: 5,
-        baseTankHp: hp, baseSpeedHp: isHell ? 40000 : 8000, baseGunnerHp: isHell ? 50000 : 10000,
+        baseTankHp: hp, baseSpeedHp: isHell ? 40000 : 8000, baseGunnerHp: isHell ? BOSS_HP.hellGunner : BOSS_HP.normalGunner,
         summonCooldown: 999, summonCount: 0, summonTriggered: false,
         bossAnimState: "idle", bossAnimTimer: 0, bossQuakeCooldownTimer: 6, _quakeShook: false
       };
     }
 
-    function makeAuthoredZombieRig(x, z, type, isBoss = false, isHell = false) {
+    function makeAuthoredZombieRig(x, z, type, isBoss, isHell, look) {
       const root = new THREE.Group();
       const torsoRoot = new THREE.Group();
       root.add(torsoRoot);
@@ -9067,28 +10982,10 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       visual.position.y = isBoss ? -0.50 : 0;
       torsoRoot.add(visual);
 
-      const tint = isBoss
-        ? new THREE.Color(isHell ? 0x6f3438 : 0x806a69)
-        : new THREE.Color(type === "fast" ? 0xb49b78 : type === "gunner" ? 0xa77c78 : type === "tank" ? 0x839398 : 0x929080);
-      visual.traverse((o) => {
-        if (!o.isMesh) return;
-        const originals = Array.isArray(o.material) ? o.material : [o.material];
-        const copies = originals.map((source) => {
-          const m = source.clone();
-          m.color.multiply(tint);
-          if (isHell) {
-            m.emissive = new THREE.Color(0x2b0305);
-            m.emissiveIntensity = 0.32;
-          }
-          return m;
-        });
-        o.material = Array.isArray(o.material) ? copies : copies[0];
-        o.castShadow = true;
-        o.receiveShadow = true;
-      });
+      realZombieCharacters.apply(visual, isHell ? "hell" : type, look);
 
-      // Compatibility pivots keep the established movement and hitbox code stable. The
-      // visible body is one authored skinned mesh, so no hand or joint can detach from it.
+      // Compatibility pivots keep the established movement and hitbox code stable.
+      // The visible body and equipment follow the authored skeleton.
       const leftArmRoot = new THREE.Group();
       const rightArmRoot = new THREE.Group();
       const leftForearmRoot = new THREE.Group();
@@ -9106,6 +11003,49 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       const headGroup = new THREE.Group();
       torsoRoot.add(headGroup);
 
+      // Joints the hit-reaction layer pushes around on top of the authored clips.
+      let spineBone = null, headBone = null;
+      const armBones = {};
+      const poseBones = [];
+      visual.traverse((o) => {
+        const n = (o.name || "").toLowerCase();
+        if (!spineBone && /spine2$/.test(n)) {
+          spineBone = o;
+          poseBones.push([o, o.quaternion.clone()]);
+        }
+        if (!headBone && /head$/.test(n)) {
+          headBone = o;
+          poseBones.push([o, o.quaternion.clone()]);
+        }
+        if (o.isBone && /(?:left|right)(?:fore)?arm$/.test(n)) {
+          armBones[n.match(/(?:left|right)(?:fore)?arm$/)[0]] = o;
+          poseBones.push([o, o.quaternion.clone()]);
+        }
+      });
+      // The grip follows the palm. The aiming layer stabilizes the weapon at that pivot.
+      let gunFlash = null, gunMount = null, gunRest = null;
+      if (type === "gunner" && !isBoss) {
+        let hand = null;
+        visual.traverse((o) => { if (o.isBone && /righthand$/i.test(o.name || "")) hand = o; });
+        if (hand) {
+          const gun = makeThirdPersonGun(3);
+          const mount = new THREE.Group();
+          mount.rotation.x = Math.PI / 2;
+          mount.position.y = 5;
+          gun.position.copy(gun.userData.primaryGrip).negate();
+          mount.add(gun);
+          hand.add(mount);
+          gunMount = mount;
+          gunRest = mount.quaternion.clone();
+          visual.updateMatrixWorld(true);
+          const handScale = new THREE.Vector3();
+          hand.getWorldScale(handScale);
+          mount.scale.setScalar(1 / Math.max(1e-4, handScale.x));
+          gun.traverse((o) => { o.raycast = () => {}; o.castShadow = true; });
+          gunFlash = makeMuzzleFlash();
+          (gun.userData.muzzle || gun).add(gunFlash);
+        }
+      }
       const mixer = new THREE.AnimationMixer(visual);
       const actions = {};
       for (const [name, clip] of Object.entries(realZombieClips)) actions[name] = mixer.clipAction(clip);
@@ -9128,9 +11068,13 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       );
 
       const common = {
-        type, group: root, torsoRoot, headGroup, leftArmRoot, rightArmRoot,
+        type, look, group: root, torsoRoot, headGroup, leftArmRoot, rightArmRoot,
         leftForearmRoot, rightForearmRoot, leftLegRoot, rightLegRoot, leftShinRoot, rightShinRoot,
         modelVisual: visual, modelMixer: mixer, modelActions: actions, modelActionName: null,
+        poseBones, poseLeftArm: armBones.leftarm, poseRightArm: armBones.rightarm,
+        poseLeftFore: armBones.leftforearm, poseRightFore: armBones.rightforearm,
+        modelSpine: spineBone, modelHead: headBone, gunFlash, gunMount, gunRest,
+        _flinchUntil: 0, _flinchMs: 1, _flinchAmt: 0, _flinchTwist: 0,
         ...hpUi, alive: true, attackCooldownTimer: 0, respawnTimer: 0,
         spawn: new THREE.Vector3(x, 0, z), walkTime: Math.random() * 10,
         moving: false, attackPhase: 0, aware: false, hiddenTimer: 0,
@@ -9141,40 +11085,82 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       };
       common.visYaw = common.facingYaw;
       setRealZombieAction(common, "idle", 0);
+      // Pose the rig now. The mixer otherwise first runs once the AI ticks (after the player
+      // clicks in), and until then every zombie stands in the model's T-pose.
+      root.rotation.y = common.visYaw;
+      updateRealZombieAnimation(common, 0.016);
       return common;
     }
 
-    function makeZombie(x, z, type = "normal") {
-      if (!realZombieTemplate || !realZombieClips) return makeProceduralZombie(x, z, type);
-      const enemy = makeAuthoredZombieRig(x, z, type, false, false);
+    let localZombieLookSeed = 0;
+    function zombieLookFor(type, slot) {
+      const seed = MULTIPLAYER && activeRoomId ? hashRoomSeed(activeRoomId) : localZombieLookSeed;
+      let ordinal = 0;
+      for (let i = 0; i < slot; i++) if (state.enemies[i]?.type === type) ordinal++;
+      return (seed % ZOMBIE_LOOK_COUNT + ordinal) % ZOMBIE_LOOK_COUNT;
+    }
+
+    function fallbackZombieLook(enemy, look) {
+      enemy.look = look;
+      return enemy;
+    }
+
+    function makeZombie(x, z, type = "normal", look = zombieLookFor(type, state.enemies.length)) {
+      if (!realZombieTemplate || !realZombieClips) return fallbackZombieLook(makeProceduralZombie(x, z, type), look);
+      const enemy = makeAuthoredZombieRig(x, z, type, false, false, look);
       enemy.hp = enemy.maxHp = type === "tank" ? 180 : type === "fast" ? 70 : type === "gunner" ? 75 : 100;
-      enemy.speed = type === "fast" ? 7.4 : type === "tank" ? 1.05 : type === "gunner" ? 1.10 : 1.75;
-      enemy.attackDamage = type === "tank" ? 14 : type === "fast" ? 9 : type === "gunner" ? 4 : 8;
-      enemy.attackCooldown = type === "tank" ? 0.70 : type === "fast" ? 0.18 : type === "gunner" ? 1.6 : 0.42;
+      enemy.speed = type === "fast" ? 5.15 : type === "tank" ? 1.05 : type === "gunner" ? 1.10 : 1.75;
+      enemy.attackDamage = type === "tank" ? 14 : type === "fast" ? 7 : type === "gunner" ? 4 : 8;
+      enemy.attackCooldown = ZOMBIE_MELEE[type]?.cooldown ?? 1.6;
       enemy.ranged = type === "gunner";
       enemy.rangeDistance = type === "gunner" ? 16 : 12;
       return enemy;
     }
 
-    function makeHormoneZombie(x, z, isHell) {
-      if (!realZombieTemplate || !realZombieClips) return makeProceduralHormoneZombie(x, z, isHell);
-      const enemy = makeAuthoredZombieRig(x, z, "boss", true, !!isHell);
-      const hp = isHell ? 75000 : 15000;
-      Object.assign(enemy, {
-        hp, maxHp: hp, attackCooldown: 1.2, attackDamage: isHell ? 250 : 50,
-        ranged: false, rangeDistance: 20, speed: isHell ? 6.175 : 5.85,
-        isBoss: true, isHormoneZombie: true, isHellBoss: !!isHell,
-        bossMode: "tank", bossModeSwitchTimer: 5,
-        baseTankHp: hp, baseSpeedHp: isHell ? 40000 : 8000,
-        baseGunnerHp: isHell ? 50000 : 10000,
+    /**
+     * The boss is a creature, not a person: an armoured eight-legged hunter built and posed by
+     * boss-creature.js. This object carries the fields the rest of the game expects of an enemy
+     * (hit table, HP bar, sync fields) around it; the fight itself is updateCreatureBoss().
+     */
+    function makeHormoneZombie(x, z, isHell, look = zombieLookFor("boss", state.enemies.length)) {
+      const creature = createBossCreature(THREE, { hell: !!isHell });
+      const root = creature.root;
+      root.position.set(x, 0, z);
+      scene.add(root);
+      const hp = isHell ? BOSS_HP.hellTank : BOSS_HP.normalTank;
+      const tune = isHell ? BOSS_TUNING.hell : BOSS_TUNING.normal;
+      const hpUi = createEnemyHpSprite(root, 256, 3.6, 0.52, 4.7);
+      // Unattached pivots: the training range and the humanoid hit-reaction code look for these names,
+      // and nothing here is driven by them.
+      const pivot = () => new THREE.Group();
+      const enemy = {
+        type: "boss", look, group: root, creature,
+        torsoRoot: pivot(), headGroup: pivot(), leftArmRoot: pivot(), rightArmRoot: pivot(),
+        leftForearmRoot: pivot(), rightForearmRoot: pivot(), leftLegRoot: pivot(), rightLegRoot: pivot(),
+        leftShinRoot: pivot(), rightShinRoot: pivot(),
+        ...creature.hitGroups, bossHitTable: creature.hitTable,
+        _flinchUntil: 0, _flinchMs: 1, _flinchAmt: 0, _flinchTwist: 0,
+        ...hpUi, alive: true, hp, maxHp: hp,
+        attackCooldownTimer: 0, attackCooldown: 1.2, attackDamage: tune.claw, respawnTimer: 0,
+        spawn: new THREE.Vector3(x, 0, z), walkTime: Math.random() * 10,
+        moving: false, attackPhase: 0, aware: false, hiddenTimer: 0,
+        facingYaw: 0, visYaw: 0, armLV: -0.2, armRV: -0.2, legLV: 0, legRV: 0,
+        torsoBobYV: 0, torsoXV: 0, torsoZV: 0, torsoPitchV: 0,
+        targetId: null, retargetTimer: 0, moveYaw: 0, rangedLosAcquireTimer: 0,
+        ranged: false, rangeDistance: 20, speed: tune.speed,
+        isBoss: true, isHormoneZombie: true, isCreatureBoss: true, isHellBoss: !!isHell,
+        // One health pool, no mode switching: the old tank/gunner toggle is gone.
+        bossMode: "tank", bossModeSwitchTimer: Infinity,
+        baseTankHp: hp, baseSpeedHp: hp, baseGunnerHp: hp,
         summonCooldown: 999, summonCount: 0, summonTriggered: false,
-        bossAnimState: "idle", bossAnimTimer: 0, bossQuakeCooldownTimer: 6, _quakeShook: false
-      });
-      enemy.facingYaw = enemy.visYaw = 0;
+        bossAnimState: "idle", bossAnimTimer: 0, bossQuakeCooldownTimer: tune.cdQuake, _quakeShook: false,
+        cdClaw: 1.2, cdCharge: tune.cdCharge * 0.6, cdLob: 2.5, cdQuake: tune.cdQuake * 0.7,
+      };
+      root.rotation.y = 0;
+      creature.update(0.016, { anim: "idle", t: 0, moving: false });
       return enemy;
     }
 
-    
     const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     const audioMaster = audioCtx.createGain();
     const audioSfx = audioCtx.createGain();
@@ -9182,6 +11168,105 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     audioSfx.connect(audioMaster);
     audioMusic.connect(audioMaster);
     audioMaster.connect(audioCtx.destination);
+
+    const acousticRay = new THREE.Ray();
+    const acousticOrigin = new THREE.Vector3();
+    const acousticDirection = new THREE.Vector3();
+    const acousticHit = new THREE.Vector3();
+    const acousticBounds = new THREE.Box3();
+    function soundBlocked(from, to, padding = 0) {
+      acousticOrigin.set(from.x, from.y, from.z);
+      acousticDirection.set(to.x - from.x, to.y - from.y, to.z - from.z);
+      const distance = acousticDirection.length();
+      if (distance < .001) return false;
+      acousticRay.set(acousticOrigin, acousticDirection.multiplyScalar(1 / distance));
+      let blocked = false;
+      forEachNearbyWallBox(from.x, from.z, box => {
+        if (blocked || box.enemyOnly) return;
+        const bounds = padding ? acousticBounds.copy(box).expandByScalar(padding) : box;
+        if (padding && bounds.containsPoint(acousticOrigin)) {
+          blocked = true;
+          return;
+        }
+        if (!acousticRay.intersectBox(bounds, acousticHit)) return;
+        const t = acousticHit.distanceTo(acousticOrigin);
+        const edge = padding ? .001 : .06;
+        if (t > edge && t < distance - edge) blocked = true;
+      });
+      return blocked;
+    }
+    const worldAudio = createWorldAudio(audioCtx, audioSfx, soundBlocked);
+    const zombieVoiceTimes = new WeakMap();
+    const footPosition = { x: 0, y: 0, z: 0 };
+    let acousticSampleAt = 0;
+    let enclosure = 0;
+    const recentNetworkShots = new Map();
+
+    function worldAudioReady() {
+      return audioCtx.state === "running" && controlsInputReady()
+        && !chatOpen && !settingsModalOpen && !gauntletClearOpen;
+    }
+
+    function updateSoundListener(now) {
+      if (now >= acousticSampleAt) {
+        acousticSampleAt = now + 250;
+        const { x, y, z } = player.position;
+        let nearbyWalls = 0;
+        for (let i = 0; i < 8; i++) {
+          const angle = i * Math.PI / 4;
+          if (soundBlocked(player.position, { x: x + Math.cos(angle) * 6, y, z: z + Math.sin(angle) * 6 })) {
+            nearbyWalls++;
+          }
+        }
+        // The maze is roofed, even at an intersection. Open arenas only reflect
+        // strongly when the listener is surrounded by nearby walls.
+        enclosure = isArenaLikeMap(CURRENT_MAP) ? 0.55 + nearbyWalls * 0.05
+          : Math.max(0, (nearbyWalls - 3) / 7);
+      }
+      worldAudio.setListener(player.position, player.yaw, enclosure);
+    }
+
+    function playNetworkShot(data) {
+      if (!worldAudioReady() || ![data.sx, data.sy, data.sz].every(Number.isFinite)) return;
+      const now = performance.now();
+      const emitter = extractShooterId(data) || [data.sx, data.sy, data.sz].map(x => x.toFixed(1)).join(",");
+      for (const [key, time] of recentNetworkShots) {
+        if (now - time > 40) recentNetworkShots.delete(key);
+      }
+      // A shotgun reports one hit event per pellet but has one muzzle report.
+      if (recentNetworkShots.has(emitter)) return;
+      recentNetworkShots.set(emitter, now);
+      worldAudio.play("shot", { x: data.sx, y: data.sy, z: data.sz }, { volume: 0.7 });
+    }
+
+    function updateZombieAudio(now) {
+      for (const enemy of state.enemies) {
+        if (!enemy.alive || enemy.trainingDummy || !enemy.group.visible) {
+          worldAudio.resetSteps(enemy);
+          continue;
+        }
+        const { x, y, z } = enemy.group.position;
+        const distanceSq = (x - player.position.x) ** 2 + (z - player.position.z) ** 2;
+        if (distanceSq > 30 ** 2) {
+          worldAudio.resetSteps(enemy);
+          continue;
+        }
+        const heavy = enemy.isBoss || enemy.type === "tank";
+        footPosition.x = x;
+        footPosition.y = (enemy.baseY ?? y) + 0.17;
+        footPosition.z = z;
+        worldAudio.step(enemy, footPosition, !!enemy.gaitAction, enemy.gaitStepDistance || 0.8,
+          "zombieStep", { volume: heavy ? 0.78 : 0.46, heading: enemy.visYaw });
+        const voiceAt = zombieVoiceTimes.get(enemy);
+        if (voiceAt === undefined || now >= voiceAt) {
+          zombieVoiceTimes.set(enemy, now + (enemy.aware ? 2800 : 6200) + Math.random() * 5500);
+          if (voiceAt !== undefined && (!enemy.isBoss || enemy.bossAnimState === "idle")) {
+            worldAudio.play("zombieVoice", { x, y: (enemy.baseY ?? y) + (enemy.isBoss ? 2.7 : 1.45), z },
+              { volume: heavy ? 0.84 : 0.49 });
+          }
+        }
+      }
+    }
 
     if (typeof GunSFX !== "undefined" && GunSFX.bindAudio) {
       GunSFX.bindAudio(audioCtx, audioSfx);
@@ -9197,17 +11282,33 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     let pvpBgmAudio = null;
     let arena19hz = null; // { osc, gain } — 19 Hz sine routed to audioMusic, started with arena BGM
 
+    /**
+     * Slider position → amplitude. Hearing is logarithmic, so a linear map made the
+     * sliders feel broken: 40% on the slider was only −8 dB, barely quieter than 100%.
+     * A cubic taper puts 50% at about −18 dB and 10% at −60 dB, which is how a real volume
+     * knob behaves.
+     */
+    function volumeTaper(v) {
+      const x = THREE.MathUtils.clamp(+v || 0, 0, 1);
+      return x * x * x;
+    }
+
     function calcMusicLevel() {
-      return THREE.MathUtils.clamp(gameSettings.masterVolume * gameSettings.musicVolume, 0, 1);
+      return THREE.MathUtils.clamp(volumeTaper(gameSettings.masterVolume) * volumeTaper(gameSettings.musicVolume), 0, 1);
     }
 
     function applyAudioVolumes() {
-      audioMaster.gain.value = gameSettings.masterVolume;
-      audioSfx.gain.value = gameSettings.soundVolume;
-      audioMusic.gain.value = gameSettings.musicVolume;
+      audioMaster.gain.value = volumeTaper(gameSettings.masterVolume);
+      // While the single-player pause screen is up the buses stay muted; moving a slider
+      // in Settings from that screen must not bring the game sound back mid-pause.
+      const pauseMuted = paused && !MULTIPLAYER;
+      audioSfx.gain.value = pauseMuted ? 0 : volumeTaper(gameSettings.soundVolume);
+      audioMusic.gain.value = pauseMuted ? 0 : volumeTaper(gameSettings.musicVolume);
       const musicLevel = calcMusicLevel();
       if (menuBgmMenuGain) {
-        menuBgmMenuGain.gain.value = musicLevel;
+        // This path already runs through audioMusic → audioMaster, which apply both
+        // sliders. Leave the node at unity so the music slider is not applied twice.
+        menuBgmMenuGain.gain.value = 1;
       } else if (menuBgmAudio && shouldPlayMenuBgm()) {
         menuBgmAudio.volume = musicLevel;
       }
@@ -9278,9 +11379,8 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       if (!menuBgmAudio || !shouldPlayMenuBgm()) return;
       const level = calcMusicLevel();
       if (menuBgmMenuGain) {
-        // WebAudio path: keep <audio>.volume at 1.0 (set in ensureMenuBgmAudio) so the
-        // gain node is the only thing the slider drives.
-        menuBgmMenuGain.gain.value = level;
+        // WebAudio path: the audioMusic/audioMaster buses carry the sliders.
+        menuBgmMenuGain.gain.value = 1;
       } else {
         menuBgmAudio.volume = level;
       }
@@ -9296,8 +11396,6 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       // cleared once play() resolves, so this also covers the rapid-fire case where two
       // listeners fire in the same task before the first play() promise settles.
       if (!menuBgmAudio.paused || _menuBgmPlayInFlight) return;
-      // Don't restart from 0 if we've already made progress — that would replay the song.
-      if (menuBgmAudio.currentTime > 0) return;
       syncMenuBgmRoutingAndVolumes();
       _menuBgmPlayInFlight = true;
       let p;
@@ -9316,7 +11414,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
 
     function ensureMenuBgmAudio() {
       if (menuBgmAudio) return;
-      const urls = getMenuBgmUrlCandidates();
+      const urls = [...new Set([new URL("../media/menu.mp3", import.meta.url).href, ...getMenuBgmUrlCandidates()])];
       menuBgmAudio = new Audio();
       menuBgmAudio.loop = true;
       menuBgmAudio.preload = "auto";
@@ -9361,7 +11459,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       try {
         menuBgmMediaSrc = audioCtx.createMediaElementSource(menuBgmAudio);
         menuBgmMenuGain = audioCtx.createGain();
-        menuBgmMenuGain.gain.value = calcMusicLevel();
+        menuBgmMenuGain.gain.value = 1;
         menuBgmAnalyser = audioCtx.createAnalyser();
         menuBgmAnalyser.fftSize = 256;
         menuBgmAnalyser.smoothingTimeConstant = 0.4;
@@ -9418,7 +11516,15 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     }
 
     function onMenuBgmUserGesture() {
-      if (!shouldPlayMenuBgm()) return;
+      if (!shouldPlayMenuBgm()) {
+        if (audioCtx.state === "suspended") void audioCtx.resume().catch(() => {});
+        if (gameWorldReady && !paused) {
+          if (isArenaLikeMap(CURRENT_MAP)) { ensureArenaBgmAudio(); tryStartArenaBgmPlayback(); }
+          else if (isBossArenaMap(CURRENT_MAP)) tryPlayBossBgm(BOSS_HELL_MODE);
+          else if (isPvpCrossfireMap(CURRENT_MAP)) tryPlayPvpBgm();
+        }
+        return;
+      }
       // Safari is the strictest of the major browsers: it only counts a user gesture if the
       // <audio>.play() call is in the same synchronous call stack as the gesture. So we do
       // EVERYTHING (resume context, ensure element, route audio, call play) right here, with
@@ -9542,7 +11648,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     }
 
     function shouldPlayArenaBgm() {
-      return gameWorldReady && isArenaLikeMap(CURRENT_MAP);
+      return gameWorldReady && !paused && isArenaLikeMap(CURRENT_MAP);
     }
 
     function syncArenaBgmRoutingAndVolumes() {
@@ -9551,7 +11657,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     }
 
     function tryStartArenaBgmPlayback() {
-      if (!arenaBgmAudio || !shouldPlayArenaBgm()) return;
+      if (!arenaBgmAudio || !shouldPlayArenaBgm() || !arenaBgmAudio.paused) return;
       syncArenaBgmRoutingAndVolumes();
       startArena19HzTone();
       const p = arenaBgmAudio.play();
@@ -9594,7 +11700,9 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       // sub-bass "pop" on speakers/headphones that emphasize low end.
       const t0 = audioCtx.currentTime;
       gain.gain.setValueAtTime(0.0001, t0);
-      gain.gain.exponentialRampToValueAtTime(1.0, t0 + 0.08);
+      // Was 1.0 (full scale): an inaudible tone sitting at 0 dBFS left no headroom, so
+      // every gunshot and the soundtrack clipped against it and the sliders seemed dead.
+      gain.gain.exponentialRampToValueAtTime(0.22, t0 + 0.08);
       osc.connect(gain);
       gain.connect(audioMusic);
       try { osc.start(); } catch (_) {}
@@ -9611,7 +11719,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
 
     function ensureArenaBgmAudio() {
       if (arenaBgmAudio) return;
-      const urls = getArenaBgmUrlCandidates();
+      const urls = [...new Set([new URL("../media/zombie-arena.mp3", import.meta.url).href, ...getArenaBgmUrlCandidates()])];
       arenaBgmAudio = new Audio();
       arenaBgmAudio.loop = true;
       arenaBgmAudio.preload = "auto";
@@ -10005,24 +12113,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       rumble.start(now + 0.08);
       rumble.stop(now + 1.6);
 
-      const echoIn = audioCtx.createGain();
-      echoIn.gain.setValueAtTime(0.52, now);
-      const delay = audioCtx.createDelay(2.0);
-      delay.delayTime.setValueAtTime(0.19, now);
-      const fb = audioCtx.createGain();
-      fb.gain.setValueAtTime(0.52, now);
-      const echoLp = audioCtx.createBiquadFilter();
-      echoLp.type = "lowpass";
-      echoLp.frequency.setValueAtTime(480, now);
-      boomG.connect(echoIn);
-      tailG.connect(echoIn);
-      rumbleG.connect(echoIn);
-      echoIn.connect(delay);
-      delay.connect(echoLp);
-      echoLp.connect(audioSfx);
-      delay.connect(fb);
-      fb.connect(delay);
-      fb.gain.exponentialRampToValueAtTime(0.0001, now + 1.85);
+
     }
 
     /** 1–4 号枪：backup 分层枪声；AMR(5) 走 playAmrGunSound（轰鸣+滚动尾音）。 */
@@ -10058,6 +12149,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     function playGunSound(w) {
       if (audioCtx.state === "suspended") void audioCtx.resume();
       if (state.weaponIndex === 4) return;
+      if (worldAudioReady()) worldAudio.play("shot", player.position, { local: true, echoOnly: true, volume: 0.65 });
       if (state.weaponIndex === 9) { playAsValGunSound(w); return; }
       if (state.weaponIndex === 5) {
         playAmrGunSound();
@@ -10071,16 +12163,6 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       void w;
       const now = audioCtx.currentTime;
       const idx = state.weaponIndex;
-      if (idx === 0 && pistolFireBuffer) {
-        const bs = audioCtx.createBufferSource();
-        bs.buffer = pistolFireBuffer;
-        const g = audioCtx.createGain();
-        g.gain.value = 0.85;
-        bs.connect(g);
-        g.connect(audioSfx);
-        try { bs.start(); } catch (_) {}
-        return;
-      }
       // AR (index 1): shot #5 with its natural reverb tail (AR.wav 354–800 ms slice).
       // Stop the previous AR source so auto-fire doesn't pile overlapping tails into a wash.
       // Gain pushed above 1.0 (other guns sit at 0.85–0.92) so the AR is clearly the loudest
@@ -10429,9 +12511,6 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       });
     }
 
-    let pistolFireBuffer = null;
-    let pistolFireLoadPromise = null;
-
     let shotgunFireBuffer = null;
     let shotgunLoadPromise = null;
 
@@ -10497,13 +12576,25 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     // INVENTORY / HOTBAR
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     const INV_CW = 70, INV_CH = 46; // canvas size per slot
+    const ICON_SCALE = 3;
     // v96: WEAPON_NAMES_INV / WEAPON_I18N_KEYS / weaponDisplayName moved up to right after tr() so
     // they are accessible from updateHud (which fires on initial load before this block executes).
     const INV_KEY_LABELS = ["1","2","3","4","5","6","7","0","/"];
 
     // ── 2D weapon silhouette drawing ─────────────────────────────────────────
+    // Icons are the real weapon models, rendered once from the side (see renderWeaponIcons). Until
+    // they exist (the bar is first built before the models are) the flat silhouettes below are used.
+    const weaponIconCache = new Map();
     function drawWeaponIcon(ctx, widx, cw, ch) {
       ctx.clearRect(0, 0, cw, ch);
+      const rendered = weaponIconCache.get(widx);
+      if (rendered) {
+        const scale = Math.min((cw - 4) / rendered.width, (ch - 4) / rendered.height);
+        const w = rendered.width * scale, h = rendered.height * scale;
+        ctx.imageSmoothingQuality = "high";
+        ctx.drawImage(rendered, (cw - w) / 2, (ch - h) / 2, w, h);
+        return;
+      }
       const pad = 3;
       const aw = cw - pad*2, ah = ch - pad*2;
       // helpers
@@ -10528,7 +12619,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       const M='#6a7280', MD='#374151', MB='#1f2937', ML='#9ca3af';
       const BR='#7c5a38', BRD='#4b3420';
       const GR='#3d6b40', GRL='#4e8455';
-      const RD='#dc2626', WH='#f5f5f5', BL='#2563eb';
+      const BL='#2563eb';
       switch(widx){
         case 0:{ // Pistol ─────────────────────────────────────────────────
           fr(0.26,0.10,0.46,0.38,M,2);   // slide
@@ -10581,11 +12672,15 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           fr(0.05,0.50,0.24,0.045,ML,1); // stock: bottom rail
           fr(0.02,0.26,0.045,0.28,ML,1); // stock: butt plate
           break;}
-        case 4:{ // Med Kit ───────────────────────────────────────────────
-          fr(0.18,0.08,0.64,0.80,RD,4);  // body
-          fr(0.22,0.42,0.56,0.18,WH,1);  // cross H
-          fr(0.42,0.22,0.16,0.56,WH,1);  // cross V
-          fr(0.35,0.00,0.30,0.12,BRD,3); // handle
+        case 4:{ // Medpack: side handle, rubber corners and red medical panel
+          fr(0.80,0.32,0.14,0.42,'#617078',5);
+          fr(0.83,0.41,0.06,0.24,'#182026',3);
+          fr(0.08,0.15,0.76,0.74,'#182026',9);
+          fr(0.13,0.17,0.65,0.62,'#91403a',7);
+          fr(0.20,0.22,0.51,0.51,'#a4493f',6);
+          fr(0.30,0.41,0.31,0.13,'#e9e4ce',2);
+          fr(0.405,0.30,0.10,0.36,'#e9e4ce',2);
+          for (const x of [0.20, 0.65]) fr(x,0.13,0.10,0.08,'#d5a36b',2);
           break;}
         case 5:{ // AMR ─────────────────────────────────────────────────────
           fr(0.08,0.24,0.50,0.28,M,2);   // receiver
@@ -10660,7 +12755,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         keyEl.textContent = slotKey || "";
         // canvas
         const cnv = document.createElement("canvas");
-        cnv.width = INV_CW; cnv.height = INV_CH;
+        cnv.width = INV_CW * ICON_SCALE; cnv.height = INV_CH * ICON_SCALE;   // drawn at 3×, shown at 1×: crisp on any screen
         cnv.style.width = INV_CW + "px";
         cnv.style.height = INV_CH + "px";
         // name — v96: tr() so all 18 languages get proper weapon names
@@ -10681,7 +12776,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         _invCanvases.push(cnv);
         // draw weapon icon
         const ctx2 = cnv.getContext("2d");
-        drawWeaponIcon(ctx2, widx, INV_CW, INV_CH);
+        drawWeaponIcon(ctx2, widx, INV_CW * ICON_SCALE, INV_CH * ICON_SCALE);
         // lock display
         if (widx !== 8 && !weaponUnlocked[widx]) {
           div.classList.add("inv-locked");
@@ -10729,78 +12824,318 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       });
     }
 
-    // ── Health bar + cast bar HUD ────────────────────────────────────────────
-    function updateHealthBarHud() {
-      if (!_healthBarWrap || !_healthBarFill) return;
-      const inGame = gameWorldReady && menuEl && menuEl.style.display === "none";
-      _healthBarWrap.style.display = inGame ? "flex" : "none";
-      if (!inGame) {
-        if (_castBarWrap) _castBarWrap.style.display = "none";
-        return;
-      }
-      // ── HP bar ───────────────────────────────────────────────────────────
-      const pct = player.maxHealth > 0
-        ? Math.max(0, Math.min(1, player.health / player.maxHealth)) : 0;
-      const pctStr = (pct * 100).toFixed(1);
-      const hbLow = pct <= 0.28;
-      const hbGrad =
-        pct > 0.55
-          ? "linear-gradient(90deg, #17c85b, #65ff8f)"
-          : pct > 0.28
-            ? "linear-gradient(90deg, #ffb21f, #ffe15c)"
-            : "linear-gradient(90deg, #ff2f2f, #ff7a4e)";
-      const hbShadow =
-        pct > 0.55
-          ? "0 0 10px rgba(35,255,120,0.38), inset 0 1px 0 rgba(255,255,255,0.26)"
-          : pct > 0.28
-            ? "0 0 10px rgba(255,205,45,0.34), inset 0 1px 0 rgba(255,255,255,0.24)"
-            : "0 0 13px rgba(255,55,40,0.55), inset 0 1px 0 rgba(255,255,255,0.20)";
-      // Skip the 4 style writes while health is static (the common case at full HP).
-      const hbKey = `${pctStr}|${hbLow}|${hbGrad}|${hbShadow}`;
-      if (hbKey !== _healthBarKey) {
-        _healthBarKey = hbKey;
-        _healthBarFill.style.width = pctStr + "%";
-        _healthBarWrap.classList.toggle("hb-low", hbLow);
-        _healthBarFill.style.background = hbGrad;
-        _healthBarFill.style.boxShadow = hbShadow;
-      }
+    // ── Combat HUD ────────────────────────────────────────────────────────────
+    /**
+     * One HUD, laid out the way shooters normally are: vitals bottom-left, weapon and gear
+     * bottom-right, timed actions as a ring on the crosshair. It replaces four bars that
+     * were stacked on top of each other over the gun (health, needle, stamina, cast) and a
+     * second heal bar that duplicated the medkit ring.
+     *
+     * State is shown, not spelled out: an empty stamina pip, a locked dash, a needle on
+     * cooldown or a harness burning down are all drawn on their widgets. A denied action
+     * shakes the widget responsible instead of flashing a line of text in the middle of
+     * the screen.
+     */
+    const ICON_SYRINGE = '<svg viewBox="0 0 24 24"><path d="M18 2l4 4-1.4 1.4-1.3-1.3-1.9 1.9 2.2 2.2-1.4 1.4-.8-.8-8 8H5.6L3.4 21 2 19.6l2.2-2.2v-3.8l8-8-.8-.8 1.4-1.4 2.2 2.2 1.9-1.9-1.3-1.3z" fill="currentColor"/></svg>';
+    const ICON_JET = '<svg viewBox="0 0 24 24"><path d="M8 3h8l1 5v7l-2 2h-1.5l-.8 4h-1.4l-.8-4H9l-2-2V8z M10 6v8h4V6z" fill="currentColor"/></svg>';
+    const ICON_CROSS = '<svg viewBox="0 0 24 24"><path d="M9 3h6v6h6v6h-6v6H9v-6H3V9h6z" fill="currentColor"/></svg>';
+    const GEAR_RING_C = 2 * Math.PI * 19;
 
-      // ── Cast bar (highest-priority active cast) ───────────────────────────
-      let hasCast = false, castProg = 0, castLbl = "", castCol = "#22ccaa";
+    let _hudBuilt = false;
+    const _hudEls = {};
+    const _hudKeys = {};
+    function buildGameHud() {
+      if (_hudBuilt) return;
+      _hudBuilt = true;
+      const gear = (id) =>
+        `<div class="gear" id="${id}"><svg class="g-ring" viewBox="0 0 44 44">` +
+        `<circle class="g-track" cx="22" cy="22" r="19"/>` +
+        `<circle class="g-prog" cx="22" cy="22" r="19" stroke-dasharray="${GEAR_RING_C.toFixed(2)}" transform="rotate(-90 22 22)"/></svg>` +
+        `<span class="g-ico">${id === "gearNeedle" ? ICON_SYRINGE : ICON_JET}</span>` +
+        `<kbd class="g-key"></kbd><b class="g-count"></b></div>`;
+      const wrap = document.createElement("div");
+      wrap.innerHTML =
+        `<div id="hudVitals" class="hud-cluster">` +
+          `<div class="hv-top"><span class="hv-ico">${ICON_CROSS}</span><span id="hvHpNum">100</span></div>` +
+          `<div class="hv-track"><div id="hvHpLag"></div><div id="hvHpFill"></div></div>` +
+          `<div id="hvStam" class="hv-stam"></div>` +
+        `</div>` +
+        `<div id="hudArms" class="hud-cluster">` +
+          `<div class="ha-gear">${gear("gearNeedle")}${gear("gearJet")}</div>` +
+          `<div class="ha-ammo"><span id="haAmmo">0</span><span id="haMag"></span></div>` +
+          `<div id="haWeapon"></div>` +
+        `</div>` +
+        `<div id="actionRing" aria-hidden="true"><svg viewBox="0 0 64 64">` +
+          `<circle class="ar-track" cx="32" cy="32" r="26"/>` +
+          `<circle id="actionRingProg" cx="32" cy="32" r="26" stroke-dasharray="163.36" stroke-dashoffset="163.36" transform="rotate(-90 32 32)"/>` +
+        `</svg></div>`;
+      while (wrap.firstChild) document.body.appendChild(wrap.firstChild);
+      const pips = document.getElementById("hvStam");
+      const nPips = Math.round(STAMINA_MAX / STAMINA_DASH_COST);
+      for (let i = 0; i < nPips; i++) {
+        const pip = document.createElement("i");
+        pip.innerHTML = "<span></span>";
+        pips.appendChild(pip);
+      }
+      for (const id of ["hvHpNum", "hvHpFill", "hvHpLag", "hvStam", "haAmmo", "haMag", "haWeapon",
+        "gearNeedle", "gearJet", "actionRing", "actionRingProg", "hudVitals", "hudArms"]) {
+        _hudEls[id] = document.getElementById(id);
+      }
+      _hudEls.pips = [...pips.querySelectorAll("i > span")];
+    }
 
-      // Priority 1: Speed Needle injection
-      if (state.speedNeedle && state.speedNeedle.phase === "injecting") {
-        const elapsed = performance.now() - state.speedNeedle.animStart;
-        castProg = Math.min(1, elapsed / NEEDLE_INJECT_DUR_MS);
-        castLbl  = tr("needleInjecting", "Injecting...");
-        castCol  = "#88ccff";
-        hasCast  = true;
-      }
-      // Priority 2: Medkit healing
-      else if (state.medKitHealProgress > 0) {
-        castProg = state.medKitHealProgress;
-        castLbl  = tr("medkitHold", "HOLD F");
-        castCol  = "#22dd88";
-        hasCast  = true;
-      }
-      // Priority 3: Reload (skip medkit slot)
-      else if (state.reloading && state.weaponIndex !== 4) {
-        const total     = weapon().reloadTime || 1;
-        const remaining = state.reloadEnd - performance.now();
-        castProg = THREE.MathUtils.clamp(1 - remaining / total, 0, 1);
-        castLbl  = "RELOAD";
-        castCol  = "#8899cc";
-        hasCast  = true;
-      }
+    /** Shake a HUD widget red — the "you can't do that right now" feedback. */
+    function hudDeny(id) {
+      buildGameHud();
+      const el = _hudEls[id];
+      if (!el) return;
+      el.classList.remove("deny");
+      void el.offsetWidth;   // restart the animation if it is already running
+      el.classList.add("deny");
+      playHudDenySound();
+    }
+    /** Kill confirmation: the hitmarker turns into a red X for a moment. */
+    let _killMarkTimer = 0;
+    function markKillConfirm() {
+      const hm = document.getElementById("hitmarker");
+      if (!hm) return;
+      hm.classList.remove("kill");
+      void hm.offsetWidth;
+      hm.classList.add("kill");
+      clearTimeout(_killMarkTimer);
+      _killMarkTimer = setTimeout(() => hm.classList.remove("kill"), 420);
+    }
 
-      if (_castBarWrap && _castBarFill && _castBarLabel) {
-        _castBarWrap.style.display = hasCast ? "flex" : "none";
-        if (hasCast) {
-          _castBarLabel.textContent = castLbl;
-          _castBarFill.style.width  = (castProg * 100).toFixed(1) + "%";
-          _castBarFill.style.background = castCol;
+    function playHudDenySound() {
+      try {
+        const t = audioCtx.currentTime;
+        const o = audioCtx.createOscillator();
+        o.type = "square";
+        o.frequency.setValueAtTime(190, t);
+        o.frequency.exponentialRampToValueAtTime(120, t + 0.09);
+        const g = audioCtx.createGain();
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(0.07, t + 0.008);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + 0.11);
+        o.connect(g); g.connect(audioSfx);
+        o.start(t); o.stop(t + 0.12);
+      } catch (_) {}
+    }
+
+    function _setText(id, v) {
+      if (_hudKeys[id] === v) return;
+      _hudKeys[id] = v;
+      _hudEls[id].textContent = v;
+    }
+    function _setGear(id, frac, mode, keyLabel, count) {
+      const key = `${frac.toFixed(3)}|${mode}|${keyLabel}|${count}`;
+      if (_hudKeys[id] === key) return;
+      _hudKeys[id] = key;
+      const el = _hudEls[id];
+      el.dataset.mode = mode;
+      el.querySelector(".g-prog").style.strokeDashoffset = (GEAR_RING_C * (1 - frac)).toFixed(2);
+      el.querySelector(".g-key").textContent = keyLabel;
+      el.querySelector(".g-count").textContent = count;
+    }
+
+    function updateGameHud() {
+      const objective = document.getElementById("gauntletObjective");
+      if (objective) {
+        const course = isGauntletMap(CURRENT_MAP) && gauntletCourse && gameWorldReady && !gauntletClearOpen;
+        objective.hidden = !course;
+        if (course) {
+          const remaining = gauntletCourse.checkpoints.length - 1;
+          let text = tr("hudGauntletGoal", "REACH THE EXIT");
+          if (gauntletCourse.spec.checkpoints) text += ` · ${tr("gauntletCheckpoint", "Checkpoint")} ${gauntletState.checkpointIdx}/${remaining}`;
+          const lockedDoor = gauntletDoors.find((d) => !d.open);
+          if (lockedDoor) {
+            const left = state.enemies.filter((e) => e.gauntletRoom === lockedDoor.room && e.alive).length;
+            if (left) text = `${tr("gauntletClearRoom", "CLEAR THE ROOM")} · ${left}`;
+          }
+          if (performance.now() < (gauntletState.missedUntil || 0)) text = tr("gauntletMissed", "Cross the remaining checkpoints before the exit.");
+
+          if (objective.textContent !== text) objective.textContent = text;
         }
       }
+
+      buildGameHud();
+      const now = performance.now();
+
+      // ── Health ────────────────────────────────────────────────────────────
+      const pct = player.maxHealth > 0 ? THREE.MathUtils.clamp(player.health / player.maxHealth, 0, 1) : 0;
+      const hpKey = pct.toFixed(3);
+      if (_hudKeys.hp !== hpKey) {
+        _hudKeys.hp = hpKey;
+        _hudEls.hvHpFill.style.width = (pct * 100).toFixed(1) + "%";
+        // The lag bar trails behind on a CSS delay, so a hit shows how much it took.
+        _hudEls.hvHpLag.style.width = (pct * 100).toFixed(1) + "%";
+        _hudEls.hudVitals.dataset.hp = pct <= 0.28 ? "low" : pct <= 0.55 ? "mid" : "ok";
+      }
+      _setText("hvHpNum", String(Math.max(0, Math.ceil(player.health))));
+
+      // ── Stamina pips (one per dash) ───────────────────────────────────────
+      const dashLocked = now < state.dashDisabledUntil || isJetStrapping();
+      const stamKey = `${state.stamina.toFixed(1)}|${dashLocked}|${isJetActive()}`;
+      if (_hudKeys.stam !== stamKey) {
+        _hudKeys.stam = stamKey;
+        _hudEls.pips.forEach((pip, i) => {
+          const f = THREE.MathUtils.clamp((state.stamina - i * STAMINA_DASH_COST) / STAMINA_DASH_COST, 0, 1);
+          pip.style.width = (f * 100).toFixed(1) + "%";
+          pip.parentNode.classList.toggle("full", f >= 1);
+        });
+        _hudEls.hvStam.classList.toggle("locked", dashLocked);
+        _hudEls.hvStam.classList.toggle("jet", isJetActive());
+      }
+
+      // ── Ammo + weapon ─────────────────────────────────────────────────────
+      const w = weapon();
+      let ammo = String(w.ammo), mag = "/ " + w.magSize, ammoState = "ok";
+      if (state.weaponIndex === 7) { ammo = ""; mag = ""; }
+      else if (state.weaponIndex === 8) { ammo = "∞"; mag = ""; }
+      else if (state.weaponIndex === 4) { mag = ""; }
+      else if (state.reloading) ammoState = "reload";
+      else if (w.ammo <= 0) ammoState = "empty";
+      else if (w.ammo <= Math.max(1, Math.floor(w.magSize * 0.25))) ammoState = "low";
+      _setText("haAmmo", ammo);
+      _setText("haMag", mag);
+      _setText("haWeapon", weaponDisplayName(state.weaponIndex));
+      if (_hudEls.hudArms.dataset.ammo !== ammoState) _hudEls.hudArms.dataset.ammo = ammoState;
+
+      // ── Gear: speed needle ────────────────────────────────────────────────
+      const nd = state.speedNeedle;
+      let nFrac = 1, nMode = nd.charges > 0 ? "ready" : "empty";
+      if (nd.phase === "injecting") { nFrac = Math.min(1, (now - nd.animStart) / NEEDLE_INJECT_DUR_MS); nMode = "busy"; }
+      else if (nd.phase === "boost") { nFrac = THREE.MathUtils.clamp(nd.timer / NEEDLE_BOOST_MS, 0, 1); nMode = "boost"; }
+      else if (nd.phase === "weak") { nFrac = THREE.MathUtils.clamp(nd.timer / NEEDLE_WEAK_MS, 0, 1); nMode = "weak"; }
+      else if (nd.charges <= 0) nFrac = 0;
+      _setGear("gearNeedle", nFrac, nMode, codeToLabel(kbCode("speedNeedle")), nd.charges > 1 ? String(nd.charges) : "");
+
+      // ── Gear: jet harness ─────────────────────────────────────────────────
+      const jt = state.jet;
+      let jFrac = 1, jMode = "ready";
+      if (jt.phase === "strapping") { jFrac = jetPhaseProgress(); jMode = "busy"; }
+      else if (jt.phase === "active") { jFrac = THREE.MathUtils.clamp((jt.endMs - now) / JET_ACTIVE_MS, 0, 1); jMode = "jet"; }
+      else if (now < (jt.cooldownUntil || 0)) { jFrac = 1 - (jt.cooldownUntil - now) / JET_COOLDOWN_MS; jMode = "cool"; }
+      _setGear("gearJet", jFrac, jMode, codeToLabel(kbCode("jetHarness")), "");
+
+      // ── Action ring on the crosshair: reload, injecting, strapping in ──────
+      // The medkit already has its own ring at the crosshair, so it is not repeated here.
+      let ring = -1, ringMode = "";
+      if (state.reloading && state.weaponIndex !== 4) {
+        const total = Math.max(1, state.reloadEnd - (state.reloadStartMs || state.reloadEnd - (w.reloadTime || 1)));
+        ring = THREE.MathUtils.clamp(1 - (state.reloadEnd - now) / total, 0, 1);
+        ringMode = "reload";
+      } else if (nd.phase === "injecting") {
+        ring = nFrac; ringMode = "inject";
+      } else if (jt.phase === "strapping") {
+        ring = jFrac; ringMode = "inject";
+      }
+      const ringKey = ring < 0 ? "off" : ringMode + ring.toFixed(3);
+      if (_hudKeys.ring !== ringKey) {
+        _hudKeys.ring = ringKey;
+        _hudEls.actionRing.classList.toggle("on", ring >= 0);
+        _hudEls.actionRing.dataset.mode = ringMode;
+        if (ring >= 0) _hudEls.actionRingProg.style.strokeDashoffset = (163.36 * (1 - ring)).toFixed(2);
+      }
+    }
+
+    function updateHealthBarHud() {
+      updateGameHud();
+      updateTutorialPrompt();
+    }
+
+    // ── Contextual tutorial prompts ─────────────────────────────────────────────
+    /**
+     * Teaches the controls at the moment they matter instead of in a wall of text: the
+     * real keycap (honouring rebinds), a pictogram, one verb. Movement and look show when
+     * a match starts until you have used them; jump / crouch / dash appear as you
+     * approach that obstacle in the gauntlet; reload appears on an empty magazine, heal on
+     * low health. Each prompt retires itself after you have done it a few times, so
+     * experienced players stop seeing them.
+     */
+    const TUT_KEY = "fps_tutorial_v1";
+    const TUT_RETIRE_AFTER = 3;
+    let tutState = (() => {
+      try { return JSON.parse(localStorage.getItem(TUT_KEY) || "{}") || {}; } catch (_) { return {}; }
+    })();
+    function tutDone(kind) {
+      tutState[kind] = (tutState[kind] || 0) + 1;
+      try { localStorage.setItem(TUT_KEY, JSON.stringify(tutState)); } catch (_) {}
+    }
+    function tutRetired(kind) { return (tutState[kind] || 0) >= TUT_RETIRE_AFTER; }
+    const TUT_ICONS = {
+      move: '<svg viewBox="0 0 24 24"><path d="M12 2l3 4h-2v4h4V8l4 4-4 4v-2h-4v4h2l-3 4-3-4h2v-4H7v2l-4-4 4-4v2h4V6H9z" fill="currentColor"/></svg>',
+      look: '<svg viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="6" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12 2v7" stroke="currentColor" stroke-width="1.6"/><path d="M2 12h3M19 12h3" stroke="currentColor" stroke-width="1.6"/></svg>',
+      fire: '<svg viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="6" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12 2.8V9H6.8A5.2 5.2 0 0 1 12 2.8z" fill="currentColor"/></svg>',
+      aim: '<svg viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="6" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12 2.8V9h5.2A5.2 5.2 0 0 0 12 2.8z" fill="currentColor"/></svg>',
+      jump: '<svg viewBox="0 0 24 24"><path d="M12 3l6 7h-4v6h-4v-6H6z" fill="currentColor"/><path d="M3 21h18" stroke="currentColor" stroke-width="2"/></svg>',
+      crouch: '<svg viewBox="0 0 24 24"><path d="M3 5h18" stroke="currentColor" stroke-width="2"/><path d="M12 21l-6-7h4V8h4v6h4z" fill="currentColor"/></svg>',
+      dash: '<svg viewBox="0 0 24 24"><path d="M3 6l6 6-6 6V6zm7 0l6 6-6 6V6zm7 0h3v12h-3z" fill="currentColor"/></svg>',
+      reload: '<svg viewBox="0 0 24 24"><path d="M12 4a8 8 0 1 0 7.7 10h-2.1A6 6 0 1 1 12 6c1.6 0 3.1.6 4.2 1.8L13 11h7V4l-2.4 2.4A8 8 0 0 0 12 4z" fill="currentColor"/></svg>',
+      heal: '<svg viewBox="0 0 24 24"><path d="M9 3h6v6h6v6h-6v6H9v-6H3V9h6z" fill="currentColor"/></svg>',
+    };
+    let _tutEl = null, _tutKey = "", _tutMoveStart = null;
+    function tutKeycaps(codes) {
+      return codes.map((c) => `<kbd>${c}</kbd>`).join("");
+    }
+    function showTutorialPrompt(kind, keysHtml, verb) {
+      if (!_tutEl) {
+        _tutEl = document.createElement("div");
+        _tutEl.id = "tutPrompt";
+        document.body.appendChild(_tutEl);
+      }
+      const key = kind + "|" + keysHtml;
+      if (_tutKey === key) return;
+      _tutKey = key;
+      if (!kind) { _tutEl.classList.remove("on"); return; }
+      _tutEl.innerHTML =
+        `<span class="tp-keys">${keysHtml}</span><span class="tp-ico">${TUT_ICONS[kind] || ""}</span><span class="tp-verb">${verb}</span>`;
+      _tutEl.classList.remove("on");
+      void _tutEl.offsetWidth;
+      _tutEl.classList.add("on");
+    }
+    const KL = (action) => codeToLabel(kbCode(action));
+    function updateTutorialPrompt() {
+      const inGame = gameWorldReady && menuEl && menuEl.style.display === "none" && player.health > 0 && !paused && !gauntletClearOpen;
+      if (!inGame) { showTutorialPrompt("", "", ""); _tutMoveStart = null; return; }
+      const forceTutorial = isGauntletMap(CURRENT_MAP) && gauntletLevel <= 5;
+      const pick = (() => {
+        // Gauntlet obstacles take priority — they are why you would fall.
+        if (isGauntletMap(CURRENT_MAP) && gauntletCourse && gauntletCourse.hints) {
+          const arc = gauntletState.arc || 0;
+          for (const h of gauntletCourse.hints) {
+            if (!h._passed && arc > h.arcTo && player.onGround) { h._passed = true; tutDone(h.kind); }
+            if (arc >= h.arcFrom && arc <= h.arcTo && (forceTutorial || !tutRetired(h.kind))) {
+              if (h.kind === "jump") return ["jump", tutKeycaps([KL("jump")]), tr("tutJump", "JUMP")];
+              if (h.kind === "crouch") return ["crouch", tutKeycaps([KL("crouch")]), tr("tutCrouch", "HOLD · CROUCH")];
+              if (h.kind === "dash") return ["dash", tutKeycaps([KL("moveForward"), "+", KL("dash")].map(String)).replace("<kbd>+</kbd>", '<i class="tp-plus">+</i>'), tr("tutDash", "DASH ACROSS")];
+            }
+          }
+        }
+        // Movement + look at the start of a match, until you have walked a few metres.
+        if (!tutRetired("move") || forceTutorial && gauntletLevel === 1) {
+          if (!_tutMoveStart) _tutMoveStart = player.position.clone();
+          if (_tutMoveStart.distanceTo(player.position) < 4) {
+            return ["move", tutKeycaps([KL("moveForward"), KL("moveLeft"), KL("moveBack"), KL("moveRight")]), tr("tutMove", "MOVE")];
+          }
+          if (!tutState._movedThisMatch) { tutState._movedThisMatch = true; tutDone("move"); }
+        }
+        const w = weapon();
+        if (state.weaponIndex !== 4 && state.weaponIndex !== 7 && state.weaponIndex !== 8
+            && w.ammo <= 0 && !state.reloading && !tutRetired("reload")) {
+          return ["reload", tutKeycaps([KL("reload")]), tr("tutReload", "RELOAD")];
+        }
+        if (player.health / player.maxHealth < 0.4 && weaponAvailable(4) && weapons[4] && weapons[4].ammo > 0 && !tutRetired("heal")) {
+          return ["heal", tutKeycaps([KL("heal")]), tr("tutHeal", "HOLD · HEAL")];
+        }
+        if ((isArenaLikeMap(CURRENT_MAP) || isBossArenaMap(CURRENT_MAP)) && !tutRetired("fire")
+            && state.enemies.some((e) => e.alive && e.aware && !e.trainingDummy)) {
+          return ["fire", "", tr("tutFire", "FIRE")];
+        }
+        return null;
+      })();
+      if (pick) showTutorialPrompt(pick[0], pick[1], pick[2]);
+      else showTutorialPrompt("", "", "");
     }
 
     // ── Hotbar settings section ──────────────────────────────────────────────
@@ -10817,10 +13152,10 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         keyEl.className = "hb-order-key";
         keyEl.textContent = tr("hbKeyLabel", "Key") + " " + INV_KEY_LABELS[slotIdx];
         const cnv = document.createElement("canvas");
-        cnv.width = 56; cnv.height = 36;
+        cnv.width = 56 * ICON_SCALE; cnv.height = 36 * ICON_SCALE;
         cnv.style.width = "56px"; cnv.style.height = "36px";
         const ctx2 = cnv.getContext("2d");
-        drawWeaponIcon(ctx2, widx, 56, 36);
+        drawWeaponIcon(ctx2, widx, 56 * ICON_SCALE, 36 * ICON_SCALE);
         const nameEl = document.createElement("div");
         nameEl.className = "hb-order-name";
         nameEl.textContent = weaponDisplayName(widx);
@@ -11260,22 +13595,6 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     }
     void ensureShotgunBuffer();
 
-    function ensurePistolFireBuffer() {
-      if (pistolFireBuffer) return Promise.resolve();
-      if (!pistolFireLoadPromise) {
-        pistolFireLoadPromise = fetch("https://cdn.jsdelivr.net/gh/indiamonda/perfectnip.github.io@main/q/g/krunker-io/sound/weapon_4.mp3")
-          .then((res) => {
-            if (!res.ok) throw new Error("pistol fire fetch");
-            return res.arrayBuffer();
-          })
-          .then((arr) => audioCtx.decodeAudioData(arr.slice(0)))
-          .then((buf) => { pistolFireBuffer = buf; })
-          .catch(() => { pistolFireLoadPromise = null; });
-      }
-      return pistolFireLoadPromise;
-    }
-    void ensurePistolFireBuffer();
-
     /** Local player hurt: bullet (PvP / default MP) vs melee (zombie). Uses Web Audio only. */
     function playReceivedDamageSound(kind) {
       if (audioCtx.state === "suspended") void audioCtx.resume();
@@ -11339,10 +13658,25 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       state.camShake = Math.min(0.38, state.camShake + add * s);
     }
 
-    function createBulletMark(point, normal) {
-      if (decalGroup.children.length > 80) {
-        const old = decalGroup.children[0];
-        decalGroup.remove(old);
+    /**
+     * Bullet holes are parented to the surface they hit (when known), so they ride moving
+     * platforms and disappear with crumbling ones instead of hanging in the air. They are
+     * also tracked here so a new level can clear every hole left from the last one.
+     */
+    const bulletMarks = [];
+    function clearBulletMarks() {
+      for (const mark of bulletMarks) {
+        mark.parent?.remove(mark);
+        mark.geometry.dispose();
+        mark.material.dispose();
+      }
+      bulletMarks.length = 0;
+    }
+
+    function createBulletMark(point, normal, host = null) {
+      if (bulletMarks.length > 80) {
+        const old = bulletMarks.shift();
+        old.parent?.remove(old);
         old.geometry.dispose();
         old.material.dispose();
       }
@@ -11355,10 +13689,16 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           opacity: 0.85
         })
       );
+      mark.raycast = () => {};
 
       mark.position.copy(point).add(normal.clone().multiplyScalar(0.01));
       mark.lookAt(point.clone().add(normal));
       decalGroup.add(mark);
+      if (host && host.parent) {
+        mark.updateMatrixWorld(true);
+        host.attach(mark);
+      }
+      bulletMarks.push(mark);
     }
 
     function createSparks(point, color = 0xffdd88) {
@@ -11382,58 +13722,65 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     const bossGoldParticles = [];
 
     function checkAllBossesDead(pos) {
-      if (bossVictoryActive) return;
+      if (!isBossArenaMap(CURRENT_MAP) || bossVictoryActive) return;
       const anyBossAlive = state.enemies.some(e => e.isBoss && e.alive);
       if (anyBossAlive) return;
       triggerBossRoundEnd(pos);
     }
 
-    function getBossRoundLabel(round) {
-      // Difficulty colors are universal; labels are pulled from tr() so each language
-      // gets the right "NORMAL/HARD/NIGHTMARE/HELL/HELL+N" wording.
-      const colors = ["#aaa", "#ff8c00", "#cc33ff", "#ff2222"];
-      const keys = ["bossRoundNormal", "bossRoundHard", "bossRoundNightmare", "bossRoundHell"];
-      if (round <= keys.length) {
-        return { name: tr(keys[round - 1], keys[round - 1].replace(/^bossRound/, "")), color: colors[round - 1] };
-      }
-      return {
-        name: tr("bossRoundHellPlus", "HELL+{n}").replace("{n}", String(round - 4)),
-        color: "#ff0000",
-      };
+    let bossResultsOpen = false;
+    function closeBossResults() {
+      bossResultsOpen = false;
+      document.getElementById("bossVictoryOverlay")?.remove();
     }
 
-    function isFinalBossRound() {
-      return BOSS_ROUND >= 4;
-    }
-
-    function spawnNextBossRound() {
-      clearBossProjectileEffects();
-      for (let i = state.enemies.length - 1; i >= 0; i--) {
-        const e = state.enemies[i];
-        if (e.group) scene.remove(e.group);
+    function showBossResults() {
+      hidePause();
+      const overlay = document.createElement("div");
+      overlay.id = "bossVictoryOverlay";
+      overlay.setAttribute("role", "dialog");
+      overlay.setAttribute("aria-modal", "true");
+      overlay.setAttribute("aria-labelledby", "bossResultTitle");
+      const card = document.createElement("div");
+      card.className = "intermission-card";
+      const title = document.createElement("h1");
+      title.id = "bossResultTitle";
+      title.textContent = tr("bossAllDefeated", "ALL BOSSES DEFEATED");
+      card.append(title);
+      function button(label, action) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "overlay-btn";
+        b.textContent = label;
+        b.addEventListener("click", action);
+        card.append(b);
       }
-      state.enemies.length = 0;
-      const round = BOSS_ROUND;
-      const isHellRound = round >= 4;
-      // Stats are fixed (no round scaling): normal 15000hp/50dmg, hell 75000hp/250dmg
-      for (let i = 0; i < BOSS_FIGHT_COUNT; i++) {
-        const { x, z } = findSpawnPosition(SPAWN_MIN_DIST_BASE);
-        const boss = makeHormoneZombie(x, z, isHellRound);
-        boss.netIndex = i;
-        drawEnemyHp(boss);
-        state.enemies.push(boss);
+      if (BOSS_HELL_MODE && bossDeathPickupPos && !bossDeathPickupPos._picked) {
+        button(tr("bossClaimReward", "Return to arena for reward"), () => {
+          closeBossResults();
+          renderer.domElement.requestPointerLock()?.catch(() => {});
+        });
       }
-      const darkFog = new THREE.Color(0x1a1a22);
-      setSceneFogVisibility(8, 50, darkFog);
-      if (scene.background && scene.background.isColor) scene.background.copy(darkFog);
-      camera.far = 98; camera.updateProjectionMatrix();
+      if (!MULTIPLAYER) button(tr("btnRestart", "Replay"), () => {
+        closeBossResults();
+        restartCurrentMap();
+      });
+      button(tr("gauntletMenu", "Main menu"), () => {
+        closeBossResults();
+        goToMenu();
+      });
+      overlay.append(card);
+      document.body.append(overlay);
+      bossResultsOpen = true;
+      releaseAllInput();
+      document.exitPointerLock();
+      card.querySelector("button")?.focus();
     }
 
     function triggerBossRoundEnd(pos) {
       bossVictoryActive = true;
       bossVictoryTimer = 0;
       bossVictoryMsgShown = false;
-      BOSS_ROUND_ACTIVE = false;
       playBossRoarSfx();
 
       if (BOSS_HELL_MODE) {
@@ -11460,19 +13807,16 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         hellLootRing._phase = 0;
         scene.add(hellLootRing);
         checkHellAchievement();
-      } else if (isFinalBossRound()) {
-        bossDeathPickupPos = pos.clone();
-        bossDeathPickupPos._picked = false;
-        checkHellAchievement();
       }
 
-      const particleCount = Math.round(120 * BOSS_ROUND);
-      const spreadMult = 1 + (BOSS_ROUND - 1) * 0.4;
-      const speedMult = 1 + (BOSS_ROUND - 1) * 0.3;
+      clearBossProjectileEffects();
+      const particleCount = BOSS_HELL_MODE ? 64 : 32;
+      const spreadMult = BOSS_HELL_MODE ? 2.2 : 1;
+      const speedMult = BOSS_HELL_MODE ? 1.9 : 1;
       for (let i = 0; i < particleCount; i++) {
         const hue = 0.10 + Math.random() * 0.08;
         const color = new THREE.Color().setHSL(hue, 1.0, 0.55 + Math.random() * 0.3);
-        const size = (0.08 + Math.random() * 0.18) * (1 + (BOSS_ROUND - 1) * 0.15);
+        const size = (0.08 + Math.random() * 0.18) * (BOSS_HELL_MODE ? 1.45 : 1);
         const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 1 });
         const p = new THREE.Mesh(new THREE.BoxGeometry(size, size, size), mat);
         p.position.set(
@@ -11488,20 +13832,20 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           upSpeed,
           Math.sin(angle) * speed
         );
-        p.userData.life = (3.0 + Math.random() * 3.0) * (1 + (BOSS_ROUND - 1) * 0.2);
+        p.userData.life = (3.0 + Math.random() * 3.0) * (BOSS_HELL_MODE ? 1.6 : 1);
         p.userData.maxLife = p.userData.life;
         p.userData.rotSpeed = (Math.random() - 0.5) * 8;
         scene.add(p);
         bossGoldParticles.push(p);
       }
 
-      const glowIntensity = 3 + BOSS_ROUND * 2;
-      const glowDist = 15 + BOSS_ROUND * 5;
+      const glowIntensity = BOSS_HELL_MODE ? 11 : 5;
+      const glowDist = BOSS_HELL_MODE ? 35 : 20;
       const goldLight = new THREE.PointLight(0xffd700, glowIntensity, glowDist);
       goldLight.position.set(pos.x, pos.y + 2, pos.z);
       scene.add(goldLight);
       goldLight._bossGlow = true;
-      goldLight._life = (4 + BOSS_ROUND) * 1.0;
+      goldLight._life = BOSS_HELL_MODE ? 8 : 5;
       goldLight._maxLife = goldLight._life;
       goldLight._baseIntensity = glowIntensity;
       bossGoldParticles.push(goldLight);
@@ -11555,48 +13899,10 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         camera.updateProjectionMatrix();
       }
 
-      if (bossVictoryTimer >= 3.0 && !bossVictoryMsgShown) {
+      if (bossVictoryTimer >= 1.4 && !bossVictoryMsgShown) {
         bossVictoryMsgShown = true;
-        const rl = getBossRoundLabel(BOSS_ROUND);
-        const isFinal = isFinalBossRound();
-        const overlay = document.createElement("div");
-        overlay.id = "bossVictoryOverlay";
-        overlay.style.cssText = "position:fixed;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;flex-direction:column;z-index:9999;pointer-events:none;";
-        const title = document.createElement("div");
-        title.textContent = isFinal
-          ? tr("bossAllDefeated", "ALL BOSSES DEFEATED")
-          : tr("bossRoundCleared", "ROUND {n} CLEAR").replace("{n}", String(BOSS_ROUND));
-        title.style.cssText = `font-size:64px;font-weight:900;color:${isFinal ? "#ffd700" : rl.color};text-shadow:0 0 30px rgba(255,215,0,0.8),0 0 60px rgba(255,165,0,0.5),0 4px 12px rgba(0,0,0,0.7);letter-spacing:6px;opacity:0;animation:bossVicFadeIn 2s ease forwards;`;
-        const sub = document.createElement("div");
-        if (isFinal) {
-          sub.textContent = tr("bossYouWin", "YOU WIN");
-        } else {
-          const nextRl = getBossRoundLabel(BOSS_ROUND + 1);
-          sub.innerHTML = `${tr("bossDiffCleared", "Difficulty:")} <span style="color:${rl.color};">${rl.name}</span> → ${tr("bossNextRound", "Next round:")} <span style="color:${nextRl.color};">${nextRl.name}</span>`;
-        }
-        sub.style.cssText = "font-size:28px;font-weight:700;color:#fff;text-shadow:0 0 20px rgba(255,255,255,0.5),0 2px 8px rgba(0,0,0,0.6);margin-top:16px;letter-spacing:4px;opacity:0;animation:bossVicFadeIn 2s ease 0.8s forwards;";
-        overlay.appendChild(title);
-        overlay.appendChild(sub);
-        document.body.appendChild(overlay);
-
-        if (!document.getElementById("bossVicStyle")) {
-          const st = document.createElement("style");
-          st.id = "bossVicStyle";
-          st.textContent = "@keyframes bossVicFadeIn{from{opacity:0;transform:translateY(20px) scale(0.9)}to{opacity:1;transform:translateY(0) scale(1)}} @keyframes bossVicFadeOut{from{opacity:1;transform:scale(1)}to{opacity:0;transform:translateY(-30px) scale(0.92)}}";
-          document.head.appendChild(st);
-        }
-
-        const fadeDelay = isFinal ? 6000 : 4000;
-        setTimeout(() => {
-          const ovl = document.getElementById("bossVictoryOverlay");
-          if (ovl) {
-            ovl.style.animation = "bossVicFadeOut 1.5s ease forwards";
-            setTimeout(() => { if (ovl.parentNode) ovl.remove(); }, 1600);
-          }
-        }, fadeDelay);
+        showBossResults();
       }
-
-      // Auto-advance to next round removed — each fight stays at selected difficulty.
 
       // 光圈脉冲动画
       if (hellLootRing) {
@@ -11620,82 +13926,13 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       }
     }
 
-    let _lastBossRoarTime = 0;
-    function playBossRoarSfx() {
-      const now = performance.now();
-      if (now - _lastBossRoarTime < 4000) return;
-      _lastBossRoarTime = now;
-      try {
-        const t0 = audioCtx.currentTime;
-        const dur = 1.0 + Math.random() * 0.5;
-        const sr = audioCtx.sampleRate;
-
-        const nLen = sr * dur;
-        const nBuf = audioCtx.createBuffer(1, nLen, sr);
-        const nd = nBuf.getChannelData(0);
-        let prev = 0;
-        for (let i = 0; i < nLen; i++) {
-          prev = prev * 0.92 + (Math.random() * 2 - 1) * 0.08;
-          nd[i] = prev + Math.sin(i / sr * 2 * Math.PI * (40 + Math.random() * 10)) * 0.5;
-        }
-        const nSrc = audioCtx.createBufferSource();
-        nSrc.buffer = nBuf;
-        nSrc.playbackRate.setValueAtTime(0.8 + Math.random() * 0.3, t0);
-
-        const bp1 = audioCtx.createBiquadFilter();
-        bp1.type = "lowpass"; bp1.frequency.value = 350; bp1.Q.value = 2.5;
-        const bp2 = audioCtx.createBiquadFilter();
-        bp2.type = "peaking"; bp2.frequency.value = 120; bp2.gain.value = 12; bp2.Q.value = 1.5;
-        const bp3 = audioCtx.createBiquadFilter();
-        bp3.type = "peaking"; bp3.frequency.value = 220; bp3.gain.value = 8; bp3.Q.value = 2;
-
-        const nGain = audioCtx.createGain();
-        nGain.gain.setValueAtTime(0, t0);
-        nGain.gain.linearRampToValueAtTime(0.5, t0 + 0.08);
-        nGain.gain.setValueAtTime(0.5, t0 + dur * 0.2);
-        nGain.gain.linearRampToValueAtTime(0.55, t0 + dur * 0.35);
-        nGain.gain.exponentialRampToValueAtTime(0.01, t0 + dur);
-
-        const o1 = audioCtx.createOscillator();
-        o1.type = "sawtooth";
-        o1.frequency.setValueAtTime(55, t0);
-        o1.frequency.linearRampToValueAtTime(42, t0 + dur * 0.5);
-        o1.frequency.linearRampToValueAtTime(35, t0 + dur);
-        const o1g = audioCtx.createGain();
-        o1g.gain.setValueAtTime(0, t0);
-        o1g.gain.linearRampToValueAtTime(0.30, t0 + 0.05);
-        o1g.gain.exponentialRampToValueAtTime(0.01, t0 + dur);
-
-        const o2 = audioCtx.createOscillator();
-        o2.type = "square";
-        o2.frequency.setValueAtTime(28, t0);
-        o2.frequency.linearRampToValueAtTime(22, t0 + dur);
-        const o2g = audioCtx.createGain();
-        o2g.gain.setValueAtTime(0.15, t0);
-        o2g.gain.exponentialRampToValueAtTime(0.01, t0 + dur * 0.8);
-
-        const dist = audioCtx.createWaveShaperFunction
-          ? null
-          : (function() {
-            const ws = audioCtx.createWaveShaper();
-            const n = 256; const c = new Float32Array(n);
-            for (let i = 0; i < n; i++) { const x = (i * 2) / n - 1; c[i] = Math.tanh(x * 3); }
-            ws.curve = c; ws.oversample = "2x"; return ws;
-          })();
-
-        const master = audioCtx.createGain();
-        master.gain.value = 0.45;
-
-        nSrc.connect(bp1).connect(bp2).connect(bp3).connect(nGain).connect(master);
-        o1.connect(o1g).connect(master);
-        o2.connect(o2g).connect(master);
-        if (dist) master.connect(dist).connect(audioSfx);
-        else master.connect(audioSfx);
-
-        nSrc.start(t0); nSrc.stop(t0 + dur);
-        o1.start(t0); o1.stop(t0 + dur);
-        o2.start(t0); o2.stop(t0 + dur);
-      } catch (_) {}
+    function playBossRoarSfx(boss) {
+      if (!worldAudioReady()) return;
+      const source = boss?.group.position || player.position;
+      worldAudio.play(boss?.isHellBoss ? "hellRoar" : "bossRoar", {
+        x: source.x, y: source.y + (boss ? 2.0 : 0), z: source.z,
+      }, { local: !boss, volume: 1.05 });
+      if (boss) boss.roarSerial = (boss.roarSerial || 0) + 1;
     }
 
     function playKnifeSwingSound(duration = 0.22, peakGain = 0.28) {
@@ -11839,7 +14076,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     const _dissolveTmp = new THREE.Vector3();
     const _dissolveDir = new THREE.Vector3();
 
-    function spawnHumanoidDissolve(rootGroup, hitWorld, opts = {}) {
+    function spawnHumanoidDissolve(rootGroup, hitWorld) {
       if (!rootGroup) return;
       trimEffectGroup(
         dissolveGroup,
@@ -11926,9 +14163,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       }
       if (particles.length) {
         playDissolveBurstSound();
-        dissolveBursts.push({ particles, onComplete: opts.onComplete || null });
-      } else if (opts.onComplete) {
-        opts.onComplete();
+        dissolveBursts.push({ particles });
       }
     }
 
@@ -11953,40 +14188,9 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
             dissolveGroup.remove(p.mesh);
             p.mesh.material.dispose();
           }
-          const done = burst.onComplete;
           dissolveBursts.splice(bi, 1);
-          if (done) done();
         }
       }
-    }
-
-    function clearLocalDeathGhost() {
-      if (localDeathGhostGroup) {
-        scene.remove(localDeathGhostGroup);
-        localDeathGhostGroup = null;
-      }
-    }
-
-    function spawnLocalPlayerDeathDissolve(hitWorld) {
-      clearLocalDeathGhost();
-      const av = createRemotePlayer(playerName || "Player");
-      av.group.position.set(player.position.x, 0, player.position.z);
-      av.group.rotation.y = player.yaw + Math.PI;
-      if (av.nameSprite) av.nameSprite.visible = false;
-      av.group.visible = true;
-      scene.add(av.group);
-      localDeathGhostGroup = av.group;
-      const hp =
-        hitWorld && hitWorld.isVector3
-          ? hitWorld
-          : new THREE.Vector3(
-              player.position.x,
-              player.position.y + 1.1,
-              player.position.z
-            );
-      spawnHumanoidDissolve(av.group, hp, {
-        onComplete: clearLocalDeathGhost,
-      });
     }
 
     /**
@@ -12165,51 +14369,99 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     scene.add(camera);
 
     const playerLightTarget = new THREE.Object3D();
-    playerLightTarget.position.set(0, 0, -1);
+    playerLightTarget.position.set(.105, -.12, -20);
 
-    const playerBodyLight = createPhysicalPointLight(
-      PLAYER_LIGHT_COLOR,
-      PLAYER_BODY_INTENSITY,
-      PLAYER_BODY_DISTANCE,
-      PLAYER_BODY_LIGHT_DECAY
-    );
-    playerBodyLight.position.set(0, -0.22, 0.08);
-    camera.add(playerBodyLight);
+    const flashlight = createPhysicalSpotLight(FLASH_COLOR, FLASH_POWER, FLASH_RANGE, FLASH_ANGLE, FLASH_PENUMBRA, 2);
+    flashlight.position.set(.105, -.12, -.62);
+    flashlight.target = playerLightTarget;
+    flashlight.shadow.mapSize.set(512, 512);
+    flashlight.shadow.camera.near = .17;
+    flashlight.shadow.camera.far = FLASH_RANGE;
+    flashlight.shadow.normalBias = .025;
+    flashlight.shadow.bias = -.00022;
+    camera.add(flashlight, playerLightTarget);
 
-    const flashOuterLocal = createPhysicalSpotLight(
-      PLAYER_LIGHT_COLOR,
-      FLASH_OUTER_INTENSITY,
-      FLASH_OUTER_DISTANCE,
-      FLASH_OUTER_ANGLE,
-      FLASH_OUTER_PEN,
-      FLASHLIGHT_LIGHT_DECAY
-    );
-    const flashInnerLocal = createPhysicalSpotLight(
-      PLAYER_LIGHT_COLOR,
-      FLASH_INNER_INTENSITY,
-      FLASH_INNER_DISTANCE,
-      FLASH_INNER_ANGLE,
-      FLASH_INNER_PEN,
-      FLASHLIGHT_LIGHT_DECAY
-    );
-    flashOuterLocal.position.set(0, 0.18, 0.12);
-    flashInnerLocal.position.set(0, 0.18, 0.12);
-    camera.add(flashOuterLocal);
-    camera.add(flashInnerLocal);
-    camera.add(playerLightTarget);
-    flashOuterLocal.target = playerLightTarget;
-    flashInnerLocal.target = playerLightTarget;
+    const flashlightRay = new THREE.Ray();
+    const flashlightHit = new THREE.Vector3();
+    const arenaFlashProbeDirections = [[0, 0], [-.16, 0], [.16, 0], [0, .16], [0, -.16]]
+      .map(([x, y]) => new THREE.Vector3(x, y, -1).normalize());
+    const arenaFlashRays = arenaFlashProbeDirections.map(() => new THREE.Ray());
+    const arenaRemoteFlashOrigin = new THREE.Vector3();
+    const arenaRemoteFlashRotation = new THREE.Quaternion();
+    const arenaReverseFlashAxis = new THREE.Quaternion(0, 1, 0, 0);
+    let flashlightSampleAt = 0;
+    let flashlightTargetPower = FLASH_POWER;
 
+    let flashlightOn = false;
+    flashlight.castShadow = true;
     function setLocalPlayerLights(on) {
-      playerBodyLight.visible = on;
-      flashOuterLocal.visible = on;
-      flashInnerLocal.visible = on;
+      // Never flip `visible` or `castShadow` here. Either one changes the light count or the
+      // shader defines, and three then recompiles every lit material: a multi-frame freeze
+      // (it used to happen on death). Fade the intensity to 0 and stop updating the shadow map.
+      flashlightOn = on;
+      if (!on) flashlight.intensity = 0;
+      flashlight.shadow.autoUpdate = on;
+      if (on) flashlightSampleAt = 0;
     }
 
-    /** User toggle (L key); actual visibility also depends on menu / death / loading. */
+    function getArenaFlashPower(origin, rotation, maxPower) {
+      // The spotlight falls off with distance squared. Limit its output when the
+      // beam falls on a nearby wall, floor or ceiling, including off-center hits.
+      const reach = Math.sqrt(maxPower / ARENA_FLASH_SURFACE_LIMIT);
+      let nearest = reach;
+      for (let i = 0; i < arenaFlashRays.length; i++) {
+        const ray = arenaFlashRays[i];
+        ray.origin.copy(origin);
+        ray.direction.copy(arenaFlashProbeDirections[i]).applyQuaternion(rotation);
+        const dy = ray.direction.y;
+        if (Math.abs(dy) > .001) {
+          const plane = dy < 0 ? 0 : MAZE_WALL_H;
+          const distance = (plane - origin.y) / dy;
+          if (distance >= 0) nearest = Math.min(nearest, distance);
+        }
+      }
+      forEachNearbyWallBox(origin.x, origin.z, box => {
+        if (box.enemyOnly || box.min.x > origin.x + nearest || box.max.x < origin.x - nearest
+          || box.min.z > origin.z + nearest || box.max.z < origin.z - nearest) return;
+        if (box.containsPoint(origin)) { nearest = 0; return; }
+        for (const ray of arenaFlashRays) {
+          if (ray.intersectBox(box, flashlightHit)) nearest = Math.min(nearest, flashlightHit.distanceTo(origin));
+        }
+      });
+      return ARENA_FLASH_SURFACE_LIMIT * nearest * nearest;
+    }
+
+    function updateFlashlightExposure(dt, now) {
+      if (!flashlightOn) {
+        flashlight.intensity = dampScalar(flashlight.intensity, 0, dt, 22);
+        return;
+      }
+      const arena = CURRENT_MAP === "arena";
+      if (now >= flashlightSampleAt) {
+        flashlightSampleAt = now + (arena ? 35 : 65);
+        if (arena) {
+          flashlight.position.set(0, .065, -.06);
+          playerLightTarget.position.set(0, .065, -20);
+          camera.localToWorld(flashlightRay.origin.copy(flashlight.position));
+          flashlightTargetPower = getArenaFlashPower(flashlightRay.origin, camera.quaternion, ARENA_FLASH_POWER);
+        } else {
+          playerLightTarget.position.set(.105, -.12, -20);
+          camera.getWorldDirection(flashlightRay.direction);
+          flashlightRay.origin.copy(camera.position);
+          let nearest = 7;
+          forEachNearbyWallBox(camera.position.x, camera.position.z, box => {
+            if (box.enemyOnly || !flashlightRay.intersectBox(box, flashlightHit)) return;
+            nearest = Math.min(nearest, flashlightHit.distanceTo(flashlightRay.origin));
+          });
+          flashlight.position.set(.105, -.12, -Math.min(.62, Math.max(.10, nearest - .18)));
+          flashlightTargetPower = FLASH_POWER * (.14 + .86 * THREE.MathUtils.smoothstep(nearest, .62, 4.5));
+        }
+      }
+      const power = dampScalar(flashlight.intensity, flashlightTargetPower, dt, 22);
+      flashlight.intensity = arena ? Math.min(power, flashlightTargetPower) : power;
+    }
+
     let playerLightsPreference = true;
-    /** 0=小 1=中 2=大 — toggled with Z (cycles). */
-    let flashlightBeamLevel = 1;
 
     function refreshLocalPlayerLightsForCurrentState() {
       if (!gameWorldReady || menuEl.style.display !== "none") {
@@ -12239,24 +14491,6 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     /** Camera-space Y offset so the view-model sits ~20px lower on a typical 1080p window (FOV 75). */
     const WEAPON_VIEW_DROP_Y = -0.032;
 
-    const VIEW_MAG_MAT = new THREE.MeshStandardMaterial({
-      color: 0x2a3d5c,
-      roughness: 0.42,
-      metalness: 0.58,
-      emissive: 0x101820,
-      emissiveIntensity: 0.22,
-    });
-
-    function attachWeaponMag(gunGroup, root, x, y, z, w, h, d) {
-      const magGrp = new THREE.Group();
-      magGrp.name = "viewMag";
-      addMeshPart(magGrp, new THREE.BoxGeometry(w, h, d), VIEW_MAG_MAT, 0, 0, 0);
-      magGrp.position.set(x, y, z);
-      gunGroup.add(magGrp);
-      root.userData.animMag = magGrp;
-      root.userData.magBasePos = magGrp.position.clone();
-    }
-
     function attachEjectPort(gunGroup, root, x, y, z) {
       const node = new THREE.Object3D();
       node.position.set(x, y, z);
@@ -12264,18 +14498,25 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       root.userData.ejectNode = node;
     }
 
-    /** Side-mounted grip stubs (±X). Thin in Z so blocks never sit on the bore axis. */
-    /** R = grip (hold). L = mag / charge / shells / bolt. */
+    /**
+     * R = the firing hand, closed around the pistol grip (anchor just behind the grip's
+     * front edge, rotated to the grip's rake; `gr` is the grip's half-thickness).
+     * L = the reload hand: mag / charge / shells / bolt. Long guns also get a support
+     * hand on the handguard (attachSupportHand) that shows whenever L is hidden.
+     */
     const VIEW_HAND_GRIPS = {
-      0: { r: [0.12, -0.15, 0.1], rRot: [0, 0, 0], l: [-0.11, -0.13, 0.02], lRot: [0, 0, 0] },
-      1: { r: [0.13, -0.13, 0.02], rRot: [0, 0, 0], l: [-0.12, -0.12, 0.06], lRot: [0, 0, 0] },
-      2: { r: [0.14, -0.1, -0.04], rRot: [0, 0, 0], l: [-0.12, -0.04, 0.12], lRot: [0, 0, 0] },
-      3: { r: [0.13, -0.13, 0.02], rRot: [0, 0, 0], l: [-0.12, -0.12, 0.05], lRot: [0, 0, 0] },
-      5: { r: [0.13, -0.12, 0.04], rRot: [0, 0, 0], l: [-0.12, -0.1, 0.08], lRot: [0, 0, 0] },
+      0: { r: [0, -0.07, 0.066], rRot: [-0.29, 0, 0], ga: 0.025, gb: 0.034, l: [-0.11, -0.13, 0.02], lRot: [0, 0, 0] },
+      1: { r: [0, -0.07, 0.186], rRot: [-0.28, 0, 0], ga: 0.017, gb: 0.023, l: [-0.12, -0.12, 0.06], lRot: [0, 0, 0] },
+      2: { r: [0, 0.03, 0.22], rRot: [-1.0, 0, 0], ga: 0.025, gb: 0.03, l: [-0.035, -0.06, 0.1], lRot: [0, 0, 0] },
+      3: { r: [0, -0.08, 0.181], rRot: [-0.2, 0, 0], ga: 0.021, gb: 0.028, l: [-0.12, -0.12, 0.05], lRot: [0, 0, 0] },
+      5: { r: [0, -0.09, 0.319], rRot: [-0.22, 0, 0], ga: 0.019, gb: 0.026, l: [-0.12, -0.1, 0.08], lRot: [0, 0, 0] },
+      9: { r: [0, -0.07, 0.194], rRot: [-0.22, 0, 0], ga: 0.017, gb: 0.022, l: [-0.12, -0.12, 0.06], lRot: [0, 0, 0] },
+      dart: { r: [0, -0.07, 0.05], rRot: [0, 0, 0], ga: 0.025, gb: 0.035, l: [-0.11, -0.13, 0.02], lRot: [0, 0, 0] },
     };
 
     function attachViewHandGrips(gunGroup, root, spec) {
       if (!spec) return;
+      root.userData.gripSpec = spec;
       const rGrip = new THREE.Group();
       rGrip.name = "viewGripR";
       rGrip.position.set(spec.r[0], spec.r[1], spec.r[2]);
@@ -12293,20 +14534,122 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       root.userData.gripL = lGrip;
     }
 
-    /** One flat glove block per side — animation only, not a full hand mesh. */
-    function makeViewHandMesh(side) {
-      const mat = new THREE.MeshStandardMaterial({
-        color: 0x3a3528,
-        roughness: 0.9,
-        depthWrite: false,
+    let _gloveMats = null;
+    function getGloveMaterials() {
+      if (_gloveMats) return _gloveMats;
+      const S = getGunSurfaces();
+      const V = (s) => new THREE.Vector2(s, s);
+      _gloveMats = {
+        glove: new THREE.MeshStandardMaterial({ color: 0x1f1e1b, roughness: 0.88, metalness: 0, roughnessMap: S.grainR, normalMap: S.stippleN, normalScale: V(0.3) }),
+        pad: new THREE.MeshStandardMaterial({ color: 0x33363a, roughness: 0.66, metalness: 0.05, normalMap: S.grainN, normalScale: V(0.5) }),
+        sleeve: new THREE.MeshStandardMaterial({ color: 0x1d2119, roughness: 0.96, metalness: 0, normalMap: S.grainN, normalScale: V(0.9) }),
+      };
+      return _gloveMats;
+    }
+
+    /**
+     * Gloved hand closed around a bar of radius `r` that runs along local Y: palm and
+     * knuckle armour on +X (right hand) or -X (left), four fingers curling round the front
+     * (-Z) to the far side, thumb along the near side. Returns the wrist point.
+     */
+    function buildGloveParts(kit, parent, side, r) {
+      const G = getGloveMaterials();
+      const sx = side === "L" ? -1 : 1;
+      kit.put(parent, gunProfile([[-0.028, 0.042], [0.036, 0.04], [0.042, -0.044], [-0.022, -0.046]], 0.024, { r: 0.014, bevel: 0.008 }),
+        G.glove, sx * (r + 0.011), 0, 0.006);
+      kit.put(parent, gunProfile([[-0.026, 0.036], [0.002, 0.036], [0.002, -0.03], [-0.026, -0.03]], 0.008, { r: 0.006, bevel: 0.0025 }),
+        G.pad, sx * (r + 0.0235), 0.002, 0.0);
+      for (let i = 0; i < 4; i++) {
+        const tube = i === 3 ? 0.0074 : 0.0087;
+        const tor = new THREE.TorusGeometry(r + tube * 0.85, tube, 7, 11, Math.PI * 0.9);
+        if (side === "L") tor.rotateZ(Math.PI * 0.1);
+        tor.rotateX(-Math.PI / 2);
+        kit.put(parent, tor, G.glove, 0, 0.029 - i * 0.0192, 0);
+      }
+      const thumb = new THREE.CapsuleGeometry(0.0088, 0.034, 4, 8);
+      thumb.rotateX(Math.PI / 2 - 0.35);
+      kit.put(parent, thumb, G.glove, -sx * (r + 0.005), 0.043, -0.01);
+      // Wrist at the heel of the hand, on the finger side (template -Z): once the support
+      // hand is turned onto a handguard that is underneath, so the forearm leaves from below.
+      const wrist = [sx * (r + 0.004), -0.05, -0.026];
+      kit.put(parent, gunSegment([wrist[0], wrist[1] + 0.016, wrist[2] + 0.008], [wrist[0], wrist[1] - 0.008, wrist[2] - 0.004], 0.027, 0.029, 12), G.pad);
+      return wrist;
+    }
+
+    /** Plan-view part: [x, z] outline extruded `height` along Y, centred on y = 0. */
+    function gunPlan(pts, height, opts = {}) {
+      const shape = new THREE.Shape();
+      gunRoundedPath(shape, pts, opts.r ?? 0.004);
+      const b = Math.min(opts.bevel ?? 0.004, height * 0.3);
+      const depth = Math.max(0.0004, height - 2 * b);
+      let geo = new THREE.ExtrudeGeometry(shape, {
+        depth, bevelEnabled: b > 0, bevelThickness: b, bevelSize: b, bevelOffset: -b, bevelSegments: 2, curveSegments: 4,
       });
+      geo.translate(0, 0, -depth / 2);
+      geo.rotateX(Math.PI / 2);
+      return toCreasedNormals(geo, 0.6);
+    }
+
+    /**
+     * Gloved hand closed on a pistol grip whose cross-section is `a` (half width) by `b`
+     * (half depth), grip axis along local Y. Palm and back-strap web are one piece; the four
+     * fingers are separate slices wrapping the front strap round to the far side, so from the
+     * shooter's eye you see the thumb, fingertips and the web of the hand, as on a real grip.
+     */
+    function buildGripGlove(kit, parent, side, a, b) {
+      const G = getGloveMaterials();
+      const sx = side === "L" ? -1 : 1;
+      const t = 0.017;
+      const X = (pts) => pts.map(([x, z, r]) => (r === undefined ? [x * sx, z] : [x * sx, z, r]));
+      // palm on the strong side + web over the back strap
+      kit.put(parent, gunPlan(X([[a, -b * 0.55], [a + t, -b * 0.6, 0.006], [a + t, b + t, 0.014], [-a * 0.7, b + t, 0.01],
+        [-a * 0.7, b], [a, b]]), 0.074, { bevel: 0.006 }), G.glove, 0, -0.004, 0);
+      // knuckle armour across the back of the hand
+      kit.put(parent, gunPlan(X([[a + t - 0.002, -b * 0.5], [a + t + 0.006, -b * 0.45, 0.003], [a + t + 0.006, b * 0.4, 0.003], [a + t - 0.002, b * 0.45]]), 0.05, { bevel: 0.002 }),
+        G.pad, 0, 0.004, 0);
+      // fingers: front strap round to the weak side
+      for (let i = 0; i < 4; i++) {
+        const h = i === 3 ? 0.014 : 0.0165;
+        const reach = i === 3 ? 0.1 : 0.35;
+        kit.put(parent, gunPlan(X([[a + t * 0.4, -b * 0.5], [a + t * 0.7, -b - t, 0.012], [-a - t, -b - t, 0.012], [-a - t, b * reach, 0.008],
+          [-a, b * reach], [-a, -b], [a, -b]]), h, { bevel: 0.005 }), G.glove, 0, 0.026 - i * 0.0185, 0);
+      }
+      // thumb along the weak side, tip forward
+      const thumb = new THREE.CapsuleGeometry(0.0088, 0.036, 4, 8);
+      thumb.rotateX(Math.PI / 2 + 0.2);
+      kit.put(parent, thumb, G.glove, -sx * (a + 0.009), 0.048, -b * 0.3);
+      kit.put(parent, gunSegment([-sx * (a + 0.004), 0.03, b * 0.7], [-sx * (a + 0.008), 0.046, -b * 0.05], 0.012, 0.0095, 10), G.glove);
+      // cuff
+      const wrist = [sx * a * 0.5, -0.048, b * 0.55];
+      kit.put(parent, gunSegment([wrist[0], wrist[1] + 0.012, wrist[2] - 0.01], [wrist[0], wrist[1] - 0.012, wrist[2] + 0.014], 0.03, 0.031, 12), G.pad);
+      return wrist;
+    }
+
+    /**
+     * Glove + forearm for a grip stub. The forearm always heads down and back toward the
+     * camera in gun space, whatever rake the grip stub is rotated to.
+     */
+    function buildViewSleeve(kit, parent, wrist, reach) {
+      const G = getGloveMaterials();
+      const at = t => wrist.map((value, axis) => value + reach[axis] * t);
+      kit.put(parent, gunSegment(at(0), at(0.18), 0.028, 0.033, 12), G.sleeve);
+      kit.put(parent, gunSegment(at(0.17), at(0.69), 0.034, 0.047, 12), G.sleeve);
+      kit.put(parent, gunSegment(at(0.68), at(1), 0.047, 0.052, 12), G.sleeve);
+      kit.put(parent, gunSegment(at(0.06), at(0.15), 0.033, 0.035, 12), G.pad);
+      kit.put(parent, gunSegment(at(0.54), at(0.62), 0.046, 0.047, 12), G.pad);
+    }
+
+    function makeViewHandMesh(side, grip, spec) {
       const g = new THREE.Group();
       g.name = side === "L" ? "viewHandL" : "viewHandR";
-      const block = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.13, 0.034), mat);
-      block.position.set(0, -0.03, 0);
-      block.renderOrder = 26;
-      g.add(block);
-      g.renderOrder = 25;
+      const kit = new GunKit();
+      const a = (side === "R" && spec && spec.ga) || 0.019;
+      const b = (side === "R" && spec && spec.gb) || 0.022;
+      const w = buildGripGlove(kit, g, side, a, b);
+      const elbow = new THREE.Vector3(side === "L" ? -0.07 : 0.06, -0.16, 0.25);
+      if (grip) elbow.applyQuaternion(new THREE.Quaternion().setFromEuler(grip.rotation).invert());
+      buildViewSleeve(kit, g, w, [elbow.x, elbow.y, elbow.z]);
+      kit.flush();
       return g;
     }
 
@@ -12314,14 +14657,14 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       const rGrip = root.userData.gripR;
       const lGrip = root.userData.gripL;
       if (!rGrip) return;
-      const rArm = makeViewHandMesh("R");
+      const rArm = makeViewHandMesh("R", rGrip, root.userData.gripSpec);
       rGrip.add(rArm);
       root.userData.viewArmR = rArm;
       root.userData.armRBasePos = new THREE.Vector3(0, 0, 0);
       root.userData.armRBaseRot = new THREE.Euler(0, 0, 0, "YXZ");
 
       if (lGrip) {
-        const lArm = makeViewHandMesh("L");
+        const lArm = makeViewHandMesh("L", lGrip, root.userData.gripSpec);
         lGrip.add(lArm);
         lArm.visible = false;
         root.userData.viewArmL = lArm;
@@ -12366,10 +14709,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       proxy.rotation.set(0, 0, 0);
       proxy.scale.set(1.12, 1.12, 1.12);
       proxy.traverse((o) => {
-        if (o.isMesh) {
-          o.renderOrder = 28;
-          o.material = VIEW_MAG_MAT;
-        }
+        if (o.isMesh) o.renderOrder = 28;
       });
       ud.handMagHold.add(proxy);
       ud.handMagProxy = proxy;
@@ -12562,272 +14902,921 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       return (p - t0) / (t1 - t0);
     }
 
-    function makeWeaponModel(type) {
+    /**
+     * Studio-style reflection probe for first-person view models only. The guns are metallic
+     * PBR materials, and metal with nothing to reflect renders as flat grey — which is most
+     * of why they read as plastic boxes. Built once from a tiny procedural scene (no asset
+     * fetch). It is never assigned to scene.environment: world lighting, and so what you can
+     * and cannot see in the dark, is untouched.
+     */
+    let _viewModelEnvMap = null;
+    function getViewModelEnvMap() {
+      if (_viewModelEnvMap) return _viewModelEnvMap;
+      try {
+        const envScene = new THREE.Scene();
+        const shell = new THREE.Mesh(
+          new THREE.SphereGeometry(10, 16, 12),
+          new THREE.MeshBasicMaterial({ color: 0x0b0e13, side: THREE.BackSide })
+        );
+        envScene.add(shell);
+        const panel = (color, w, h, x, y, z) => {
+          const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide }));
+          m.position.set(x, y, z);
+          m.lookAt(0, 0, 0);
+          envScene.add(m);
+        };
+        panel(0xdfe9ff, 7, 3, 0, 8, -2);     // overhead key strip
+        panel(0x6f8fb8, 3, 6, -8, 1, 2);     // cool side fill
+        panel(0xb08a5a, 2.5, 4, 8, 0, 4);    // warm kicker
+        panel(0x2a3340, 12, 2, 0, -7, 0);    // floor bounce
+        const pmrem = new THREE.PMREMGenerator(renderer);
+        _viewModelEnvMap = pmrem.fromScene(envScene, 0.06).texture;
+        pmrem.dispose();
+        shell.geometry.dispose();
+        shell.material.dispose();
+      } catch (_) {
+        _viewModelEnvMap = null;
+      }
+      return _viewModelEnvMap;
+    }
+
+    /**
+     * Finishing pass for a view model: bevel the hard box edges so they catch a highlight
+     * (a real machined part has no perfectly sharp corner), and give the metal something
+     * to reflect. Purely cosmetic and local to the first-person model.
+     */
+    function polishViewModel(root) {
+      const env = getViewModelEnvMap();
+      const seenMats = new Set();
+      root.traverse((o) => {
+        if (!o.isMesh) return;
+        const g = o.geometry;
+        if (g && g.type === "BoxGeometry" && g.parameters) {
+          const { width, height, depth } = g.parameters;
+          const minDim = Math.min(width, height, depth);
+          if (minDim >= 0.018) {
+            o.geometry = new RoundedBoxGeometry(width, height, depth, 2, Math.min(0.011, minDim * 0.22));
+            g.dispose();
+          }
+        }
+        const mats = Array.isArray(o.material) ? o.material : [o.material];
+        for (const m of mats) {
+          if (!m || !m.isMeshStandardMaterial || seenMats.has(m)) continue;
+          seenMats.add(m);
+          if (env) {
+            // Metal reads from its reflections; polymer, wood and gloves only pick up a
+            // faint sheen so they keep their shape in dark maps without looking wet.
+            m.envMap = env;
+            m.envMapIntensity = m.metalness > 0.2 ? 0.34 : 0.14;
+            m.needsUpdate = true;
+          }
+        }
+      });
+      return root;
+    }
+
+    // ── Gun kit ────────────────────────────────────────────────────────────────────
+    // View models are built from side-profile silhouettes (extruded across the gun with a
+    // soft bevel), lathe-turned round parts and a handful of small details, then merged
+    // into one mesh per material per moving part. Every gun-local coordinate follows the
+    // old convention: +X right, +Y up, muzzle toward -Z, stock toward +Z.
+
+    /** Tileable procedural surfaces shared by every view model (built once, no fetch). */
+    let _gunSurfaces = null;
+    function getGunSurfaces() {
+      if (_gunSurfaces) return _gunSurfaces;
+      const N = 256;
+      const tileNoise = (n, cells) => {
+        const grid = new Float32Array(cells * cells);
+        for (let i = 0; i < grid.length; i++) grid[i] = Math.random();
+        const out = new Float32Array(n * n);
+        for (let y = 0; y < n; y++) {
+          const fy = (y / n) * cells, iy = Math.floor(fy);
+          let ty = fy - iy; ty = ty * ty * (3 - 2 * ty);
+          for (let x = 0; x < n; x++) {
+            const fx = (x / n) * cells, ix = Math.floor(fx);
+            let tx = fx - ix; tx = tx * tx * (3 - 2 * tx);
+            const x0 = ix % cells, x1 = (ix + 1) % cells, y0 = iy % cells, y1 = (iy + 1) % cells;
+            const a = grid[y0 * cells + x0], b = grid[y0 * cells + x1];
+            const c = grid[y1 * cells + x0], d = grid[y1 * cells + x1];
+            out[y * n + x] = (a + (b - a) * tx) * (1 - ty) + (c + (d - c) * tx) * ty;
+          }
+        }
+        return out;
+      };
+      const toTexture = (canvas, repeatU, repeatV, srgb) => {
+        const t = new THREE.CanvasTexture(canvas);
+        t.wrapS = t.wrapT = THREE.RepeatWrapping;
+        t.repeat.set(repeatU, repeatV);
+        t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+        t.anisotropy = getMaxTextureAnisotropy();
+        return t;
+      };
+      const heightToNormal = (h, n, strength, ru, rv) => {
+        const c = document.createElement("canvas");
+        c.width = c.height = n;
+        const g = c.getContext("2d");
+        const img = g.createImageData(n, n);
+        const at = (x, y) => h[((y + n) % n) * n + ((x + n) % n)];
+        for (let y = 0; y < n; y++) {
+          for (let x = 0; x < n; x++) {
+            const nx = (at(x - 1, y) - at(x + 1, y)) * strength;
+            const ny = (at(x, y + 1) - at(x, y - 1)) * strength;
+            const l = 1 / Math.hypot(nx, ny, 1);
+            const p = (y * n + x) * 4;
+            img.data[p] = (nx * l * 0.5 + 0.5) * 255;
+            img.data[p + 1] = (ny * l * 0.5 + 0.5) * 255;
+            img.data[p + 2] = (l * 0.5 + 0.5) * 255;
+            img.data[p + 3] = 255;
+          }
+        }
+        g.putImageData(img, 0, 0);
+        return toTexture(c, ru, rv, false);
+      };
+      const heightToGray = (h, n, lo, hi, ru, rv) => {
+        const c = document.createElement("canvas");
+        c.width = c.height = n;
+        const g = c.getContext("2d");
+        const img = g.createImageData(n, n);
+        for (let i = 0; i < n * n; i++) {
+          const v = (lo + (hi - lo) * h[i]) * 255;
+          img.data[i * 4] = img.data[i * 4 + 1] = img.data[i * 4 + 2] = v;
+          img.data[i * 4 + 3] = 255;
+        }
+        g.putImageData(img, 0, 0);
+        return toTexture(c, ru, rv, false);
+      };
+
+      // Machined / coated metal: low-frequency handling marks plus fine tooling grain.
+      // Geometry UVs are in metres, so a repeat of 12 is one tile every ~8 cm.
+      const nA = tileNoise(N, 6), nB = tileNoise(N, 40);
+      const grain = new Float32Array(N * N);
+      for (let i = 0; i < grain.length; i++) grain[i] = nA[i] * 0.55 + nB[i] * 0.3 + Math.random() * 0.15;
+      // Polymer stippling: overlapping round bumps, the texture moulded into grips.
+      const stip = new Float32Array(N * N);
+      for (let k = 0; k < 1500; k++) {
+        const cx = Math.random() * N, cy = Math.random() * N, r = 1.2 + Math.random() * 1.8;
+        const r2 = r * r;
+        for (let dy = -3; dy <= 3; dy++) {
+          for (let dx = -3; dx <= 3; dx++) {
+            const d2 = dx * dx + dy * dy;
+            if (d2 > r2) continue;
+            const x = (Math.floor(cx) + dx + N) % N, y = (Math.floor(cy) + dy + N) % N;
+            stip[y * N + x] = Math.max(stip[y * N + x], Math.sqrt(1 - d2 / r2));
+          }
+        }
+      }
+      // Walnut: growth lines along U (the length of the stock) bent by low-frequency warp,
+      // with stretched pores on top.
+      const WN = 512;
+      const warp = tileNoise(WN, 5), warp2 = tileNoise(WN, 16);
+      const woodH = new Float32Array(WN * WN);
+      const wc = document.createElement("canvas");
+      wc.width = wc.height = WN;
+      const wg = wc.getContext("2d");
+      const wimg = wg.createImageData(WN, WN);
+      for (let y = 0; y < WN; y++) {
+        for (let x = 0; x < WN; x++) {
+          const i = y * WN + x;
+          const v = y / WN * 22 + warp[i] * 1.6 + warp2[i] * 0.3;
+          const ring = Math.pow(0.5 + 0.5 * Math.sin(v * Math.PI * 2), 3);
+          const pore = Math.random() < 0.05 ? 0.25 : 0;
+          const t = Math.min(1, ring * 0.42 + pore + warp[i] * 0.3 + warp2[i] * 0.1);
+          woodH[i] = 1 - t;
+          wimg.data[i * 4] = 128 - 58 * t;
+          wimg.data[i * 4 + 1] = 78 - 40 * t;
+          wimg.data[i * 4 + 2] = 42 - 24 * t;
+          wimg.data[i * 4 + 3] = 255;
+        }
+      }
+      wg.putImageData(wimg, 0, 0);
+
+      _gunSurfaces = {
+        grainR: heightToGray(grain, N, 0.72, 1.0, 12, 12),
+        grainN: heightToNormal(grain, N, 2.2, 12, 12),
+        stippleN: heightToNormal(stip, N, 2.6, 22, 22),
+        woodMap: toTexture(wc, 2.2, 3, true),
+        woodN: heightToNormal(woodH, WN, 1.1, 2.2, 3),
+      };
+      return _gunSurfaces;
+    }
+
+    /** One set of view-model materials per gun (cheap: the textures are shared). */
+    function makeGunMaterials() {
+      const S = getGunSurfaces();
+      const V = (s) => new THREE.Vector2(s, s);
+      const std = (o) => new THREE.MeshStandardMaterial(o);
+      const metal = (color, rough, metalness = 0.82) =>
+        std({ color, metalness, roughness: rough, roughnessMap: S.grainR, normalMap: S.grainN, normalScale: V(0.25) });
+      const poly = (color, rough = 0.8, stipple = 0.55) =>
+        std({ color, metalness: 0, roughness: rough, roughnessMap: S.grainR, normalMap: S.stippleN, normalScale: V(stipple) });
+      return {
+        steel: metal(0x3c4148, 0.4),
+        blued: metal(0x1d2127, 0.32, 0.88),
+        bright: metal(0x9aa1aa, 0.26, 0.92),
+        coat: std({ color: 0x2b2f35, metalness: 0.38, roughness: 0.62, roughnessMap: S.grainR, normalMap: S.grainN, normalScale: V(0.4) }),
+        coatDS: std({ color: 0x2b2f35, metalness: 0.38, roughness: 0.62, roughnessMap: S.grainR, side: THREE.DoubleSide }),
+        poly: poly(0x16171a),
+        polySm: poly(0x1a1b1e, 0.6, 0.18),
+        fde: poly(0x6b5a3f, 0.78, 0.45),
+        od: poly(0x353b2d, 0.76, 0.4),
+        wood: std({ map: S.woodMap, normalMap: S.woodN, normalScale: V(0.45), roughness: 0.52, metalness: 0 }),
+        rubber: poly(0x0f0f10, 0.95, 0.9),
+        hole: std({ color: 0x060607, roughness: 0.9, metalness: 0.1 }),
+        brass: std({ color: 0xc9a046, metalness: 0.9, roughness: 0.3 }),
+        hull: poly(0x8f1f1a, 0.55, 0.15),
+        white: new THREE.MeshBasicMaterial({ color: 0xe6e4d8 }),
+        tritium: new THREE.MeshBasicMaterial({ color: 0x8cff6e }),
+        reticle: new THREE.MeshBasicMaterial({ color: 0xff2a1e }),
+        lens: std({ color: 0x0d1b24, metalness: 1, roughness: 0.06, emissive: 0x050b12 }),
+        glass: std({ color: 0x5f8f9e, metalness: 0, roughness: 0.04, transparent: true, opacity: 0.16, depthWrite: false }),
+      };
+    }
+
+    /** Rounded polygon: each [x, y, r?] corner is replaced by a quadratic fillet. */
+    function gunRoundedPath(path, pts, rDef) {
+      const n = pts.length;
+      for (let i = 0; i < n; i++) {
+        const p = pts[i], a = pts[(i + n - 1) % n], b = pts[(i + 1) % n];
+        const r = p.length > 2 ? p[2] : rDef;
+        const da = Math.hypot(a[0] - p[0], a[1] - p[1]), db = Math.hypot(b[0] - p[0], b[1] - p[1]);
+        if (r <= 0 || da < 1e-6 || db < 1e-6) {
+          if (i === 0) path.moveTo(p[0], p[1]); else path.lineTo(p[0], p[1]);
+          continue;
+        }
+        const ra = Math.min(r, da * 0.45), rb = Math.min(r, db * 0.45);
+        const e0x = p[0] + (a[0] - p[0]) / da * ra, e0y = p[1] + (a[1] - p[1]) / da * ra;
+        const e1x = p[0] + (b[0] - p[0]) / db * rb, e1y = p[1] + (b[1] - p[1]) / db * rb;
+        if (i === 0) path.moveTo(e0x, e0y); else path.lineTo(e0x, e0y);
+        path.quadraticCurveTo(p[0], p[1], e1x, e1y);
+      }
+      path.closePath();
+    }
+
+    /**
+     * Side silhouette → solid part. `pts` are [z, y, cornerRadius?] in gun space; the shape
+     * is extruded `thick` across X, centred on x = 0, with a soft bevel on every edge.
+     */
+    function gunProfile(pts, thick, opts = {}) {
+      const r = opts.r ?? 0.003;
+      const shape = new THREE.Shape();
+      gunRoundedPath(shape, pts, r);
+      if (opts.holes) {
+        for (const hp of opts.holes) {
+          const h = new THREE.Path();
+          gunRoundedPath(h, hp, r);
+          shape.holes.push(h);
+        }
+      }
+      const b = Math.min(opts.bevel ?? 0.003, thick * 0.3);
+      const depth = Math.max(0.0004, thick - 2 * b);
+      let geo = new THREE.ExtrudeGeometry(shape, {
+        depth,
+        bevelEnabled: b > 0,
+        bevelThickness: b,
+        bevelSize: b,
+        bevelOffset: -b,
+        bevelSegments: 2,
+        curveSegments: opts.seg ?? 4,
+      });
+      geo.translate(0, 0, -depth / 2);
+      geo.rotateY(-Math.PI / 2);
+      geo = toCreasedNormals(geo, 0.6);
+      return geo;
+    }
+
+    function gunMetricUV(geo, su, sv) {
+      const uv = geo.attributes.uv;
+      if (!uv) return geo;
+      for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * su, uv.getY(i) * sv);
+      return geo;
+    }
+
+    /** Round bar along Z. */
+    function gunTube(rFront, rBack, len, seg = 18) {
+      const g = new THREE.CylinderGeometry(rBack, rFront, len, seg, 1);
+      g.rotateX(Math.PI / 2);
+      return gunMetricUV(g, Math.PI * (rFront + rBack), len);
+    }
+
+    /** Round bar along X (pins, turrets, drums). */
+    function gunPin(r, len, seg = 14) {
+      const g = new THREE.CylinderGeometry(r, r, len, seg, 1);
+      g.rotateZ(Math.PI / 2);
+      return gunMetricUV(g, Math.PI * 2 * r, len);
+    }
+
+    /** Lathe-turned part along Z from [radius, z] pairs. */
+    function gunLathe(prof, seg = 22) {
+      const g = new THREE.LatheGeometry(prof.map(([r, z]) => new THREE.Vector2(Math.max(0.00005, r), z)), seg);
+      g.rotateX(Math.PI / 2);
+      let len = 0;
+      for (let i = 1; i < prof.length; i++) len += Math.hypot(prof[i][0] - prof[i - 1][0], prof[i][1] - prof[i - 1][1]);
+      return gunMetricUV(g, 0.12, len);
+    }
+
+    /** Tapered rod between two points (sleeves, bipod legs, stock struts). */
+    function gunSegment(a, b, r0, r1, seg = 10) {
+      const d = new THREE.Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+      const len = d.length();
+      const g = new THREE.CylinderGeometry(r1, r0, len, seg, 1);
+      g.translate(0, len / 2, 0);
+      g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize()));
+      g.translate(a[0], a[1], a[2]);
+      return gunMetricUV(g, Math.PI * (r0 + r1), len);
+    }
+
+    function gunBox(w, h, d) {
+      return gunMetricUV(new THREE.BoxGeometry(w, h, d), Math.max(w, d), Math.max(h, d));
+    }
+
+    /**
+     * Collects parts and merges them into one mesh per (parent group, material), so a gun
+     * with a few hundred details still costs only a dozen draw calls.
+     */
+    class GunKit {
+      constructor() {
+        this.bins = new Map();
+        this._m = new THREE.Matrix4();
+        this._q = new THREE.Quaternion();
+        this._e = new THREE.Euler();
+        this._p = new THREE.Vector3();
+        this._s = new THREE.Vector3(1, 1, 1);
+      }
+      put(parent, geo, mat, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0) {
+        if (x || y || z || rx || ry || rz) {
+          this._q.setFromEuler(this._e.set(rx, ry, rz));
+          geo.applyMatrix4(this._m.compose(this._p.set(x, y, z), this._q, this._s));
+        }
+        let g = geo;
+        if (g.index) { g = geo.toNonIndexed(); geo.dispose(); }
+        g.clearGroups();
+        for (const key of Object.keys(g.attributes)) {
+          if (key !== "position" && key !== "normal" && key !== "uv") g.deleteAttribute(key);
+        }
+        let byMat = this.bins.get(parent);
+        if (!byMat) { byMat = new Map(); this.bins.set(parent, byMat); }
+        let list = byMat.get(mat);
+        if (!list) { list = []; byMat.set(mat, list); }
+        list.push(g);
+      }
+      flush() {
+        for (const [parent, byMat] of this.bins) {
+          for (const [mat, list] of byMat) {
+            const merged = list.length === 1 ? list[0] : mergeGeometries(list, false);
+            if (!merged) continue;
+            if (merged !== list[0]) list.forEach((g) => g.dispose());
+            parent.add(new THREE.Mesh(merged, mat));
+          }
+        }
+        this.bins.clear();
+      }
+    }
+
+    /** Picatinny rail along Z: a base strip plus cross-slot teeth every 10 mm. */
+    function gunRail(kit, parent, mat, z0, z1, y, w = 0.022) {
+      const len = z1 - z0;
+      kit.put(parent, gunBox(w, 0.005, len), mat, 0, y + 0.0025, (z0 + z1) / 2);
+      for (let z = z0 + 0.004; z < z1 - 0.004; z += 0.01) {
+        kit.put(parent, gunBox(w + 0.002, 0.0035, 0.0052), mat, 0, y + 0.0062, z + 0.0026);
+      }
+    }
+
+    /** Dark recessed slot on a side face: a thin plate standing just proud of the surface. */
+    function gunSlot(kit, parent, mats, x, y, z, h, d) {
+      kit.put(parent, gunBox(0.0012, h, d), mats.hole, x, y, z);
+    }
+
+    function attachMagGroup(gunGroup, root, x, y, z) {
+      const magGrp = new THREE.Group();
+      magGrp.name = "viewMag";
+      magGrp.position.set(x, y, z);
+      gunGroup.add(magGrp);
+      root.userData.animMag = magGrp;
+      root.userData.magBasePos = magGrp.position.clone();
+      return magGrp;
+    }
+
+    /** Shifts gun-space [z, y] points into a group whose origin sits at (oz, oy). */
+    function gunLocalPts(pts, oz, oy) {
+      return pts.map((p) => (p.length > 2 ? [p[0] - oz, p[1] - oy, p[2]] : [p[0] - oz, p[1] - oy]));
+    }
+
+    /**
+     * Sight picture: the eye sits at the camera origin, so ADS must bring the sight line
+     * (local y = sightY at x = 0) to exactly y = 0 after WEAPON_VIEW_DROP_Y.
+     */
+    function adsForSight(basePos, sightY, z) {
+      return new THREE.Vector3(-basePos.x, -WEAPON_VIEW_DROP_Y - basePos.y - sightY, z);
+    }
+
+    /**
+     * Left hand cupping a horizontal handguard / pump, shown while the reload hand is
+     * hidden so long guns are held with two hands. Built around a bar of radius `r` along Z.
+     */
+    function attachSupportHand(parent, root, x, y, z, r, elbow) {
+      const outer = new THREE.Group();
+      outer.position.set(x, y, z);
+      const inner = new THREE.Group();
+      // Grip template: bar along local Y, fingers wrapping via -Z. Turn it so the bar runs
+      // along gun Z and the fingers curl under the handguard.
+      inner.rotation.set(-Math.PI / 2, 0, -0.25);
+      outer.add(inner);
+      const kit = new GunKit();
+      const wrist = buildGloveParts(kit, inner, "L", r);
+      inner.updateMatrix();
+      const w = new THREE.Vector3(...wrist).applyMatrix4(inner.matrix);
+      const G = getGloveMaterials();
+      // Long enough that the forearm always runs off the bottom of the screen.
+      const k = 1.8;
+      buildViewSleeve(kit, outer, [w.x, w.y, w.z], elbow.map(value => value * k));
+      kit.flush();
+      parent.add(outer);
+      root.userData.supportHand = outer;
+      return outer;
+    }
+
+    function makeWeaponModel(type, opts = {}) {
       const root = new THREE.Group();
       const gunGroup = new THREE.Group();
       let adsOffset = new THREE.Vector3();
-
-      const mDark = new THREE.MeshStandardMaterial({ color: 0x1a1f28, roughness: 0.55, metalness: 0.45 });
-      const mMetal = new THREE.MeshStandardMaterial({ color: 0x3a4455, roughness: 0.45, metalness: 0.55 });
-      const mLight = new THREE.MeshStandardMaterial({ color: 0x6a7585, roughness: 0.35, metalness: 0.65 });
-      const mBlack = new THREE.MeshStandardMaterial({ color: 0x111115, roughness: 0.6, metalness: 0.3 });
-      const mWood = new THREE.MeshStandardMaterial({ color: 0x6e4a2a, roughness: 0.8 });
-      const mWoodD = new THREE.MeshStandardMaterial({ color: 0x4a3018, roughness: 0.8 });
-      const mSight = new THREE.MeshStandardMaterial({ color: 0xd1d5db, roughness: 0.3, metalness: 0.7 });
-      const mDot = new THREE.MeshBasicMaterial({ color: 0xff2d2d });
-
-      const barrelZ = Math.PI / 2;
+      const M = makeGunMaterials();
+      const kit = new GunKit();
+      const P = (pts, thick, mat, opts, parent = gunGroup, x = 0) => kit.put(parent, gunProfile(pts, thick, opts), mat, x, 0, 0);
+      const muzzleAt = (parent, x, y, z) => {
+        const node = new THREE.Object3D();
+        node.position.set(x, y, z);
+        parent.add(node);
+        root.userData.muzzleNode = node;
+      };
+      // Small round face (sight dots, bores) looking down ±Z.
+      const disc = (parent, mat, r, x, y, z) => kit.put(parent, gunTube(r, r, 0.0012, 12), mat, x, y, z);
+      // Buttstock parts that sit right under the eye once aimed — hidden past mid-ADS, the
+      // way a real stock disappears beside your cheek.
+      const stockGrp = new THREE.Group();
+      gunGroup.add(stockGrp);
+      root.userData.adsHideStock = stockGrp;
 
       if (type === 0) {
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.09, 0.11, 0.36), mMetal, 0, 0.01, -0.02);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.04, 0.06, 0.12), mDark, 0, -0.03, -0.08);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.05, 0.028, 0.08), mBlack, 0, -0.055, 0.02);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.035, 0.022, 0.05), mBlack, 0, -0.07, 0.06);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.09, 0.19, 0.11), mBlack, 0, -0.16, 0.09);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.11, 0.045, 0.09), mBlack, 0, -0.055, 0.09);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.042, 0.038, 0.06), mBlack, 0, 0.058, 0.03);
+        // ── Polymer-frame striker pistol ──
         const slideGrp = new THREE.Group();
-        addMeshPart(slideGrp, new THREE.BoxGeometry(0.085, 0.055, 0.22), mLight, 0, 0.06, -0.12);
-        addMeshPart(slideGrp, new THREE.BoxGeometry(0.06, 0.02, 0.018), mSight, 0, 0.078, 0.06);
-        addMeshPart(slideGrp, new THREE.BoxGeometry(0.006, 0.048, 0.014), mSight, 0, 0.09, -0.17);
-        addMeshPart(slideGrp, new THREE.SphereGeometry(0.004, 8, 8), mDot, 0, 0.112, -0.17);
         gunGroup.add(slideGrp);
         root.userData.animSlide = slideGrp;
-        attachWeaponMag(gunGroup, root, 0, -0.1, 0.04, 0.05, 0.12, 0.08);
+        // slide
+        P([[-0.212, 0.03, 0.002], [-0.212, 0.078, 0.006], [-0.2, 0.088, 0.004], [0.03, 0.088, 0.003], [0.034, 0.08, 0.004], [0.034, 0.03, 0.002]],
+          0.054, M.coat, { bevel: 0.0035, r: 0.002 }, slideGrp);
+        for (let i = 0; i < 7; i++) {
+          for (const sx of [-1, 1]) gunSlot(kit, slideGrp, M, sx * 0.0272, 0.058, -0.004 + i * 0.0045, 0.04, 0.0018);
+        }
+        for (let i = 0; i < 4; i++) {
+          for (const sx of [-1, 1]) gunSlot(kit, slideGrp, M, sx * 0.0272, 0.06, -0.19 + i * 0.0045, 0.032, 0.0018);
+        }
+        kit.put(slideGrp, gunBox(0.022, 0.002, 0.05), M.hole, 0.006, 0.0882, -0.035);
+        kit.put(slideGrp, gunBox(0.02, 0.0025, 0.008), M.bright, 0.006, 0.0886, -0.056);
+        kit.put(slideGrp, gunBox(0.0018, 0.005, 0.02), M.steel, 0.0274, 0.072, -0.012);
+        // barrel crown + bore
+        kit.put(slideGrp, gunTube(0.0095, 0.0095, 0.003, 16), M.bright, 0, 0.058, -0.2125);
+        disc(slideGrp, M.hole, 0.0056, 0, 0.058, -0.2141);
+        // rear sight: two ears leaving a notch, white dots; front post with a tritium dot
+        kit.put(slideGrp, gunBox(0.038, 0.008, 0.013), M.coat, 0, 0.092, 0.02);
+        for (const sx of [-1, 1]) {
+          kit.put(slideGrp, gunBox(0.013, 0.012, 0.012), M.coat, sx * 0.0125, 0.098, 0.02);
+          disc(slideGrp, M.white, 0.0017, sx * 0.0125, 0.0985, 0.0267);
+        }
+        kit.put(slideGrp, gunBox(0.0055, 0.016, 0.008), M.coat, 0, 0.096, -0.196);
+        disc(slideGrp, M.tritium, 0.0019, 0, 0.0985, -0.1914);
+
+        // frame + grip, with the trigger-guard opening cut through
+        P([[-0.205, 0.03, 0.002], [-0.208, 0.008, 0.004], [-0.075, 0.004, 0.006], [-0.08, -0.032, 0.01], [-0.066, -0.046, 0.008],
+           [0.004, -0.046, 0.004], [0.018, -0.04, 0.004], [0.024, -0.055, 0.006], [0.034, -0.068, 0.006], [0.028, -0.08, 0.004],
+           [0.039, -0.094, 0.006], [0.033, -0.106, 0.004], [0.044, -0.122, 0.006], [0.048, -0.142, 0.004], [0.114, -0.142, 0.006],
+           [0.108, -0.11, 0.02], [0.092, -0.03, 0.02], [0.1, -0.006, 0.006], [0.112, 0.006, 0.006], [0.104, 0.018, 0.004], [0.07, 0.03, 0.002]],
+          0.05, M.poly, { bevel: 0.003,
+            holes: [[[-0.064, -0.007], [-0.068, -0.028, 0.008], [-0.058, -0.038, 0.006], [0.0, -0.038, 0.004], [0.012, -0.03, 0.006], [0.012, -0.007, 0.002]]] });
+        for (let i = 0; i < 3; i++) {
+          for (const sx of [-1, 1]) gunSlot(kit, gunGroup, M, sx * 0.0251, 0.017, -0.17 + i * 0.02, 0.007, 0.012);
+        }
+        P([[-0.03, -0.006], [-0.025, -0.02, 0.004], [-0.031, -0.032, 0.003], [-0.024, -0.034], [-0.016, -0.022, 0.004], [-0.019, -0.006]], 0.007, M.polySm, { bevel: 0.0015, r: 0.001 });
+        kit.put(gunGroup, gunBox(0.003, 0.006, 0.022), M.steel, -0.0262, 0.024, -0.03);
+        kit.put(gunGroup, gunBox(0.003, 0.005, 0.009), M.steel, -0.0262, 0.016, -0.062);
+        kit.put(gunGroup, gunBox(0.003, 0.009, 0.01), M.polySm, 0.0262, -0.005, 0.03);
+
+        // magazine: steel body hidden in the grip, polymer base plate below it
+        const mag = attachMagGroup(gunGroup, root, 0, -0.07, 0.075);
+        P(gunLocalPts([[0.036, -0.04], [0.088, -0.04], [0.104, -0.14], [0.054, -0.14]], 0.075, -0.07), 0.03, M.steel, { bevel: 0.002 }, mag);
+        P(gunLocalPts([[0.046, -0.14], [0.116, -0.14], [0.118, -0.152, 0.004], [0.048, -0.152, 0.004]], 0.075, -0.07), 0.046, M.poly, { bevel: 0.003 }, mag);
+
         gunGroup.position.set(0.26, -0.22, -0.72);
         attachViewHandGrips(gunGroup, root, VIEW_HAND_GRIPS[0]);
-        attachViewArmsOnGrips(root);
-        adsOffset.set(-0.26, 0.135, 0.26);
-
-        const muzzleNode = new THREE.Object3D();
-        muzzleNode.position.set(0, 0.058, -0.21);
-        gunGroup.add(muzzleNode);
-        root.userData.muzzleNode = muzzleNode;
+        if (!opts.noHands) attachViewArmsOnGrips(root);
+        adsOffset = adsForSight(gunGroup.position, 0.104, 0.26);
+        attachEjectPort(gunGroup, root, 0.006, 0.09, -0.035);
+        muzzleAt(slideGrp, 0, 0.058, -0.216);
 
       } else if (type === 1) {
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.12, 0.13, 0.52), mDark, 0, 0.02, 0.14);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.09, 0.08, 0.22), mBlack, 0, -0.02, 0.38);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.07, 0.2, 0.1), mDark, 0, -0.16, 0.1);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.06, 0.26, 0.09), mBlack, 0, -0.13, -0.02);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.05, 0.14, 0.08), mBlack, 0, -0.08, -0.14);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.11, 0.09, 0.18), mMetal, 0, 0, 0.54);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.1, 0.06, 0.1), mBlack, 0, -0.05, 0.48);
-        addMeshPart(gunGroup, new THREE.CylinderGeometry(0.028, 0.03, 0.62, 10), mMetal, 0, 0.055, -0.18, barrelZ, 0, 0);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.1, 0.06, 0.44), mLight, 0, 0.05, -0.02);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.055, 0.05, 0.12), mDark, 0, -0.07, 0.06);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.008, 0.035, 0.014), mSight, 0, 0.1, -0.36);
-        addMeshPart(gunGroup, new THREE.SphereGeometry(0.004, 6, 6), mDot, 0, 0.116, -0.36);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.038, 0.024, 0.055), mDark, 0.04, 0.085, 0.1);
-        attachEjectPort(gunGroup, root, 0.055, 0.09, 0.08);
-        attachWeaponMag(gunGroup, root, 0, -0.12, 0.06, 0.055, 0.16, 0.1);
+        // ── Flat-top carbine: free-float handguard, red-dot, FDE furniture ──
+        const BORE = 0.055;
+        // upper receiver
+        P([[-0.07, 0.03], [-0.07, 0.088], [0.2, 0.088], [0.2, 0.042, 0.004], [0.18, 0.03]], 0.05, M.coat, { bevel: 0.004 });
+        kit.put(gunGroup, gunTube(0.0085, 0.0085, 0.038), M.coat, 0.026, 0.072, 0.15);
+        kit.put(gunGroup, gunBox(0.008, 0.016, 0.016), M.coat, 0.026, 0.07, 0.112);
+        kit.put(gunGroup, gunBox(0.0022, 0.018, 0.05), M.hole, 0.0255, 0.06, 0.07);
+        kit.put(gunGroup, gunBox(0.0016, 0.008, 0.052), M.steel, 0.0262, 0.047, 0.07);
+        gunRail(kit, gunGroup, M.coat, -0.38, 0.198, 0.088);
+        // charging handle
+        kit.put(gunGroup, gunBox(0.038, 0.008, 0.014), M.coat, 0, 0.086, 0.208);
+        // lower receiver with mag well and trigger guard
+        P([[-0.06, 0.032], [-0.06, -0.005, 0.004], [-0.035, -0.012], [-0.035, -0.065, 0.003], [0.078, -0.065, 0.003], [0.08, -0.012],
+           [0.09, -0.012], [0.094, -0.05, 0.006], [0.15, -0.05, 0.004], [0.156, -0.012], [0.205, -0.012, 0.004], [0.215, 0.01, 0.006], [0.205, 0.032]],
+          0.05, M.coat, { bevel: 0.0025, holes: [[[0.1, -0.018], [0.101, -0.043, 0.004], [0.146, -0.043, 0.004], [0.148, -0.018]]] });
+        kit.put(gunGroup, gunPin(0.004, 0.054), M.steel, 0, -0.004, 0.09);
+        kit.put(gunGroup, gunPin(0.0055, 0.052), M.steel, 0, -0.032, 0.03);
+        P([[0.112, -0.015], [0.118, -0.024, 0.003], [0.113, -0.036, 0.003], [0.118, -0.038], [0.124, -0.026, 0.003], [0.122, -0.015]], 0.006, M.steel, { bevel: 0.0015, r: 0.001 });
+        kit.put(gunGroup, gunBox(0.012, 0.004, 0.014), M.steel, -0.0258, 0.012, 0.165);
+        // pistol grip
+        P([[0.152, -0.012], [0.198, -0.012], [0.2, -0.03, 0.006], [0.222, -0.125, 0.008], [0.212, -0.135, 0.006], [0.178, -0.135, 0.006],
+           [0.172, -0.11, 0.004], [0.164, -0.075, 0.008], [0.152, -0.04, 0.006]], 0.034, M.fde, { bevel: 0.006 });
+        // buffer tube + castle nut + collapsible stock + butt pad
+        kit.put(gunGroup, gunTube(0.016, 0.016, 0.25), M.coat, 0, 0.05, 0.335);
+        kit.put(gunGroup, gunTube(0.019, 0.019, 0.012, 10), M.steel, 0, 0.05, 0.216);
+        P([[0.33, 0.074, 0.006], [0.48, 0.078, 0.008], [0.49, 0.07], [0.49, -0.07, 0.006], [0.475, -0.075, 0.004], [0.44, -0.035, 0.012],
+           [0.36, 0.02, 0.012], [0.33, 0.025, 0.006]], 0.042, M.fde, { bevel: 0.006,
+            holes: [[[0.405, 0.045], [0.46, 0.05], [0.46, -0.02], [0.445, -0.012]]] }, stockGrp);
+        P([[0.49, 0.076], [0.506, 0.076, 0.006], [0.506, -0.074, 0.006], [0.49, -0.074]], 0.044, M.rubber, { bevel: 0.004 }, stockGrp);
+        // handguard: octagonal tube with M-LOK slots, end cap, exposed barrel + flash hider
+        kit.put(gunGroup, gunTube(0.033, 0.033, 0.31, 8), M.coat, 0, BORE, -0.225, 0, 0, Math.PI / 8);
+        for (let i = 0; i < 5; i++) {
+          for (const sx of [-1, 1]) gunSlot(kit, gunGroup, M, sx * 0.0305, BORE, -0.33 + i * 0.05, 0.008, 0.03);
+          gunSlot(kit, gunGroup, M, 0, BORE - 0.0305, -0.33 + i * 0.05, 0.0012, 0.03);
+        }
+        kit.put(gunGroup, gunTube(0.03, 0.033, 0.008, 8), M.coat, 0, BORE, -0.383, 0, 0, Math.PI / 8);
+        kit.put(gunGroup, gunTube(0.0095, 0.0095, 0.09), M.blued, 0, BORE, -0.43);
+        kit.put(gunGroup, gunLathe([[0, -0.47], [0.0105, -0.47], [0.0105, -0.476], [0.0122, -0.48], [0.0122, -0.516], [0.011, -0.521], [0, -0.521]]), M.steel, 0, BORE, 0);
+        for (let i = 0; i < 4; i++) {
+          const a = i * Math.PI / 2 + Math.PI / 4;
+          kit.put(gunGroup, gunBox(0.003, 0.003, 0.028), M.hole, Math.sin(a) * 0.0118, BORE + Math.cos(a) * 0.0118, -0.503, 0, 0, -a);
+        }
+        disc(gunGroup, M.hole, 0.0048, 0, BORE, -0.5212);
+        // folded back-up irons
+        kit.put(gunGroup, gunBox(0.022, 0.01, 0.026), M.coat, 0, 0.1, 0.18);
+        kit.put(gunGroup, gunBox(0.022, 0.01, 0.026), M.coat, 0, 0.1, -0.36);
+        // red-dot: mount, hollow tube, tinted glass, the dot itself on the sight line
+        const SY = 0.135;
+        P([[0.035, 0.094], [0.115, 0.094], [0.11, 0.116, 0.004], [0.04, 0.116, 0.004]], 0.03, M.coat, { bevel: 0.003 });
+        kit.put(gunGroup, gunLathe([[0.0175, 0.115], [0.0175, 0.031], [0.0205, 0.03], [0.0215, 0.034], [0.0215, 0.111], [0.0205, 0.115], [0.0175, 0.115]], 28), M.coatDS, 0, SY, 0);
+        kit.put(gunGroup, gunPin(0.0085, 0.014), M.coat, 0.027, SY, 0.07);
+        kit.put(gunGroup, gunTube(0.0075, 0.0075, 0.016), M.coat, 0, SY + 0.025, 0.07, Math.PI / 2, 0, 0);
+        kit.put(gunGroup, gunTube(0.0172, 0.0172, 0.001, 24), M.glass, 0, SY, 0.04);
+        kit.put(gunGroup, new THREE.SphereGeometry(0.0009, 8, 6), M.reticle, 0, SY, 0.045);
+        // magazine: curved aluminium body, polymer base
+        const mag = attachMagGroup(gunGroup, root, 0, -0.04, 0.022);
+        P(gunLocalPts([[-0.028, -0.02], [-0.028, -0.07], [-0.04, -0.13], [-0.058, -0.185, 0.004], [0.014, -0.19, 0.004], [0.03, -0.125], [0.04, -0.07], [0.04, -0.02]], 0.022, -0.04),
+          0.028, M.coat, { bevel: 0.003 }, mag);
+        P(gunLocalPts([[-0.062, -0.183], [0.018, -0.188], [0.02, -0.2, 0.004], [-0.064, -0.195, 0.004]], 0.022, -0.04), 0.034, M.poly, { bevel: 0.003 }, mag);
+
         gunGroup.position.set(0.25, -0.22, -0.80);
         attachViewHandGrips(gunGroup, root, VIEW_HAND_GRIPS[1]);
-        attachViewArmsOnGrips(root);
-        adsOffset.set(-0.25, 0.10, 0.28);
-
-        const muzzleNode = new THREE.Object3D();
-        muzzleNode.position.set(0, 0.078, -0.52);
-        gunGroup.add(muzzleNode);
-        root.userData.muzzleNode = muzzleNode;
+        if (!opts.noHands) attachViewArmsOnGrips(root);
+        if (!opts.noHands) attachSupportHand(gunGroup, root, 0, BORE, -0.22, 0.034, [-0.1, -0.2, 0.24]);
+        adsOffset = adsForSight(gunGroup.position, SY, 0.28);
+        attachEjectPort(gunGroup, root, 0.03, 0.065, 0.07);
+        muzzleAt(gunGroup, 0, BORE, -0.525);
 
       } else if (type === 9) {
-        // AS Val, built to the reference photo: AK-pattern receiver, a long ribbed
-        // integral suppressor over the front half, a skeletonised TRIANGULAR side-folding
-        // stock, a curved 20-round magazine, and plain iron sights (the photo has no optic).
-        // Muzzle points -Z; the stock runs back toward +Z.
-
-        // ── receiver + dust cover ──
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.100, 0.115, 0.34), mDark, 0, 0.020, 0.10);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.092, 0.034, 0.30), mMetal, 0, 0.088, 0.09);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.086, 0.040, 0.10), mBlack, 0, 0.060, 0.26); // rear trunnion
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.038, 0.026, 0.06), mDark, 0.052, 0.075, 0.14); // charging handle
-
-        // ── integral suppressor: fat ribbed tube over the whole front half ──
-        addMeshPart(gunGroup, new THREE.CylinderGeometry(0.045, 0.045, 0.60, 14), mBlack, 0, 0.055, -0.24, barrelZ, 0, 0);
-        for (let i = 0; i < 7; i++) {
-          addMeshPart(gunGroup, new THREE.CylinderGeometry(0.050, 0.050, 0.016, 14), mDark, 0, 0.055, -0.03 - i * 0.075, barrelZ, 0, 0);
+        // ── AS Val: AK-pattern receiver, integral suppressor, skeleton stock, iron sights ──
+        const BORE = 0.055;
+        // suppressor: smooth front can, ribbed rear section the support hand holds
+        const sup = [[0, -0.556], [0.038, -0.556], [0.041, -0.551], [0.041, -0.3]];
+        for (let z = -0.3; z < -0.04; z += 0.03) sup.push([0.0435, z + 0.002], [0.0465, z + 0.006], [0.0465, z + 0.022], [0.0435, z + 0.026]);
+        sup.push([0.043, -0.03], [0, -0.03]);
+        kit.put(gunGroup, gunLathe(sup, 26), M.blued, 0, BORE, 0);
+        disc(gunGroup, M.hole, 0.008, 0, BORE, -0.557);
+        // receiver: stamped AK body with the trigger guard cut out underneath
+        P([[-0.04, 0.0, 0.004], [-0.04, 0.075, 0.006], [-0.02, 0.085, 0.004], [0.235, 0.085, 0.012], [0.245, 0.06, 0.006], [0.245, 0.0, 0.004],
+           [0.15, 0.0], [0.145, -0.04, 0.006], [0.07, -0.04, 0.006], [0.065, 0.0]],
+          0.054, M.coat, { bevel: 0.006, holes: [[[0.077, -0.007], [0.138, -0.007], [0.134, -0.032, 0.005], [0.08, -0.032, 0.005]]] });
+        for (let i = 0; i < 6; i++) kit.put(gunGroup, gunBox(0.03, 0.0016, 0.004), M.steel, 0, 0.0855, 0.04 + i * 0.03);
+        kit.put(gunGroup, gunBox(0.0022, 0.022, 0.07), M.hole, 0.0272, 0.058, 0.1);
+        kit.put(gunGroup, gunBox(0.0025, 0.012, 0.09), M.steel, 0.0282, 0.036, 0.165);
+        kit.put(gunGroup, gunBox(0.006, 0.01, 0.03), M.steel, 0.03, 0.066, 0.145);
+        kit.put(gunGroup, gunPin(0.0055, 0.022), M.steel, 0.042, 0.066, 0.13);
+        P([[0.098, -0.006], [0.103, -0.02, 0.004], [0.098, -0.03, 0.003], [0.104, -0.031], [0.11, -0.02, 0.003], [0.107, -0.006]], 0.006, M.steel, { bevel: 0.0015, r: 0.001 });
+        // rear leaf with notch ears, front post between protective ears (both tops on SY)
+        const SY = 0.125;
+        P([[-0.03, 0.08], [0.02, 0.08], [0.02, 0.112], [0.012, 0.113], [-0.03, 0.096]], 0.026, M.coat, { bevel: 0.003 });
+        for (const sx of [-1, 1]) kit.put(gunGroup, gunBox(0.008, 0.013, 0.007), M.coat, sx * 0.0075, SY - 0.0065, 0.016);
+        P([[-0.49, 0.088], [-0.45, 0.088], [-0.455, 0.108], [-0.485, 0.108]], 0.022, M.coat, { bevel: 0.003 });
+        kit.put(gunGroup, gunBox(0.004, 0.018, 0.004), M.steel, 0, SY - 0.009, -0.47);
+        for (const sx of [-1, 1]) kit.put(gunGroup, gunBox(0.003, 0.018, 0.012), M.coat, sx * 0.0095, SY - 0.01, -0.47);
+        // grip
+        P([[0.16, 0.0], [0.2, 0.0], [0.205, -0.02, 0.006], [0.228, -0.13, 0.01], [0.215, -0.14, 0.006], [0.186, -0.14, 0.006], [0.18, -0.11],
+           [0.166, -0.04, 0.01]], 0.034, M.poly, { bevel: 0.006 });
+        // skeleton stock: hinge block, triangle of tube struts, rubber butt plate
+        P([[0.24, 0.078], [0.265, 0.078], [0.265, 0.005], [0.24, 0.005]], 0.04, M.coat, { bevel: 0.004 });
+        kit.put(stockGrp, gunSegment([0, 0.068, 0.26], [0, 0.064, 0.53], 0.0085, 0.0085), M.steel);
+        kit.put(stockGrp, gunSegment([0, 0.014, 0.26], [0, -0.06, 0.52], 0.0085, 0.0085), M.steel);
+        kit.put(stockGrp, gunSegment([0, 0.064, 0.33], [0, -0.03, 0.45], 0.007, 0.007), M.steel);
+        P([[0.518, 0.08], [0.545, 0.08, 0.008], [0.545, -0.085, 0.008], [0.518, -0.085]], 0.042, M.rubber, { bevel: 0.005 }, stockGrp);
+        // curved 20-round magazine
+        const mag = attachMagGroup(gunGroup, root, 0, -0.02, 0.02);
+        P(gunLocalPts([[-0.018, 0.0], [-0.02, -0.05], [-0.032, -0.1], [-0.052, -0.142, 0.004], [0.022, -0.137, 0.004], [0.04, -0.095], [0.05, -0.05], [0.052, 0.0]], 0.02, -0.02),
+          0.028, M.coat, { bevel: 0.0035 }, mag);
+        for (const sx of [-1, 1]) {
+          kit.put(mag, gunBox(0.0015, 0.08, 0.004), M.steel, sx * 0.0142, -0.07, -0.006, 0.28, 0, 0);
         }
-        addMeshPart(gunGroup, new THREE.CylinderGeometry(0.047, 0.047, 0.05, 14), mMetal, 0, 0.055, -0.525, barrelZ, 0, 0); // end cap
 
-        // ── iron sights: front post on a block at the muzzle end, rear notch on the receiver ──
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.030, 0.055, 0.045), mDark, 0, 0.108, -0.46);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.008, 0.030, 0.008), mSight, 0, 0.140, -0.46);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.048, 0.016, 0.030), mDark, 0, 0.108, 0.22);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.010, 0.022, 0.010), mSight, -0.014, 0.122, 0.22);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.010, 0.022, 0.010), mSight, 0.014, 0.122, 0.22);
-
-        // ── grip + trigger guard ──
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.056, 0.185, 0.085), mBlack, 0, -0.155, 0.155, 0.22, 0, 0);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.048, 0.014, 0.105), mDark, 0, -0.070, 0.075);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.020, 0.038, 0.014), mMetal, 0, -0.052, 0.095);
-
-        // ── curved 20-round magazine: two segments, the lower one kicked forward ──
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.050, 0.115, 0.075), mDark, 0, -0.105, 0.020, 0.12, 0, 0);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.048, 0.105, 0.070), mBlack, 0, -0.205, -0.010, 0.30, 0, 0);
-
-        // ── skeleton triangular folding stock ──
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.016, 0.018, 0.30), mMetal, -0.030, 0.075, 0.44, 0.10, 0, 0);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.016, 0.018, 0.30), mMetal, 0.030, 0.075, 0.44, 0.10, 0, 0);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.016, 0.018, 0.26), mMetal, -0.030, -0.040, 0.42, -0.22, 0, 0);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.016, 0.018, 0.26), mMetal, 0.030, -0.040, 0.42, -0.22, 0, 0);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.082, 0.150, 0.020), mBlack, 0, 0.020, 0.585);  // butt plate
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.070, 0.016, 0.016), mMetal, 0, 0.075, 0.300);  // front crossbar
-
-        attachEjectPort(gunGroup, root, 0.052, 0.075, 0.14);
-        attachWeaponMag(gunGroup, root, 0, -0.105, 0.020, 0.050, 0.115, 0.075);
         gunGroup.position.set(0.25, -0.22, -0.80);
-        attachViewHandGrips(gunGroup, root, VIEW_HAND_GRIPS[1]);
-        attachViewArmsOnGrips(root);
-        // Iron sights sit at y 0.108–0.14, so ADS lines the eye up with the sight plane.
-        adsOffset.set(-0.25, 0.020, 0.30);
-
-        const muzzleNodeV = new THREE.Object3D();
-        muzzleNodeV.position.set(0, 0.055, -0.55);
-        gunGroup.add(muzzleNodeV);
-        root.userData.muzzleNode = muzzleNodeV;
+        attachViewHandGrips(gunGroup, root, VIEW_HAND_GRIPS[9]);
+        if (!opts.noHands) attachViewArmsOnGrips(root);
+        if (!opts.noHands) attachSupportHand(gunGroup, root, 0, BORE, -0.13, 0.047, [-0.1, -0.2, 0.25]);
+        adsOffset = adsForSight(gunGroup.position, SY, 0.30);
+        attachEjectPort(gunGroup, root, 0.03, 0.06, 0.1);
+        muzzleAt(gunGroup, 0, BORE, -0.56);
 
       } else if (type === 2) {
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.12, 0.13, 0.26), mWoodD, 0, 0, 0.5);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.10, 0.08, 0.14), mWoodD, 0, -0.055, 0.38);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.08, 0.035, 0.05), mBlack, 0, -0.055, 0.12);
-        const breakGrp = new THREE.Group();
-        breakGrp.position.set(0, 0.03, 0.22);
-        addMeshPart(breakGrp, new THREE.BoxGeometry(0.11, 0.10, 0.20), mLight, 0, 0.01, 0.04);
-        addMeshPart(breakGrp, new THREE.BoxGeometry(0.10, 0.08, 0.16), mMetal, 0, -0.01, -0.12);
-        addMeshPart(breakGrp, new THREE.BoxGeometry(0.06, 0.06, 0.10), mDark, 0, 0.04, -0.02);
-        const barrelGrp = new THREE.Group();
-        barrelGrp.position.set(0, 0.01, -0.3);
-        addMeshPart(barrelGrp, new THREE.CylinderGeometry(0.042, 0.046, 0.52, 12), mMetal, 0, 0, -0.18, barrelZ, 0, 0);
-        addMeshPart(barrelGrp, new THREE.BoxGeometry(0.055, 0.035, 0.02), mSight, 0, 0.05, 0.02);
-        addMeshPart(barrelGrp, new THREE.BoxGeometry(0.03, 0.065, 0.02), mSight, 0, 0.06, -0.4);
-        breakGrp.add(barrelGrp);
-        gunGroup.add(breakGrp);
-        root.userData.animBreak = breakGrp;
-        root.userData.animBarrel = barrelGrp;
+        // ── Pump-action shotgun: blued steel, walnut stock and forend ──
+        const BORE = 0.065;
+        P([[-0.085, 0.0, 0.004], [-0.085, 0.084, 0.006], [0.12, 0.084, 0.006], [0.17, 0.068, 0.01], [0.17, 0.012, 0.006], [0.15, 0.0, 0.004]],
+          0.052, M.blued, { bevel: 0.005 });
+        kit.put(gunGroup, gunBox(0.026, 0.002, 0.075), M.hole, 0, -0.0004, 0.03);
+        kit.put(gunGroup, gunBox(0.002, 0.03, 0.064), M.hole, 0.0262, 0.052, 0.025);
+        kit.put(gunGroup, gunBox(0.001, 0.022, 0.05), M.bright, 0.0268, 0.052, 0.025);
+        kit.put(gunGroup, gunPin(0.004, 0.056), M.steel, 0, 0.012, -0.06);
+        kit.put(gunGroup, gunPin(0.004, 0.056), M.steel, 0, 0.012, 0.12);
+        // barrel with vent rib + bead, magazine tube, barrel clamp
+        kit.put(gunGroup, gunTube(0.0125, 0.0125, 0.48), M.blued, 0, BORE, -0.325);
+        kit.put(gunGroup, gunLathe([[0.0095, -0.5652], [0.0132, -0.5652], [0.0132, -0.558], [0.0125, -0.555], [0.0095, -0.555]]), M.blued, 0, BORE, 0);
+        disc(gunGroup, M.hole, 0.0096, 0, BORE, -0.5605);
+        kit.put(gunGroup, gunBox(0.01, 0.003, 0.47), M.blued, 0, 0.0815, -0.32);
+        for (let z = -0.54; z < -0.09; z += 0.035) kit.put(gunGroup, gunBox(0.006, 0.004, 0.006), M.blued, 0, 0.078, z);
+        kit.put(gunGroup, new THREE.SphereGeometry(0.0032, 10, 8), M.brass, 0, 0.0858, -0.553);
+        kit.put(gunGroup, gunBox(0.004, 0.0012, 0.03), M.hole, 0, 0.0845, 0.02);
+        kit.put(gunGroup, gunTube(0.0135, 0.0135, 0.4), M.blued, 0, 0.03, -0.285);
+        kit.put(gunGroup, gunLathe([[0.0135, -0.485], [0.0155, -0.487], [0.0155, -0.505], [0.012, -0.51], [0, -0.511]]), M.steel, 0, 0.03, 0);
+        P([[-0.468, 0.016], [-0.448, 0.016], [-0.448, 0.08], [-0.468, 0.08]], 0.03, M.steel, { bevel: 0.004, r: 0.008 });
+        // trigger guard + trigger + safety
+        P([[0.05, 0.002], [0.145, 0.002], [0.14, -0.035, 0.01], [0.06, -0.038, 0.012]], 0.02, M.blued,
+          { bevel: 0.003, holes: [[[0.066, -0.005], [0.13, -0.005], [0.125, -0.028, 0.006], [0.072, -0.03, 0.006]]] });
+        P([[0.09, -0.004], [0.095, -0.016, 0.003], [0.09, -0.027, 0.003], [0.096, -0.028], [0.102, -0.016, 0.003], [0.099, -0.004]], 0.006, M.steel, { bevel: 0.0015, r: 0.001 });
+        kit.put(gunGroup, gunPin(0.0045, 0.032), M.steel, 0, 0.0, 0.135);
+        // walnut stock + recoil pad
+        // Real length of pull with drop at the heel, so it falls away to the shoulder instead of
+        // pointing at the camera.
+        P([[0.165, 0.072, 0.004], [0.32, 0.056, 0.04], [0.47, 0.034, 0.012], [0.47, -0.118, 0.012], [0.42, -0.1], [0.27, -0.035, 0.06], [0.2, 0.0, 0.03], [0.165, 0.01, 0.004]],
+          0.05, M.wood, { bevel: 0.012, seg: 6 });
+        P([[0.468, 0.036], [0.49, 0.036, 0.006], [0.49, -0.12, 0.006], [0.468, -0.118]], 0.05, M.rubber, { bevel: 0.006 });
+        kit.put(gunGroup, gunBox(0.051, 0.155, 0.003), M.white, 0, -0.041, 0.4695);
+        // pump: walnut forend with grooves and the action bars that run back into the receiver
         const pumpGrp = new THREE.Group();
-        addMeshPart(pumpGrp, new THREE.BoxGeometry(0.12, 0.08, 0.2), mWood, 0, -0.06, -0.06);
-        addMeshPart(pumpGrp, new THREE.BoxGeometry(0.06, 0.1, 0.06), mDark, 0, 0.02, -0.12);
         gunGroup.add(pumpGrp);
         root.userData.animPump = pumpGrp;
-        attachEjectPort(gunGroup, root, 0.05, 0.1, 0.06);
-        attachViewHandGrips(gunGroup, root, VIEW_HAND_GRIPS[2]);
-        attachViewArmsOnGrips(root);
-        const mBrass = new THREE.MeshStandardMaterial({
-          color: 0xd4af37,
-          metalness: 0.88,
-          roughness: 0.32,
-        });
+        P([[-0.34, 0.006, 0.012], [-0.34, 0.058, 0.014], [-0.16, 0.058, 0.012], [-0.16, 0.006, 0.012]], 0.06, M.wood, { bevel: 0.014, seg: 6 }, pumpGrp);
+        for (let i = 0; i < 7; i++) {
+          for (const sx of [-1, 1]) gunSlot(kit, pumpGrp, M, sx * 0.0301, 0.032, -0.316 + i * 0.022, 0.026, 0.004);
+        }
+        for (const sx of [-1, 1]) kit.put(pumpGrp, gunTube(0.003, 0.003, 0.09), M.steel, sx * 0.017, 0.022, -0.115);
+        // reload shell (driven along the loading-port path by applyReloadPartAnims)
         const shellIns = new THREE.Group();
-        addMeshPart(shellIns, new THREE.CylinderGeometry(0.012, 0.014, 0.032, 6), mBrass, 0, 0, 0, barrelZ, 0, 0);
-        shellIns.position.set(0, 0.04, -0.06);
+        kit.put(shellIns, gunTube(0.0108, 0.0108, 0.052), M.hull, 0, 0, -0.007);
+        kit.put(shellIns, gunTube(0.0112, 0.0112, 0.014), M.brass, 0, 0, 0.025);
+        kit.put(shellIns, gunTube(0.0122, 0.0122, 0.002), M.brass, 0, 0, 0.0325);
         shellIns.visible = false;
-        breakGrp.add(shellIns);
+        gunGroup.add(shellIns);
         root.userData.animReloadShell = shellIns;
 
         gunGroup.position.set(0.23, -0.2, -0.82);
-        adsOffset.set(-0.23, 0.11, 0.28);
-
-        const muzzleNode = new THREE.Object3D();
-        muzzleNode.position.set(0, 0.05, -0.46);
-        barrelGrp.add(muzzleNode);
-        root.userData.muzzleNode = muzzleNode;
+        attachViewHandGrips(gunGroup, root, VIEW_HAND_GRIPS[2]);
+        if (!opts.noHands) attachViewArmsOnGrips(root);
+        if (!opts.noHands) attachSupportHand(pumpGrp, root, 0, 0.032, -0.25, 0.031, [-0.1, -0.2, 0.26]);
+        adsOffset = adsForSight(gunGroup.position, 0.0875, 0.28);
+        attachEjectPort(gunGroup, root, 0.03, 0.055, 0.025);
+        muzzleAt(gunGroup, 0, BORE, -0.566);
 
       } else if (type === 3) {
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.1, 0.11, 0.42), mMetal, 0, 0.01, 0.02);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.08, 0.14, 0.09), mDark, 0, -0.14, 0.08);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.06, 0.2, 0.08), mBlack, 0, -0.1, -0.02);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.055, 0.12, 0.07), mBlack, 0, -0.06, -0.12);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.07, 0.05, 0.14), mDark, 0, -0.04, 0.34);
-        addMeshPart(gunGroup, new THREE.CylinderGeometry(0.024, 0.027, 0.48, 10), mLight, 0, 0.05, -0.12, barrelZ, 0, 0);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.09, 0.06, 0.28), mDark, 0, 0.055, -0.04);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.018, 0.038, 0.018), mSight, 0, 0.08, -0.26);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.04, 0.016, 0.016), mSight, 0, 0.07, 0.12);
-        attachEjectPort(gunGroup, root, 0.048, 0.085, 0.04);
-        attachWeaponMag(gunGroup, root, 0, -0.12, 0.04, 0.048, 0.14, 0.09);
+        // ── Roller-delayed SMG: rounded stamped receiver, hooded front post, drum rear ──
+        const BORE = 0.05;
+        P([[-0.13, 0.02, 0.004], [-0.13, 0.075, 0.01], [-0.118, 0.086, 0.004], [0.215, 0.086, 0.006], [0.225, 0.076, 0.006], [0.225, 0.02, 0.004]],
+          0.048, M.coat, { bevel: 0.008 });
+        kit.put(gunGroup, gunTube(0.011, 0.011, 0.19), M.coat, 0, 0.084, -0.215);
+        kit.put(gunGroup, gunBox(0.03, 0.006, 0.01), M.steel, -0.026, 0.084, -0.29, 0, 0.2, 0);
+        kit.put(gunGroup, new THREE.SphereGeometry(0.0055, 10, 8), M.poly, -0.042, 0.084, -0.292);
+        kit.put(gunGroup, gunBox(0.0022, 0.016, 0.045), M.hole, 0.0245, 0.058, 0.06);
+        for (let i = 0; i < 2; i++) kit.put(gunGroup, gunPin(0.0045, 0.052), M.steel, 0, 0.032, -0.08 + i * 0.27);
+        // front sight: post inside a ring hood; rear drum with a peep aperture
+        const SY = 0.118;
+        P([[-0.325, 0.09], [-0.305, 0.09], [-0.308, 0.1], [-0.322, 0.1]], 0.014, M.coat, { bevel: 0.002 });
+        kit.put(gunGroup, gunBox(0.004, 0.02, 0.004), M.steel, 0, SY - 0.01, -0.315);
+        kit.put(gunGroup, new THREE.TorusGeometry(0.016, 0.0028, 6, 20), M.coat, 0, 0.112, -0.315);
+        P([[0.155, 0.084], [0.195, 0.084], [0.195, 0.094], [0.155, 0.094]], 0.03, M.coat, { bevel: 0.002 });
+        kit.put(gunGroup, gunPin(0.012, 0.032, 18), M.steel, 0, 0.104, 0.18);
+        kit.put(gunGroup, new THREE.TorusGeometry(0.0042, 0.0022, 6, 14), M.steel, 0, SY, 0.166);
+        // polymer handguard with finger grooves, exposed barrel and 3-lug ring
+        P([[-0.29, 0.0, 0.008], [-0.29, 0.07, 0.012], [-0.125, 0.072, 0.006], [-0.12, 0.0, 0.006], [-0.14, -0.01, 0.006], [-0.27, -0.012, 0.008]],
+          0.056, M.poly, { bevel: 0.009 });
+        for (let i = 0; i < 4; i++) {
+          for (const sx of [-1, 1]) gunSlot(kit, gunGroup, M, sx * 0.0285, 0.03, -0.265 + i * 0.035, 0.03, 0.006);
+        }
+        kit.put(gunGroup, gunTube(0.0095, 0.0095, 0.095), M.blued, 0, BORE, -0.335);
+        kit.put(gunGroup, gunTube(0.013, 0.013, 0.02), M.steel, 0, BORE, -0.36);
+        for (let i = 0; i < 3; i++) {
+          const a = i * Math.PI * 2 / 3;
+          kit.put(gunGroup, gunBox(0.005, 0.004, 0.012), M.steel, Math.sin(a) * 0.014, BORE + Math.cos(a) * 0.014, -0.37, 0, 0, -a);
+        }
+        disc(gunGroup, M.hole, 0.0048, 0, BORE, -0.3832);
+        // mag well, lower with trigger guard, grip
+        P([[-0.075, 0.022], [0.002, 0.022], [0.002, -0.035, 0.003], [-0.075, -0.035, 0.003]], 0.04, M.coat, { bevel: 0.003 });
+        P([[0.0, 0.022], [0.215, 0.022], [0.215, -0.01, 0.004], [0.2, -0.02], [0.205, -0.04, 0.006], [0.215, -0.135, 0.008], [0.205, -0.145, 0.006],
+           [0.165, -0.145, 0.006], [0.16, -0.12, 0.004], [0.152, -0.08, 0.008], [0.145, -0.045, 0.008], [0.035, -0.045, 0.008], [0.025, -0.03, 0.006], [0.025, 0.0]],
+          0.042, M.poly, { bevel: 0.006, holes: [[[0.04, -0.008], [0.042, -0.036, 0.006], [0.13, -0.036, 0.004], [0.135, -0.008]]] });
+        P([[0.068, -0.006], [0.073, -0.018, 0.003], [0.068, -0.029, 0.003], [0.074, -0.03], [0.08, -0.018, 0.003], [0.077, -0.006]], 0.006, M.steel, { bevel: 0.0015, r: 0.001 });
+        kit.put(gunGroup, gunBox(0.003, 0.006, 0.02), M.steel, -0.0225, 0.004, 0.15, 0.4, 0, 0);
+        // retractable stock: twin rails into a polymer butt
+        for (const sx of [-1, 1]) {
+          kit.put(stockGrp, gunTube(0.0055, 0.0055, 0.1), M.steel, sx * 0.02, 0.07, 0.275);
+          kit.put(stockGrp, gunSegment([sx * 0.02, 0.0, 0.215], [sx * 0.02, -0.03, 0.325], 0.0055, 0.0055), M.steel);
+        }
+        // butt pad in the collapsed position
+        P([[0.32, 0.085], [0.34, 0.085, 0.004], [0.35, 0.07], [0.35, -0.05, 0.006], [0.325, -0.05, 0.006], [0.32, 0.06]], 0.05, M.rubber, { bevel: 0.005 }, stockGrp);
+        // curved magazine
+        const mag = attachMagGroup(gunGroup, root, 0, -0.03, -0.035);
+        P(gunLocalPts([[-0.064, -0.02], [-0.066, -0.07], [-0.078, -0.12], [-0.1, -0.17], [-0.112, -0.19, 0.004], [-0.06, -0.185, 0.004], [-0.045, -0.165], [-0.022, -0.12], [-0.008, -0.07], [-0.006, -0.02]], -0.035, -0.03),
+          0.026, M.coat, { bevel: 0.003 }, mag);
+
         gunGroup.position.set(0.26, -0.21, -0.78);
         attachViewHandGrips(gunGroup, root, VIEW_HAND_GRIPS[3]);
-        attachViewArmsOnGrips(root);
-        adsOffset.set(-0.22, 0.085, 0.24);
+        if (!opts.noHands) attachViewArmsOnGrips(root);
+        if (!opts.noHands) attachSupportHand(gunGroup, root, 0, 0.03, -0.21, 0.031, [-0.1, -0.2, 0.24]);
+        adsOffset = adsForSight(gunGroup.position, SY, 0.24);
+        attachEjectPort(gunGroup, root, 0.026, 0.06, 0.06);
+        muzzleAt(gunGroup, 0, BORE, -0.385);
 
-        const muzzleNode = new THREE.Object3D();
-        muzzleNode.position.set(0, 0.072, -0.38);
-        gunGroup.add(muzzleNode);
-        root.userData.muzzleNode = muzzleNode;
       } else if (type === 5) {
-        const mGreen = new THREE.MeshStandardMaterial({ color: 0x3d4a38, roughness: 0.72, metalness: 0.12 });
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.12, 0.14, 0.4), mDark, 0, 0.02, 0.22);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.11, 0.12, 0.34), mBlack, 0, -0.01, 0.48);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.09, 0.16, 0.1), mBlack, 0, -0.15, 0.3);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.08, 0.18, 0.09), mDark, 0, -0.12, 0.14);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.09, 0.14, 0.11), mBlack, 0, -0.1, 0.02);
-        addMeshPart(gunGroup, new THREE.CylinderGeometry(0.036, 0.04, 0.88, 14), mMetal, 0, 0.058, -0.28, barrelZ, 0, 0);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.1, 0.075, 0.5), mLight, 0, 0.048, -0.1);
-        addMeshPart(gunGroup, new THREE.CylinderGeometry(0.05, 0.042, 0.14, 12), mDark, 0, 0.062, -0.78, barrelZ, 0, 0);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.07, 0.05, 0.08), mBlack, 0, 0.05, -0.84);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.065, 0.1, 0.14), mBlack, 0, -0.12, 0.06);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.07, 0.09, 0.36), mSight, 0, 0.14, 0.04);
-        addMeshPart(gunGroup, new THREE.CylinderGeometry(0.038, 0.044, 0.1, 12), mSight, 0, 0.15, 0.2, barrelZ, 0, 0);
-        addMeshPart(gunGroup, new THREE.CylinderGeometry(0.03, 0.034, 0.08, 10), mSight, 0, 0.148, -0.12, barrelZ, 0, 0);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.055, 0.04, 0.42), mSight, 0, 0.155, -0.02);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.014, 0.05, 0.1), mGreen, -0.052, -0.04, -0.18, 0, 0, -0.45);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.014, 0.05, 0.1), mGreen, 0.052, -0.04, -0.18, 0, 0, 0.45);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.02, 0.008, 0.06), mMetal, -0.05, -0.07, -0.28);
-        addMeshPart(gunGroup, new THREE.BoxGeometry(0.02, 0.008, 0.06), mMetal, 0.05, -0.07, -0.28);
+        // ── Anti-materiel bolt rifle: chassis stock, fluted barrel, brake, big scope ──
+        const BORE = 0.07;
+        const SY = 0.15; // scope axis: the overlay fades in centred on this line
+        // receiver with bolt raceway on top
+        P([[-0.13, 0.035, 0.004], [-0.13, 0.098, 0.006], [0.1, 0.098, 0.004], [0.11, 0.087], [0.27, 0.087], [0.28, 0.098], [0.3, 0.098, 0.004], [0.3, 0.035, 0.004]],
+          0.066, M.steel, { bevel: 0.004 });
+        kit.put(gunGroup, gunBox(0.0022, 0.03, 0.12), M.hole, 0.0333, 0.068, 0.19);
+        gunRail(kit, gunGroup, M.coat, -0.13, 0.3, 0.098, 0.024);
+        // heavy fluted barrel + ported brake
+        kit.put(gunGroup, gunTube(0.019, 0.022, 0.66), M.blued, 0, BORE, -0.45);
+        for (let k = 0; k < 6; k++) {
+          const a = k * Math.PI / 3;
+          kit.put(gunGroup, gunBox(0.0035, 0.0035, 0.46), M.hole, Math.sin(a) * 0.0195, BORE + Math.cos(a) * 0.0195, -0.52, 0, 0, -a);
+        }
+        P([[-0.885, 0.045, 0.004], [-0.885, 0.095, 0.004], [-0.775, 0.095, 0.004], [-0.775, 0.045, 0.004]], 0.058, M.steel,
+          { bevel: 0.004, holes: [0, 1, 2].map((i) => [[-0.872 + i * 0.03, 0.053], [-0.852 + i * 0.03, 0.053], [-0.852 + i * 0.03, 0.087], [-0.872 + i * 0.03, 0.087]]) });
+        disc(gunGroup, M.hole, 0.011, 0, BORE, -0.8862);
+        // chassis: lightened forend around the barrel, centre section with mag well + guard
+        P([[-0.42, 0.0, 0.01], [-0.42, 0.088, 0.01], [-0.1, 0.088], [-0.1, 0.0, 0.004]], 0.07, M.od,
+          { bevel: 0.006, holes: [0, 1, 2, 3].map((i) => [[-0.4 + i * 0.075, 0.018, 0.006], [-0.345 + i * 0.075, 0.018, 0.006], [-0.345 + i * 0.075, 0.07, 0.006], [-0.4 + i * 0.075, 0.07, 0.006]]) });
+        P([[-0.13, 0.04], [0.34, 0.04], [0.34, -0.02, 0.006], [0.29, -0.02], [0.275, -0.06, 0.008], [0.19, -0.06, 0.008], [0.18, -0.02], [0.165, -0.02],
+           [0.165, -0.04, 0.003], [0.045, -0.04, 0.003], [0.045, -0.02], [-0.13, -0.02, 0.006]], 0.07, M.od,
+          { bevel: 0.005, holes: [[[0.195, -0.026], [0.268, -0.026], [0.262, -0.05, 0.006], [0.2, -0.052, 0.006]]] });
+        P([[0.222, -0.024], [0.228, -0.036, 0.003], [0.222, -0.047, 0.003], [0.229, -0.048], [0.236, -0.036, 0.003], [0.232, -0.024]], 0.007, M.steel, { bevel: 0.0015, r: 0.001 });
+        P([[0.285, -0.02], [0.33, -0.02], [0.335, -0.04, 0.006], [0.36, -0.16, 0.01], [0.348, -0.172, 0.006], [0.31, -0.172, 0.006], [0.304, -0.14],
+           [0.296, -0.1, 0.01], [0.286, -0.06, 0.008]], 0.038, M.rubber, { bevel: 0.006 });
+        // skeleton stock with cheek riser and butt pad
+        P([[0.34, 0.04], [0.34, -0.02], [0.42, -0.04], [0.63, -0.06, 0.01], [0.645, -0.1, 0.008], [0.66, -0.1], [0.66, 0.125, 0.006], [0.645, 0.125],
+           [0.6, 0.118, 0.01], [0.45, 0.116, 0.01], [0.4, 0.07, 0.02]], 0.05, M.od,
+          { bevel: 0.006, holes: [[[0.43, 0.0, 0.012], [0.6, -0.035, 0.012], [0.6, 0.085, 0.012], [0.47, 0.085, 0.012]]] });
+        P([[0.66, 0.128], [0.688, 0.128, 0.008], [0.688, -0.102, 0.008], [0.66, -0.102]], 0.056, M.rubber, { bevel: 0.006 });
+        // folded bipod
+        P([[-0.43, -0.002], [-0.39, -0.002], [-0.39, -0.022], [-0.43, -0.022]], 0.06, M.steel, { bevel: 0.004 });
+        for (const sx of [-1, 1]) {
+          kit.put(gunGroup, gunSegment([sx * 0.024, -0.015, -0.41], [sx * 0.026, -0.016, -0.17], 0.0065, 0.0055), M.coat);
+          kit.put(gunGroup, gunBox(0.014, 0.01, 0.024), M.rubber, sx * 0.026, -0.016, -0.165);
+        }
+        // scope: objective bell, 34 mm tube, turrets, eyepiece, two rings
+        kit.put(gunGroup, gunLathe([[0, -0.252], [0.026, -0.252], [0.026, -0.265], [0.033, -0.265], [0.033, -0.2], [0.03, -0.19], [0.018, -0.14], [0.0172, -0.13], [0.0172, 0.15],
+          [0.02, 0.17], [0.025, 0.18], [0.026, 0.25], [0.024, 0.262], [0, 0.262]], 30), M.coat, 0, SY, 0);
+        kit.put(gunGroup, gunTube(0.0255, 0.0255, 0.001, 28), M.lens, 0, SY, -0.2526);
+        kit.put(gunGroup, gunTube(0.021, 0.021, 0.001, 28), M.lens, 0, SY, 0.2626);
+        for (let i = 0; i < 5; i++) kit.put(gunGroup, gunTube(0.0262, 0.0262, 0.003, 30), M.coat, 0, SY, 0.192 + i * 0.008);
+        kit.put(gunGroup, gunTube(0.012, 0.012, 0.026, 22), M.coat, 0, SY + 0.028, 0.0, Math.PI / 2, 0, 0);
+        kit.put(gunGroup, gunTube(0.0128, 0.0128, 0.008, 22), M.steel, 0, SY + 0.04, 0.0, Math.PI / 2, 0, 0);
+        kit.put(gunGroup, gunPin(0.011, 0.024, 20), M.coat, 0.028, SY, 0.0);
+        kit.put(gunGroup, gunPin(0.009, 0.018, 18), M.coat, -0.025, SY, 0.0);
+        for (const rz of [-0.07, 0.1]) {
+          kit.put(gunGroup, gunTube(0.0205, 0.0205, 0.02, 24), M.steel, 0, SY, rz);
+          P([[rz - 0.012, 0.106], [rz + 0.012, 0.106], [rz + 0.01, 0.135], [rz - 0.01, 0.135]], 0.026, M.steel, { bevel: 0.003 });
+          kit.put(gunGroup, gunPin(0.0035, 0.036), M.bright, 0, 0.118, rz);
+        }
+        // bolt: body in the raceway, shroud, handle arm + knob out to the right
         const boltGrp = new THREE.Group();
-        addMeshPart(boltGrp, new THREE.BoxGeometry(0.055, 0.045, 0.14), mLight, 0, 0.07, 0.18);
-        addMeshPart(boltGrp, new THREE.BoxGeometry(0.022, 0.035, 0.04), mMetal, 0, 0.1, 0.24);
         gunGroup.add(boltGrp);
         root.userData.animBolt = boltGrp;
-        attachWeaponMag(gunGroup, root, 0, -0.14, 0.1, 0.06, 0.12, 0.11);
-        attachEjectPort(gunGroup, root, 0.06, 0.1, 0.2);
-        // Hip pose sits on the right shoulder like every other rifle (the old centered
-        // pose read as if the gun were growing out of the player's chin). Accuracy is
-        // unaffected — tryShoot always casts from camera.position; the muzzle node only
-        // decides where the tracer is drawn from.
-        // ADS pulls it back to x = 0 and lifts the scope axis (local y 0.15) onto the
-        // screen centre — WEAPON_VIEW_DROP_Y (-0.032) + gun.y (-0.118) + 0.15 = 0 — so the
-        // tube lines up with the crosshair right before the scope overlay fades in.
+        kit.put(boltGrp, gunTube(0.0155, 0.0155, 0.16), M.bright, 0, 0.072, 0.19);
+        kit.put(boltGrp, gunLathe([[0.0155, 0.27], [0.019, 0.272], [0.019, 0.296], [0.014, 0.302], [0, 0.302]]), M.steel, 0, 0.072, 0);
+        kit.put(boltGrp, gunSegment([0.012, 0.072, 0.25], [0.058, 0.046, 0.268], 0.0048, 0.0042), M.bright);
+        kit.put(boltGrp, new THREE.SphereGeometry(0.012, 14, 10), M.rubber, 0.062, 0.043, 0.27);
+        // box magazine
+        const mag = attachMagGroup(gunGroup, root, 0, -0.03, 0.105);
+        P(gunLocalPts([[0.052, -0.02], [0.158, -0.02], [0.158, -0.128, 0.004], [0.052, -0.128, 0.004]], 0.105, -0.03), 0.052, M.coat, { bevel: 0.003 }, mag);
+        for (let i = 0; i < 3; i++) {
+          for (const sx of [-1, 1]) gunSlot(kit, mag, M, sx * 0.0262, -0.05, -0.03 + i * 0.03, 0.06, 0.008);
+        }
+        P(gunLocalPts([[0.048, -0.126], [0.162, -0.126], [0.162, -0.138, 0.004], [0.048, -0.138, 0.004]], 0.105, -0.03), 0.058, M.rubber, { bevel: 0.003 }, mag);
+
+        // Hip pose sits on the right shoulder like every other rifle. Accuracy is unaffected —
+        // tryShoot always casts from camera.position; the muzzle node only decides where the
+        // tracer is drawn from. ADS lifts the scope axis onto the screen centre right before
+        // the scope overlay fades in.
         gunGroup.position.set(0.25, -0.2, -0.9);
         attachViewHandGrips(gunGroup, root, VIEW_HAND_GRIPS[5]);
-        attachViewArmsOnGrips(root);
-        adsOffset.set(-0.25, 0.082, 0.32);
-
-        const muzzleNode = new THREE.Object3D();
-        muzzleNode.position.set(0, 0.1, -0.88);
-        gunGroup.add(muzzleNode);
-        root.userData.muzzleNode = muzzleNode;
+        if (!opts.noHands) attachViewArmsOnGrips(root);
+        if (!opts.noHands) attachSupportHand(gunGroup, root, 0, 0.044, -0.3, 0.038, [-0.1, -0.2, 0.26]);
+        adsOffset = adsForSight(gunGroup.position, SY, 0.32);
+        attachEjectPort(gunGroup, root, 0.04, 0.08, 0.2);
+        muzzleAt(gunGroup, 0, BORE, -0.89);
       }
 
+      kit.flush();
       root.add(gunGroup);
       root.userData.gun = gunGroup;
       root.userData.basePos = gunGroup.position.clone();
       root.userData.adsOffset = adsOffset.clone();
+      polishViewModel(root);
 
       return root;
     }
 
-    /** Compact first-aid case (procedural): white shell + recessed red cross + latch strip — readable at arm’s length. */
+    const MEDPACK_GRIP = {
+      r: [0.164, -0.022, -0.006], rRot: [-0.08, 0, 0],
+      ga: 0.012, gb: 0.014, l: [-0.10, -0.09, 0.06], lRot: [0, 0, 0],
+    };
+
+    /** Shared case for the view model, other players, and the hotbar icon. */
+    function makeMedpackCase() {
+      const pack = new THREE.Group();
+      const lid = new THREE.Group();
+      lid.position.set(0, 0.063, -0.063);
+      pack.add(lid);
+      const texture = getGunSurfaces();
+      const shell = new THREE.MeshStandardMaterial({
+        color: 0x30383c, roughness: 0.79, normalMap: texture.stippleN, normalScale: new THREE.Vector2(0.42, 0.42),
+      });
+      const rubber = new THREE.MeshStandardMaterial({ color: 0x181d20, roughness: 0.93, normalMap: texture.stippleN });
+      const coating = new THREE.MeshStandardMaterial({
+        color: 0x96392f, metalness: 0.16, roughness: 0.66, normalMap: texture.grainN, normalScale: new THREE.Vector2(0.24, 0.24),
+      });
+      const badge = new THREE.MeshStandardMaterial({ color: 0x762922, roughness: 0.72, metalness: 0.10 });
+      const ivory = new THREE.MeshStandardMaterial({
+        color: 0xe9e0ca, roughness: 0.72, emissive: 0x65573e, emissiveIntensity: 0.30,
+      });
+      const hardware = new THREE.MeshStandardMaterial({ color: 0x77838b, roughness: 0.48, metalness: 0.48 });
+      const latch = new THREE.MeshStandardMaterial({ color: 0xb98145, roughness: 0.56, metalness: 0.26 });
+      const parts = new GunKit();
+      const box = (parent, material, w, h, d, x, y, z, radius) => {
+        const geo = new RoundedBoxGeometry(w, h, d, 1, radius);
+        parts.put(parent, gunMetricUV(geo, w, h), material, x, y, z);
+      };
+
+      // The two halves meet at the gasket. The rear edge is the hinge axis.
+      box(pack, shell, 0.281, 0.137, 0.089, 0, -0.012, -0.016, 0.013);
+      box(pack, rubber, 0.289, 0.016, 0.094, 0, 0.053, -0.016, 0.007);
+      box(lid, coating, 0.285, 0.034, 0.099, 0, 0.004, 0.050, 0.012);
+      box(pack, coating, 0.218, 0.104, 0.015, 0, -0.012, 0.030, 0.011);
+      box(pack, badge, 0.144, 0.080, 0.008, 0, -0.009, 0.040, 0.008);
+      box(pack, ivory, 0.071, 0.023, 0.004, 0, -0.009, 0.046, 0.002);
+      for (const side of [-1, 1]) {
+        box(pack, ivory, 0.024, 0.023, 0.004, 0, -0.009 + side * 0.023, 0.046, 0.002);
+        box(pack, rubber, 0.036, 0.040, 0.100, side * 0.130, -0.065, -0.017, 0.012);
+        box(lid, rubber, 0.036, 0.037, 0.104, side * 0.130, 0.004, 0.050, 0.011);
+        box(pack, latch, 0.031, 0.026, 0.013, side * 0.093, 0.051, 0.034, 0.004);
+        box(pack, hardware, 0.018, 0.006, 0.009, side * 0.093, 0.054, 0.042, 0.002);
+        box(pack, hardware, 0.045, 0.017, 0.019, side * 0.085, 0.067, -0.060, 0.007);
+      }
+      // Smaller rear marking faces out when another player holds the kit.
+      box(pack, badge, 0.116, 0.087, 0.008, 0, -0.009, -0.064, 0.008);
+      box(pack, ivory, 0.058, 0.020, 0.004, 0, -0.009, -0.070, 0.002);
+      for (const side of [-1, 1]) {
+        box(pack, ivory, 0.020, 0.020, 0.004, 0, -0.009 + side * 0.020, -0.070, 0.002);
+        box(pack, hardware, 0.032, 0.012, 0.026, 0.149, -0.022 + side * 0.035, -0.006, 0.004);
+      }
+      box(pack, rubber, 0.024, 0.086, 0.025, 0.164, -0.022, -0.006, 0.010);
+      // Sealed dressings sit just inside the lid and only show as it lifts.
+      box(pack, ivory, 0.092, 0.010, 0.049, -0.058, 0.063, -0.014, 0.004);
+      box(pack, hardware, 0.054, 0.010, 0.044, 0.050, 0.063, -0.014, 0.004);
+      box(pack, latch, 0.012, 0.011, 0.045, 0.049, 0.066, -0.014, 0.003);
+      parts.flush();
+      return { pack, lid };
+    }
+
     function makeMedKitModel() {
       const root = new THREE.Group();
-      const kit = new THREE.Group();
-      const mCase = new THREE.MeshStandardMaterial({ color: 0xeeeeee, roughness: 0.38, metalness: 0.06 });
-      const mCross = new THREE.MeshStandardMaterial({ color: 0xc81e1e, roughness: 0.45 });
-      const mLatch = new THREE.MeshStandardMaterial({ color: 0x5c6169, roughness: 0.5 });
-      addMeshPart(kit, new THREE.BoxGeometry(0.26, 0.16, 0.075), mCase, 0, 0, 0);
-      addMeshPart(kit, new THREE.BoxGeometry(0.045, 0.11, 0.078), mCross, 0, 0, 0.041);
-      addMeshPart(kit, new THREE.BoxGeometry(0.11, 0.045, 0.078), mCross, 0, 0, 0.041);
-      addMeshPart(kit, new THREE.BoxGeometry(0.24, 0.022, 0.078), mLatch, 0, 0.068, 0);
-      addMeshPart(kit, new THREE.BoxGeometry(0.055, 0.035, 0.08), mCase, -0.1, 0, 0.04);
-      kit.position.set(0.27, -0.19, -0.66);
-      kit.rotation.y = -0.09;
-      const kitMuzzle = new THREE.Object3D();
-      kitMuzzle.position.set(0, 0, -0.052);
-      kit.add(kitMuzzle);
-      root.userData.muzzleNode = kitMuzzle;
-      root.add(kit);
-      root.userData.gun = kit;
-      root.userData.basePos = kit.position.clone();
-      root.userData.adsOffset = new THREE.Vector3(-0.14, 0.07, 0.16);
+      const { pack, lid } = makeMedpackCase();
+      pack.position.set(0.23, -0.174, -0.68);
+      pack.rotation.y = -0.15;
+      root.add(pack);
+      root.userData.gun = pack;
+      root.userData.medLid = lid;
+      root.userData.basePos = pack.position.clone();
+      root.userData.adsOffset = new THREE.Vector3();
+      attachViewHandGrips(pack, root, MEDPACK_GRIP);
+      attachViewArmsOnGrips(root);
+      polishViewModel(root);
       return root;
     }
 
@@ -13047,7 +16036,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       gun.add(animDart);
 
       gun.position.set(0.24, -0.22, -0.74);
-      attachViewHandGrips(gun, root, VIEW_HAND_GRIPS[0]);
+      attachViewHandGrips(gun, root, VIEW_HAND_GRIPS.dart);
       attachViewArmsOnGrips(root);
       const muzzleNode = new THREE.Object3D();
       muzzleNode.position.set(0, 0.05, -0.34);
@@ -13299,10 +16288,104 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       makeWeaponModel(9),
     ];
 
+    // First-person materials still respond to room lighting. Exclude the camera-mounted
+    // spot from their direct lighting so the player's flashlight never paints the gun.
+    const weaponLightChunk = THREE.ShaderChunk.lights_fragment_begin.replace(
+      "getSpotLightInfo( spotLight, geometryPosition, directLight );",
+      "$&\nif (distance(spotLight.position, zoneFlashlightOrigin) < 0.001) directLight.color = vec3(0.0);"
+    );
+    const weaponMaterials = new Set();
     weaponModels.forEach((w, i) => {
       w.visible = i === state.weaponIndex;
       weaponRoot.add(w);
+      w.traverse(mesh => {
+        if (!mesh.isMesh) return;
+        for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+          if (!material.isMeshStandardMaterial || weaponMaterials.has(material)) continue;
+          weaponMaterials.add(material);
+          material.onBeforeCompile = shader => {
+            shader.uniforms.zoneFlashlightOrigin = { value: flashlight.position };
+            shader.fragmentShader = "uniform vec3 zoneFlashlightOrigin;\n" + shader.fragmentShader
+              .replace("#include <lights_fragment_begin>", weaponLightChunk);
+          };
+        }
+      });
     });
+
+    /**
+     * Inventory icons: every weapon is drawn from its real model, side-on, lit like a product
+     * shot, on an offscreen renderer, then cropped to the model's own outline. Knife, med kit and
+     * dart gun use their carried parts only (no hand or forearm).
+     */
+    function renderWeaponIcons() {
+      const W = 420, H = 276;
+      let iconRenderer = null;
+      try {
+        iconRenderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, preserveDrawingBuffer: true });
+        iconRenderer.setPixelRatio(1);
+        iconRenderer.setSize(W, H, false);
+        iconRenderer.setClearColor(0x000000, 0);
+        const iconScene = new THREE.Scene();
+        iconScene.add(new THREE.HemisphereLight(0xf2f6ff, 0x5a6070, 4.6));
+        const key = new THREE.DirectionalLight(0xfff1dc, 5.2);
+        key.position.set(3, 4, 2.5);
+        iconScene.add(key);
+        const rim = new THREE.DirectionalLight(0x9fc4ff, 1.4);
+        rim.position.set(2, 1, -4);
+        iconScene.add(rim);
+        const cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.01, 50);
+        // Spin (radians about Y, then roll about the view axis) that lays each item out like a shelf shot.
+        const POSE = { 4: { y: 1.13, roll: -0.24, tilt: 0.13 }, 7: { y: 0, roll: 0.45 } };
+        for (const widx of [0, 1, 2, 3, 4, 5, 6, 7, 9]) {
+          let model = null;
+          try {
+            if (widx === 4) model = makeMedpackCase().pack;
+            else if (widx === 6) model = makeBlindDartModel();
+            else if (widx === 7) model = makeKnifeModel();
+            else model = makeWeaponModel(widx, { noHands: true });
+          } catch (_) { continue; }
+          let subject = model;
+          if (widx === 7 && model.userData.knifeGroup) subject = model.userData.knifeGroup;
+          else if (widx === 6 && model.userData.gun) subject = model.userData.gun;
+          const holder = new THREE.Group();
+          iconScene.add(holder);
+          // Take the subject out of its first-person rig and drop its pose, keep its own geometry.
+          if (subject !== model) { subject.parent && subject.parent.remove(subject); subject.position.set(0, 0, 0); subject.rotation.set(0, 0, 0); subject.scale.set(1, 1, 1); }
+          holder.add(subject);
+          // Hands are rigged in later under these two grip nodes; an icon shows the object alone.
+          const grips = [];
+          subject.traverse((o) => { if (o.name === "viewGripR" || o.name === "viewGripL") grips.push(o); });
+          grips.forEach((g) => g.parent && g.parent.remove(g));
+          const pose = POSE[widx] || {};
+          holder.rotation.set(pose.roll || 0, pose.y || 0, pose.tilt || 0);
+          holder.updateMatrixWorld(true);
+          const box = new THREE.Box3().setFromObject(holder);
+          const size = box.getSize(new THREE.Vector3()), centre = box.getCenter(new THREE.Vector3());
+          // Camera on +X looking at -X: the muzzle (-Z) points right and up stays up.
+          const half = Math.max(size.z / (2 * 0.94), size.y / (2 * 0.94) * (W / H));
+          cam.left = -half; cam.right = half; cam.top = half * H / W; cam.bottom = -half * H / W;
+          cam.updateProjectionMatrix();
+          cam.position.set(centre.x + 10, centre.y, centre.z);
+          cam.lookAt(centre);
+          cam.updateMatrixWorld(true);
+          iconRenderer.toneMapping = widx === 4 ? THREE.ACESFilmicToneMapping : THREE.NoToneMapping;
+          iconRenderer.render(iconScene, cam);
+          const out = document.createElement("canvas");
+          out.width = W; out.height = H;
+          out.getContext("2d").drawImage(iconRenderer.domElement, 0, 0);
+          weaponIconCache.set(widx, out);
+          iconScene.remove(holder);
+          holder.traverse((o) => { if (o.geometry) o.geometry.dispose(); });
+        }
+      } catch (e) {
+        console.warn("[icons] 3D weapon icons unavailable, using silhouettes:", e);
+      } finally {
+        if (iconRenderer) { try { iconRenderer.dispose(); iconRenderer.forceContextLoss(); } catch (_) {} }
+      }
+      try { _buildInvBar(); } catch (_) {}
+      try { if (typeof _buildHotbarSettings === "function") _buildHotbarSettings(); } catch (_) {}
+    }
+    renderWeaponIcons();
 
     const MED_KIT_HEAL_DURATION = 2.5;
     /**
@@ -13354,6 +16437,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
 
 
     function startWeaponFireAnim() {
+      broadcastPlayerAction("fire");
       const wi = state.weaponIndex;
       if (wi === 0) {
         state.weaponAction = "slide";
@@ -13625,6 +16709,9 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         else breakOpen = 1;
         if (ud.animBreak) ud.animBreak.rotation.x = -breakOpen * 0.68;
 
+        // Tube-fed: each shell comes up from below, lines up with the loading port under
+        // the receiver and is thumbed forward into the magazine tube, where it disappears.
+        // The pump is racked once the last shell is in.
         const shellsNeeded = Math.max(1, w.magSize - state.reloadStartAmmo);
         const loadT = reloadPhase(p, 0.14, 0.88);
         if (ud.animReloadShell && loadT > 0 && loadT < 1) {
@@ -13633,10 +16720,17 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
             Math.floor(loadT * shellsNeeded)
           );
           const shellP = loadT * shellsNeeded - idx;
-          ud.animReloadShell.visible = true;
-          ud.animReloadShell.position.set(0, 0.05 + shellP * 0.035, -0.04 - shellP * 0.05);
-          ud.animReloadShell.rotation.x = Math.PI / 2 + shellP * 0.45;
+          const rise = THREE.MathUtils.smoothstep(shellP, 0, 0.55);
+          const push = THREE.MathUtils.smoothstep(shellP, 0.55, 0.92);
+          ud.animReloadShell.visible = shellP < 0.9;
+          ud.animReloadShell.position.set(
+            THREE.MathUtils.lerp(-0.035, 0, rise),
+            THREE.MathUtils.lerp(-0.11, -0.016, rise) + push * 0.044,
+            THREE.MathUtils.lerp(0.1, 0.055, rise) - push * 0.09
+          );
+          ud.animReloadShell.rotation.set(0.55 * (1 - rise), 0, 0);
         }
+        if (ud.animPump && closeT > 0) ud.animPump.position.z = 0.11 * Math.sin(closeT * Math.PI);
       } else if (wi === 5) {
         const boltOpen = reloadPhase(p, 0, 0.18);
         const magOut = reloadPhase(p, 0.18, 0.4);
@@ -13721,6 +16815,8 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       } else {
         resetViewArms(ud);
       }
+      // The support hand on the handguard lets go whenever the left hand is busy reloading.
+      if (ud.supportHand) ud.supportHand.visible = !(ud.viewArmL && ud.viewArmL.visible);
 
       if (wi === 0) {
         let slideBack = 0;
@@ -13791,9 +16887,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
             rotX = 0; rotZ = 0; offX = 0;
           }
         } else {
-          let pumpZ = 0;
-          if (act === "pump" && !state.reloading) pumpZ = 0.11 * k;
-          if (ud.animPump) ud.animPump.position.z = pumpZ;
+          if (act === "pump" && !state.reloading && ud.animPump) ud.animPump.position.z = 0.11 * k;
           rotX = -0.03 * k;
         }
       } else if (wi === 5) {
@@ -14003,6 +17097,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     }
 
     function setWeapon(index) {
+      if (isMedKitHoldHealing()) return;   // a heal in progress allows walking and nothing else
       const prev = state.weaponIndex;
       flashInvBar(); // slide the hotbar up so the new selection is visible
       state.weaponIndex = THREE.MathUtils.clamp(index | 0, 0, weaponModels.length - 1);
@@ -14119,13 +17214,17 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       state.ads = false;
       state.reloadStartAmmo = w.ammo;
       // Vests slow every hand action: reloads, med-kit use, strapping the harness on.
-      state.reloadEnd = performance.now() + w.reloadTime * getDartSlowReloadMult() * myVest().actionMul;
+      state.reloadStartMs = performance.now();
+      broadcastPlayerAction("reload");
+      if (w.ammo <= 0) tutDone("reload");
+      state.reloadEnd = state.reloadStartMs + w.reloadTime * getDartSlowReloadMult() * myVest().actionMul;
       playReloadSound();
       updateHud();
     }
 
     document.addEventListener("keydown", (e) => {
       if (settingsModalOpen && e.key === "Escape") {
+        if (document.getElementById("settingsPrompt").open) return;
         closeSettingsModal();
         e.preventDefault();
         return;
@@ -14135,6 +17234,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         if (e.key === "Escape") { closeChat(); renderer.domElement.requestPointerLock(); e.preventDefault(); }
         return;
       }
+      if (!controlsInputReady() || settingsModalOpen || gauntletClearOpen || bossResultsOpen) return;
       const k = e.key.toLowerCase();
       if (
         isAction(e, "flashlight") &&
@@ -14151,23 +17251,6 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         playerLightsPreference = !playerLightsPreference;
         refreshLocalPlayerLightsForCurrentState();
         playFlashlightToggleSound();
-        e.preventDefault();
-        return;
-      }
-      if (
-        isAction(e, "flashBeam") &&
-        started &&
-        gameWorldReady &&
-        menuEl.style.display === "none" &&
-        !chatOpen &&
-        !settingsModalOpen
-      ) {
-        if (isBrightIndoorMap(CURRENT_MAP)) {
-          e.preventDefault();
-          return;
-        }
-        if (e.repeat) return;
-        flashlightBeamLevel = (flashlightBeamLevel + 1) % 3;
         e.preventDefault();
         return;
       }
@@ -14189,8 +17272,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       // browser chord (Ctrl+R, Ctrl+W) while the game has focus.
       if (isAction(e, "crouch")) keys.crouch = true;
       // Hotbar keys — order follows gameSettings.weaponSlotOrder
-      { const _sk = ["1","2","3","4","5","6","7","0"];
-        const _si = _sk.indexOf(k);
+      { const _si = LOADOUT_SLOT_KEYS.indexOf(k);
         if (_si >= 0) {
           const _slot = activeHotbarSlots().find((sl) => sl.key === k);
           // A key with nothing behind it still peeks the bar, so the layout is discoverable.
@@ -14203,14 +17285,14 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       }
       if (isAction(e, "reload")) startReload();
 
-      if (isAction(e, "dash") && started && !paused && player.health > 0 && gameWorldReady && menuEl.style.display === "none" && !chatOpen && !settingsModalOpen) {
+      if (isAction(e, "dash") && started && !paused && player.health > 0 && gameWorldReady && menuEl.style.display === "none" && !chatOpen && !settingsModalOpen && !isMedKitHoldHealing()) {
         const nowC = performance.now();
         if (isJetStrapping()) {
-          showCombatFeedback(tr("jetBusy", "STRAPPING IN..."), "#88ccff", 0.25);
-        } else if (nowC < state.dashDisabledUntil) {
-          showCombatFeedback("DASH LOCKED " + Math.ceil((state.dashDisabledUntil - nowC) / 1000) + "s", "#ff4422", 0.25);
-        } else if (!isJetActive() && state.stamina < STAMINA_DASH_COST) {
-          showCombatFeedback(tr("staminaEmpty", "OUT OF STAMINA"), "#ffb21f", 0.25);
+          hudDeny("hvStam");
+        } else if (nowC < state.dashDisabledUntil || gauntletRuntime?.modifiers(player).locked) {
+          hudDeny("hvStam");
+        } else if (state.stamina + 1e-6 < STAMINA_DASH_COST || ((state.dashChain || 0) >= 3 && state.stamina < STAMINA_MAX - 1e-6)) {
+          hudDeny("hvStam");
         } else if (nowC >= state.dashCooldownEnd) {
           // True velocity-based dash. DASH_DIST units over DASH_DURATION_MS (≈200ms —
           // half the prior 400ms, so the dash is 2× faster and more responsive).
@@ -14219,19 +17301,23 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           // etc. If the player has no recent movement input, fall back to camera-
           // forward. Wall sliding + the 350ms cooldown still apply.
           const DASH_DIST = 8.0;
-          const DASH_DURATION_MS = 200;
+          const DASH_DURATION_MS = isJetActive() ? 290 : 200;
           const cp = Math.cos(player.pitch);
           let dirX;
           let dirY;
           let dirZ;
           const jetting = isJetActive();
           if (jetting) {
-            // Jet dash: fly along the FULL look vector, pitch included. Camera-forward is
-            // already unit length, so the travelled distance is DASH_DIST at every angle —
-            // straight up covers exactly as much ground as straight ahead.
-            dirX = -Math.sin(player.yaw) * cp;
-            dirY = Math.sin(player.pitch);
-            dirZ = -Math.cos(player.yaw) * cp;
+            // WASD chooses the horizontal direction and look pitch controls climb.
+            const steerX = (keys.d ? 1 : 0) - (keys.a ? 1 : 0);
+            const steerZ = (keys.w ? 1 : 0) - (keys.s ? 1 : 0);
+            const localForward = steerX || steerZ ? steerZ : 1;
+            dirX = -Math.sin(player.yaw) * localForward + Math.cos(player.yaw) * steerX;
+            dirZ = -Math.cos(player.yaw) * localForward - Math.sin(player.yaw) * steerX;
+            const horizontal = Math.max(0.01, Math.hypot(dirX, dirZ));
+            dirX /= horizontal;
+            dirZ /= horizontal;
+            dirY = THREE.MathUtils.clamp(Math.sin(player.pitch), -0.38, 0.46);
           } else {
             // Ground dash: direction comes from the player's last horizontal movement
             // (captured every frame in updatePlayer): W → forward, W+A → diagonal
@@ -14249,28 +17335,39 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           state.dashDirX = dirX / dirLen;
           state.dashDirY = dirY / dirLen;
           state.dashDirZ = dirZ / dirLen;
-          state.dashRemainingDist = DASH_DIST;
+          state.dashRemainingDist = jetting ? 6.4 : DASH_DIST;
+          state.dashSpeed = state.dashRemainingDist / (DASH_DURATION_MS / 1000);
           state.dashActiveUntil = nowC + DASH_DURATION_MS;
           state.dashIsJet = jetting;
+          state.dashWasActive = true;
+          player.velocityY = 0;
           if (jetting) playJetBurstSound();
           else playDashSound();
           state.dashCooldownEnd = nowC + 350;
-          // Flight is free of stamina by design — the harness is limited by its own 10 s
-          // window plus JET_COOLDOWN_MS, not by the ground-mobility budget.
-          if (!jetting) {
-            state.stamina = Math.max(0, state.stamina - STAMINA_DASH_COST);
-            state.staminaRegenAt = nowC + STAMINA_REGEN_DELAY_MS;
-          }
+          state.stamina = Math.max(0, state.stamina - STAMINA_DASH_COST);
+          state.dashChain = (state.dashChain || 0) + 1;   // three in a row, then wait for a full bar
+          state.staminaRegenAt = nowC + STAMINA_REGEN_DELAY_MS;
+          broadcastPlayerAction("dash");
           state.camShake = Math.max(state.camShake, jetting ? 0.1 : 0.06);
+          {
+            const lateral = state.dashDirX * Math.cos(player.yaw) - state.dashDirZ * Math.sin(player.yaw);
+            addCamKick({ fov: jetting ? 11 : 8, pitch: 0.012, roll: -lateral * 0.05 });
+          }
           e.preventDefault();
         }
       }
       if (isAction(e, "questHud")) toggleQuestHud();
-      if (isAction(e, "speedNeedle") && started && !paused && gameWorldReady && menuEl.style.display === "none" && !chatOpen && !settingsModalOpen) {
+      if (isAction(e, "hudHelp") && !e.repeat) {
+        // Pin it open, or dismiss it — either way the auto-hide timer no longer applies.
+        hudHelpPinned = !isHudHelpVisible();
+        hudHelpAutoUntilMs = 0;
+        updateHud();
+      }
+      if (isAction(e, "speedNeedle") && started && !paused && gameWorldReady && menuEl.style.display === "none" && !chatOpen && !settingsModalOpen && !isMedKitHoldHealing()) {
         e.preventDefault();
         activateSpeedNeedle();
       }
-      if (isAction(e, "jetHarness") && started && !paused && gameWorldReady && menuEl.style.display === "none" && !chatOpen && !settingsModalOpen) {
+      if (isAction(e, "jetHarness") && started && !paused && gameWorldReady && menuEl.style.display === "none" && !chatOpen && !settingsModalOpen && !isMedKitHoldHealing()) {
         e.preventDefault();
         if (!e.repeat) activateJetHarness();
       }
@@ -14352,6 +17449,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       keys.space = false;
       keys.shift = false;
       keys.f = false;
+      keys.v = false;
       keys.crouch = false;
       state.mouseDown = false;
       state.ads = false;
@@ -14361,11 +17459,9 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       state.locked = document.pointerLockElement === renderer.domElement;
       if (!state.locked) {
         _freeLookHasLast = false;
-        if (!gameSettings.skipClickToPlay) {
-          releaseAllInput();
-          if (started && player.health > 0 && menuEl.style.display === "none" && !chatOpen && !settingsModalOpen && gameWorldReady) {
-            showPause();
-          }
+        releaseAllInput();
+        if (started && player.health > 0 && menuEl.style.display === "none" && !chatOpen && !settingsModalOpen && gameWorldReady && !gauntletClearOpen && !bossResultsOpen) {
+          showPause();
         }
       } else {
         hidePause();
@@ -14432,11 +17528,11 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         const sp = pickPvpSpawn(CURRENT_MAP);
         player.position.set(sp.x, 1.65, sp.z);
         player.yaw = Math.random() * Math.PI * 2;
-        floor.visible = true;
-        ceiling.visible = CURRENT_MAP === "crossfire";
+        floor.visible = false;     // every PVP map lays its own ground and roof
+        ceiling.visible = false;
       } else if (isBossArenaMap(CURRENT_MAP)) {
         player.position.set(0, 1.65, 40);
-        player.yaw = Math.PI;
+        player.yaw = 0;
         floor.visible = false;
         ceiling.visible = false;
       } else if (isGauntletMap(CURRENT_MAP)) {
@@ -14451,7 +17547,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         // back — you had to spin 180° on every spawn.
         player.position.set(0, 1.65, 22);
         player.yaw = 0;
-        floor.visible = true;
+        floor.visible = false;
         ceiling.visible = false;
       } else {
         floor.visible = false;
@@ -14464,28 +17560,57 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       clearMap();
       positionPlayerForCurrentMap();
       MAP_BUILDERS[CURRENT_MAP]();
+      applyWallTexture();
       applySceneFogAndCameraFar();
       if (isArenaLikeMap(CURRENT_MAP)) {
         applyArenaMazePlayerSpawn();
+        ensureArenaBootstrapChunks();
       }
       buildNavGrid();
       rebuildEnemyRoster();
       player.velocityY = 0;
       player.onGround = true;
       camera.position.copy(player.position);
+      if (isArenaLikeMap(CURRENT_MAP)) cullMazeLightsNearCamera();
       compileSceneShaders();
     }
 
     const _enemyWallSphere = new THREE.Sphere();
 
-    function enemyCollidesWall(nextX, nextZ, radius = 0.34) {
-      _enemyWallSphere.center.set(nextX, 1.0, nextZ);
+    function enemyCollidesWall(nextX, nextZ, radius = 0.34, floorY = 0) {
+      _enemyWallSphere.center.set(nextX, floorY + 1, nextZ);
       _enemyWallSphere.radius = radius;
       let hit = false;
+      let hasFloor = !isGauntletMap(CURRENT_MAP);
       forEachNearbyWallBox(nextX, nextZ, (box) => {
         if (!hit && box.intersectsSphere(_enemyWallSphere)) hit = true;
+        if (!hasFloor && box.wideTop && Math.abs(box.max.y - floorY) < 0.1
+            && nextX >= box.min.x && nextX <= box.max.x && nextZ >= box.min.z && nextZ <= box.max.z) {
+          hasFloor = true;
+        }
       });
-      return hit;
+      return hit || !hasFloor;
+    }
+
+    function bossRouteClear(fromX, fromZ, toX, toZ, floorY, radius = 0.68) {
+      const dx = toX - fromX, dz = toZ - fromZ;
+      const steps = Math.max(1, Math.ceil(Math.hypot(dx, dz) / 0.45));
+      for (let i = 1; i <= steps; i++) {
+        if (enemyCollidesWall(fromX + dx * i / steps, fromZ + dz * i / steps, radius, floorY)) return false;
+      }
+      return true;
+    }
+
+    function bossMinionSpawn(boss, angle, radius) {
+      const origin = boss.group.position;
+      for (let attempt = 0; attempt < 8; attempt++) {
+        const direction = angle + attempt * 0.43;
+        const distance = radius * (1 - attempt * 0.10);
+        const x = origin.x + Math.cos(direction) * distance;
+        const z = origin.z + Math.sin(direction) * distance;
+        if (!enemyCollidesWall(x, z, 0.42, boss.baseY || 0)) return { x, z };
+      }
+      return { x: origin.x, z: origin.z };
     }
 
     /** Prefer high-degree maze cells (actual grid), then near chunk center, until collision-free. */
@@ -14559,11 +17684,39 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       return out;
     }
     /** Respawn delay with jitter — a wiped-out wave used to come back in perfect lockstep. */
+    /** A live zombie farther than this from the player is moved back into the area around them. */
+    const ZOMBIE_LEASH_DIST_SQ = 62 * 62;
+    /** Zombies closer together than this steer apart (world units, centre to centre). */
+    const ZOMBIE_SEPARATION_DIST = 0.95;
+    /** Unaware zombies shuffle at this fraction of their chase speed. */
+    const ZOMBIE_WANDER_SPEED_MUL = 0.3;
+    /** How far a gunshot carries to zombie ears. The AS Val's suppressor earns its keep here. */
+    const GUNSHOT_HEAR_RADIUS = 26;
+    const GUNSHOT_HEAR_RADIUS_SUPPRESSED = 8;
+
+    /**
+     * Sound aggro: firing alerts every unaware zombie in earshot, so shooting in the maze
+     * draws the ones around the corner instead of leaving them idling until they happen to
+     * get line of sight. Once alerted they path to you through the normal flow field and
+     * forget again after LOSE_TIME without seeing you.
+     */
+    function alertZombiesToNoise(x, z, radius) {
+      const r2 = radius * radius;
+      for (const enemy of state.enemies) {
+        if (!enemy.alive || enemy.aware || enemy.isBoss || enemy.trainingDummy) continue;
+        const dx = enemy.group.position.x - x;
+        const dz = enemy.group.position.z - z;
+        if (dx * dx + dz * dz > r2) continue;
+        enemy.aware = true;
+        enemy.hiddenTimer = 0;
+      }
+    }
+
     function zombieRespawnDelay() {
       return 3.0 + Math.random() * 3.5;
     }
     /** Gunner (ranged): seconds of clear line-of-sight to target before firing is allowed. Resets when LOS breaks. */
-    const RANGED_LOS_ACQUIRE_DELAY = 0.62;
+    const RANGED_LOS_ACQUIRE_DELAY = 0.92;
     /**
      * Gunner kite thresholds (XZ distance to player). When the player closes
      * inside GUNNER_KITE_TRIGGER_DIST, the gunner starts slowly backing away
@@ -14581,6 +17734,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         scene.remove(enemy.group);
       }
       state.enemies.length = 0;
+      localZombieLookSeed = Math.floor(Math.random() * ZOMBIE_LOOK_COUNT);
 
       if (isTrainingMap(CURRENT_MAP)) {
         rebuildTrainingDummies();
@@ -14591,7 +17745,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         const spec = gauntletCourse ? gauntletCourse.spec : null;
         if (!spec) return;
         const spots = gauntletCourse.spots.slice();
-        const n = Math.min(spec.z || 0, spots.length);
+        const n = Math.min((spec.z || 0) * ZOMBIE_POPULATION_MULTIPLIER, spots.length);
         const composition = buildZombieComposition(n);
         for (let i = 0; i < n; i++) {
           const sp = spots.splice(Math.floor(Math.random() * spots.length), 1)[0];
@@ -14601,14 +17755,18 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           zomb.baseY = sp.y;
           zomb.group.position.y = sp.y;
           zomb.netIndex = i;
+          zomb.gauntletRoom = sp.room;
           drawEnemyHp(zomb);
           state.enemies.push(zomb);
         }
         if (spec.boss && gauntletCourse.bossSpot) {
           const bs = gauntletCourse.bossSpot;
-          // The boss pins itself to the BOSS_BASE_Y constant every frame, so its room is
-          // always authored at ground level (see the level table) and no Y fixup is needed.
           const boss = makeHormoneZombie(bs.x, bs.z, !!spec.hell);
+          boss.baseY = bs.y;
+          boss.group.position.y += bs.y;
+          // Gauntlet bosses are a quick fight: 5x a normal zombie's 100 HP in every mode.
+          boss.hp = boss.maxHp = boss.baseTankHp = boss.baseGunnerHp = boss.baseSpeedHp = 5 * 100;
+          boss.gauntletRoom = bs.room;
           boss.netIndex = state.enemies.length;
           drawEnemyHp(boss);
           state.enemies.push(boss);
@@ -14700,6 +17858,8 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
 
     function performDevGunPierce(ray, muzzleStart, w) {
       const wallDist = getVerticalWallDist(ray);
+      const demoHit = hitAnimationShowcase(ray);
+      if (demoHit && demoHit.distance < wallDist) showAnimationShowcaseHit(demoHit);
       const pierceHits = [];
       for (const enemy of state.enemies) {
         if (!enemyBlockingHits(enemy)) continue;
@@ -14851,14 +18011,16 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
      */
     function bossHitAlongRay(raycaster, enemy, pad = 1) {
       let bestT = Infinity, bestZone = null, bestGroup = null;
-      for (let pi = 0; pi < BOSS_PART_BOXES.length; pi++) {
-        const g = enemy[BOSS_PART_BOXES[pi][0]];
+      // The creature carries its own table (groups of its skeleton); the humanoid boss used BOSS_PART_BOXES.
+      const table = enemy.bossHitTable || BOSS_PART_BOXES;
+      for (let pi = 0; pi < table.length; pi++) {
+        const g = enemy[table[pi][0]];
         if (!g) continue;
         g.updateMatrixWorld(true);
         _invEnemyMat.copy(g.matrixWorld).invert();
         _ehLo.copy(raycaster.ray.origin).applyMatrix4(_invEnemyMat);
         _ehLd.copy(raycaster.ray.direction).transformDirection(_invEnemyMat).normalize();
-        const boxes = BOSS_PART_BOXES[pi][1];
+        const boxes = table[pi][1];
         for (let bi = 0; bi < boxes.length; bi++) {
           const t = rayBoxParam(_ehLo.x, _ehLo.y, _ehLo.z, _ehLd.x, _ehLd.y, _ehLd.z, boxes[bi], pad);
           if (t !== null && t < bestT) { bestT = t; bestZone = boxes[bi].zone; bestGroup = g; }
@@ -14885,13 +18047,14 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       let zone = null;
       {
         const volumes = [
-          { cx: 0, cy: 1.82, cz: 0, r: 0.3, zone: "head" },
+          { cx: 0, cy: 1.82, cz: 0, r: rootGroup.userData.operator ? .23 : .3, zone: "head" },
           { cx: 0, cy: 1.12, cz: 0, r: 0.52, zone: "body" },
           { cx: 0, cy: 0.42, cz: 0, r: 0.46, zone: "leg" },
         ];
         for (let vi = 0; vi < volumes.length; vi++) {
           const v = volumes[vi];
-          const t = raySphereParam(_ehLo, _ehLd, v.cx, v.cy, v.cz, v.r * pad);
+          const drop = (rootGroup.userData.crouchDrop || 0) * (v.zone === "leg" ? 0.35 : 1);
+          const t = raySphereParam(_ehLo, _ehLd, v.cx, v.cy - drop, v.cz, v.r * pad);
           if (t !== null && t < bestLocalT) {
             bestLocalT = t;
             zone = v.zone;
@@ -14917,9 +18080,22 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     }
 
     function applyDamage(enemy, zone, w) {
-      if (zone === "head") enemy.hp -= w.damageHead;
-      else if (zone === "leg") enemy.hp -= w.damageLegs;
-      else enemy.hp -= w.damageBody;
+      // The creature boss takes double while its armour is open (stunned after a missed charge).
+      const armor = bossArmorMul(enemy);
+      if (zone === "head") enemy.hp -= w.damageHead * armor;
+      else if (zone === "leg") enemy.hp -= w.damageLegs * armor;
+      else enemy.hp -= w.damageBody * armor;
+      // Flinch + brief stagger, scaled by how hard the round hits. Bosses barely notice.
+      {
+        const dmg = zone === "head" ? w.damageHead : zone === "leg" ? w.damageLegs : w.damageBody;
+        const hard = THREE.MathUtils.clamp((dmg || 0) / 60, 0.25, 1);
+        enemy._flinchMs = 180 + 140 * hard;
+        enemy._flinchUntil = performance.now() + enemy._flinchMs;
+        enemy._flinchAmt = (enemy.isBoss ? 0.08 : 0.32) * hard;
+        enemy._flinchTwist = (Math.random() - 0.5) * (enemy.isBoss ? 0.05 : 0.3) * hard;
+        enemy._flinchHead = zone === "head";
+        if (!enemy.isBoss) enemy._staggerUntil = performance.now() + 110 + 220 * hard;
+      }
       drawEnemyHp(enemy);
       // Aggro on hit: being damaged always alerts the enemy (bosses are already always-
       // aware, but for regular zombies a long-range sniper shot should pull them off
@@ -14965,9 +18141,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       if (player.health <= 0) return;
       const nd = state.speedNeedle;
       if (nd.phase === 'injecting') return;
-      if (nd.phase === 'boost')  { showCombatFeedback(tr("needleAlreadyActive","SPEED ACTIVE"), '#22ff88', 0.4); return; }
-      if (nd.phase === 'weak')   { showCombatFeedback(tr("needleAlreadyWeak","SPEED WEAK"), '#ff9922', 0.4); return; }
-      if (nd.charges <= 0)       { showCombatFeedback(tr("needleNoCharge","NO CHARGES"), '#ff4422', 0.4); return; }
+      if (nd.phase === 'boost' || nd.phase === 'weak' || nd.charges <= 0) { hudDeny("gearNeedle"); return; }
       nd.charges--;
       nd.phase = 'injecting';
       nd.animStart = performance.now();
@@ -15026,7 +18200,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           nd.phase = 'boost';
           nd.timer = NEEDLE_BOOST_MS;
           if (needleRoot) needleRoot.visible = false;
-          showCombatFeedback('⚡ ' + tr("needleBoostStart","SPEED ×2  5s"), '#22ff88', 1.8);
+          /* shown on the HUD / in the world, not as text */
           _playNeedleBoostSound();
         }
       } else if (nd.phase === 'boost') {
@@ -15034,7 +18208,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         if (nd.timer <= 0) {
           nd.phase = 'weak';
           nd.timer = NEEDLE_WEAK_MS;
-          showCombatFeedback(tr("needleWeakStart","SPEED WEAK..."), '#ff9922', 1.8);
+          /* shown on the HUD / in the world, not as text */
         }
       } else if (nd.phase === 'weak') {
         nd.timer -= dt * 1000;
@@ -15042,51 +18216,13 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           nd.phase = 'idle';
           nd.timer = 0;
           nd.charges = 1;
-          showCombatFeedback(tr("needleReady","NEEDLE READY"), '#88aaff', 1.0);
+          /* shown on the HUD / in the world, not as text */
         }
       }
       updateNeedleHud();
     }
 
-    function updateNeedleHud() {
-      const el = _needleHudEl || (_needleHudEl = document.getElementById('needleHud'));
-      if (!el) return;
-      const inGame = gameWorldReady && menuEl && menuEl.style.display === 'none';
-      if (!inGame) { el.style.display = 'none'; return; }
-      el.style.display = 'flex';
-      const nd = state.speedNeedle;
-      let cls = "";
-      let label = "";
-      let width = "";
-      if (nd.phase === 'idle') {
-        label = 'Q · ' + tr("needleName","Speed Needle") + (nd.charges > 0 ? ' ×' + nd.charges : ' — ' + tr("needleExhausted","Empty"));
-        width = nd.charges > 0 ? '100%' : '0%';
-      } else if (nd.phase === 'injecting') {
-        cls = 'nh-inject';
-        label = tr("needleInjecting","Injecting...");
-        const t = Math.min((performance.now() - nd.animStart) / NEEDLE_INJECT_DUR_MS, 1);
-        width = (t * 100).toFixed(0) + '%';
-      } else if (nd.phase === 'boost') {
-        cls = 'nh-boost';
-        const sec = Math.max(0, nd.timer / 1000).toFixed(1);
-        label = '⚡ ' + tr("needleBoost","SPEED ×2") + '  ' + sec + 's';
-        width = (nd.timer / NEEDLE_BOOST_MS * 100).toFixed(0) + '%';
-      } else if (nd.phase === 'weak') {
-        cls = 'nh-weak';
-        const sec = Math.max(0, nd.timer / 1000).toFixed(1);
-        label = tr("needleWeakLabel","Weak") + '  ' + sec + 's';
-        width = (nd.timer / NEEDLE_WEAK_MS * 100).toFixed(0) + '%';
-      }
-      // Skip the class/label/width writes while nothing changed (idle is static).
-      const key = cls + "|" + label + "|" + width;
-      if (key === _needleHudKey) return;
-      _needleHudKey = key;
-      el.className = cls;
-      const lbl  = _needleLabelEl || (_needleLabelEl = document.getElementById('needleLabel'));
-      const fill = _needleBarFillEl || (_needleBarFillEl = document.getElementById('needleBarFill'));
-      if (lbl) lbl.textContent = label;
-      if (fill) fill.style.width = width;
-    }
+    function updateNeedleHud() { /* drawn by updateGameHud() */ }
 
     /**
      * Speed-needle inject sound. Five layers, ~420 ms total:
@@ -15270,7 +18406,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         const extra = w.reloadTime * (DART_SLOW_RELOAD_MULT - 1);
         state.reloadEnd = Math.max(state.reloadEnd, performance.now() + extra);
       }
-      showCombatFeedback(tr("combatSlowed", "SLOWED"), "#6bd4ff", 0.42);
+      /* shown on the HUD / in the world, not as text */
       if (SLOW_TEXT_EL) {
         SLOW_TEXT_EL.textContent = tr("hudSlowed", "IMMOBILIZED");
         SLOW_TEXT_EL.classList.add("show");
@@ -15296,19 +18432,18 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     }
 
     function activateJetHarness() {
+      if (!controlsInputReady()) return;
       if (!gameWorldReady || !menuEl || menuEl.style.display !== "none") return;
       if (player.health <= 0 || paused) return;
       const jt = state.jet;
       if (jt.phase === "strapping") return;
       if (jt.phase === "active") {
-        showCombatFeedback(tr("jetAlreadyOn", "HARNESS ALREADY ON"), "#66ccff", 0.4);
+        hudDeny("gearJet");
         return;
       }
       const nowJ = performance.now();
       if (nowJ < (jt.cooldownUntil || 0)) {
-        showCombatFeedback(
-          tr("jetCooling", "HARNESS COOLING") + " " + Math.ceil((jt.cooldownUntil - nowJ) / 1000) + "s",
-          "#ff9422", 0.4);
+        hudDeny("gearJet");
         return;
       }
       jt.phase = "strapping";
@@ -15320,7 +18455,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       state.mouseDown = false;
       if (jetRoot) jetRoot.visible = true;
       playJetStrapSound();
-      showCombatFeedback(tr("jetStrapping", "STRAPPING IN..."), "#88ccff", 0.6);
+      /* shown on the HUD / in the world, not as text */
     }
 
     /**
@@ -15377,11 +18512,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           jt.netState = 2;
           if (jetRoot) jetRoot.visible = false;
           playJetIgniteSound();
-          showCombatFeedback(
-            "🜂 " + tr("jetOnline", "JET ONLINE — DASH TO FLY"),
-            "#66ccff",
-            1.6
-          );
+
         }
         return;
       }
@@ -15393,7 +18524,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           jt.charges = 1;
           jt.cooldownUntil = performance.now() + JET_COOLDOWN_MS;
           if (jetRoot) jetRoot.visible = false;
-          showCombatFeedback(tr("jetExpired", "HARNESS BURNED OUT"), "#ff9922", 1.2);
+          /* shown on the HUD / in the world, not as text */
         }
         return;
       }
@@ -15433,9 +18564,9 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         "background:linear-gradient(180deg,rgba(12,14,18,0.92),rgba(0,0,0,0.7));" +
         "border:1px solid rgba(255,255,255,0.18);box-shadow:0 2px 10px rgba(0,0,0,0.65);";
 
-      // Lethal band: everything at or above JET_FATAL_FALL_DROP on the scale.
+      // Lethal band for a full-health player.
       const danger = document.createElement("div");
-      const dangerFrac = 1 - JET_FATAL_FALL_DROP / ALT_GAUGE_MAX;
+      const dangerFrac = 1 - FATAL_FALL_DROP / ALT_GAUGE_MAX;
       danger.style.cssText =
         "position:absolute;left:0;right:0;top:0;height:" + (dangerFrac * 100).toFixed(1) + "%;" +
         "background:repeating-linear-gradient(45deg,rgba(255,40,40,0.30) 0 6px,rgba(255,40,40,0.14) 6px 12px);";
@@ -15470,7 +18601,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       const wrap = document.createElement("div");
       wrap.id = "dashStaminaHud";
       wrap.style.cssText =
-        "position:fixed;left:50%;bottom:205px;transform:translateX(-50%);z-index:43;" +
+        "position:fixed;left:50%;bottom:160px;transform:translateX(-50%);z-index:43;" +
         "display:none;flex-direction:column;align-items:center;gap:4px;" +
         "pointer-events:none;user-select:none;font-family:var(--game-font-ui);";
       const txt = document.createElement("div");
@@ -15502,32 +18633,21 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       _stamWrapEl = wrap; _stamFillEl = fill; _stamTextEl = txt;
     }
 
-    function updateStaminaHud() {
-      buildStaminaHud();
-      if (!_stamWrapEl) return;
-      const inGame = gameWorldReady && menuEl && menuEl.style.display === "none" && player.health > 0;
-      if (!inGame) { _stamWrapEl.style.display = "none"; return; }
-      _stamWrapEl.style.display = "flex";
-      const frac = THREE.MathUtils.clamp(state.stamina / STAMINA_MAX, 0, 1);
-      _stamFillEl.style.width = (frac * 100).toFixed(1) + "%";
-      const dashes = Math.floor(state.stamina / STAMINA_DASH_COST);
-      const dry = dashes < 1;
-      _stamFillEl.style.background = dry
-        ? "linear-gradient(180deg,#ff8a5c,#d8451f)"
-        : "linear-gradient(180deg,#7fe3ff,#1f9dd8)";
-      _stamTextEl.style.color = dry ? "#ffb08f" : "#9fd8ff";
-      // NOTE: K() is a local of updateHud() — use the underlying helpers directly here.
-      _stamTextEl.textContent =
-        tr("hudStamina", "STAMINA") + "  " + dashes + "× " + codeToLabel(kbCode("dash"));
-    }
+    function updateStaminaHud() { /* drawn by updateGameHud() */ }
 
     function updateAltGauge() {
       buildAltGauge();
       if (!_altGaugeEl) return;
       const inGame = gameWorldReady && menuEl && menuEl.style.display === "none";
-      // Height you would fall from right now (floor sits at eye level 1.65).
-      const drop = player.position.y - 1.65;
-      const show = inGame && player.health > 0 && (drop > 0.6 || state.jet.phase !== "idle");
+      if (!inGame || player.health <= 0 || (player.onGround && state.jet.phase === "idle")) {
+        _altGaugeEl.style.display = "none";
+        return;
+      }
+      const { x, y, z } = player.position;
+      const support = highestSupportTop(x, z, -Infinity, y - 1.65 + .01);
+      const landingEyeY = Math.max(worldFloorEyeY(), support + 1.65);
+      const drop = Math.max(0, Math.max(y, player.fallApexY ?? y) - landingEyeY);
+      const show = drop > 0.6 || state.jet.phase !== "idle";
       _altGaugeEl.style.display = show ? "flex" : "none";
       if (!show) return;
 
@@ -15536,48 +18656,21 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
 
       let color = "#17c85b";
       let label = "#8de08d";
-      if (drop >= JET_FATAL_FALL_DROP) {
+      const lethal = fallDamage(drop) >= player.health;
+      if (lethal) {
         color = "#ff2f2f";
         label = "#ff6a6a";
-      } else if (drop >= JET_FALL_WARN_DROP) {
+      } else if (drop > SAFE_FALL_DROP) {
         color = "#ffb21f";
         label = "#ffd07a";
       }
       _altFillEl.style.background = `linear-gradient(180deg, ${color}, ${color})`;
       _altTextEl.style.color = label;
       _altTextEl.textContent =
-        drop.toFixed(1) + "m" + (drop >= JET_FATAL_FALL_DROP ? "  ☠" : "");
+        drop.toFixed(1) + "m" + (lethal ? "  ☠" : "");
     }
 
-    function updateJetHud() {
-      const el = _jetHudEl || (_jetHudEl = document.getElementById("needleHud"));
-      if (!el) return;
-      const jt = state.jet;
-      if (jt.phase === "idle") return; // needle HUD owns the bar when the harness is idle
-      const inGame = gameWorldReady && menuEl && menuEl.style.display === "none";
-      if (!inGame) return;
-      const lbl = _needleLabelEl || (_needleLabelEl = document.getElementById("needleLabel"));
-      const fill = _needleBarFillEl || (_needleBarFillEl = document.getElementById("needleBarFill"));
-      let text = "";
-      let width = "0%";
-      if (jt.phase === "strapping") {
-        const p = jetPhaseProgress();
-        // Span, not the constant: a heavy vest stretches the strap-in, and the countdown
-        // has to say so rather than lying about a flat 3 s.
-        const strapSpan = Math.max(1, jt.endMs - jt.startMs);
-        text = tr("jetStrapping", "STRAPPING IN...") + "  " + ((1 - p) * (strapSpan / 1000)).toFixed(1) + "s";
-        width = (p * 100).toFixed(0) + "%";
-      } else {
-        const left = Math.max(0, jt.endMs - performance.now());
-        text = "🜂 " + tr("jetActive", "JET") + "  " + (left / 1000).toFixed(1) + "s";
-        width = ((left / JET_ACTIVE_MS) * 100).toFixed(0) + "%";
-      }
-      el.style.display = "flex";
-      el.className = "nh-inject";
-      if (lbl) lbl.textContent = text;
-      if (fill) fill.style.width = width;
-      _needleHudKey = "";  // force the needle HUD to redraw once the harness releases the bar
-    }
+    function updateJetHud() { /* drawn by updateGameHud() */ }
 
     /** Short pneumatic clatter — buckles being drawn tight. */
     function playJetStrapSound() {
@@ -15679,6 +18772,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       enemy.retargetTimer = 0;
       enemy.rangedLosAcquireTimer = 0;
       enemy.moving = false;
+      enemy.meleeElapsed = null;
       enemy.attackCooldownTimer = Math.max(enemy.attackCooldownTimer, dur);
     }
 
@@ -15898,6 +18992,14 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
             }
           }
 
+          if (!consumed && p.fromShooter && isTrainingMap(CURRENT_MAP)) {
+            const demoHit = hitAnimationShowcase(segRay);
+            if (demoHit && !segRay.intersectObjects(wallMeshes, false).some(hit => hit.distance < demoHit.distance)) {
+              showAnimationShowcaseHit(demoHit);
+              consumed = true;
+            }
+          }
+
           if (!consumed) {
             for (const enemy of state.enemies) {
               if (!enemyBlockingHits(enemy)) continue;
@@ -16028,11 +19130,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           rpVictim.hpEstimate = Math.max(0, after);
           if (after <= 0) {
             if (applyPvpKillToVictim(rpVictim, bp.clone ? bp.clone() : bp)) {
-              showCombatFeedback(
-                isBack ? tr("combatBackstab", "BACKSTAB!") : tr("combatKill", "KILL!"),
-                "#ff5050",
-                0.34
-              );
+              markKillConfirm();
               createSparks(bp.clone ? bp.clone() : bp, 0xff5555);
             }
           }
@@ -16064,7 +19162,8 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         }
         triggerHitFeedback(false, false);
         const baseEnemyDamage = bestEnemyZone === "head" ? w.damageHead : bestEnemyZone === "leg" ? w.damageLegs : w.damageBody;
-        bestEnemy.hp -= baseEnemyDamage * knifeDamageMult;
+        bestEnemy.playerHit = true;
+        bestEnemy.hp -= baseEnemyDamage * knifeDamageMult * bossArmorMul(bestEnemy);
         drawEnemyHp(bestEnemy);
         if (bestEnemy.hp <= 0 && bestEnemy.alive) {
           bestEnemy.alive = false;
@@ -16152,7 +19251,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     }
 
     function tryShoot() {
-      if (!gameWorldReady || paused || player.health <= 0) return;
+      if (!controlsInputReady()) return;
       if (state.weaponIndex === 4) return;
       // Both hands are on the harness straps for the 3 s strap-on — that commitment is the
       // cost of the item, so no shooting until it is on.
@@ -16172,6 +19271,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         state.weaponActionDur = combo === 2 ? 700 : 620;
         state.weaponActionStart = now;
         playKnifeSwingSound();
+        broadcastPlayerAction("knife");
         performKnifeAttack(w);
         updateHud();
         return;
@@ -16225,7 +19325,8 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
             createSparks(bp.clone ? bp.clone() : bp, 0x6bd4ff);
           }
         }
-        updateHud();
+        if (w.ammo <= 0) startReload();
+        else updateHud();
         return;
       }
 
@@ -16260,6 +19361,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         recoilMultiplier = adsReady ? 0.62 : THREE.MathUtils.lerp(1.45, 0.85, adsAccuracy * 0.55);
       }
       state.recoil += w.recoil * recoilMultiplier;
+      addCamKick({ pitch: Math.min(0.03, w.recoil * recoilMultiplier * 0.22), roll: (Math.random() - 0.5) * 0.006 });
       applyRecoilKick(w, recoilMultiplier);
       state.spreadBloom = Math.min(
         w.spreadBloomMax,
@@ -16270,13 +19372,23 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       const _crosshairHit = new THREE.Vector3();
 
       playGunSound(w);
+      if (state.enemies.some((e) => e.alive && e.aware)) tutDone("fire");
+      alertZombiesToNoise(
+        player.position.x, player.position.z,
+        state.weaponIndex === 9 ? GUNSHOT_HEAR_RADIUS_SUPPRESSED : GUNSHOT_HEAR_RADIUS
+      );
       startWeaponFireAnim();
       maybeEjectShellCasing();
 
       for (let i = 0; i < w.pellets; i++) {
         getActiveMuzzleWorld(muzzleStart);
 
-        const movingPenalty = (keys.w || keys.a || keys.s || keys.d) ? 1.25 : 1;
+        // Scales with how fast you are really moving (so coasting to a stop tightens the
+        // cone progressively), opens up in the air, and tightens when crouched and settled.
+        const _mvFrac = Math.min(1, Math.hypot(state.velX, state.velZ) / player.speed);
+        const movingPenalty = (1 + 0.25 * _mvFrac)
+          * (player.onGround ? 1 : 1.3)
+          * (1 - 0.15 * crouchAmt);
         // ADS penalty blends with the same adsAccuracy so the steadying kicks in as the animation finishes.
         // A weapon may pull the cone BELOW its hip value once fully scoped (AS Val 0.55).
         // Without adsSpreadMul the floor is 1.0 — ADS only cancels the hip penalty.
@@ -16300,6 +19412,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           totalSpread =
             (w.spreadBase + state.spreadBloom) * spreadMultiplier * movingPenalty * adsPenalty;
         }
+        if (w.pellets === 1) totalSpread = Math.min(totalSpread, state.weaponIndex === 5 ? 0.028 : 0.065);
         const dir = getWeaponDirection(totalSpread);
         const rayOrigin = camera.position;
         const ray = new THREE.Raycaster(rayOrigin, dir, 0.02, 160);
@@ -16322,7 +19435,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           if (!enemyBlockingHits(enemy)) continue;
           enemy.group.updateMatrixWorld(true);
           let hit = null;
-          if (enemy.trainingDummy) {
+          if (enemy.trainingDummy && !enemy.isBoss) {
             hit = humanoidHitAlongRay(ray, enemy.group);
           } else {
             hit = enemyHitAlongRay(ray, enemy);
@@ -16368,10 +19481,21 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         const enemyDist = bestEnemy ? bestEnemyHitT : Infinity;
         const rpDist = bestRpId != null ? bestRpHitT : Infinity;
         const projDist = bestProjIdx >= 0 ? bestProjT : Infinity;
-        const closestDist = Math.min(enemyDist, rpDist, wallDist, projDist);
+        const showcaseHit = isTrainingMap(CURRENT_MAP) ? hitAnimationShowcase(ray) : null;
+        const closestDist = Math.min(enemyDist, rpDist, wallDist, projDist, showcaseHit?.distance ?? Infinity);
+        if (showcaseHit && closestDist === showcaseHit.distance) {
+          showAnimationShowcaseHit(showcaseHit);
+          createBulletTrail(muzzleStart, showcaseHit.point, w.color);
+          emitShootNetwork(muzzleStart, showcaseHit.point, w.color, "spark");
+          continue;
+        }
 
         if (closestDist === projDist && bestProjIdx >= 0) {
           const proj = bossProjectiles[bestProjIdx];
+          if (MULTIPLAYER && ARENA_COOP && !ZOMBIE_AUTHORITY) {
+            socket.emit("bossProjectileHit", { id: proj.netId, weapon: state.weaponIndex });
+            continue;
+          }
           proj.hp -= w.damageBody;
           const hitPt = new THREE.Vector3().copy(ray.ray.origin).addScaledVector(ray.ray.direction, bestProjT);
           createSparks(hitPt, 0xff6622);
@@ -16383,6 +19507,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         }
 
         if (closestDist === enemyDist && bestEnemy && bestEnemyHitT < Infinity) {
+          bestEnemy.playerHit = true;
           const bp = _ehHitWorld.copy(ray.ray.origin).addScaledVector(ray.ray.direction, bestEnemyHitT);
           createBlood(bp);
           createBulletTrail(muzzleStart, bp, w.color);
@@ -16391,6 +19516,10 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
 
           if (bestEnemy.trainingDummy) {
             registerTrainingHit(bestEnemyZone);
+            if (MULTIPLAYER && TRAINING_COOP && !ZOMBIE_AUTHORITY) {
+              socket.emit("zombieDamaged", { ei: state.enemies.indexOf(bestEnemy), zone: bestEnemyZone, weaponIndex: state.weaponIndex });
+              continue;
+            }
             const downed = damageTrainingDummy(bestEnemy, bestEnemyZone, w, bp);
             if (downed) triggerHitFeedback(true, bestEnemyZone === "head");
             updateHud();
@@ -16460,7 +19589,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
             if (after <= 0) {
               predictedKill = applyPvpKillToVictim(rpVictim, bp.clone ? bp.clone() : bp);
               if (predictedKill) {
-                showCombatFeedback(tr("combatKill", "KILL!"), "#ff5050", 0.34);
+                /* shown on the HUD / in the world, not as text */
                 createSparks(bp.clone(), 0xff5555);
                 createSparks(bp.clone(), 0xff8888);
               }
@@ -16475,11 +19604,12 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
             hitKind: "bullet",
           });
         } else if (wallHit) {
+          wallHit.object.userData.gauntletTarget?.();
           const wp = wallHit.point.clone();
           const normal = wallHit.face.normal.clone().transformDirection(wallHit.object.matrixWorld);
           createBulletTrail(muzzleStart, wp, w.color);
           createSparks(wp.clone(), w.color);
-          createBulletMark(wp.clone(), normal);
+          createBulletMark(wp.clone(), normal, wallHit.object);
           emitShootNetwork(muzzleStart, wp, w.color, "spark", {
             nx: normal.x,
             ny: normal.y,
@@ -16492,7 +19622,10 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         }
       }
 
-      updateHud();
+      // Begin reloading as soon as the last round leaves the magazine. The shot above
+      // has already completed, so its effects and fire animation remain intact.
+      if (w.ammo <= 0 && state.weaponIndex !== 8) startReload();
+      else updateHud();
     }
 
     function updateMedKit(dt) {
@@ -16526,12 +19659,14 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         if (state.medKitHealProgress === 0) {
           state.medKitHealStartMs = performance.now();
           playMedPackHealSound(getMedKitHealDuration());
+          broadcastPlayerAction("heal");
         }
         const healDur = getMedKitHealDuration();
         const elapsedMs = performance.now() - state.medKitHealStartMs;
         state.medKitHealProgress = elapsedMs / (healDur * 1000);
         if (state.medKitHealProgress >= 1) {
           player.health = Math.min(player.maxHealth, player.health + 50);
+          tutDone("heal");
           wMed.ammo = Math.max(0, wMed.ammo - 1);
           state.medKitHealProgress = 0;
           state.medKitHealStartMs = 0;
@@ -16570,6 +19705,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
 
     const _weaponScaleVec = new THREE.Vector3();
 
+    const viewDynamics = { yaw: 0, pitch: 0, lagX: 0, lagY: 0, dash: 0, air: 0 };
     function updateWeaponVisuals(dt, isMoving) {
       const t = performance.now() * 0.001;
 
@@ -16581,16 +19717,21 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         state.weaponIndex !== 4 &&
         state.weaponIndex !== 7;
         
-      let bobX = 0;
-      let bobY = 0;
-      let bobRotZ = 0;
-
-      const moveBobScale = state.weaponIndex === 5 ? 0.88 : 1;
-      if (isMoving && player.onGround && !usingAds) {
-        bobX = Math.sin(t * 5.5) * 0.005 * moveBobScale;
-        bobY = Math.abs(Math.cos(t * 11)) * 0.007 * moveBobScale;
-        bobRotZ = Math.sin(t * 5.5) * 0.008 * moveBobScale;
-      }
+      const motion = viewDynamics;
+      const yawDelta = Math.atan2(Math.sin(player.yaw - motion.yaw), Math.cos(player.yaw - motion.yaw));
+      motion.lagX = dampScalar(motion.lagX, THREE.MathUtils.clamp(yawDelta * 1.8, -0.09, 0.09), dt, 16);
+      motion.lagY = dampScalar(motion.lagY, THREE.MathUtils.clamp((player.pitch - motion.pitch) * 1.9, -0.09, 0.09), dt, 16);
+      motion.yaw = player.yaw;
+      motion.pitch = player.pitch;
+      motion.dash = dampScalar(motion.dash, performance.now() < state.dashActiveUntil ? 1 : 0, dt, 14);
+      motion.air = dampScalar(motion.air, player.onGround ? 0 : THREE.MathUtils.clamp(player.velocityY / 8, -1, 1), dt, 10);
+      const aimWeight = 1 - state.adsProgress * 0.94;
+      const stride = player.onGround ? Math.min(1, Math.hypot(state.velX, state.velZ) / player.speed) : 0;
+      const phase = state.walkPhase;
+      const breath = Math.sin(t * 2.1);
+      const bobX = (Math.sin(phase) * 0.012 * stride + motion.lagX * 0.18) * aimWeight;
+      const bobY = (Math.abs(Math.sin(phase)) * 0.014 * stride + breath * 0.0026) * aimWeight;
+      const bobRotZ = (Math.sin(phase) * 0.024 * stride - motion.lagX * 0.58) * aimWeight;
 
       state.weaponBobX = dampScalar(state.weaponBobX, bobX, dt, 16);
       state.weaponBobY = dampScalar(state.weaponBobY, bobY, dt, 16);
@@ -16636,6 +19777,8 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         animProgress = Math.max(animProgress, state.medKitHealProgress);
       }
       const viewAnim = applyWeaponHandsAnim(activeWeapon, animProgress);
+      const medLid = activeWeapon.userData.medLid;
+      if (medLid) medLid.rotation.x = dampScalar(medLid.rotation.x, -Math.sin(animProgress * Math.PI) * 1.18, dt, 18);
       const gun = activeWeapon.userData.gun;
       const basePos = activeWeapon.userData.basePos;
       const adsOffset = activeWeapon.userData.adsOffset;
@@ -16655,6 +19798,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       }
 
       const adsBlend = state.adsProgress;
+      if (activeWeapon.userData.adsHideStock) activeWeapon.userData.adsHideStock.visible = adsBlend < 0.6;
 
       const targetScale =
         usingAds && state.weaponIndex === 1
@@ -16668,12 +19812,13 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       const targetY = basePos.y + adsOffset.y * adsBlend;
       const targetZ = basePos.z + adsOffset.z * adsBlend;
 
-      gun.position.x += (targetX - gun.position.x) * Math.min(1, dt * 16);
-      gun.position.y += (targetY - gun.position.y) * Math.min(1, dt * 16);
-      gun.position.z += (targetZ - gun.position.z) * Math.min(1, dt * 16);
-      gun.position.x += viewAnim.offX;
-      gun.position.y += viewAnim.offY;
-      gun.position.z += viewAnim.offZ;
+      // Blend the sight position separately from action offsets so a draw animation
+      // cannot feed its offset back into the next frame's ADS position.
+      const pose = activeWeapon.userData.sightPose ||= basePos.clone();
+      pose.x = dampScalar(pose.x, targetX, dt, 18);
+      pose.y = dampScalar(pose.y, targetY, dt, 18);
+      pose.z = dampScalar(pose.z, targetZ, dt, 18);
+      gun.position.set(pose.x + viewAnim.offX, pose.y + viewAnim.offY, pose.z + viewAnim.offZ);
       gun.rotation.x = viewAnim.rotX;
       gun.rotation.z = viewAnim.rotZ;
          
@@ -16697,18 +19842,19 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
 
       weaponRoot.position.set(
         state.weaponBobX + reloadX,
-        WEAPON_VIEW_DROP_Y - state.recoil - state.weaponBobY + reloadY,
-        reloadPushZ
+        WEAPON_VIEW_DROP_Y - state.recoil - state.weaponBobY + reloadY
+          - (motion.dash * 0.13 + state.landDipVis * 0.46 + motion.air * 0.018) * aimWeight,
+        reloadPushZ + state.recoil * 0.58 + motion.dash * 0.075
       );
       weaponRoot.rotation.set(
-        state.recoil * (usingAds ? 0.7 : 1.0) + reloadRotX,
-        reloadRotY,
-        state.weaponBobRotZ + reloadRotZ
+        state.recoil * (usingAds ? 0.7 : 1.0) + reloadRotX + (motion.lagY + motion.dash * 0.21) * aimWeight,
+        reloadRotY + motion.lagX * aimWeight,
+        state.weaponBobRotZ + reloadRotZ + motion.dash * 0.12
       );
 
       const adsFov = Math.min(88, Math.max(28, weapon().adsFov ?? 55));
       // Helmets narrow the field of view — the higher the tier, the more you give up.
-      const targetFov = (usingAds ? adsFov : 75) * myHelmet().fovMul;
+      const targetFov = (usingAds ? adsFov : 75) * myHelmet().fovMul + (state.camFovKick || 0);
       if (camera.fov !== targetFov) {
         camera.fov += (targetFov - camera.fov) * Math.min(1, dt * 10);
         camera.updateProjectionMatrix();
@@ -16724,13 +19870,17 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         w.ammo = w.magSize;
         updateHud();
       }
+      // An empty magazine reloads straight away, not on the next trigger pull. Switching weapons
+      // cancels a reload in progress, so this also restarts it on the weapon you switch back to.
+      // startReload() ignores the knife, med kit and the 4th/7th slots, so calling it every frame is safe.
+      if (!state.reloading && w.ammo <= 0) startReload();
 
       state.spreadBloom = Math.max(0, state.spreadBloom - w.recover * dt);
       state.recoil *= Math.pow(0.13, dt);
       if (state.recoil < 0.0002) state.recoil = 0;
 
       const healLock = isMedKitHoldHealing();
-      const movingNow = !healLock && (keys.w || keys.a || keys.s || keys.d);
+      const movingNow = (keys.w || keys.a || keys.s || keys.d);
       updateWeaponVisuals(dt, movingNow);
       updateMedKit(dt);
     }
@@ -16740,6 +19890,9 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         camera.position.copy(player.position);
         camera.rotation.y = player.yaw;
         camera.rotation.x = player.pitch;
+        camera.rotation.z = 0;
+        state.velX = state.velZ = 0;
+        state.camRoll = state.landDip = state.landDipVis = 0;
         return;
       }
 
@@ -16748,17 +19901,22 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       // a constant-velocity integration along the stored direction. Distance
       // is capped at DASH_DIST; wall sliding takes care of obstacles.
       const _nowMs = performance.now();
+      const beforeMoveY = player.position.y;
       const _dashing = _nowMs < state.dashActiveUntil;
+      if (!_dashing && state.dashWasActive) {
+        // A dash cancels the jump's remaining lift. If the burst ended in midair,
+        // start falling now instead of continuing the pre-dash jump arc.
+        state.dashWasActive = false;
+        player.velocityY = Math.min(player.velocityY, -2);
+        player.onGround = false;
+        state.jumpedSinceGround = true;
+      }
       if (_dashing) {
-        const _speed = (() => {
-          // 8 units over DASH_DURATION_MS — recompute from remaining time so a
-          // long frame finishes the dash on schedule (no overshoot).
-          const _remaining = (state.dashActiveUntil - _nowMs) / 1000;
-          return state.dashRemainingDist / Math.max(_remaining, 1e-3);
-        })();
-        const _stepX = state.dashDirX * _speed * dt;
-        const _stepZ = state.dashDirZ * _speed * dt;
-        const _stepY = state.dashDirY * _speed * dt;
+        state.dashWasActive = true;
+        const distance = Math.min(state.dashRemainingDist, state.dashSpeed * dt);
+        const _stepX = state.dashDirX * distance;
+        const _stepZ = state.dashDirZ * distance;
+        const _stepY = state.dashDirY * distance;
         const _next = player.position.clone().add(new THREE.Vector3(_stepX, _stepY, _stepZ));
         const _resolved = resolveWallSliding(_next);
         player.position.x = _resolved.x;
@@ -16770,14 +19928,11 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         // our own floor/ceiling clamp.
         player.position.y = resolveVerticalStep(player.position.y, _stepY);
         player.velocityY = 0;
-        state.dashRemainingDist = Math.max(0, state.dashRemainingDist - _speed * dt);
-        // A jet dash genuinely leaves the floor: keep onGround false above the deck so
-        // gravity takes over the instant the burst ends and the fall is measured. A plain
-        // ground dash still pins you down, exactly as before.
-        player.onGround = state.dashIsJet ? player.position.y <= 1.66 : true;
+        state.dashRemainingDist = Math.max(0, state.dashRemainingDist - distance);
       }
 
       const healLock = isMedKitHoldHealing();
+      const terrain = gauntletRuntime ? gauntletRuntime.modifiers(player) : pvpWorld ? pvpWorld.modifiers() : undefined;
 
       const forward = new THREE.Vector3(0, 0, -1)
         .applyAxisAngle(new THREE.Vector3(0, 1, 0), player.yaw);
@@ -16786,7 +19941,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
 
       const move = new THREE.Vector3();
       const moveLocked = isPlayerSlowed();
-      if (!_dashing && !healLock && !moveLocked) {
+      if (!_dashing && !moveLocked) {   // walking is the one thing a heal allows (at two thirds speed, below)
         if (keys.w) move.add(forward);
         if (keys.s) move.sub(forward);
         if (keys.d) move.add(right);
@@ -16794,6 +19949,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       }
 
       // Stamina regen — only after the quiet window, so dash-spam never tops itself up.
+      if (state.stamina >= STAMINA_MAX - 1e-6) state.dashChain = 0;
       if (state.stamina < STAMINA_MAX && performance.now() >= state.staminaRegenAt) {
         state.stamina = Math.min(STAMINA_MAX, state.stamina + STAMINA_REGEN_PER_SEC * dt);
       }
@@ -16801,70 +19957,177 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       // Crouch depth. Ground only, and never mid-dash or mid-flight — crouching in the air
       // would just be a free hitbox shrink.
       {
-        const wantCrouch = keys.crouch && player.onGround && !_dashing && !isJetActive()
-          && player.health > 0 && !paused;
+        // Under a low ceiling the crouch is held for you — dashing included — and only lets go
+        // once there is headroom again, so standing up can never push you into (or onto) the slab.
+        const _ceilingLock = player.onGround && player.health > 0 && lowCeilingAbove();
+        const wantCrouch = _ceilingLock || (keys.crouch && player.onGround && !_dashing && !isJetActive() && !healLock
+          && player.health > 0 && !paused);
+        if (_ceilingLock) crouchAmt = Math.max(crouchAmt, 0.96);
         crouchAmt += ((wantCrouch ? 1 : 0) - crouchAmt) * Math.min(1, dt * 13);
         if (crouchAmt < 0.001) crouchAmt = 0;
       }
 
+      // Horizontal velocity eases toward the input instead of snapping to it. The ramp is
+      // short (full speed in ~0.12s on the ground) so dodges stay sharp, but starts, stops
+      // and direction changes now carry a little weight. In the air the pull is weaker:
+      // a jump keeps the momentum it left the ground with.
+      let _wishX = 0, _wishZ = 0;
       if (move.lengthSq() > 0) {
         const _ndPhase = state.speedNeedle.phase;
         const _ndMult = (_ndPhase === 'boost' ? 2.0 : _ndPhase === 'weak' ? 0.25 : 1.0)
           * (1 - (1 - CROUCH_SPEED_MUL) * crouchAmt)
+          * (isJetActive() && !player.onGround ? 1.3 : 1)   // under power you move faster than you walk
           * myVest().speedMul;   // heavier vest, slower walk
-        // Normalize first so we can capture the unit direction for the dash before
-        // scaling by speed*dt. (State lookup is one branch cheaper than re-normalizing.)
+        // Normalize first so we can capture the unit direction for the dash.
         move.normalize();
         state.lastMoveX = move.x;
         state.lastMoveZ = move.z;
-        move.multiplyScalar(player.speed * _ndMult * dt);
-        const next = player.position.clone().add(new THREE.Vector3(move.x, 0, move.z));
-        const resolved = resolveWallSliding(next);
-        player.position.x = resolved.x;
-        player.position.z = resolved.z;
+        const speed = player.speed * _ndMult * (terrain?.speed ?? 1) * (healLock ? 2 / 3 : 1);
+        _wishX = move.x * speed;
+        _wishZ = move.z * speed;
+      }
+      if (_dashing) {
+        state.velX = state.velZ = 0;
+      } else {
+        const _hasWish = _wishX !== 0 || _wishZ !== 0;
+        const carryingMomentum = (!!gauntletRuntime && Math.hypot(state.velX, state.velZ) > player.speed + .8)
+          || _nowMs < (state.wallJumpCarryUntil || 0);
+        const _jetFlying = isJetActive() && !player.onGround;
+        const steering = player.onGround ? (_hasWish ? 22 : 17) : _jetFlying ? (_hasWish ? 10 : 2.4) : carryingMomentum ? 1.2 : (_hasWish ? 7 : 1.2);
+        const grip = steering * (terrain?.grip ?? 1);
+        state.velX = dampScalar(state.velX, _wishX, dt, grip);
+        state.velZ = dampScalar(state.velZ, _wishZ, dt, grip);
+        if (!_hasWish && state.velX * state.velX + state.velZ * state.velZ < 0.0025) {
+          state.velX = state.velZ = 0;
+        }
+        const travelX = (state.velX + (terrain?.x || 0)) * dt;
+        const travelZ = (state.velZ + (terrain?.z || 0)) * dt;
+        if (travelX !== 0 || travelZ !== 0) {
+          const next = player.position.clone();
+          next.x += travelX;
+          next.z += travelZ;
+          const _px = player.position.x, _pz = player.position.z;
+          const resolved = resolveWallSliding(next);
+          player.position.x = resolved.x;
+          player.position.z = resolved.z;
+          // Kill the component a wall swallowed, so you do not keep "pushing" into it and
+          // then lurch when you slide past the corner.
+          if (Math.abs(resolved.x - _px) < Math.abs(travelX) * 0.25) state.velX = 0;
+          if (Math.abs(resolved.z - _pz) < Math.abs(travelZ) * 0.25) state.velZ = 0;
+        }
       }
 
+      // Coyote time: a jump still counts for a beat after you run off an edge. Wall-clock,
+      // not dt, so it is the same window at any frame rate.
+      if (player.onGround) { state.lastGroundedMs = _nowMs; state.jumpedSinceGround = false; }
+      const _canCoyote = !player.onGround && !state.jumpedSinceGround && player.velocityY <= 0
+        && _nowMs - state.lastGroundedMs < COYOTE_MS;
       // Stand up before you jump — otherwise crouch-spam would be a free bunny-hop.
-      if (!_dashing && !healLock && !moveLocked && keys.space && player.onGround && crouchAmt < 0.5) {
-        player.velocityY = 5.8;
+      const _spacePressed = keys.space && !state.spaceWasDown;
+      state.spaceWasDown = keys.space;
+      let _jumped = false;
+      if (!_dashing && !healLock && !moveLocked && keys.space && (player.onGround || _canCoyote) && crouchAmt < 0.5) {
+        player.velocityY = 5.8 * (terrain?.jump ?? 1);
         player.onGround = false;
+        state.jumpedSinceGround = true;
+        _jumped = true;
+        addCamKick({ pitch: 0.012 });
       }
+      // Wall jump: a fresh jump press in the air against any wall. It rises exactly as far as a
+      // normal jump (never higher) and throws you clear of the wall, away from its face.
+      if (!_jumped && _spacePressed && !player.onGround && !_dashing && !healLock && !moveLocked
+          && !isJetActive() && _nowMs - (state.lastWallJumpMs || 0) > WALLJUMP_COOLDOWN_MS) {
+        const wall = findWallJumpNormal();
+        if (wall) {
+          state.lastWallJumpMs = _nowMs;
+          state.wallJumpCarryUntil = _nowMs + 260;
+          player.velocityY = 5.8;
+          state.velX = wall.x * WALLJUMP_PUSH;
+          state.velZ = wall.z * WALLJUMP_PUSH;
+          state.jumpedSinceGround = true;
+          // The view lurches away from the wall: roll into the push, a lift of the head, a FOV punch.
+          addCamKick({ roll: (wall.x * right.x + wall.z * right.z) * -0.09, pitch: 0.035, fov: 5 });
+          triggerCamShake(0.03);
+        }
+      }
+
+      // Harness fuel is the flight window: it only runs down while thrusting (fully), hovering
+      // (slowly) or dashing, and holds still while you stand on something.
+      let _jetThrust = 0;
+      if (isJetActive() && _dashing) _jetThrust = 1;
 
       // Skip gravity + vertical integration during the dash — the dash branch
       // already wrote a fresh position and reset velocityY to 0.
       if (!_dashing) {
-        player.velocityY -= 14 * dt;
-        player.position.y += player.velocityY * dt;
+        const acceleration = (terrain?.lift || 0) - 14 * (terrain?.gravity ?? 1);
+        if (terrain?.climb) {
+          player.velocityY = terrain.climb;
+          player.onGround = false;
+        } else if (isJetActive() && !player.onGround) {
+          // Powered flight: hold jump to climb, crouch to sink, let go and the harness holds you
+          // in a gentle hover instead of dropping like a stone. Thrust is spent only while used.
+          const climbing = keys.space, sinking = keys.crouch && !keys.space;
+          const target = climbing ? 5.8 : sinking ? -5.6 : -0.3;
+          player.velocityY += (target - player.velocityY) * Math.min(1, dt * (climbing ? 5.2 : 4));
+          _jetThrust = climbing ? 1 : 0.4;
+        } else {
+          player.velocityY += acceleration * dt;
+        }
+        if (terrain?.lift) player.velocityY = Math.min(player.velocityY, 7.2);
+        const lift = player.velocityY * dt;
+        const nextY = resolveVerticalStep(player.position.y, lift);
+        if (lift > 0 && nextY < player.position.y + lift - 1e-5) player.velocityY = 0;
+        player.position.y = nextY;
       }
 
+      if (isJetActive()) {
+        const jd = Math.min(100, _nowMs - (state.jetTickMs || _nowMs));
+        state.jetTickMs = _nowMs;
+        state.jet.endMs += jd * (1 - Math.min(1, _jetThrust));   // refunds the time not spent thrusting
+        if (_jetThrust > 0 && _nowMs - (state.jetFxMs || 0) > 55) {
+          state.jetFxMs = _nowMs;
+          const fx = player.position.x, fz = player.position.z, fy = player.position.y - 1.55;
+          spawnFx({ x: fx, y: fy, z: fz, vx: (Math.random() - .5) * .8, vy: -3.4, vz: (Math.random() - .5) * .8, size: .8 * _jetThrust + .35, grow: 2.4, life: .38, color: 0xa8d8ff, opacity: .6, drag: 1.5 });
+          if (_jetThrust > .6) spawnFx({ x: fx, y: fy + .1, z: fz, vy: -2, size: .45, grow: 1.4, life: .2, color: 0xffd7a0, opacity: .9, drag: 1 });
+        }
+        if (_jetThrust > 0 && _nowMs - (state.jetHissMs || 0) > 150 && worldAudioReady()) {
+          state.jetHissMs = _nowMs;
+          playNoiseSweep({ dur: .18, from: 2600, to: 900, gain: .05 * _jetThrust + .02, type: "bandpass", q: .7 });
+        }
+      } else state.jetTickMs = 0;
+
       const _wasAirborne = !player.onGround || _dashing;
+      const _impactVy = player.velocityY;
+      // Walking or dashing along the ground may climb up to STEP_UP onto the next surface in one frame.
+      const _stepRise = (!_wasAirborne || _dashing) ? STEP_UP : .07;
+      // Walking down a slope or off a low step: stay on the surface instead of skipping down it in
+      // a string of tiny falls. A real drop (past STEP_UP) is still a fall.
+      const _stickDown = !_wasAirborne ? STEP_UP : .08;
       const _floorEyeY = worldFloorEyeY();
-      if (player.position.y <= _floorEyeY) {
+      // Standing on the level floor: a low tread or kerb under the feet still lifts you onto it. Without
+      // this the first step of a stair from the ground had to be jumped, because this branch snapped the
+      // body back to the floor before the support sweep below could see the step.
+      const _stepUpFromFloor = (player.position.y <= _floorEyeY + 1e-4 && player.velocityY <= 0)
+        ? highestSupportTop(player.position.x, player.position.z, player.position.y - 1.65 + 0.004, player.position.y - 1.65 + _stepRise) : -Infinity;
+      if (Number.isFinite(_stepUpFromFloor)) {
+        player.position.y = _stepUpFromFloor + 1.65;
+        player.velocityY = 0;
+        player.onGround = true;
+      } else if (player.position.y <= _floorEyeY) {
         player.position.y = _floorEyeY;
         player.velocityY = 0;
         player.onGround = true;
       } else if (player.velocityY <= 0) {
-        // Check if player's feet have landed on top of any wall/cover box
-        const feetY = player.position.y - 1.65;
-        const pr = player.radius;
-        const px = player.position.x;
-        const pz = player.position.z;
-        let landed = false;
-        forEachNearbyWallBox(px, pz, (box) => {
-          if (landed || box.enemyOnly) return;
-          const topY = box.max.y;
-          // Feet must be within a thin slab just above the box top
-          if (feetY >= topY - 0.42 && feetY <= topY + 0.08) {
-            // Same footprint the collision exemption uses — see centreOverBoxTop().
-            if (centreOverBoxTop(box, px, pz)) {
-              player.position.y = topY + 1.65;
-              player.velocityY = 0;
-              player.onGround = true;
-              landed = true;
-            }
-          }
-        });
-        if (!landed) player.onGround = false;
+        // Sweep the foot plane to the highest supported surface, including a
+        // landing crossed in one frame during a long drop.
+        const feet = player.position.y - 1.65;
+        const previousFeet = beforeMoveY - 1.65;
+        const landing = highestSupportTop(player.position.x, player.position.z, feet - _stickDown, previousFeet + _stepRise);
+        player.onGround = Number.isFinite(landing);
+        if (player.onGround) {
+          player.position.y = landing + 1.65;
+          player.velocityY = 0;
+        }
       } else {
         player.onGround = false;
       }
@@ -16873,85 +20136,100 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       // anything ever does, walk them back out instead of leaving them trapped.
       unstickFromWalls();
 
-      // ── Fall damage ───────────────────────────────────────────────────────
-      // Track the high-water mark of the current airborne stretch and, on touchdown,
-      // compare it with the surface actually landed on. Nothing in the base movement set
-      // can reach JET_FATAL_FALL_DROP (a jump peaks ~1.2 units), so in practice this only
-      // ever fires after a jet climb — which is the point: fly too high and the landing
-      // kills you. Routed through damagePlayer so the death screen, sound and shake all run.
+      // Measure the unbraked drop to the actual landing surface. A harness that
+      // has slowed the descent starts a new fall if its thrust runs out again.
+      const braked = isJetActive() && !_dashing && _impactVy >= JET_BRAKED_FALL_SPEED;
       if (!player.onGround) {
-        // Airborne: keep the high-water mark of this flight.
-        if (player.fallApexY == null || player.position.y > player.fallApexY) {
-          player.fallApexY = player.position.y;
-        }
-        const _drop = player.fallApexY - player.position.y;
-        if (_drop > JET_FALL_WARN_DROP && player.velocityY < -6 && player.health > 0) {
-          showCombatFeedback(tr("jetFallWarn", "⚠ TOO HIGH"), "#ff4422", 0.2);
-        }
+        player.fallApexY = braked ? player.position.y
+          : Math.max(player.fallApexY ?? beforeMoveY, beforeMoveY, player.position.y);
       } else if (!_dashing) {
-        // Touchdown. A ground dash pins onGround true while the player is still in the air,
-        // so the landing is only judged on a frame where no dash is running — otherwise
-        // dashing sideways during a fall would "land" you in mid-air and kill you.
-        if (player.fallApexY != null && player.health > 0) {
-          const drop = player.fallApexY - player.position.y;
-          if (drop >= JET_FATAL_FALL_DROP) {
-            triggerCamShake(0.9);
-            createBlood(player.position.clone());
-            lastPlayerHitWorld.copy(player.position);
-            showCombatFeedback(tr("jetFallDeath", "IMPACT"), "#ff2222", 1.2);
-            damagePlayer(player.maxHealth * 10, null);
-          }
+        const drop = (player.fallApexY ?? beforeMoveY) - player.position.y;
+        if (_wasAirborne && !braked) {
+          const damage = fallDamage(drop);
+          if (damage > 0) damagePlayer(damage, null, "body", -1, true);
         }
         player.fallApexY = null;
       }
 
-      const movingNow = !healLock && (keys.w || keys.a || keys.s || keys.d);
+      // Stride follows real ground speed, so the bob slows with a crouch or a heavy vest and
+      // dies away as you coast to a stop instead of cutting out the frame the key lifts.
+      const _hSpeed = Math.hypot(state.velX, state.velZ);
+      const _stride = Math.min(1.6, _hSpeed / player.speed);
+      const movingNow = _stride > 0.08;
       if (movingNow && player.onGround) {
-        state.walkPhase += dt * 10.5;
+        state.walkPhase += dt * 10.5 * Math.max(0.55, _stride);
       }
       const bobTarget = (movingNow && player.onGround)
-        ? Math.abs(Math.sin(state.walkPhase)) * 0.026
+        ? Math.abs(Math.sin(state.walkPhase)) * 0.026 * Math.min(1, _stride)
         : 0;
       state.smoothHeadBob = dampScalar(state.smoothHeadBob, bobTarget, dt, 11);
 
+      // Landing: the camera sinks with the impact and springs back. Scaled by how fast you
+      // were actually falling, so stepping off a kerb is a nudge and a real drop is a thud.
+      if (_wasAirborne && player.onGround && !_dashing && _impactVy < -2.5) {
+        state.landDip = Math.max(state.landDip, Math.min(0.2, (-_impactVy - 2.5) * 0.024));
+        addCamKick({ pitch: -Math.min(0.06, (-_impactVy - 2.5) * 0.012), roll: (Math.random() - 0.5) * Math.min(0.03, (-_impactVy - 2.5) * 0.006) });
+      }
+      state.landDipVis = dampScalar(state.landDipVis, state.landDip, dt, 26);
+      state.landDip = dampScalar(state.landDip, 0, dt, 7.5);
+
+      // Lean into a strafe. Roll is derived from sideways velocity, so it eases in and out
+      // with the movement itself; under 1° at full speed, identical on every quality tier.
+      const _latSpeed = state.velX * right.x + state.velZ * right.z;
+      const _rollTarget = _dashing ? 0 : -THREE.MathUtils.clamp(_latSpeed / player.speed, -1, 1) * 0.036;
+      state.camRoll = dampScalar(state.camRoll, _rollTarget, dt, 9);
+
       camera.position.copy(player.position);
-      camera.position.y += state.smoothHeadBob;
+      // Auto-stepping up a kerb or a slope tread moves the body in one go; the camera eases
+      // through it instead of popping.
+      if (state.camBaseY === undefined || !player.onGround || Math.abs(player.position.y - state.camBaseY) > 0.7) state.camBaseY = player.position.y;
+      else state.camBaseY = dampScalar(state.camBaseY, player.position.y, dt, 20);
+      camera.position.y = state.camBaseY;
+      camera.position.y += state.smoothHeadBob - state.landDipVis;
       // Crouch is a camera offset, NOT a change to player.position — the physics body keeps
       // its 1.65 eye reference, so ground snapping, fall damage and every wall test that
       // hardcodes 1.65 keep working untouched.
       camera.position.y -= CROUCH_EYE_DROP * crouchAmt;
-      camera.rotation.y = player.yaw;
-      camera.rotation.x = player.pitch;
-      if (MULTIPLAYER) {
-        socket.emit("move", {
-          x: player.position.x,
-          y: player.position.y,
-          z: player.position.z,
-          yaw: player.yaw,
-          name: playerName,
-          weapon: state.weaponIndex,
-          reloading: state.reloading,
-          ads: !!state.ads,
-          pitch: player.pitch,
-          achievement: equippedAchievementIds[0] || "",
-          // 0 none / 1 strapping in / 2 flying. Mirrors state.jet.phase exactly, so a player
-          // who has not used the harness broadcasts 0 and never shows a pack on anyone's screen.
-          jet: state.jet.netState | 0,
-          // Crouch depth 0..100, so opponents see the same posture — and the same smaller
-          // silhouette — you do. Absent on older clients → 0 → standing.
-          crouch: Math.round(crouchAmt * 100),
-          // Packed helmet/vest so shooters can compute mitigation before emitting a hit.
-          arm: packArmor(),
-        });
-      }
+      const rig = updateCameraRig(dt, _stride, player.onGround, player.velocityY);
+      camera.position.y += rig.y;
+      camera.rotation.y = player.yaw + rig.yaw;
+      camera.rotation.x = player.pitch + rig.pitch;
+      camera.rotation.z = state.camRoll + rig.roll;
+      state.camFovKick = rig.fov;
     }
+
+    function publishPlayerState(now) {
+      if (!MULTIPLAYER || !gameWorldReady || now - lastPlayerSyncAt < 40) return;
+      lastPlayerSyncAt = now;
+      const { x, y, z } = player.position;
+      socket.emit("move", {
+        x, y, z, yaw: player.yaw, pitch: player.pitch, name: playerName,
+        weapon: state.weaponIndex, ammo: weapon().ammo, ads: (state.ads || keys.shift) && !state.reloading,
+        reloading: state.reloading, reload: state.reloading
+          ? THREE.MathUtils.clamp((now - state.reloadStartMs) / Math.max(1, state.reloadEnd - state.reloadStartMs), 0, 1) : 0,
+        heal: state.medKitHealProgress, health: player.health, down: player.health <= 0,
+        grounded: player.onGround, dash: now < state.dashActiveUntil,
+        jet: state.jet.netState | 0, crouch: Math.round(crouchAmt * 100), arm: packArmor(),
+        needle: ["idle", "injecting", "boost", "weak"].indexOf(state.speedNeedle.phase),
+        light: playerLightsPreference, beam: 0,
+        slow: Math.max(0, (state.slowUntil - now) / 1000),
+        achievement: equippedAchievementIds[0] || "",
+      });
+    }
+
     function showDeathScreen(killer) {
-      if (isPvpCrossfireMap(CURRENT_MAP) && MULTIPLAYER && !ARENA_COOP) {
+      const pvp = isPvpCrossfireMap(CURRENT_MAP);
+      if (pvp && MULTIPLAYER && !ARENA_COOP) {
         resetPvpKillStreak();
       }
+      if (paused) hidePause();
       killerEnemy = killer || null;
-      deathAnimTime = 0;
-      spawnLocalPlayerDeathDissolve(lastPlayerHitWorld);
+      deathAnimStartedAt = pvp ? null : performance.now();
+      deathBaseFov = camera.fov;
+      // Reuse the resident particle pool. A new avatar adds a spotlight and
+      // forces the renderer to recompile lighting shaders for the entire scene.
+      createBlood(_dissolveTmp.set(player.position.x, player.position.y - .55, player.position.z));
+      playDissolveBurstSound();
       crosshairEl.classList.add("hidden");
       if (medKitReticleEl) medKitReticleEl.classList.add("hidden");
       state.mouseDown = false;
@@ -16964,17 +20242,15 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       }
       document.body.classList.add("show-cursor");
 
-      if (!isPvpCrossfireMap(CURRENT_MAP) && killerEnemy) {
+      if (!pvp && killerEnemy) {
         const ex = killerEnemy.group.position.x;
         const ez = killerEnemy.group.position.z;
-        deathCamYaw = Math.atan2(ex - player.position.x, ez - player.position.z);
+        deathCamYaw = Math.atan2(player.position.x - ex, player.position.z - ez);
         deathCamPitch = -0.1;
-        deathBaseFov = camera.fov;
       }
 
       deathOverlay.style.display = "block";
       deathFade.style.background = "rgba(0,0,0,0)";
-      deathUI.style.display = "none";
       // Always hide revive prompt on entry; it will be shown after the death anim if applicable.
       if (revivePrompt) revivePrompt.style.display = "none";
       if (reviveAdSlot) reviveAdSlot.style.display = "none";
@@ -16983,48 +20259,32 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       btnDeathRestart.textContent = MULTIPLAYER ? "RESPAWN" : "RESTART";
       btnDeathSettings.style.display = "";
 
-      if (MULTIPLAYER && isPvpCrossfireMap(CURRENT_MAP)) {
+      if (MULTIPLAYER && pvp) {
         try {
           socket.emit("playerDown", { id: socket.id });
         } catch (_) {}
       }
 
-      if (isPvpCrossfireMap(CURRENT_MAP)) {
-        deathUI.style.display = "flex";
-        deathUI.style.opacity = "0.25";
-        deathTitle.textContent = "DEFEATED";
-        deathTitle.style.color = "#e53e3e";
-        deathScore.textContent = "";
-        btnDeathRestart.style.display = "";
-        deathOverlay.style.pointerEvents = "auto";
-        deathUI.addEventListener("mouseenter", () => { deathUI.style.opacity = "1"; });
-        deathUI.addEventListener("mouseleave", () => { deathUI.style.opacity = "0.25"; });
-        // Crossfire never gets the revive flow.
-        reviveFlowActive = false;
-      } else {
-        deathScore.textContent = `Score: ${state.score}`;
-        deathTitle.textContent = "DEFEAT";
-        deathTitle.style.color = "#e53e3e";
-        btnDeathRestart.style.display = "";
-        deathOverlay.style.pointerEvents = "none";
-        // Non-crossfire modes: delay the death UI until the revive prompt resolves
-        // (or is skipped because the player already revived this life).
-        reviveFlowActive = !reviveAdWatchedThisLife;
-      }
+      deathUI.classList.toggle("death-spectating", pvp);
+      deathScore.textContent = pvp ? "" : `Score: ${state.score}`;
+      deathTitle.textContent = pvp ? "DEFEATED" : "DEFEAT";
+      deathTitle.style.color = "#e53e3e";
+      btnDeathRestart.style.display = "";
+      reviveFlowActive = !pvp && !reviveAdWatchedThisLife && typeof startReviveCountdown === "function";
+      deathUI.style.display = reviveFlowActive ? "none" : "flex";
+      deathOverlay.style.pointerEvents = reviveFlowActive ? "none" : "auto";
     }
 
-    function updateDeathAnim(dt) {
-      if (player.health > 0 || isPvpCrossfireMap(CURRENT_MAP)) return;
-      deathAnimTime += dt;
-      const t = Math.min(deathAnimTime / DEATH_ANIM_DURATION, 1);
-      const fadeOpacity = t * 0.5;
-      deathFade.style.background = `rgba(0,0,0,${fadeOpacity})`;
+    function updateDeathAnim(dt, now) {
+      if (player.health > 0 || deathAnimStartedAt == null) return;
+      const t = THREE.MathUtils.clamp((now - deathAnimStartedAt) / DEATH_ANIM_DURATION_MS, 0, 1);
+      deathFade.style.background = `rgba(0,0,0,${t * 0.35})`;
 
       if (killerEnemy) {
-        player.yaw += (deathCamYaw - player.yaw) * Math.min(1, dt * 4);
+        player.yaw = dampAngle(player.yaw, deathCamYaw, dt, 9);
         player.pitch += (deathCamPitch - player.pitch) * Math.min(1, dt * 4);
       }
-      const zoomFov = deathBaseFov - t * 20;
+      const zoomFov = deathBaseFov - t * 10;
       camera.fov = Math.max(30, zoomFov);
       camera.updateProjectionMatrix();
 
@@ -17032,30 +20292,14 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       camera.rotation.y = player.yaw;
       camera.rotation.x = player.pitch;
 
-      if (t >= 1 && deathUI.style.display === "none") {
-        // Revive flow takes priority over the legacy death UI for non-crossfire
-        // modes when the player has not already revived this life.
-        // GUARD: startReviveCountdown() has never been written. Calling it threw a
-        // ReferenceError here — inside animate(), before renderer.render() — so the first
-        // death in arena / boss froze the screen with no DEFEAT buttons. The deployed
-        // main.min.js predates the revive UI and so never hit it; this guard keeps a
-        // rebuilt bundle behaving the same way. Delete the typeof check once the real
-        // countdown exists.
-        if (
-          reviveFlowActive &&
-          !isPvpCrossfireMap(CURRENT_MAP) &&
-          typeof startReviveCountdown === "function"
-        ) {
-          startReviveCountdown();
-        } else {
-          deathUI.style.display = "flex";
-          deathOverlay.style.pointerEvents = "auto";
-        }
+      if (t >= 1) {
+        deathAnimStartedAt = null;
+        if (reviveFlowActive) startReviveCountdown();
       }
     }
 
     function hideDeathScreen() {
-      clearLocalDeathGhost();
+      deathAnimStartedAt = null;
       crosshairEl.classList.remove("hidden");
       if (medKitReticleEl) medKitReticleEl.classList.add("hidden");
       document.body.classList.remove("show-cursor");
@@ -17083,17 +20327,22 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       if (now - _armorAbsorbShownAt > 900) _armorAbsorbAcc = 0;
       _armorAbsorbAcc += absorbed;
       _armorAbsorbShownAt = now;
-      showCombatFeedback(
-        tr("armorAbsorbed", "ARMOUR −{n}").replace("{n}", String(Math.round(_armorAbsorbAcc))),
-        "#7ec8ff", 0.5);
+      // The vitals panel flashes armour-blue instead of printing the number.
+      buildGameHud();
+      if (_hudEls.hudVitals) {
+        _hudEls.hudVitals.classList.remove("armor-hit");
+        void _hudEls.hudVitals.offsetWidth;
+        _hudEls.hudVitals.classList.add("armor-hit");
+      }
     }
 
-    function damagePlayer(amount, attacker, zone = "body", widx = -1) {
+    function damagePlayer(amount, attacker, zone = "body", widx = -1, ignoreArmor = false) {
       if (player.health <= 0) return;
       if (performance.now() < player.spawnProtectUntil) return;
       // Armour is applied here so every incoming source funnels through one place.
       const rawAmount = amount;
-      amount = applyArmorToDamage(amount, zone, armorHelmet, armorVest, widx);
+      // Environmental hazards (lasers, blades, hot floors, mines) ignore armour: you avoid them.
+      if (!ignoreArmor) amount = applyArmorToDamage(amount, zone, armorHelmet, armorVest, widx);
       reportArmorAbsorb(rawAmount - amount);
       player.health = Math.max(0, player.health - amount);
       player.regenTimer = 0;
@@ -17101,18 +20350,23 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       if (state.speedNeedle.phase === 'boost') {
         state.speedNeedle.phase = 'weak';
         state.speedNeedle.timer = NEEDLE_WEAK_MS;
-        showCombatFeedback(tr("needleInterrupted","SPEED INTERRUPTED!"), '#ff4422', 1.6);
+        /* shown on the HUD / in the world, not as text */
       }
       state.flashTimer = 0.14;
       triggerCamShake(0.095);
+      {
+        // The view snaps toward the side the hit came from, harder for bigger hits.
+        const hit = Math.min(1, amount / 40);
+        let side = Math.random() - 0.5;
+        if (attacker && attacker.group) {
+          const dx = attacker.group.position.x - player.position.x, dz = attacker.group.position.z - player.position.z;
+          side = (dx * Math.cos(player.yaw) - dz * Math.sin(player.yaw)) / (Math.hypot(dx, dz) || 1);
+        }
+        addCamKick({ pitch: -0.02 - hit * 0.035, roll: side * (0.02 + hit * 0.04), yaw: -side * hit * 0.012 });
+      }
       playReceivedDamageSound("melee");
       if (attacker && attacker.group) {
-        lastPlayerHitWorld.copy(attacker.group.position);
-        lastPlayerHitWorld.y = player.position.y + 1.1;
         addHitIndicator(attacker.group.position.x, attacker.group.position.z);
-      } else {
-        lastPlayerHitWorld.copy(player.position);
-        lastPlayerHitWorld.y += 1.1;
       }
       updateHud();
       if (player.health <= 0) {
@@ -17121,17 +20375,80 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     }
 
     /** Host sim: hurt local player or send zombie hit to a remote co-op player (server `hit` → `damaged`). */
-    function applyCoopZombieDamageToTarget(enemy) {
+    function applyCoopZombieDamageToTarget(enemy, eyeY) {
+      // Attacks are chosen with a line-of-sight check, but damage can land a moment later
+      // (fast strike, boss smash, gunner tracer). Re-check the path at impact so a zombie that
+      // walked round a wall during its wind-up can't land the hit through it.
+      const hitTarget = getEnemyTarget(enemy);
+      if (!clearLosToTarget(enemy.group.position.x, enemy.group.position.z, hitTarget.x, hitTarget.z, hitTarget.y ?? 1.65, eyeY)) return;
       if (MULTIPLAYER && ARENA_COOP && (isArenaLikeMap(CURRENT_MAP) || isBossArenaMap(CURRENT_MAP)) && enemy.targetId != null) {
         socket.emit("hit", {
           target: enemy.targetId,
           damage: enemy.attackDamage,
           x: enemy.group.position.x,
           z: enemy.group.position.z,
-          hitKind: "melee",
+          hitKind: "zombie",
         });
       } else {
         damagePlayer(enemy.attackDamage, enemy);
+      }
+    }
+
+    // The attacker plants its feet and commits to one target and one facing.
+    // Only the authority runs this hit check; clients replay the same pose.
+    function updateZombieMelee(enemy, target, eyeY, dt) {
+      const timing = ZOMBIE_MELEE[enemy.type];
+      if (!timing) return false;
+      const { x, z } = enemy.group.position;
+      const dx = target.x - x, dz = target.z - z;
+      const distance = Math.hypot(dx, dz);
+      const height = Math.abs(target.y - eyeY);
+      if (enemy.meleeElapsed == null) {
+        if (!enemy.aware || enemy.attackCooldownTimer > 0 || distance >= 2.05 || height >= 1.4
+            || !clearLosToTarget(x, z, target.x, target.z, target.y, eyeY)) return false;
+        enemy.facingYaw = Math.atan2(dx, dz);
+        enemy.meleeElapsed = 0;
+        enemy.meleeTargetId = enemy.targetId;
+        enemy.attackCooldownTimer = timing.cooldown;
+        if (enemy.type === "fast" && worldAudioReady()) {
+          worldAudio.play("zombieVoice", { x, y: eyeY, z }, { volume: 0.78 });
+        }
+        return true;
+      }
+
+      const previous = enemy.meleeElapsed;
+      const elapsed = previous + dt;
+      enemy.meleeElapsed = elapsed < timing.recovery ? elapsed : null;
+      if (previous < timing.contact && elapsed >= timing.contact && enemy.targetId === enemy.meleeTargetId
+          && distance < 2.35 && height < 1.4
+          && dx * Math.sin(enemy.facingYaw) + dz * Math.cos(enemy.facingYaw) >= distance * 0.5) {
+        applyCoopZombieDamageToTarget(enemy, eyeY);
+      }
+      return enemy.meleeElapsed != null;
+    }
+
+    function applyBossImpact(enemy, radius, knockback, shake) {
+      if (!controlsInputReady() || player.health <= 0) return;
+      const origin = enemy.group.position;
+      const dx = player.position.x - origin.x;
+      const dz = player.position.z - origin.z;
+      const distance = Math.hypot(dx, dz);
+      if (distance >= radius || soundBlocked(origin, player.position)) return;
+      state.camShake = Math.max(state.camShake || 0, shake * (1 - distance / (radius * 1.6)));
+      addQuake(shake * 0.9 * (1 - distance / (radius * 1.3)));
+      if (!player.onGround) {
+        player.velocityY = Math.min(player.velocityY, -22);
+        return;
+      }
+      if (distance < 0.01) return;
+      const steps = Math.ceil(knockback / 0.18);
+      const push = knockback / (distance * steps);
+      const target = new THREE.Vector3();
+      for (let i = 0; i < steps; i++) {
+        target.set(player.position.x + dx * push, player.position.y, player.position.z + dz * push);
+        const resolved = resolveWallSliding(target);
+        if (resolved.equals(player.position)) break;
+        player.position.copy(resolved);
       }
     }
 
@@ -17141,6 +20458,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       paused = true;
       releaseAllInput();
       pauseOverlay.style.display = "flex";
+      btnResume.focus({ preventScroll: true });
       btnPauseRestart.style.display = isPvpCrossfireMap(CURRENT_MAP) ? "none" : "";
       crosshairEl.classList.add("hidden");
       // Single-player: silence everything — WebAudio buses (SFX + music bus carrying
@@ -17171,7 +20489,10 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
 
     function setActiveSettingsTab(sectionId) {
       for (const t of document.querySelectorAll(".settings-tab")) {
-        t.classList.toggle("active", t.getAttribute("data-scroll-target") === sectionId);
+        const active = t.getAttribute("data-scroll-target") === sectionId;
+        t.classList.toggle("active", active);
+        if (active) t.setAttribute("aria-current", "true");
+        else t.removeAttribute("aria-current");
       }
     }
 
@@ -17280,6 +20601,8 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       syncSensReadout();
       qualityLabel.textContent = QUALITY_LABELS[gameSettings.qualityIndex] || "REGULAR";
       textureLabel.textContent = gameSettings.texturesOn ? "ON" : "OFF";
+      const postLabelEl = document.getElementById("postLabel");
+      if (postLabelEl) postLabelEl.textContent = gameSettings.postFx !== false ? "ON" : "OFF";
       const rdi = THREE.MathUtils.clamp(
         gameSettings.renderDistanceIndex | 0,
         0,
@@ -17293,20 +20616,28 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       applyLanguageUI();
     }
 
+    let settingsReturnFocus = null;
+
     function openSettingsModal() {
       buildSensitivityControls();
+      settingsReturnFocus = document.activeElement;
       settingsModalOpen = true;
       syncSettingsUI();
       settingsModal.style.display = "flex";
       if (settingsScroll) settingsScroll.scrollTop = 0;
       setActiveSettingsTab("settingsSectionAudio");
+      btnCloseSettings.focus({ preventScroll: true });
       document.exitPointerLock();
     }
 
     function closeSettingsModal() {
+      const prompt = document.getElementById("settingsPrompt");
+      if (prompt.open) prompt.close();
       settingsModalOpen = false;
       _keyBindingCapture = null;
       settingsModal.style.display = "none";
+      settingsReturnFocus?.focus({ preventScroll: true });
+      settingsReturnFocus = null;
     }
 
     // ── Nav grid + BFS flow field (shared by all zombies) ──
@@ -17319,7 +20650,11 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     let _flowDistBuf = null;
     let _flowDistBufLen = 0;
 
+    let bossWaypoint = null;
+
     function buildNavGrid() {
+      bossWaypoint = isBossArenaMap(CURRENT_MAP)
+        ? createBossNavigation((x, z) => enemyCollidesWall(x, z, BOSS_NAV_RADIUS)) : null;
       if (isArenaLikeMap(CURRENT_MAP)) {
         mazeNavAnchorCx = null;
         mazeNavAnchorCz = null;
@@ -17493,15 +20828,14 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       return _visRay.intersectObjects(wallMeshes, false).length === 0;
     }
 
-    function clearLosToTarget(ex, ez, tx, tz, ty = 1.65) {
-      return canSeePoint(ex, 1.6, ez, tx, ty, tz);
+    function clearLosToTarget(ex, ez, tx, tz, ty = 1.65, ey = 1.6) {
+      return canSeePoint(ex, ey, ez, tx, ty, tz);
     }
 
-    function computeVisibility(ex, ez, px, pz) {
-      const ey = 1.6;
+    function computeVisibility(ex, ez, px, pz, ey = 1.6, targetEyeY = 1.65) {
       let visible = 0;
       for (let i = 0; i < VIS_OFFSETS.length; i++) {
-        const oy = VIS_OFFSETS[i][1];
+        const oy = targetEyeY - 1.65 + VIS_OFFSETS[i][1];
         if (canSeePoint(ex, ey, ez, px, oy, pz)) visible++;
       }
       return visible / VIS_OFFSETS.length;
@@ -17510,8 +20844,18 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     function getEnemyTarget(enemy) {
       if (enemy.targetId) {
         const rp = remotePlayers.get(enemy.targetId);
-        if (rp && rp.group.visible) return { x: rp.x, y: 1.65, z: rp.z };
+        if (rp && rp.group.visible && !rp.isDown) return { x: rp.x, y: rp.y ?? 1.65, z: rp.z };
         enemy.targetId = null;
+      }
+      if (player.health <= 0 || paused) {
+        let nearest = Infinity;
+        for (const [id, rp] of remotePlayers) {
+          if (!rp.group.visible || rp.isDown) continue;
+          const d = (rp.x - enemy.group.position.x) ** 2 + (rp.z - enemy.group.position.z) ** 2;
+          if (d < nearest) { nearest = d; enemy.targetId = id; }
+        }
+        const rp = remotePlayers.get(enemy.targetId);
+        if (rp) return { x: rp.x, y: rp.y ?? 1.65, z: rp.z };
       }
       return { x: player.position.x, y: player.position.y, z: player.position.z };
     }
@@ -17565,7 +20909,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       const target = getEnemyTarget(enemy);
       const ex = enemy.group.position.x;
       const ez = enemy.group.position.z;
-      const ratio = computeVisibility(ex, ez, target.x, target.z);
+      const ratio = computeVisibility(ex, ez, target.x, target.z, (enemy.baseY || 0) + 1.6, target.y);
 
       if (!enemy.aware) {
         if (ratio > 0) {
@@ -17586,62 +20930,232 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       }
     }
 
-    function applyZombieSyncPayload(data) {
+    function applyZombieSyncPayload(data, hydrate = false) {
       if (!gameWorldReady) return;
       if (!data || !Array.isArray(data.zombies)) return;
-      if (typeof data.score === "number") state.score = data.score;
-      // v33: spawn missing bosses on demand. Host may have BOSS_FIGHT_COUNT > joiner's local default
-      // (1/2/3) or HELL mode; the joiner previously dropped sync rows for unknown netIndex, leaving
-      // bosses invisible. Now we materialize them from the sync payload itself.
-      const isBossMap = isBossArenaMap(CURRENT_MAP);
+      if (typeof data.score === "number" && !TRAINING_COOP) state.score = data.score;
+      if (typeof data.shake === "number") bossShakeTimerMs = data.shake;
+      const seen = new Set();
       for (const z of data.zombies) {
         const ei = z.i | 0;
-        if (ei < 0) continue;
-        if (ei >= state.enemies.length) {
-          if (isBossMap && z.bm != null && typeof z.x === "number" && typeof z.z === "number") {
-            const isHell = !!z.hell;
-            const newBoss = makeHormoneZombie(z.x, z.z, isHell);
-            newBoss.netIndex = ei;
-            // Pad state.enemies up to ei so future indexed access works (sparse-safe).
-            while (state.enemies.length < ei) {
-              state.enemies.push({ alive: false, hp: 0, group: new THREE.Group(), netIndex: state.enemies.length, isBoss: false, _placeholder: true });
-            }
-            state.enemies.push(newBoss);
-            drawEnemyHp(newBoss);
-          } else {
-            continue;
+        if (ei < 0 || ei >= 512 || !Number.isFinite(z.x) || !Number.isFinite(z.z)) continue;
+        seen.add(ei);
+        const type = Object.hasOwn(ZOMBIE_MIX, z.type) ? z.type : z.minion;
+        const boss = z.bm === "tank" || z.bm === "gunner";
+        const look = zombieLookFor(boss ? "boss" : type, ei);
+        let e = state.enemies[ei];
+        if (!TRAINING_COOP && (!e || e._placeholder || e.look !== look || (boss && (!e.isBoss || e.isHellBoss !== !!z.hell))
+          || (!boss && type && (e.isBoss || e.type !== type)))) {
+          if (!boss && !Object.hasOwn(ZOMBIE_MIX, type)) continue;
+          if (e?.group) scene.remove(e.group);
+          e = boss ? makeHormoneZombie(z.x, z.z, !!z.hell, look) : makeZombie(z.x, z.z, type, look);
+          e.netIndex = ei;
+          while (state.enemies.length < ei) {
+            state.enemies.push({ alive: false, group: new THREE.Group(), _placeholder: true });
           }
+          state.enemies[ei] = e;
         }
-        const e = state.enemies[ei];
         if (!e || e._placeholder) continue;
-        const prevX = e.group.position.x;
-        const prevZ = e.group.position.z;
-        if (typeof z.x === "number") e.group.position.x = z.x;
-        if (typeof z.z === "number") e.group.position.z = z.z;
-        const syncDx = e.group.position.x - prevX;
-        const syncDz = e.group.position.z - prevZ;
-        e.moving = syncDx * syncDx + syncDz * syncDz > 0.0004;
-        if (typeof z.y === "number") {
-          e.visYaw = z.y;
+        const delta = Math.hypot(z.x - e.group.position.x, z.z - e.group.position.z);
+        const py = Number.isFinite(z.py) ? z.py : e.group.position.y;
+        e.syncPosition ||= new THREE.Vector3();
+        e.syncPosition.set(z.x, py, z.z);
+        if (hydrate || !e.group.visible || delta > 5) {
+          e.group.position.copy(e.syncPosition);
+          e.gaitAction = null;
+          e.gaitStepDistance = 0;
+          worldAudio.resetSteps(e);
+        }
+        e.moving = z.moving ?? delta > 0.02;
+        e.aware = z.aware ?? e.aware;
+        if (Number.isFinite(z.y)) {
+          e.syncYaw = z.y;
           e.facingYaw = z.y;
-          e.group.rotation.y = z.y;
+          if (hydrate) e.visYaw = z.y;
         }
-        if (typeof z.hp === "number") e.hp = z.hp;
-        if (typeof z.a === "number") e.alive = z.a !== 0;
-        if (typeof z.rt === "number") e.respawnTimer = z.rt;
-        if (z.bm && e.isBoss) e.bossMode = z.bm;
-        if (e.isBoss && ["idle", "attacking", "quaking", "rangedAttack", "summoning", "modeSwitch"].includes(z.ba)) {
-          e.bossAnimState = z.ba;
-          if (typeof z.bt === "number") e.bossAnimTimer = z.bt;
+        if (Number.isFinite(z.max)) e.maxHp = z.max;
+        if (Number.isFinite(z.hp)) e.hp = z.hp;
+        if (Number.isFinite(z.rt)) e.respawnTimer = z.rt;
+        if (Number.isFinite(z.ac)) {
+          // A gunner's full cooldown starts only when it fires a shot. The
+          // existing snapshot is enough to replay the recoil on other clients.
+          if (e.type === "gunner" && !hydrate && z.a !== 0
+            && z.ac > e.attackCooldown - 0.18 && z.ac > e.attackCooldownTimer + 0.25) {
+            e._shotAt = performance.now();
+          }
+          e.attackCooldownTimer = z.ac;
         }
+        const melee = ZOMBIE_MELEE[e.type];
+        if (melee) {
+          // ap marks a committed swing; ac supplies its timeline without a new
+          // relay field. Never infer an attack from proximity or paralysis.
+          const elapsed = melee.cooldown - z.ac;
+          const active = z.a !== 0 && z.ap > 0 && elapsed >= 0 && elapsed < melee.recovery;
+          if (active && e.meleeElapsed == null && elapsed < melee.contact
+              && e.type === "fast" && !hydrate && worldAudioReady()) {
+            worldAudio.play("zombieVoice", { x: z.x, y: py + 1.6, z: z.z }, { volume: 0.78 });
+          }
+          e.meleeElapsed = active ? elapsed : null;
+          e.meleeTargetId = z.target || null;
+        } else if (Number.isFinite(z.ap)) {
+          e.attackPhase = z.ap;
+        }
+        if (Number.isFinite(z.slow)) e.slowUntil = performance.now() + z.slow * 1000;
+        if (Number.isFinite(z.patrolDir)) e.patrolDir = z.patrolDir;
+        e.targetId = z.target || null;
+        if (boss) {
+          e.bossMode = z.bm;
+          e.ranged = z.bm === "gunner";
+          if (Number.isFinite(z.modeIn)) e.bossModeSwitchTimer = z.modeIn;
+          if (Number.isFinite(z.quakeIn)) e.bossQuakeCooldownTimer = z.quakeIn;
+          if (Number.isFinite(z.summon)) e._hellSummonStage = z.summon;
+          e.summonTriggered = z.summonDone ?? e.summonTriggered;
+          e._hellBossSummoned = z.hellSummonDone ?? e._hellBossSummoned;
+          if (z.ba && z.ba !== e.bossAnimState && !hydrate) {
+            // Joining clients show the same warnings the host's creature gives (the creature's own timings).
+            const tuneR = e.isHellBoss ? BOSS_TUNING.hell : BOSS_TUNING.normal;
+            if (z.ba === "attacking") spawnBossTelegraph(e, tuneR.clawReach * e.creature.scale, CLAW_STRIKE_S, 0xff6a35);
+            if (z.ba === "quaking") spawnBossTelegraph(e, tuneR.quakeR, QUAKE_SLAM_S, 0xffa02a);
+            if (z.ba === "chargeWind") {
+              e._lane = spawnBossLane(e, 0xff7a2a);
+              e._laneUntil = performance.now() + 1100;
+            }
+          }
+          if (z.roar !== undefined && e.lastRemoteRoar !== undefined && z.roar !== e.lastRemoteRoar && !hydrate) {
+            playBossRoarSfx(e);
+          }
+          if (Number.isFinite(z.roar)) e.lastRemoteRoar = z.roar;
+          e.bossAnimState = z.ba || "idle";
+          e.bossAnimTimer = z.bt ?? 0;
+          e._pendingBossProjectile = z.pending || null;
+          e._rangedBallReleased = !!z.released;
+          e._meleeDamagePending = !!z.meleePending;
+          const impactTune = e.isHellBoss ? BOSS_TUNING.hell : BOSS_TUNING.normal;
+          if (!hydrate && z.quakeDone && !e._quakeShook) applyBossImpact(e, impactTune.quakeR, 4, 1.4);
+          if (!hydrate && z.smashDone && !e._smashShook) applyBossImpact(e, impactTune.clawReach * e.creature.scale + 1.5, 3.2, 0.9);
+          e._quakeShook = !!z.quakeDone;
+          e._smashShook = !!z.smashDone;
+        }
+        const wasAlive = e.alive;
+        e.alive = z.a !== 0;
+        if (wasAlive && !e.alive && !hydrate && e.group.visible) spawnHumanoidDissolve(e.group, e.group.position);
         if (e.alive) e.dissolveTimer = 0;
         e.group.visible = e.alive;
         drawEnemyHp(e);
       }
+      if (data.complete) {
+        for (let i = 0; i < state.enemies.length; i++) {
+          if (seen.has(i) || !state.enemies[i]) continue;
+          state.enemies[i].alive = false;
+          state.enemies[i].group.visible = false;
+          if (!TRAINING_COOP) state.enemies[i]._placeholder = true;
+        }
+      }
+      if (Array.isArray(data.balls)) reconcileBossProjectiles(data.balls, hydrate);
+      if (data.victory && !bossVictoryActive && isBossArenaMap(CURRENT_MAP)) {
+        const boss = state.enemies.find(enemy => enemy.isBoss);
+        if (boss) triggerBossRoundEnd(boss.group.position.clone());
+      }
       updateHud();
     }
 
-    function spawnBossProjectile(ox, oy, oz, dx, dy, dz, damage) {
+    function updateRemoteEnemies(dt) {
+      const blend = 1 - Math.exp(-17 * dt);
+      for (const enemy of state.enemies) {
+        if (!enemy.group.visible) continue;
+        const { x, z } = enemy.group.position;
+        if (enemy.syncPosition) enemy.group.position.lerp(enemy.syncPosition, blend);
+        if (Number.isFinite(enemy.syncYaw)) {
+          enemy.visYaw = dampAngle(enemy.visYaw || 0, enemy.syncYaw, dt, 17);
+          enemy.group.rotation.y = enemy.visYaw;
+        }
+        if (enemy.isBoss) enemy.bossAnimTimer += dt;
+        if (enemy._lane) {
+          // The charge lane a joining client shows follows the creature until the charge is on its way.
+          enemy._lane.mesh.position.set(enemy.group.position.x, (enemy.baseY || 0) + 0.04, enemy.group.position.z);
+          enemy._lane.mesh.rotation.y = enemy.group.rotation.y;
+          if (performance.now() > enemy._laneUntil || enemy.bossAnimState !== "chargeWind") {
+            enemy._lane.fadeAt = performance.now();
+            enemy._lane = null;
+          }
+        }
+        if (enemy.meleeElapsed != null) {
+          const elapsed = enemy.meleeElapsed + dt;
+          enemy.meleeElapsed = elapsed < ZOMBIE_MELEE[enemy.type].recovery ? elapsed : null;
+          enemy.attackCooldownTimer -= dt;
+        }
+        if (enemy.trainingDummy && enemy.type === "recruit") animateTrainingDummyLimbs(enemy, dt, enemy.moving);
+        else updateZombieVisual(enemy, dt, Math.hypot(enemy.group.position.x - x, enemy.group.position.z - z));
+      }
+    }
+
+    let bossProjectileSerial = 0;
+
+    function reconcileBossProjectiles(rows, hydrate) {
+      const ids = new Set(rows.map(p => p.id));
+      for (let i = bossProjectiles.length - 1; i >= 0; i--) {
+        if (!ids.has(bossProjectiles[i].netId)) destroyBossProjectile(i, !hydrate);
+      }
+      for (const row of rows) {
+        let bp = bossProjectiles.find(p => p.netId === row.id);
+        if (!bp) bp = spawnBossProjectile(row.x, row.y, row.z, 0, 0, 0, row.damage, row.target, row.id);
+        bp.mesh.position.set(row.x, row.y, row.z);
+        bp.velocity.set(row.vx, row.vy, row.vz);
+        bp.life = row.life;
+        bp.hp = row.hp;
+      }
+    }
+
+    function publishWorldState(dt) {
+      if (!MULTIPLAYER || !(ARENA_COOP || TRAINING_COOP) || !ZOMBIE_AUTHORITY || !gameWorldReady) return;
+      _zombieSyncAcc += dt;
+      if (_zombieSyncAcc < 1 / 14) return;
+      _zombieSyncAcc = 0;
+      const now = performance.now();
+      socket.emit("zombieSync", {
+        complete: true, score: state.score, round: BOSS_HELL_MODE ? 4 : 1, victory: bossVictoryActive, shake: bossShakeTimerMs,
+        zombies: state.enemies.flatMap((e, idx) => {
+          if (e._placeholder) return [];
+          const { x, y, z } = e.group.position;
+          const melee = ZOMBIE_MELEE[e.type];
+          const attackPhase = melee
+            ? (e.alive && e.meleeElapsed != null ? Math.max(0.001, melee.contact - e.meleeElapsed) : 0)
+            : e.attackPhase;
+          const row = {
+            i: e.netIndex ?? idx, x, py: y, z, y: e.group.rotation.y, hp: e.hp, max: e.maxHp,
+            a: e.alive ? 1 : 0, rt: e.respawnTimer, ac: e.attackCooldownTimer,
+            ap: attackPhase,
+            type: e.type, moving: e.moving, aware: e.aware, target: e.targetId,
+            slow: Math.max(0, ((e.slowUntil || 0) - now) / 1000), patrolDir: e.patrolDir,
+          };
+          if (e.isBoss) Object.assign(row, {
+            bm: e.bossMode, hell: e.isHellBoss, ba: e.bossAnimState, bt: e.bossAnimTimer,
+            modeIn: e.bossModeSwitchTimer, quakeIn: e.bossQuakeCooldownTimer,
+            summon: e._hellSummonStage, summonDone: e.summonTriggered, hellSummonDone: e._hellBossSummoned,
+            roar: e.roarSerial || 0, pending: e._pendingBossProjectile, released: e._rangedBallReleased,
+            meleePending: e._meleeDamagePending, quakeDone: e._quakeShook, smashDone: e._smashShook,
+          });
+          return [row];
+        }),
+        balls: bossProjectiles.map(p => ({
+          id: p.netId, x: p.mesh.position.x, y: p.mesh.position.y, z: p.mesh.position.z,
+          vx: p.velocity.x, vy: p.velocity.y, vz: p.velocity.z, life: p.life, hp: p.hp,
+          damage: p.damage, target: p.target,
+        })),
+      });
+    }
+
+    /** Launches the balls of a throw. (dx, dy, dz) is each ball's launch velocity, in units per second. */
+    function releaseBossBalls(p) {
+      const shots = p.fan || [p];
+      // Each ball of a fan does less, so the spread is a pressure tool, not a multiplied hit.
+      const per = p.damage * (shots.length > 1 ? 0.7 : 1);
+      for (const s of shots) spawnBossProjectile(p.ox, p.oy, p.oz, s.dx, s.dy, s.dz, per, p.target);
+    }
+
+    function spawnBossProjectile(ox, oy, oz, dx, dy, dz, damage, target = null, netId = null) {
+      if (netId == null) netId = ++bossProjectileSerial;
+      else bossProjectileSerial = Math.max(bossProjectileSerial, netId);
       const mesh = new THREE.Group();
       mesh.position.set(ox, oy, oz);
 
@@ -17711,9 +21225,8 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       const trail = new THREE.Points(trailGeo, new THREE.PointsMaterial({ size: 0.34, vertexColors: true, transparent: true, opacity: 0.72, blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true }));
       trail.frustumCulled = false;
       scene.add(mesh, trail);
-      const spd = 22;
-      bossProjectiles.push({
-        mesh,
+      const projectile = {
+        mesh, netId, target,
         core,
         aura,
         ringA,
@@ -17722,11 +21235,13 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         trail,
         trailPositions,
         visualTime: Math.random() * 10,
-        velocity: new THREE.Vector3(dx * spd, dy * spd, dz * spd),
+        velocity: new THREE.Vector3(dx, dy, dz),
         life: 5,
         damage: damage || 8,
-        hp: 60
-      });
+        hp: 60,
+      };
+      bossProjectiles.push(projectile);
+      return projectile;
     }
 
     function disposeBossVisual(root) {
@@ -17758,7 +21273,10 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     function destroyBossProjectile(idx, impact = false) {
       const bp = bossProjectiles[idx];
       if (!bp) return;
-      if (impact) spawnBossLavaImpact(bp.mesh.position);
+      if (impact) {
+        spawnBossLavaImpact(bp.mesh.position);
+        createSparks(bp.mesh.position.clone(), 0xff7a2a);
+      }
       scene.remove(bp.mesh);
       scene.remove(bp.trail);
       disposeBossVisual(bp.mesh);
@@ -17783,7 +21301,76 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       }
     }
 
+    /**
+     * Ground telegraph for a boss slam. The attack is read from the arena floor, the way
+     * the player would read it in any action game: a ring marks the reach as soon as the
+     * boss commits, the inside fills toward the edge as the wind-up completes, and it
+     * bursts outward on impact. Replaces the "⚠ SMASH!" / "⚠ CRASH!" text.
+     */
+    const bossTelegraphs = [];
+    const _tgDiscGeo = new THREE.CircleGeometry(1, 56);
+    const _tgRimGeo = new THREE.RingGeometry(0.965, 1, 72);
+    function spawnBossTelegraph(enemy, radius, windupS, color) {
+      const mk = (geo, opacity) => {
+        const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
+          color, transparent: true, opacity, depthWrite: false,
+          blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false,
+        }));
+        m.rotation.x = -Math.PI / 2;
+        m.raycast = () => {};
+        m.renderOrder = 3;
+        return m;
+      };
+      const grp = new THREE.Group();
+      const disc = mk(_tgDiscGeo, 0);
+      const rim = mk(_tgRimGeo, 0);
+      grp.add(disc, rim);
+      grp.position.set(enemy.group.position.x, (enemy.baseY || 0) + 0.035, enemy.group.position.z);
+      scene.add(grp);
+      bossTelegraphs.push({ grp, disc, rim, enemy, radius, startMs: performance.now(), windupMs: windupS * 1000 });
+    }
+    function updateBossTelegraphs() {
+      updateBossLanes();
+      const now = performance.now();
+      for (let i = bossTelegraphs.length - 1; i >= 0; i--) {
+        const tg = bossTelegraphs[i];
+        const t = (now - tg.startMs) / tg.windupMs;
+        if (t < 1) {
+          if (tg.enemy && tg.enemy.alive) {
+            tg.grp.position.set(tg.enemy.group.position.x, (tg.enemy.baseY || 0) + 0.035, tg.enemy.group.position.z);
+          }
+          const e = t * t;
+          tg.rim.scale.setScalar(tg.radius);
+          tg.rim.material.opacity = 0.35 + 0.4 * e + 0.15 * Math.sin(now * 0.025);
+          tg.disc.scale.setScalar(Math.max(0.01, tg.radius * e));
+          tg.disc.material.opacity = 0.10 + 0.16 * e;
+          continue;
+        }
+        const f = (now - tg.startMs - tg.windupMs) / 420;
+        if (f >= 1) {
+          scene.remove(tg.grp);
+          tg.disc.material.dispose();
+          tg.rim.material.dispose();
+          bossTelegraphs.splice(i, 1);
+          continue;
+        }
+        const ease = 1 - (1 - f) * (1 - f);
+        tg.rim.scale.setScalar(tg.radius * (1 + 0.35 * ease));
+        tg.rim.material.opacity = 0.9 * (1 - f);
+        tg.disc.scale.setScalar(tg.radius);
+        tg.disc.material.opacity = 0.32 * (1 - f) * (1 - f);
+      }
+    }
+
     function clearBossProjectileEffects() {
+      for (const tg of bossTelegraphs) {
+        scene.remove(tg.grp);
+        tg.disc.material.dispose();
+        tg.rim.material.dispose();
+      }
+      bossTelegraphs.length = 0;
+      for (const lane of bossLanes) { scene.remove(lane.mesh); lane.mat.dispose(); }
+      bossLanes.length = 0;
       for (let i = bossProjectiles.length - 1; i >= 0; i--) destroyBossProjectile(i, false);
       for (let i = bossLavaImpacts.length - 1; i >= 0; i--) {
         const fx = bossLavaImpacts[i];
@@ -17810,6 +21397,9 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
      * left the player at 0 HP with no death UI. It routes through damagePlayer() now.
      */
     const BOSS_BALL_HIT_RADIUS = 0.85;
+    /** Launch speed of a boss ball (units/s) and the drop it feels (units/s²). */
+    const BOSS_BALL_SPEED = 18;
+    const BOSS_BALL_GRAVITY = 6;
     const _bbSeg = new THREE.Vector3();
     const _bbBody = new THREE.Vector3();
     const _bbPrev = new THREE.Vector3();
@@ -17821,6 +21411,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
 
     function updateBossProjectiles(dt) {
       updateBossLavaImpacts(dt);
+      const authoritative = !MULTIPLAYER || !ARENA_COOP || ZOMBIE_AUTHORITY;
       for (let i = bossProjectiles.length - 1; i >= 0; i--) {
         const bp = bossProjectiles[i];
         bp.visualTime += dt;
@@ -17831,19 +21422,19 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         bp.ringB.rotation.y -= dt * 4.2;
         const pulse = 1 + Math.sin(bp.visualTime * 9) * 0.08;
         bp.aura.scale.setScalar(pulse);
-        playerBodyCenter(_bbBody);
-        const toPx = _bbBody.x - bp.mesh.position.x;
-        const toPy = _bbBody.y - bp.mesh.position.y;
-        const toPz = _bbBody.z - bp.mesh.position.z;
-        const toLen = Math.sqrt(toPx * toPx + toPy * toPy + toPz * toPz);
-        if (toLen > 0.1) {
-          const curSpd = bp.velocity.length();
-          bp.velocity.set(toPx / toLen * curSpd, toPy / toLen * curSpd, toPz / toLen * curSpd);
-        }
+        const remoteTarget = remotePlayers.get(bp.target);
+        if (remoteTarget && !remoteTarget.isDown) _bbBody.set(remoteTarget.x, remoteTarget.y - 0.45, remoteTarget.z);
+        else playerBodyCenter(_bbBody);
+        // No homing: the ball keeps the arc it was launched on, and gravity bends it down.
+        bp.velocity.y -= BOSS_BALL_GRAVITY * dt;
         _bbPrev.copy(bp.mesh.position);
         bp.mesh.position.x += bp.velocity.x * dt;
         bp.mesh.position.y += bp.velocity.y * dt;
         bp.mesh.position.z += bp.velocity.z * dt;
+        if (authoritative && soundBlocked(_bbPrev, bp.mesh.position, .24)) {
+          destroyBossProjectile(i, true);
+          continue;
+        }
         const tp = bp.trailPositions;
         for (let ti = 11; ti > 0; ti--) {
           tp[ti * 3] = tp[(ti - 1) * 3];
@@ -17857,47 +21448,366 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           destroyBossProjectile(i, bp.hp <= 0);
           continue;
         }
-        if (player.health > 0) {
-          // Closest approach of the segment travelled this frame to the chest point.
-          playerBodyCenter(_bbBody);
-          _bbSeg.subVectors(bp.mesh.position, _bbPrev);
-          const segLen2 = _bbSeg.lengthSq();
-          let cx = bp.mesh.position.x;
-          let cy = bp.mesh.position.y;
-          let cz = bp.mesh.position.z;
-          if (segLen2 > 1e-8) {
-            const t = THREE.MathUtils.clamp(
-              ((_bbBody.x - _bbPrev.x) * _bbSeg.x +
-                (_bbBody.y - _bbPrev.y) * _bbSeg.y +
-                (_bbBody.z - _bbPrev.z) * _bbSeg.z) / segLen2,
-              0,
-              1
-            );
-            cx = _bbPrev.x + _bbSeg.x * t;
-            cy = _bbPrev.y + _bbSeg.y * t;
-            cz = _bbPrev.z + _bbSeg.z * t;
-          }
-          const pdx = cx - _bbBody.x;
-          const pdy = cy - _bbBody.y;
-          const pdz = cz - _bbBody.z;
-          if (pdx * pdx + pdy * pdy + pdz * pdz < BOSS_BALL_HIT_RADIUS * BOSS_BALL_HIT_RADIUS) {
-            createSparks(bp.mesh.position.clone(), 0xff5522);
-            state.flashTimer = 0.25;
-            damagePlayer(bp.damage, null);
+        if (!authoritative) continue;
+        _bbSeg.subVectors(bp.mesh.position, _bbPrev);
+        const span = Math.max(1e-8, _bbSeg.lengthSq());
+        const inPath = body => {
+          const t = THREE.MathUtils.clamp(
+            ((body.x - _bbPrev.x) * _bbSeg.x + (body.y - _bbPrev.y) * _bbSeg.y
+             + (body.z - _bbPrev.z) * _bbSeg.z) / span, 0, 1);
+          return (body.x - _bbPrev.x - _bbSeg.x * t) ** 2 + (body.y - _bbPrev.y - _bbSeg.y * t) ** 2
+            + (body.z - _bbPrev.z - _bbSeg.z * t) ** 2 < BOSS_BALL_HIT_RADIUS ** 2;
+        };
+        if (player.health > 0 && inPath(playerBodyCenter(_bbBody))) {
+          state.flashTimer = 0.25;
+          damagePlayer(bp.damage, null);
+          destroyBossProjectile(i, true);
+          continue;
+        }
+        if (MULTIPLAYER && ARENA_COOP) {
+          for (const [id, rp] of remotePlayers) {
+            if (rp.isDown || !rp.group.visible || !inPath(_bbBody.set(rp.x, rp.y - 0.45, rp.z))) continue;
+            socket.emit("hit", { target: id, damage: bp.damage, x: bp.mesh.position.x, z: bp.mesh.position.z, hitKind: "boss" });
             destroyBossProjectile(i, true);
-            continue;
+            break;
           }
         }
       }
     }
 
+    // ── The creature boss: how the fight plays ───────────────────────────────
+    //
+    // The creature stalks the player, then picks a move by range and cooldown:
+    //   claw strike (close)        both pincers rear up and crash down in front of it
+    //   ground slam (mid range)    rears onto its back legs; the shock hurts anyone still on the floor, so jump
+    //   charge (far, clear lane)   paws the ground, a red lane marks the line, then a straight-line rush that
+    //                              cannot turn. If it hits a wall or pillar it is STUNNED: the armour splits
+    //                              open and the core takes double damage. If it misses, it skids and recovers.
+    //   tail lob (far)             the stinger arches over the back and flings a lobbed ball at where you were
+    // Hell throws three balls, rushes sooner, slams harder and wider. Both hit more often below half health.
+    const _bossTip = new THREE.Vector3();
+    const bossLanes = [];
+    const _laneGeo = (() => { const g = new THREE.PlaneGeometry(1, 1); g.rotateX(-Math.PI / 2); g.translate(0, 0, 0.5); return g; })();
+
+    /** A ground strip showing the line of a charge. It follows the creature until the charge is locked. */
+    function spawnBossLane(enemy, color) {
+      const mat = new THREE.MeshBasicMaterial({
+        color, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending,
+        side: THREE.DoubleSide, fog: false,
+      });
+      const mesh = new THREE.Mesh(_laneGeo, mat);
+      mesh.raycast = () => {};
+      mesh.renderOrder = 3;
+      mesh.position.set(enemy.group.position.x, (enemy.baseY || 0) + 0.04, enemy.group.position.z);
+      mesh.scale.set(BOSS_RADIUS * enemy.creature.scale * 1.8 + 0.8, 1, 46);
+      scene.add(mesh);
+      const lane = { mesh, mat, born: performance.now(), fadeAt: 0 };
+      bossLanes.push(lane);
+      return lane;
+    }
+
+    function updateBossLanes() {
+      const now = performance.now();
+      for (let i = bossLanes.length - 1; i >= 0; i--) {
+        const lane = bossLanes[i];
+        if (lane.fadeAt) {
+          const f = (now - lane.fadeAt) / 450;
+          if (f >= 1) { scene.remove(lane.mesh); lane.mat.dispose(); bossLanes.splice(i, 1); continue; }
+          lane.mat.opacity = 0.34 * (1 - f);
+        } else {
+          lane.mat.opacity = 0.14 + 0.2 * (0.5 + 0.5 * Math.sin((now - lane.born) * 0.018));
+        }
+      }
+    }
+
+    function playBossQuakeSfx() {
+      if (!audioCtx || !audioSfx) return;
+      const now2 = audioCtx.currentTime;
+      const nb = audioCtx.createBuffer(1, Math.floor(audioCtx.sampleRate * 0.35), audioCtx.sampleRate);
+      const nd = nb.getChannelData(0);
+      for (let qi = 0; qi < nd.length; qi++) nd[qi] = Math.random() * 2 - 1;
+      const ns = audioCtx.createBufferSource(); ns.buffer = nb;
+      const lp = audioCtx.createBiquadFilter(); lp.type = "lowpass";
+      lp.frequency.setValueAtTime(180, now2); lp.frequency.exponentialRampToValueAtTime(40, now2 + 0.3);
+      const gg = audioCtx.createGain();
+      gg.gain.setValueAtTime(0.0001, now2); gg.gain.linearRampToValueAtTime(1.1, now2 + 0.02);
+      gg.gain.exponentialRampToValueAtTime(0.0001, now2 + 0.32);
+      ns.connect(lp); lp.connect(gg); gg.connect(audioSfx); ns.start(now2); ns.stop(now2 + 0.36);
+      const osc2 = audioCtx.createOscillator(); osc2.type = "sine";
+      osc2.frequency.setValueAtTime(60, now2); osc2.frequency.exponentialRampToValueAtTime(18, now2 + 0.4);
+      const og2 = audioCtx.createGain();
+      og2.gain.setValueAtTime(0.6, now2); og2.gain.exponentialRampToValueAtTime(0.0001, now2 + 0.4);
+      osc2.connect(og2); og2.connect(audioSfx); osc2.start(now2); osc2.stop(now2 + 0.45);
+    }
+
+    function bossCollisionRadius(enemy) { return BOSS_RADIUS * enemy.creature.scale * 0.9; }
+
+    /** Walk the boss along (dirX, dirZ). With `slide` it slides along walls; without, any contact stops it (a charge). */
+    function moveBossBody(enemy, dirX, dirZ, speed, dt, slide = true) {
+      const pos = enemy.group.position, floorY = enemy.baseY || 0, cr = bossCollisionRadius(enemy);
+      const total = speed * dt;
+      const steps = Math.max(1, Math.ceil(total / 0.4)), sl = total / steps;
+      for (let i = 0; i < steps; i++) {
+        const nx = pos.x + dirX * sl, nz = pos.z + dirZ * sl;
+        if (!enemyCollidesWall(nx, nz, cr, floorY)) { pos.x = nx; pos.z = nz; continue; }
+        if (slide) {
+          if (Math.abs(dirX) > 0.05 && !enemyCollidesWall(nx, pos.z, cr, floorY)) { pos.x = nx; continue; }
+          if (Math.abs(dirZ) > 0.05 && !enemyCollidesWall(pos.x, nz, cr, floorY)) { pos.z = nz; continue; }
+        }
+        return true;
+      }
+      return false;
+    }
+
+    /** If the boss is embedded in geometry (spawned against a pillar), step it out. */
+    function freeBossFromWalls(enemy) {
+      const pos = enemy.group.position, floorY = enemy.baseY || 0, cr = bossCollisionRadius(enemy);
+      if (!enemyCollidesWall(pos.x, pos.z, cr, floorY)) return;
+      for (let d = 0.2; d <= 4; d += 0.2) {
+        for (let a = 0; a < 16; a++) {
+          const ang = a * Math.PI / 8 + d * 0.3;
+          const tx = pos.x + Math.sin(ang) * d, tz = pos.z + Math.cos(ang) * d;
+          if (!enemyCollidesWall(tx, tz, cr, floorY)) { pos.x = tx; pos.z = tz; return; }
+        }
+      }
+    }
+
+    /** Launch velocities for a lobbed ball from `from` to `aim`; hell throws a three-ball fan. */
+    function bossLobFan(from, aim, hell) {
+      const flight = Math.hypot(aim.x - from.x, aim.y - from.y, aim.z - from.z);
+      const T = Math.max(0.05, flight / BOSS_BALL_SPEED);
+      const vx = (aim.x - from.x) / T, vz = (aim.z - from.z) / T;
+      const vy = (aim.y - from.y) / T + 0.5 * BOSS_BALL_GRAVITY * T;
+      return (hell ? [-0.16, 0, 0.16] : [0]).map((a) => {
+        const c = Math.cos(a), s = Math.sin(a);
+        return { dx: vx * c + vz * s, dy: vy, dz: -vx * s + vz * c };
+      });
+    }
+
+    /** Damage multiplier on the creature: its armour is open while it is stunned. */
+    function bossArmorMul(enemy) {
+      return enemy.isCreatureBoss && enemy.bossAnimState === "stunned" ? 2.2 : 1;
+    }
+
+    function updateCreatureBoss(enemy, dt, gauntlet) {
+      const tune = enemy.isHellBoss ? BOSS_TUNING.hell : BOSS_TUNING.normal;
+      const creature = enemy.creature, scale = creature.scale;
+      const pos = enemy.group.position, floorY = enemy.baseY || 0;
+      const cr = bossCollisionRadius(enemy);
+      const target = getEnemyTarget(enemy);
+      const tx = target.x, tz = target.z, ty = target.y ?? 1.65;
+      const dx = tx - pos.x, dz = tz - pos.z;
+      const dist = Math.hypot(dx, dz);
+      const enraged = enemy.hp < enemy.maxHp * 0.5;
+      const cdMul = enraged ? 0.72 : 1;
+      const eyeY = floorY + 1.6;
+      const reach = tune.clawReach * scale;
+      const lineColor = enemy.isHellBoss ? 0xff2a1a : 0xff5a2a;
+      enemy.aware = true;
+      enemy.bossAnimTimer += dt;
+      enemy.cdClaw -= dt; enemy.cdCharge -= dt; enemy.cdLob -= dt; enemy.cdQuake -= dt;
+      const begin = (s) => { enemy.bossAnimState = s; enemy.bossAnimTimer = 0; };
+      const finish = () => {
+        enemy._smashShook = false; enemy._quakeShook = false; enemy._meleeDamagePending = false;
+        begin("idle");
+      };
+      freeBossFromWalls(enemy);
+
+      const anim = enemy.bossAnimState;
+      const t = enemy.bossAnimTimer;
+      let turnRate = 6;
+      let wantYaw = Math.atan2(dx, dz);
+      let moved = false;
+
+      switch (anim) {
+        case "idle": {
+          const los = clearLosToTarget(pos.x, pos.z, tx, tz, ty, eyeY);
+          if (dist <= reach && enemy.cdClaw <= 0) {
+            begin("attacking");
+            enemy._smashShook = false;
+            enemy.cdClaw = tune.cdClaw * cdMul + BOSS_DURATIONS.attacking;
+            spawnBossTelegraph(enemy, reach, CLAW_STRIKE_S, lineColor);
+          } else if (dist >= 3 && dist <= tune.quakeR - 1.5 && enemy.cdQuake <= 0) {
+            begin("quaking");
+            enemy._quakeShook = false;
+            enemy.cdQuake = tune.cdQuake * cdMul + BOSS_DURATIONS.quaking;
+            spawnBossTelegraph(enemy, tune.quakeR, QUAKE_SLAM_S, lineColor);
+          } else if (los && dist >= 9 && dist <= 42 && enemy.cdCharge <= 0
+            && bossRouteClear(pos.x, pos.z, pos.x + dx / dist * 11, pos.z + dz / dist * 11, floorY, cr)) {
+            begin("chargeWind");
+            enemy._chargeLocked = false;
+            enemy.cdCharge = tune.cdCharge * cdMul + BOSS_DURATIONS.chargeWind + 1.5;
+            enemy._lane = spawnBossLane(enemy, lineColor);
+            playBossRoarSfx(enemy);
+          } else if (los && dist >= 8 && dist <= 34 && enemy.cdLob <= 0) {
+            begin("rangedAttack");
+            enemy._rangedBallReleased = false;
+            enemy._lobAim = { x: tx, y: ty - 0.45, z: tz };
+            enemy.cdLob = tune.cdLob * cdMul + BOSS_DURATIONS.rangedAttack;
+          } else if (dist > cr + 1.9) {
+            // Stalk: straight at the player when the lane is clear, otherwise round the obstacles.
+            const ox = pos.x, oz = pos.z;
+            const canReach = (x, z) => bossRouteClear(ox, oz, x, z, floorY, cr);
+            const probe = Math.min(3.4, dist);
+            const px = ox + dx / dist * probe, pz = oz + dz / dist * probe;
+            const next = los && canReach(px, pz) ? { x: px, z: pz } : (bossWaypoint ? bossWaypoint(ox, oz, tx, tz, canReach) : null);
+            let dirX = 0, dirZ = 0;
+            if (next) {
+              const len = Math.hypot(next.x - ox, next.z - oz);
+              if (len > 0.01) { dirX = (next.x - ox) / len; dirZ = (next.z - oz) / len; }
+            } else {
+              const ang = Math.atan2(dz, dx);
+              for (const turn of [0.75, -0.75, 1.35, -1.35, 2.1, -2.1]) {
+                const nx = Math.cos(ang + turn), nz = Math.sin(ang + turn);
+                if (canReach(ox + nx * 1.2, oz + nz * 1.2)) { dirX = nx; dirZ = nz; break; }
+              }
+            }
+            enemy._speedNow = THREE.MathUtils.damp(enemy._speedNow || 0, tune.speed * (enraged ? 1.12 : 1), 3, dt);
+            if (dirX || dirZ) { moveBossBody(enemy, dirX, dirZ, enemy._speedNow, dt); moved = true; }
+          }
+          if (!moved) enemy._speedNow = THREE.MathUtils.damp(enemy._speedNow || 0, 0, 6, dt);
+          break;
+        }
+        case "attacking": {
+          turnRate = 2.5;
+          if (t >= CLAW_STRIKE_S && !enemy._smashShook) {
+            enemy._smashShook = true;
+            const fx = Math.sin(enemy.visYaw), fz = Math.cos(enemy.visYaw);
+            const cosA = dist > 0.01 ? (dx * fx + dz * fz) / dist : 1;
+            if (dist <= reach && cosA > 0.22 && Math.abs(ty - eyeY) < 2.6) {
+              enemy.attackDamage = tune.claw;
+              applyCoopZombieDamageToTarget(enemy);
+              applyBossImpact(enemy, reach + 1.5, 3.2, 0.9);
+            } else if (dist < 30) {
+              state.camShake = Math.max(state.camShake || 0, 0.18);
+            }
+          }
+          if (t >= BOSS_DURATIONS.attacking) finish();
+          break;
+        }
+        case "quaking": {
+          turnRate = 1.5;
+          if (t >= QUAKE_SLAM_S && !enemy._quakeShook) {
+            enemy._quakeShook = true;
+            const radius = tune.quakeR;
+            if (dist < radius && ty < floorY + 1.65 + 0.5) {
+              enemy.attackDamage = tune.quake * (1 - 0.35 * dist / radius);
+              applyCoopZombieDamageToTarget(enemy);
+            }
+            applyBossImpact(enemy, radius, 4, 1.4);
+            playBossQuakeSfx();
+          }
+          if (t >= BOSS_DURATIONS.quaking) finish();
+          break;
+        }
+        case "rangedAttack": {
+          turnRate = 4;
+          if (t >= LOB_RELEASE_S && !enemy._rangedBallReleased) {
+            enemy._rangedBallReleased = true;
+            creature.tipWorld(_bossTip);
+            const aim = enemy._lobAim || { x: tx, y: ty - 0.45, z: tz };
+            releaseBossBalls({
+              ox: _bossTip.x, oy: _bossTip.y, oz: _bossTip.z,
+              fan: bossLobFan(_bossTip, aim, enemy.isHellBoss), damage: tune.ball,
+              target: enemy.targetId || (MULTIPLAYER ? socket.id : null),
+            });
+            state.camShake = Math.max(state.camShake || 0, 0.1);
+          }
+          if (t >= BOSS_DURATIONS.rangedAttack) finish();
+          break;
+        }
+        case "summoning": {
+          turnRate = 2;
+          if (t >= BOSS_DURATIONS.summoning) finish();
+          break;
+        }
+        case "chargeWind": {
+          const lane = enemy._lane;
+          if (!enemy._chargeLocked && t >= 0.7) enemy._chargeLocked = true;
+          turnRate = enemy._chargeLocked ? 0 : 5;
+          if (lane) {
+            lane.mesh.position.set(pos.x, floorY + 0.04, pos.z);
+            lane.mesh.rotation.y = enemy.visYaw;
+          }
+          if (t >= BOSS_DURATIONS.chargeWind) {
+            enemy.charge = { dirX: Math.sin(enemy.visYaw), dirZ: Math.cos(enemy.visYaw), speed: 6, traveled: 0, hit: false };
+            if (lane) lane.fadeAt = performance.now();
+            enemy._lane = null;
+            begin("charging");
+          }
+          break;
+        }
+        case "charging": {
+          turnRate = 0;
+          const ch = enemy.charge || (enemy.charge = { dirX: Math.sin(enemy.visYaw), dirZ: Math.cos(enemy.visYaw), speed: 6, traveled: 0, hit: false });
+          ch.speed = Math.min(tune.chargeSpeed * (enraged ? 1.08 : 1), ch.speed + dt * 46);
+          const blocked = moveBossBody(enemy, ch.dirX, ch.dirZ, ch.speed, dt, false);
+          ch.traveled += ch.speed * dt;
+          moved = true;
+          if (!ch.hit && dist < cr + 1.15 && Math.abs(ty - eyeY) < 2.4) {
+            ch.hit = true;
+            enemy.attackDamage = tune.charge;
+            applyCoopZombieDamageToTarget(enemy);
+            applyBossImpact(enemy, cr + 4, 6, 1.4);
+          }
+          if (blocked) {
+            // Crashed into a wall or pillar: the armour cracks open.
+            begin("stunned");
+            enemy.stunFor = tune.stun;
+            enemy._stunNotified = false;
+            state.camShake = Math.max(state.camShake || 0, dist < 45 ? 0.5 : 0.2);
+            addQuake(1.2 * THREE.MathUtils.clamp(1 - dist / 60, 0.2, 1));
+            for (let i = 0; i < 6; i++) {
+              createSparks(new THREE.Vector3(
+                pos.x + ch.dirX * cr + (Math.random() - 0.5) * 2, floorY + 0.5 + Math.random() * 1.5,
+                pos.z + ch.dirZ * cr + (Math.random() - 0.5) * 2), 0xffb060);
+            }
+            playBossQuakeSfx();
+          } else if (ch.traveled >= 48) {
+            begin("skid");
+          }
+          break;
+        }
+        case "skid": {
+          turnRate = 0;
+          const ch = enemy.charge;
+          if (ch) moveBossBody(enemy, ch.dirX, ch.dirZ, ch.speed * Math.pow(Math.max(0, 1 - t / BOSS_DURATIONS.skid), 2), dt, false);
+          moved = true;
+          if (t >= BOSS_DURATIONS.skid) finish();
+          break;
+        }
+        case "stunned": {
+          turnRate = 0;
+          if (!enemy._stunNotified) {
+            enemy._stunNotified = true;
+            showGauntletNotice(tr("bossStunNotice", "ARMOUR CRACKED — SHOOT THE CORE"), 1.8);
+          }
+          if (t >= (enemy.stunFor || BOSS_DURATIONS.stunned)) {
+            playBossRoarSfx(enemy);
+            finish();
+          }
+          break;
+        }
+        default:
+          finish();
+      }
+
+      if (turnRate > 0) enemy.visYaw = dampAngle(enemy.visYaw, wantYaw, dt, turnRate);
+      enemy.facingYaw = enemy.visYaw;
+      enemy.group.rotation.y = enemy.visYaw;
+      enemy.group.position.y = floorY;
+      enemy.moving = moved;
+    }
+
     function updateEnemies(dt) {
-      if (!gameWorldReady) return;
+      if (!gameWorldReady || (isBossArenaMap(CURRENT_MAP) && bossVictoryActive)) return;
       // Zombies must not move or attack until the player is officially in the
       // game (they've clicked "click anywhere" → pointer-locked, or have the
       // skip-click-to-play setting on). The world is loaded and ready before
       // the click hint is dismissed, so gameWorldReady alone isn't enough.
-      if (!controlsInputReady()) return;
+      const servingSquad = MULTIPLAYER && ARENA_COOP && ZOMBIE_AUTHORITY
+        && [...remotePlayers.values()].some(rp => rp.group.visible && !rp.isDown);
+      if (!controlsInputReady() && !servingSquad) return;
       if (player.health > 0 && player.health < player.maxHealth) {
         player.regenTimer += dt;
         if (player.regenTimer >= 5.0) {
@@ -17908,15 +21818,13 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       }
 
       if (MULTIPLAYER && ARENA_COOP && (isArenaLikeMap(CURRENT_MAP) || isBossArenaMap(CURRENT_MAP)) && !ZOMBIE_AUTHORITY) {
-        // The host owns movement/combat decisions, but every client must still
-        // advance the skinned clips. Previously co-op bosses slid in a frozen
-        // pose because this authority return happened before mixer updates.
-        for (const enemy of state.enemies) updateRealZombieAnimation(enemy, dt);
+        updateRemoteEnemies(dt);
         return;
       }
 
       visFrameCounter++;
-      if ((visFrameCounter % 16) === 0) {
+      const gauntlet = isGauntletMap(CURRENT_MAP);
+      if (!gauntlet && (visFrameCounter % 16) === 0) {
         // Rebuild the BFS flow field toward the player. rebuildFlowField()
         // self-guards: it returns immediately unless the player has moved to a
         // new nav cell, so this is cheap on most frames.
@@ -17934,6 +21842,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       // their path/attack decisions don't matter until the player gets close.
       // Halves the per-frame cost on the zombie arena where there are 30+ enemies.
       const AI_SKIP_DIST_SQ = 60 * 60; // ~60 units
+      let relocatedThisFrame = false;
       const px = player.position.x, pz = player.position.z;
       // Run heavy AI logic (path/attack decisions) only every other frame for non-boss
       // enemies. Position updates still run every frame so movement looks smooth. The
@@ -17952,6 +21861,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       const HP_FADE_RANGE = HP_FADE_END - HP_FADE_START;
       const shadowDistance = getQualityPreset().shadowDist;
       const SHADOW_DIST_SQ = shadowDistance * shadowDistance;
+      const cullDistance = (scene.userData.fogCullFar ?? camera.far) * 0.9;
 
       for (let ei = 0; ei < state.enemies.length; ei++) {
         const enemy = state.enemies[ei];
@@ -17963,7 +21873,8 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         //     back-bent pose on the boss target;
         //   • the distance-cull line reset group.visible to true, undoing the visible=false
         //     set on death — that is why a killed target stood there instead of dissolving.
-        if (enemy.trainingDummy) continue;
+        if (enemy.trainingDummy || enemy._placeholder) continue;
+        const startX = enemy.group.position.x, startZ = enemy.group.position.z;
         // Distance bookkeeping for the perf toggles below (cheap: 2 subs + 2 mults).
         const edx = enemy.group.position.x - px;
         const edz = enemy.group.position.z - pz;
@@ -17972,6 +21883,8 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         // HP_FADE_START and HP_FADE_END, fully hidden beyond. Base opacity is
         // captured once so each enemy keeps its own look.
         if (enemy.hpSprite) {
+          // Zombies show their bar only once the local player has hit them; bosses always show.
+          enemy.hpSprite.visible = enemy.isBoss || !!enemy.playerHit;
           if (enemy._hpBaseOpacity === undefined) enemy._hpBaseOpacity = enemy.hpSprite.material.opacity;
           const d = Math.sqrt(d2);
           const fade = THREE.MathUtils.clamp((HP_FADE_END - d) / HP_FADE_RANGE, 0, 1);
@@ -17993,16 +21906,41 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         if (!enemy.isBoss) {
           // Far zombies are >90% fogged (AI already frozen at AI_SKIP_DIST_SQ) — hide
           // them so we don't keep drawing + skinning fully-fogged humanoids each frame.
-          const cullDistSq = scene.fog ? (scene.fog.far * 0.9) * (scene.fog.far * 0.9) : d2;
-          const visible = enemy.alive && d2 < cullDistSq;
+          const visible = enemy.alive && d2 < cullDistance * cullDistance;
           if (enemy.group.visible !== visible) enemy.group.visible = visible;
           // Only LIVE far zombies may be skipped. The old code skipped dead ones too, so a
           // zombie that died more than 60 units away never ran its respawn countdown and
           // stayed dead forever — over a long run the arena quietly drained itself empty.
           // Respawn bookkeeping is a handful of arithmetic ops; it can run at any range.
-          if (d2 > AI_SKIP_DIST_SQ && enemy.alive) continue;
+          if (d2 > AI_SKIP_DIST_SQ && enemy.alive) {
+            enemy.meleeElapsed = null;
+            enemy.gaitAction = null;
+            enemy.moving = false;
+            // Left behind. In the infinite maze the player walks away from the start and
+            // every zombie that spawned there froze in place out of AI range — the arena
+            // emptied out after a minute of walking. Bring stragglers back around the
+            // player instead, one per frame so a sprint never pops the whole horde at once.
+            if (isArenaLikeMap(CURRENT_MAP) && !relocatedThisFrame && d2 > ZOMBIE_LEASH_DIST_SQ) {
+              const sp = findSpawnPosition(SPAWN_MIN_DIST_BASE);
+              if (sp.usedDist > 0) {
+                relocatedThisFrame = true;
+                enemy.group.position.set(sp.x, 0, sp.z);
+                enemy.group.visible = false;
+                // Half come back already hunting, so pressure follows you down the maze.
+                enemy.aware = Math.random() < 0.5;
+                enemy.hiddenTimer = 0;
+                enemy.targetId = null;
+                enemy.rangedLosAcquireTimer = 0;
+                enemy._lastLosClear = undefined;
+                enemy.facingYaw = Math.random() * Math.PI * 2;
+                enemy.visYaw = enemy.facingYaw;
+              }
+            }
+            continue;
+          }
         }
         if (!enemy.alive) {
+          enemy.meleeElapsed = null;
           if (enemy._bossDeathHandled !== true && (enemy.summonedBy || enemy.isBoss)) {
             enemy._bossDeathHandled = true;
             if (enemy.summonedBy && enemy.summonedBy.summonCount > 0) {
@@ -18029,6 +21967,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
             }
             continue;
           }
+          if (gauntlet) continue;
           enemy.respawnTimer -= dt;
           if (enemy.respawnTimer <= 0) {
             enemy.alive = true;
@@ -18036,6 +21975,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
             enemy.dissolveTimer = 0;
             enemy.hp = enemy.maxHp;
             enemy._hpBarRatio = -1;
+            enemy.playerHit = false;
             enemy.group.visible = true;
             const sp = findSpawnPosition(SPAWN_MIN_DIST_BASE);
             enemy.group.position.set(sp.x, 0, sp.z);
@@ -18045,6 +21985,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
             enemy.retargetTimer = 0;
             enemy.rangedLosAcquireTimer = 0;
             enemy.slowUntil = 0;
+            enemy.attackCooldownTimer = 0;
             enemy.facingYaw = Math.random() * Math.PI * 2;
             enemy.visYaw = enemy.facingYaw;
             enemy.armLV = -0.2;
@@ -18065,14 +22006,14 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           enemy._roarTimer -= dt;
           if (enemy._roarTimer <= 0) {
             enemy._roarTimer = 6 + Math.random() * 8;
-            playBossRoarSfx();
+            playBossRoarSfx(enemy);
           }
 
           enemy.bossModeSwitchTimer -= dt;
           if (enemy.bossModeSwitchTimer <= 0 && enemy.bossAnimState === "idle") {
             enemy.bossModeSwitchTimer = 5;
             enemy.bossAnimState = "modeSwitch";
-            playBossRoarSfx();
+            playBossRoarSfx(enemy);
             enemy.bossAnimTimer = 0;
             const hpRatio = enemy.hp / enemy.maxHp;
             const hell = !!enemy.isHellBoss;
@@ -18100,7 +22041,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
             drawEnemyHp(enemy);
           }
 
-          if (enemy.isHellBoss) {
+          if (enemy.isHellBoss && !gauntlet) {
             if (!enemy._hellSummonStage) enemy._hellSummonStage = 0;
             const hpPct = enemy.hp / enemy.maxHp;
             const stage = Math.floor((1 - hpPct) * 10);
@@ -18109,14 +22050,13 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
               enemy._hellSummonStage = stage;
               enemy.bossAnimState = "summoning";
               enemy.bossAnimTimer = 0;
-              playBossRoarSfx();
+              playBossRoarSfx(enemy);
               const types = ["normal", "fast", "gunner", "tank"];
+              const waveSize = 10 * ZOMBIE_POPULATION_MULTIPLIER;
               for (let w = 0; w < wavesToSpawn; w++) {
-                for (let si = 0; si < 10; si++) {
-                  const angle = (si / 10) * Math.PI * 2 + w * 0.5;
-                  const rad = 5 + Math.random() * 3;
-                  const sx = enemy.group.position.x + Math.cos(angle) * rad;
-                  const sz = enemy.group.position.z + Math.sin(angle) * rad;
+                for (let si = 0; si < waveSize; si++) {
+                  const angle = (si / waveSize) * Math.PI * 2 + w * 0.5;
+                  const { x: sx, z: sz } = bossMinionSpawn(enemy, angle, 5 + Math.random() * 3);
                   const t = types[Math.floor(Math.random() * types.length)];
                   const minion = makeZombie(sx, sz, t);
                   minion.netIndex = state.enemies.length;
@@ -18131,12 +22071,14 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
               enemy._hellBossSummoned = true;
               enemy.bossAnimState = "summoning";
               enemy.bossAnimTimer = 0;
-              playBossRoarSfx();
+              playBossRoarSfx(enemy);
               for (let si = 0; si < 3; si++) {
                 const angle = (si / 3) * Math.PI * 2;
                 const sx = enemy.group.position.x + Math.cos(angle) * 8;
                 const sz = enemy.group.position.z + Math.sin(angle) * 8;
                 const miniBoss = makeHormoneZombie(sx, sz, false);
+                // The spawn at the end of the hell fight is a pressure phase, not a second full health bar.
+                miniBoss.hp = miniBoss.maxHp = miniBoss.baseTankHp = miniBoss.baseGunnerHp = 1500;
                 miniBoss.netIndex = state.enemies.length;
                 miniBoss.aware = true;
                 drawEnemyHp(miniBoss);
@@ -18147,11 +22089,16 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
             enemy.summonTriggered = true;
             enemy.bossAnimState = "summoning";
             enemy.bossAnimTimer = 0;
-            playBossRoarSfx();
-            for (let si = 0; si < 2; si++) {
-              const sx = enemy.group.position.x + (si === 0 ? -3 : 3);
-              const sz = enemy.group.position.z + (Math.random() - 0.5) * 4;
+            playBossRoarSfx(enemy);
+            const count = 2 * ZOMBIE_POPULATION_MULTIPLIER;
+            for (let si = 0; si < count; si++) {
+              const { x: sx, z: sz } = bossMinionSpawn(enemy, si / count * Math.PI * 2, 3.5);
               const minion = makeZombie(sx, sz, "normal");
+              if (gauntlet) {
+                minion.baseY = enemy.baseY;
+                minion.group.position.y = enemy.baseY;
+                minion.gauntletRoom = enemy.gauntletRoom;
+              }
               minion.netIndex = state.enemies.length;
               minion.summonedBy = enemy;
               minion._summonedByBoss = enemy;
@@ -18162,7 +22109,50 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           }
         }
 
+        const isSlowed =
+          enemy.slowUntil && performance.now() < enemy.slowUntil;
+
+        if (!isSlowed && enemy.meleeElapsed == null && (visFrameCounter + ei) % 8 === 0) {
+          updateAwareness(enemy, dt * 8);
+        }
+
+        enemy.retargetTimer += dt;
+        if (!isSlowed && enemy.meleeElapsed == null && enemy.aware && enemy.retargetTimer >= RETARGET_INTERVAL) {
+          enemy.retargetTimer = 0;
+          retargetEnemy(enemy);
+        }
+
+        enemy.attackCooldownTimer -= dt;
+
+        if (isSlowed) {
+          enemy.aware = false;
+          enemy.targetId = null;
+          enemy.rangedLosAcquireTimer = 0;
+          enemy.moving = false;
+          enemy.meleeElapsed = null;
+          if (enemy.attackCooldownTimer < 0.3) enemy.attackCooldownTimer = 0.3;
+          updateZombieVisual(enemy, dt);
+          continue;
+        }
+
+        if (enemy.isCreatureBoss) {
+          // The creature has its own fight (updateCreatureBoss) and its own pose update.
+          updateCreatureBoss(enemy, dt, gauntlet);
+          updateBossCreatureVisual(enemy, dt);
+          continue;
+        }
+
         const target = getEnemyTarget(enemy);
+        const enemyFloorY = enemy.baseY || 0;
+        const enemyEyeY = enemyFloorY + 1.6;
+        if (!enemy.isBoss && !enemy.ranged && updateZombieMelee(enemy, target, enemyEyeY, dt)) {
+          enemy.moving = false;
+          enemy.visYaw = dampAngle(enemy.visYaw, enemy.facingYaw, dt, 14);
+          enemy.group.rotation.y = enemy.visYaw;
+          updateZombieVisual(enemy, dt);
+          continue;
+        }
+
         // Hit-direction aggro override: if the zombie was recently hit but currently has
         // no LOS to the player (e.g. the bullet came through a wall), walk in the bullet
         // direction toward where the shooter came from. As soon as LOS opens, the
@@ -18175,36 +22165,15 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           performance.now() - (enemy.lastHitTime || 0) < 6000 &&
           (enemy._lastLosClear === false || enemy._lastLosClear === undefined);
         if (useHitDir) {
-          moveX = enemy.group.position.x + enemy.lastHitDirX * 10;
-          moveZ = enemy.group.position.z + enemy.lastHitDirZ * 10;
+          // lastHitDir points shooter → zombie (the bullet's travel), so the shooter is
+          // back along it. This used to ADD the vector, which turned a wounded zombie to
+          // face directly away from whoever shot it.
+          moveX = enemy.group.position.x - enemy.lastHitDirX * 10;
+          moveZ = enemy.group.position.z - enemy.lastHitDirZ * 10;
         }
         const dx = moveX - enemy.group.position.x;
         const dz = moveZ - enemy.group.position.z;
         const dist = Math.sqrt(dx * dx + dz * dz);
-
-        const isSlowed =
-          enemy.slowUntil && performance.now() < enemy.slowUntil;
-
-        if (!isSlowed && (visFrameCounter + ei) % 8 === 0) {
-          updateAwareness(enemy, dt * 8);
-        }
-
-        enemy.retargetTimer += dt;
-        if (!isSlowed && enemy.aware && enemy.retargetTimer >= RETARGET_INTERVAL) {
-          enemy.retargetTimer = 0;
-          retargetEnemy(enemy);
-        }
-
-        enemy.attackCooldownTimer -= dt;
-
-        if (isSlowed) {
-          enemy.aware = false;
-          enemy.targetId = null;
-          enemy.rangedLosAcquireTimer = 0;
-          enemy.moving = false;
-          if (enemy.attackCooldownTimer < 0.3) enemy.attackCooldownTimer = 0.3;
-          continue;
-        }
 
         if (enemy.aware) {
           enemy.facingYaw = Math.atan2(dx, dz);
@@ -18215,7 +22184,27 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
             enemy._sprintCd = 0;
           }
 
-          const shouldStopForRanged = enemy.ranged && dist < enemy.rangeDistance && dist > 4.8;
+          let bossThrow = null;
+          let rangedSight = false;
+          if (enemy.ranged && dist < enemy.rangeDistance) {
+            const origin = enemy.group.position;
+            if (enemy.isBoss) {
+              const y = origin.y + 1.48;
+              const facing = Math.atan2(target.x - origin.x, target.z - origin.z);
+              const muzzle = { x: origin.x + Math.sin(facing) * 0.90, y, z: origin.z + Math.cos(facing) * 0.90 };
+              const chest = { x: target.x, y: (target.y ?? 1.65) - 0.42, z: target.z };
+              if (!soundBlocked({ x: origin.x, y, z: origin.z }, muzzle, .24) && !soundBlocked(muzzle, chest, .24)) {
+                bossThrow = { muzzle, chest };
+              }
+              rangedSight = bossThrow !== null;
+            } else {
+              if ((visFrameCounter + ei) % 3 === 0 || enemy._lastGunnerLos === undefined) {
+                enemy._lastGunnerLos = canSeePoint(origin.x, enemyEyeY, origin.z, target.x, target.y ?? 1.65, target.z);
+              }
+              rangedSight = enemy._lastGunnerLos;
+            }
+          }
+          const shouldStopForRanged = rangedSight && dist > 4.8;
 
           // Boss can only walk when the current animation state allows it. Roaring /
           // summoning / mode-switching / attacking / quaking all lock the boss in
@@ -18225,6 +22214,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
 
           if (!shouldStopForRanged && dist > 1.8 && walkingAnimAvailable) {
             let moveSpeed = enemy.speed;
+            if (!enemy.isBoss && performance.now() < (enemy._staggerUntil || 0)) moveSpeed *= 0.3;
             if (enemy._bossSprinting) {
               moveSpeed = enemy.isHellBoss ? 19.5 : 16.25;
             }
@@ -18235,14 +22225,14 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
             const BOSS_CR = enemy.isBoss ? 0.68 : 0.34;
 
             // ── 主动推出墙体：如 boss 已经陷入几何体，立即弹出 ───────────────
-            if (enemy.isBoss && enemyCollidesWall(enemy.group.position.x, enemy.group.position.z, BOSS_CR)) {
+            if (enemy.isBoss && enemyCollidesWall(enemy.group.position.x, enemy.group.position.z, BOSS_CR, enemyFloorY)) {
               let pushed = false;
               outerPush: for (let pd = 0.15; pd <= 2.4; pd += 0.15) {
                 for (let pa = 0; pa < 16; pa++) {
                   const ang = pa * Math.PI / 8 + (pd * 0.3);
                   const tx = enemy.group.position.x + Math.sin(ang) * pd;
                   const tz = enemy.group.position.z + Math.cos(ang) * pd;
-                  if (!enemyCollidesWall(tx, tz, BOSS_CR)) {
+                  if (!enemyCollidesWall(tx, tz, BOSS_CR, enemyFloorY)) {
                     enemy.group.position.x = tx;
                     enemy.group.position.z = tz;
                     pushed = true;
@@ -18253,7 +22243,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
             }
 
             let dirX = 0, dirZ = 0;
-            const flow = getFlowDirection(enemy.group.position.x, enemy.group.position.z);
+            const flow = gauntlet ? null : getFlowDirection(enemy.group.position.x, enemy.group.position.z);
 
             // LOS 检测（boss 每帧，普通僵尸每 4 帧）。canSeePoint ray-casts against every
             // wall mesh — at 32 zombies in the arena, %2 was 16 ray-casts/frame and
@@ -18265,29 +22255,33 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
                 enemy.group.position.z,
                 target.x,
                 target.z,
-                target.y ?? 1.65
+                target.y ?? 1.65,
+                enemyEyeY
               );
               enemy._lastLosClear = losClear;
             }
 
             if (enemy.isBoss) {
-              // ── Boss 走迷宫导航：永远以流场为主，LOS 清晰时混入直冲分量 ──
-              // 流场 BFS 路径绕过柱子/墙角；混合 30% 直冲保持追击感。
-              if (flow && dLen > 0.02) {
-                if (losClear) {
-                  // 30% 直冲 + 70% 流场
-                  const t = 0.30;
-                  const bx = (dx / dLen) * t + flow.x * (1 - t);
-                  const bz = (dz / dLen) * t + flow.z * (1 - t);
-                  const bl = Math.sqrt(bx * bx + bz * bz);
-                  dirX = bl > 0.01 ? bx / bl : flow.x;
-                  dirZ = bl > 0.01 ? bz / bl : flow.z;
-                } else {
-                  // 完全跟随流场
-                  dirX = flow.x; dirZ = flow.z;
+              const ox = enemy.group.position.x, oz = enemy.group.position.z;
+              const canReach = (x, z) => bossRouteClear(ox, oz, x, z, enemyFloorY);
+              const probe = Math.min(2.8, dLen);
+              const directX = ox + dx / Math.max(0.01, dLen) * probe;
+              const directZ = oz + dz / Math.max(0.01, dLen) * probe;
+              const next = losClear && canReach(directX, directZ)
+                ? { x: directX, z: directZ }
+                : bossWaypoint?.(ox, oz, target.x, target.z, canReach);
+              if (next) {
+                const length = Math.hypot(next.x - ox, next.z - oz);
+                if (length > 0.01) {
+                  dirX = (next.x - ox) / length;
+                  dirZ = (next.z - oz) / length;
                 }
-              } else if (dLen > 0.02) {
-                dirX = dx / dLen; dirZ = dz / dLen;
+              } else {
+                const angle = Math.atan2(dz, dx);
+                for (const turn of [0.75, -0.75, 1.35, -1.35, 2.1, -2.1]) {
+                  const nx = Math.cos(angle + turn), nz = Math.sin(angle + turn);
+                  if (canReach(ox + nx, oz + nz)) { dirX = nx; dirZ = nz; break; }
+                }
               }
             } else {
               // 普通僵尸：原有逻辑
@@ -18329,11 +22323,56 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
                 const fLen = Math.sqrt(flow.x * flow.x + flow.z * flow.z);
                 if (fLen > 0.015) { dirX = flow.x / fLen; dirZ = flow.z / fLen; }
               }
+              if (dirX !== 0 || dirZ !== 0) {
+                // Shamble: in the open each zombie weaves on its own rhythm, so a pack
+                // fans out across the corridor instead of arriving as one straight
+                // single-file line you can mow down without moving the crosshair.
+                if (!gunnerKiting && losClear && dLen > 3.5) {
+                  if (enemy._weaveFreq === undefined) {
+                    enemy._weaveFreq = 0.9 + Math.random() * 1.1;
+                    enemy._weavePhase = Math.random() * Math.PI * 2;
+                    enemy._weaveAmp = 0.16 + Math.random() * 0.2;
+                  }
+                  const wv = Math.sin(performance.now() * 0.001 * enemy._weaveFreq + enemy._weavePhase)
+                    * enemy._weaveAmp * Math.min(1, (dLen - 3.5) / 4);
+                  const ox = dirX;
+                  dirX += -dirZ * wv;
+                  dirZ += ox * wv;
+                }
+                // Separation: steer away from any zombie standing in the same spot. They
+                // have no body collision with each other, so without this a horde
+                // collapses into a single overlapping blob at the player's feet.
+                let sepX = 0, sepZ = 0;
+                const ex0 = enemy.group.position.x, ez0 = enemy.group.position.z;
+                for (let oi = 0; oi < state.enemies.length; oi++) {
+                  const o = state.enemies[oi];
+                  if (o === enemy || !o.alive || o.isBoss || o.trainingDummy) continue;
+                  const ox = ex0 - o.group.position.x;
+                  const oz = ez0 - o.group.position.z;
+                  const od2 = ox * ox + oz * oz;
+                  if (od2 >= ZOMBIE_SEPARATION_DIST * ZOMBIE_SEPARATION_DIST) continue;
+                  if (od2 < 1e-4) {
+                    // Exactly stacked: split them along a fixed per-index direction.
+                    sepX += Math.cos(ei * 2.4); sepZ += Math.sin(ei * 2.4);
+                    continue;
+                  }
+                  const od = Math.sqrt(od2);
+                  const push = (ZOMBIE_SEPARATION_DIST - od) / ZOMBIE_SEPARATION_DIST;
+                  sepX += (ox / od) * push;
+                  sepZ += (oz / od) * push;
+                }
+                dirX += sepX * 0.85;
+                dirZ += sepZ * 0.85;
+                const nLen = Math.sqrt(dirX * dirX + dirZ * dirZ);
+                if (nLen > 1e-4) { dirX /= nLen; dirZ /= nLen; }
+              }
             }
 
             const MAX_SUB_STEP = 0.5; // larger step (was 0.25) — fewer raycasts
             const subSteps = Math.ceil(totalStep / MAX_SUB_STEP);
             const subLen = totalStep / subSteps;
+            const stepStartX = enemy.group.position.x;
+            const stepStartZ = enemy.group.position.z;
             for (let si = 0; si < subSteps; si++) {
               const sx = dirX * subLen;
               const sz = dirZ * subLen;
@@ -18344,7 +22383,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
               // X-only, Z-only, fall-back). The sliding-along-axis fallback
               // adds visible jitter at corners, but cuts per-frame raycast cost
               // by 4×, which is the main arena-mode perf bottleneck.
-              if (!enemyCollidesWall(nx, nz, BOSS_CR)) {
+              if (!enemyCollidesWall(nx, nz, BOSS_CR, enemyFloorY)) {
                 enemy.group.position.x = nx;
                 enemy.group.position.z = nz;
               } else if (flow) {
@@ -18353,7 +22392,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
                 if (fLen > 0.01) {
                   nx = enemy.group.position.x + (flow.x / fLen) * subLen;
                   nz = enemy.group.position.z + (flow.z / fLen) * subLen;
-                  if (!enemyCollidesWall(nx, nz, BOSS_CR)) {
+                  if (!enemyCollidesWall(nx, nz, BOSS_CR, enemyFloorY)) {
                     enemy.group.position.x = nx;
                     enemy.group.position.z = nz;
                   }
@@ -18361,30 +22400,15 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
               }
             }
             enemy.moveYaw = Math.atan2(dx, dz);
-            const bossWalkRate = enemy._bossSprinting ? 28 : 14;
-            enemy.walkTime += dt * (enemy.isBoss ? bossWalkRate : enemy.type === "fast" ? 12 : 8);
-            enemy.moving = true;
+            enemy.moving = Math.hypot(enemy.group.position.x - stepStartX, enemy.group.position.z - stepStartZ) > 0.001;
           } else {
             enemy.moving = false;
           }
 
-          let gunnerLosClear = false;
-          if (enemy.ranged && dist < enemy.rangeDistance) {
-            // LOS is expensive (full maze raycast) and the acquire timer needs 0.62s of
-            // continuous clear lines — recompute on a 3-frame cadence and reuse the result.
-            if ((visFrameCounter + ei) % 3 === 0) {
-              enemy._lastGunnerLos = canSeePoint(
-                enemy.group.position.x,
-                1.6,
-                enemy.group.position.z,
-                target.x,
-                target.y ?? 1.65,
-                target.z
-              );
+          if (rangedSight) {
+            if (!enemy.isBoss && enemy.rangedLosAcquireTimer <= 0.001) {
+              enemy.rangedAim = { x: target.x, y: target.y, z: target.z };
             }
-            gunnerLosClear = enemy._lastGunnerLos === true;
-          }
-          if (enemy.ranged && dist < enemy.rangeDistance && gunnerLosClear) {
             enemy.rangedLosAcquireTimer += dt;
           } else {
             enemy.rangedLosAcquireTimer = 0;
@@ -18393,25 +22417,26 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           if (enemy.isBoss && enemy.bossQuakeCooldownTimer !== undefined) {
             enemy.bossQuakeCooldownTimer -= dt;
           }
-          if (!enemy.ranged) {
-            if (dist < (enemy.isBoss ? 3.5 : 2.05) && enemy.attackCooldownTimer <= 0 && (!enemy.isBoss || enemy.bossAnimState === "idle")) {
+          if (enemy.isBoss && !enemy.ranged) {
+            if (dist < 3.5 && Math.abs(target.y - enemyEyeY) < 1.8
+                && clearLosToTarget(enemy.group.position.x, enemy.group.position.z, target.x, target.z, target.y, enemyEyeY)
+                && enemy.attackCooldownTimer <= 0 && enemy.bossAnimState === "idle") {
               enemy.attackCooldownTimer = enemy.attackCooldown;
-              if (enemy.isBoss) {
-                enemy.bossAnimState = "attacking";
-                enemy.bossAnimTimer = 0;
-                enemy._smashShook = false;
-                enemy._meleeDamagePending = true;
-              } else {
-                applyCoopZombieDamageToTarget(enemy);
-              }
+              enemy.bossAnimState = "attacking";
+              // Smash: knock-back reaches 14u; impact lands ~0.55 s into the swing.
+              spawnBossTelegraph(enemy, 14, BOSS_IMPACT.attacking.contact, enemy.isHellBoss ? 0xff2a1a : 0xff5a2a);
+              enemy.bossAnimTimer = 0;
+              enemy._smashShook = false;
+              enemy._meleeDamagePending = true;
             } else if (
-              enemy.isBoss &&
               enemy.bossMode !== "gunner" &&
               enemy.bossAnimState === "idle" &&
               dist >= 4 && dist <= 18 &&
               enemy.bossQuakeCooldownTimer <= 0
             ) {
               enemy.bossAnimState = "quaking";
+              // Quake: arms up for 0.6 s, slam at ~0.75 s, the tremor covers its trigger range.
+              spawnBossTelegraph(enemy, 18, BOSS_IMPACT.quaking.contact, enemy.isHellBoss ? 0xff2a1a : 0xffa02a);
               enemy.bossAnimTimer = 0;
               enemy._quakeShook = false;
               enemy.bossQuakeCooldownTimer = enemy.isHellBoss ? 8 : 12;
@@ -18423,83 +22448,99 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
             (!enemy.isBoss || enemy.bossAnimState === "idle") &&
             enemy.rangedLosAcquireTimer >= RANGED_LOS_ACQUIRE_DELAY
           ) {
-            _visOrigin.set(enemy.group.position.x, 1.6, enemy.group.position.z);
-            const ty = (target.y ?? 1.65) - 0.3;
-            _enemyShotDir.set(dx, ty - 1.6, dz);
-            const spr = 0.16 + Math.random() * 0.14;
-            _enemyShotDir.x += (Math.random() - 0.5) * spr * 2;
-            _enemyShotDir.z += (Math.random() - 0.5) * spr * 2;
-            _enemyShotDir.y += (Math.random() - 0.5) * spr * 0.5;
-            _enemyShotDir.normalize();
-            const shotEndX =
-              enemy.group.position.x + _enemyShotDir.x * Math.min(dist, enemy.rangeDistance);
-            const shotEndZ =
-              enemy.group.position.z + _enemyShotDir.z * Math.min(dist, enemy.rangeDistance);
-            const shotEndY = 1.6 + _enemyShotDir.y * Math.min(dist, enemy.rangeDistance);
-            if (
-              canSeePoint(
-                enemy.group.position.x,
-                1.6,
-                enemy.group.position.z,
-                shotEndX,
-                shotEndY,
-                shotEndZ
-              )
-            ) {
+            if (bossThrow) {
+              const { muzzle, chest } = bossThrow;
               enemy.attackCooldownTimer = enemy.attackCooldown;
-              if (enemy.isBoss) {
-                const bScale = enemy.isHellBoss ? 2.6 : 2.0;
-                const bBaseY = enemy.isHellBoss ? 1.30 : 1.00;
-                const headLocalY = 1.96;
-                const headLocalZ = 0.50;
-                const hunch = 0.18;
-                const mouthWorldY = bBaseY + (headLocalY * Math.cos(hunch) - headLocalZ * Math.sin(hunch)) * bScale - 0.15 * bScale;
-                const mouthWorldZ = (headLocalZ * Math.cos(hunch) + headLocalY * Math.sin(hunch)) * bScale;
-                const yaw = enemy.visYaw || enemy.facingYaw || 0;
-                const mouthX = enemy.group.position.x + Math.sin(yaw) * mouthWorldZ;
-                const mouthZ = enemy.group.position.z + Math.cos(yaw) * mouthWorldZ;
-                // Hold the ball until the authored throw reaches its release
-                // pose; previously it appeared at the start of an idle frame.
-                enemy.bossAnimState = "rangedAttack";
-                enemy.bossAnimTimer = 0;
-                enemy._rangedBallReleased = false;
-                enemy._pendingBossProjectile = {
-                  ox: mouthX, oy: mouthWorldY, oz: mouthZ,
-                  dx: _enemyShotDir.x, dy: _enemyShotDir.y, dz: _enemyShotDir.z,
-                  damage: enemy.attackDamage,
-                };
-              } else {
-                applyCoopZombieDamageToTarget(enemy);
-                _tracerEnd.set(
-                  target.x + (Math.random() - 0.5) * 0.45,
-                  (target.y ?? 1.65) + 1.25 + (Math.random() - 0.5) * 0.45,
-                  target.z + (Math.random() - 0.5) * 0.45
-                );
+              enemy.bossAnimState = "rangedAttack";
+              enemy.bossAnimTimer = 0;
+              enemy._rangedBallReleased = false;
+              // A lobbed ball: its launch speed already cancels the drop of gravity over the
+              // flight, so it arcs down onto the chest point it was aimed at. It is not steered
+              // after release, so stepping aside avoids it. Hell throws a three-ball fan.
+              const flight = Math.hypot(chest.x - muzzle.x, chest.y - muzzle.y, chest.z - muzzle.z);
+              const T = Math.max(0.05, flight / BOSS_BALL_SPEED);
+              const vx = (chest.x - muzzle.x) / T;
+              const vy = (chest.y - muzzle.y) / T + 0.5 * BOSS_BALL_GRAVITY * T;
+              const vz = (chest.z - muzzle.z) / T;
+              const fanAngles = enemy.isHellBoss ? [-0.16, 0, 0.16] : [0];
+              enemy._pendingBossProjectile = {
+                ox: muzzle.x, oy: muzzle.y, oz: muzzle.z,
+                fan: fanAngles.map((a) => {
+                  const c = Math.cos(a), s = Math.sin(a);
+                  return { dx: vx * c + vz * s, dy: vy, dz: -vx * s + vz * c };
+                }),
+                damage: enemy.attackDamage, target: enemy.targetId || (MULTIPLAYER ? socket.id : null),
+              };
+            } else if (!enemy.isBoss) {
+              const origin = enemy.group.position;
+              const aim = enemy.rangedAim || target;
+              _enemyShotDir.set(
+                aim.x - origin.x + (Math.random() - 0.5) * dist * 0.24,
+                (aim.y ?? 1.65) - 0.42 - enemyEyeY + (Math.random() - 0.5) * dist * 0.096,
+                aim.z - origin.z + (Math.random() - 0.5) * dist * 0.24
+              ).normalize();
+              const length = Math.min(dist + 1, enemy.rangeDistance);
+              _tracerEnd.set(
+                origin.x + _enemyShotDir.x * length, enemyEyeY + _enemyShotDir.y * length,
+                origin.z + _enemyShotDir.z * length
+              );
+              if (canSeePoint(origin.x, enemyEyeY, origin.z, _tracerEnd.x, _tracerEnd.y, _tracerEnd.z)) {
+                enemy.attackCooldownTimer = enemy.attackCooldown;
+                const hit = raySphereParam(_visOrigin, _enemyShotDir,
+                  target.x, (target.y ?? 1.65) - 0.42, target.z, 0.49);
+                if (hit !== null && hit <= length) applyCoopZombieDamageToTarget(enemy);
+                if (worldAudioReady()) worldAudio.play("shot", _visOrigin, { volume: 0.58 });
                 createBulletTrail(_visOrigin.clone(), _tracerEnd.clone(), 0xff6666);
+                enemy._shotAt = performance.now();
+                if (MULTIPLAYER && ARENA_COOP) socket.emit("zombieShotTrail", {
+                  sx: _visOrigin.x, sy: _visOrigin.y, sz: _visOrigin.z,
+                  x: _tracerEnd.x, y: _tracerEnd.y, z: _tracerEnd.z,
+                });
+              } else {
+                enemy.attackCooldownTimer = 0.22;
               }
+              enemy.rangedLosAcquireTimer = 0;
             }
           }
         } else {
-          enemy.moving = false;
-          enemy.facingYaw += dt * 0.3;
+          // Unaware: wander. Shuffle a few steps in one direction, stop and stand, pick a
+          // new heading — instead of spinning on the spot like a turntable until seen.
           enemy.rangedLosAcquireTimer = 0;
+          enemy._wanderTimer = (enemy._wanderTimer || 0) - dt;
+          if (enemy._wanderTimer <= 0) {
+            enemy._wanderWalking = !enemy._wanderWalking && Math.random() < 0.8;
+            enemy._wanderTimer = enemy._wanderWalking ? 1.5 + Math.random() * 3 : 1 + Math.random() * 2.5;
+            if (enemy._wanderWalking) enemy._wanderYaw = enemy.facingYaw + (Math.random() - 0.5) * 2.6;
+          }
+          if (enemy._wanderWalking && !enemy.isBoss) {
+            const wStep = enemy.speed * ZOMBIE_WANDER_SPEED_MUL * dt;
+            const wnx = enemy.group.position.x + Math.sin(enemy._wanderYaw) * wStep;
+            const wnz = enemy.group.position.z + Math.cos(enemy._wanderYaw) * wStep;
+            // Probe a little ahead so they turn before grinding their face on the wall.
+            const wpx = enemy.group.position.x + Math.sin(enemy._wanderYaw) * 0.6;
+            const wpz = enemy.group.position.z + Math.cos(enemy._wanderYaw) * 0.6;
+            if (!enemyCollidesWall(wpx, wpz, 0.34, enemyFloorY)) {
+              enemy.group.position.x = wnx;
+              enemy.group.position.z = wnz;
+              enemy.facingYaw = enemy._wanderYaw;
+              enemy.moveYaw = enemy._wanderYaw;
+              enemy.moving = true;
+            } else {
+              enemy._wanderYaw += Math.PI * (0.5 + Math.random());
+              enemy.moving = false;
+            }
+          } else {
+            enemy.moving = false;
+          }
         }
 
         enemy.visYaw = dampAngle(enemy.visYaw, enemy.facingYaw, dt, 14);
         enemy.group.rotation.y = enemy.visYaw;
 
-        const walk = Math.sin(enemy.walkTime) * 0.55;
-        const bob = Math.abs(Math.sin(enemy.walkTime * 2)) * 0.05;
-        const shakePhase = enemy.walkTime * 4.35 + ei * 2.31;
-        const sway = enemy.moving
-          ? Math.sin(shakePhase) * 0.13 + Math.sin(enemy.walkTime * 6.2 + ei) * 0.04
-          : Math.sin(shakePhase * 0.35) * 0.035;
-        const bobble = enemy.moving ? Math.cos(enemy.walkTime * 5.1 + ei * 1.2) * 0.028 : 0;
-
         let bossAnimOverride = false;
         const HUNCH = 0.18;
         const ELBOW_REST = -0.55;
-        const BOSS_BASE_Y = enemy.isHellBoss ? 1.30 : 1.00;
+        const BOSS_BASE_Y = enemyFloorY + (enemy.isHellBoss ? 1.30 : 1.00);
         if (enemy.isBoss) {
           enemy.bossAnimTimer += dt;
           const lfa = enemy.leftForearmRoot;
@@ -18615,8 +22656,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
               enemy.torsoRoot.rotation.z = THREE.MathUtils.lerp(-0.16, 0.10, s);
               if (s > 0.45 && !enemy._rangedBallReleased && enemy._pendingBossProjectile) {
                 enemy._rangedBallReleased = true;
-                const p = enemy._pendingBossProjectile;
-                spawnBossProjectile(p.ox, p.oy, p.oz, p.dx, p.dy, p.dz, p.damage);
+                releaseBossBalls(enemy._pendingBossProjectile);
                 enemy._pendingBossProjectile = null;
                 state.camShake = Math.max(state.camShake || 0, 0.16);
               }
@@ -18635,8 +22675,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
               // A dropped frame can cross both release and completion; never
               // lose the shot just because its release window was skipped.
               if (!enemy._rangedBallReleased && enemy._pendingBossProjectile) {
-                const p = enemy._pendingBossProjectile;
-                spawnBossProjectile(p.ox, p.oy, p.oz, p.dx, p.dy, p.dz, p.damage);
+                releaseBossBalls(enemy._pendingBossProjectile);
               }
               enemy._pendingBossProjectile = null;
               enemy._rangedBallReleased = false;
@@ -18649,7 +22688,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
 
           if (!bossAnimOverride && enemy.bossAnimState === "attacking") {
             bossAnimOverride = true;
-            const dur = 1.4;
+            const dur = BOSS_IMPACT.attacking.recovery;
             const t = Math.min(enemy.bossAnimTimer / dur, 1);
             if (t < 0.35) {
               // Wind-up: torso rears back, arms sweep wide then overhead
@@ -18677,35 +22716,16 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
               rfa.rotation.x = THREE.MathUtils.lerp(-0.10, -1.6, pow);
               enemy.torsoRoot.rotation.x = THREE.MathUtils.lerp(HUNCH - 0.55, HUNCH + 0.65, pow);
               enemy.group.position.y = THREE.MathUtils.lerp(BOSS_BASE_Y + 0.25, BOSS_BASE_Y - 0.10, pow);
-              if (pow > 0.7 && !enemy._smashShook) {
+              if (enemy.bossAnimTimer >= BOSS_IMPACT.attacking.contact && !enemy._smashShook) {
                 enemy._smashShook = true;
                 if (enemy._meleeDamagePending) {
                   enemy._meleeDamagePending = false;
-                  applyCoopZombieDamageToTarget(enemy);
+                  const target = getEnemyTarget(enemy);
+                  const origin = enemy.group.position;
+                  if (Math.hypot(target.x - origin.x, target.z - origin.z) < 4.2
+                      && !soundBlocked(origin, target)) applyCoopZombieDamageToTarget(enemy);
                 }
-                state.camShake = Math.max(state.camShake || 0, 1.0);
-                if (player.health > 0) {
-                  const bx = enemy.group.position.x, bz = enemy.group.position.z;
-                  const pdx = player.position.x - bx, pdz = player.position.z - bz;
-                  if (Math.hypot(pdx, pdz) < 14) {
-                    if (player.onGround) {
-                      const norm = Math.hypot(pdx, pdz) > 0.01 ? 1 / Math.hypot(pdx, pdz) : 1;
-                      const kbTarget = new THREE.Vector3(
-                        player.position.x + pdx * norm * 3.5,
-                        player.position.y,
-                        player.position.z + pdz * norm * 3.5
-                      );
-                      const kbRes = resolveWallSliding(kbTarget);
-                      player.position.x = kbRes.x;
-                      player.position.z = kbRes.z;
-                      showCombatFeedback("⚠ SMASH!", "#ff6644", 0.5);
-                    } else {
-                      player.velocityY = -22;
-                      player.onGround = false;
-                      showCombatFeedback("⚠ CRASH!", "#ff4422", 0.5);
-                    }
-                  }
-                }
+                applyBossImpact(enemy, 14, 3.5, 1.0);
               }
             } else if (t < 0.56) {
               // Ground impact hold with tremor
@@ -18743,11 +22763,10 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
               enemy.group.position.y = BOSS_BASE_Y;
             }
           }
-        }
 
           if (!bossAnimOverride && enemy.bossAnimState === "quaking") {
             bossAnimOverride = true;
-            const dur = 1.5;
+            const dur = BOSS_IMPACT.quaking.recovery;
             const t = Math.min(enemy.bossAnimTimer / dur, 1);
             if (t < 0.4) {
               // 蓄力：双臂举高，身体微微跳起
@@ -18771,9 +22790,9 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
               rfa.rotation.x = THREE.MathUtils.lerp(0.30, -1.8, pow);
               enemy.torsoRoot.rotation.x = THREE.MathUtils.lerp(HUNCH - 0.45, HUNCH + 0.7, pow);
               enemy.group.position.y = THREE.MathUtils.lerp(BOSS_BASE_Y + 0.45, BOSS_BASE_Y - 0.15, pow);
-              if (pow > 0.75 && !enemy._quakeShook) {
+              if (enemy.bossAnimTimer >= BOSS_IMPACT.quaking.contact && !enemy._quakeShook) {
                 enemy._quakeShook = true;
-                state.camShake = Math.max(state.camShake || 0, 1.4);
+                applyBossImpact(enemy, 18, 4, 1.4);
                 // 震地音效
                 if (audioCtx && audioSfx) {
                   const now2 = audioCtx.currentTime;
@@ -18787,22 +22806,6 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
                   const osc2 = audioCtx.createOscillator(); osc2.type = "sine"; osc2.frequency.setValueAtTime(60, now2); osc2.frequency.exponentialRampToValueAtTime(18, now2 + 0.4);
                   const og2 = audioCtx.createGain(); og2.gain.setValueAtTime(0.6, now2); og2.gain.exponentialRampToValueAtTime(0.0001, now2 + 0.4);
                   osc2.connect(og2); og2.connect(audioSfx); osc2.start(now2); osc2.stop(now2 + 0.45);
-                }
-                // 击退 + 封锁 dash
-                if (player.health > 0) {
-                  const bx = enemy.group.position.x, bz = enemy.group.position.z;
-                  const pdx = player.position.x - bx, pdz = player.position.z - bz;
-                  const dist2 = Math.hypot(pdx, pdz);
-                  if (player.onGround) {
-                    const norm = dist2 > 0.01 ? 1 / dist2 : 1;
-                    const kbT = new THREE.Vector3(player.position.x + pdx * norm * 4, player.position.y, player.position.z + pdz * norm * 4);
-                    const kbR = resolveWallSliding(kbT);
-                    player.position.x = kbR.x; player.position.z = kbR.z;
-                    showCombatFeedback("⚠ SMASH!", "#ff6644", 0.5);
-                  } else {
-                    player.velocityY = -22; player.onGround = false;
-                    showCombatFeedback("⚠ CRASH!", "#ff4422", 0.5);
-                  }
                 }
               }
             } else if (t < 0.7) {
@@ -18833,15 +22836,25 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
               enemy._quakeShook = false;
               enemy.torsoRoot.rotation.x = HUNCH;
               enemy.group.position.y = BOSS_BASE_Y;
-            }
+        }
           }
+
+        }
+
+        if (enemy.type === "gunner") {
+          enemy.attackPhase = enemy.aware && dist < enemy.rangeDistance ? 1 : 0;
+        }
+
+        updateZombieVisual(enemy, dt, Math.hypot(enemy.group.position.x - startX, enemy.group.position.z - startZ));
 
         if (!bossAnimOverride && enemy.isBoss) {
           const lfa = enemy.leftForearmRoot;
           const rfa = enemy.rightForearmRoot;
-          const breathe = Math.sin(enemy.walkTime * 1.5) * 0.04;
+          const breathe = Math.sin(performance.now() * 0.0024 + enemy.walkTime) * 0.055;
           const sway0 = Math.sin(enemy.walkTime * 0.8) * 0.02;
-          if (!enemy.moving) {
+          const moving = !!enemy.gaitAction;
+          const gait = (enemy.gaitPhase ?? 0) * 2 * Math.PI;
+          if (!moving) {
             enemy.leftArmRoot.rotation.x = -0.10 + breathe;
             enemy.rightArmRoot.rotation.x = -0.10 + breathe;
             enemy.leftArmRoot.rotation.z = -0.50 + sway0;
@@ -18853,7 +22866,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
             enemy.torsoRoot.rotation.x = HUNCH + breathe * 0.5;
             enemy.torsoRoot.rotation.z = sway0;
           } else {
-            const w = enemy.walkTime;
+            const w = gait;
             const stride = Math.sin(w);
             const sprinting = !!enemy._bossSprinting;
             const armSwing = sprinting ? 0.70 : 0.40;
@@ -18875,8 +22888,8 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           const isSprinting = !!enemy._bossSprinting;
           const legSwingAmp = isSprinting ? 0.75 : 0.50;
           const shinKickAmp = isSprinting ? 0.65 : 0.45;
-          if (enemy.moving) {
-            const sw = Math.sin(enemy.walkTime);
+          if (moving) {
+            const sw = Math.sin(gait);
             const bLegL = LEG_BASE_TILT - sw * legSwingAmp;
             const bLegR = LEG_BASE_TILT + sw * legSwingAmp;
             enemy.legLV = dampScalar(enemy.legLV, bLegL, dt, 14);
@@ -18893,51 +22906,11 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           }
           enemy.leftLegRoot.rotation.x = enemy.legLV;
           enemy.rightLegRoot.rotation.x = enemy.legRV;
-          enemy.torsoBobYV = dampScalar(enemy.torsoBobYV, enemy.moving ? Math.abs(Math.sin(enemy.walkTime * 2)) * 0.06 : 0, dt, 16);
+          enemy.torsoBobYV = dampScalar(enemy.torsoBobYV, moving ? Math.abs(Math.sin(gait * 2)) * 0.06 : 0, dt, 16);
           enemy.torsoRoot.position.y = enemy.torsoBobYV;
           enemy.group.position.y = BOSS_BASE_Y;
         }
 
-        if (!bossAnimOverride && !enemy.isBoss) {
-          if (enemy.aware && dist < 2.2 && !enemy.ranged) {
-            enemy.attackPhase += dt * 10;
-          } else if (enemy.aware && enemy.ranged && dist < enemy.rangeDistance) {
-            enemy.attackPhase += dt * 6;
-          } else {
-            enemy.attackPhase = 0;
-          }
-
-          const attackSwing = enemy.attackPhase > 0 ? Math.max(0, Math.sin(enemy.attackPhase)) * 0.6 : 0;
-          const tgtArmL = (enemy.aware ? -1.0 : -0.2) + attackSwing + (enemy.moving ? walk * 0.15 : 0);
-          const tgtArmR = (enemy.aware ? -1.0 : -0.2) + attackSwing - (enemy.moving ? walk * 0.15 : 0);
-          const tgtLegL = enemy.moving ? -walk : 0;
-          const tgtLegR = enemy.moving ? walk : 0;
-          const torsoXTgt = enemy.moving
-            ? Math.sin(shakePhase * 1.12) * 0.075
-            : Math.sin(shakePhase * 0.42) * 0.022;
-
-          enemy.armLV = dampScalar(enemy.armLV, tgtArmL, dt, 19);
-          enemy.armRV = dampScalar(enemy.armRV, tgtArmR, dt, 19);
-          enemy.legLV = dampScalar(enemy.legLV, tgtLegL, dt, 15);
-          enemy.legRV = dampScalar(enemy.legRV, tgtLegR, dt, 15);
-          enemy.leftArmRoot.rotation.x = enemy.armLV;
-          enemy.rightArmRoot.rotation.x = enemy.armRV;
-          enemy.leftArmRoot.rotation.z = 0;
-          enemy.rightArmRoot.rotation.z = 0;
-          enemy.leftLegRoot.rotation.x = enemy.legLV;
-          enemy.rightLegRoot.rotation.x = enemy.legRV;
-
-          enemy.torsoBobYV = dampScalar(enemy.torsoBobYV, bob, dt, 16);
-          enemy.torsoXV = dampScalar(enemy.torsoXV, torsoXTgt, dt, 14);
-          enemy.torsoZV = dampScalar(enemy.torsoZV, sway, dt, 15);
-          enemy.torsoPitchV = dampScalar(enemy.torsoPitchV, bobble, dt, 16);
-          enemy.torsoRoot.position.y = enemy.torsoBobYV;
-          enemy.torsoRoot.position.x = enemy.torsoXV;
-          enemy.torsoRoot.rotation.z = enemy.torsoZV;
-          enemy.torsoRoot.rotation.x = enemy.torsoPitchV;
-        }
-
-        updateRealZombieAnimation(enemy, dt);
       }
     }
 
@@ -18997,28 +22970,44 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       }
     }
 
+    const frameDiagnostics = new URLSearchParams(location.search).get("perf") === "1" ? [] : null;
+    if (frameDiagnostics) window.__fpsFrameDiagnostics = frameDiagnostics;
+    let nextHudUpdate = 0;
+    let nextSlowFrameLog = 0;
+
+    function adjustRenderResolution(interval) {
+      // Ignore isolated interruptions and use a rolling time budget so a single
+      // slow frame doesn't resize the canvas or change the image.
+      if (interval > .24) return;
+      slowRenderTime = interval > .037 ? slowRenderTime + interval : Math.max(0, slowRenderTime - interval * 2);
+      steadyRenderTime = interval < .020 ? steadyRenderTime + interval : 0;
+      const next = slowRenderTime > .82 ? Math.max(.56, resolutionScale - .11)
+        : steadyRenderTime > 6 ? Math.min(1, resolutionScale + .06) : resolutionScale;
+      if (Math.abs(next - resolutionScale) < .001) return;
+      resolutionScale = next;
+      slowRenderTime = steadyRenderTime = 0;
+      syncGameRendererSize();
+    }
+
     function animate() {
       requestAnimationFrame(animate);
-      const rawDt = Math.min(clock.getDelta(), 0.25);
-      const dt = Math.min(rawDt, 0.033);
-      if (document.visibilityState === "hidden") return;
-      updateAdaptiveResolution(rawDt);
+      const rawDelta = clock.getDelta();
+      const dt = Math.min(rawDelta, 0.033);
+      const frameStart = frameDiagnostics ? performance.now() : 0;
+      if (document.visibilityState === "hidden" || !gameWorldReady) return;
+      if (!paused && player.health > 0 && (isTrainingMap(CURRENT_MAP) || isArenaLikeMap(CURRENT_MAP))) adjustRenderResolution(rawDelta);
       updateAtmosphericFog(dt);
+      const audioNow = performance.now();
+      publishPlayerState(audioNow);
+      const playWorldSounds = worldAudioReady();
+      if (playWorldSounds) updateSoundListener(audioNow);
+      else worldAudio.resetSteps(player);
 
       if (_rendererSyncWarmupFrames > 0) {
         _rendererSyncWarmupFrames--;
         // Warmup re-syncs every frame (~9 layout reads each) — throttle to every 8th
         // warmup frame; ResizeObserver + event listeners still catch true resizes.
         if ((_rendererSyncWarmupFrames & 7) === 0) syncGameRendererSize();
-      }
-
-      {
-        const tgt = FLASH_BEAM_LEVELS[flashlightBeamLevel] || FLASH_BEAM_LEVELS[1];
-        const lam = 17;
-        flashOuterLocal.angle = dampScalar(flashOuterLocal.angle, tgt.outerA, dt, lam);
-        flashInnerLocal.angle = dampScalar(flashInnerLocal.angle, tgt.innerA, dt, lam);
-        flashOuterLocal.penumbra = dampScalar(flashOuterLocal.penumbra, tgt.outerP, dt, lam);
-        flashInnerLocal.penumbra = dampScalar(flashInnerLocal.penumbra, tgt.innerP, dt, lam);
       }
 
       // Runs for real opponents AND for the training-range showcase dummy, so what you see
@@ -19053,15 +23042,22 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
 
           const spx = rp._prevVisX ?? rp.visX;
           const spz = rp._prevVisZ ?? rp.visZ;
-          const gSpeed = Math.hypot(rp.visX - spx, rp.visZ - spz) / Math.max(dt, 1e-5);
+          const travel = Math.hypot(rp.visX - spx, rp.visZ - spz);
+          const gSpeed = rp.gaitSpeed = dampScalar(rp.gaitSpeed || 0, travel > 2.3 ? 0
+            : Math.min(12, travel / Math.max(dt, 1e-5)), dt, 13);
           rp._prevVisX = rp.visX;
           rp._prevVisZ = rp.visZ;
-          rp.walkPhase = (rp.walkPhase || 0) + dt * Math.min(gSpeed * 4.2, 14);
+          const rpAirborne = rp.grounded === undefined ? rpGroundOffset > 0.12 : !rp.grounded;
+          const moving = gSpeed > 0.14 && !rp.isDown;
+          const walking = moving && !rpAirborne;
+          if (walking) rp.walkPhase = (rp.walkPhase || 0) + dt * Math.min(gSpeed * 4.2, 14);
+          if (playWorldSounds && MULTIPLAYER && rp.group.visible) {
+            worldAudio.step(rp, rp.group.position, walking, 0.89, "bootStep",
+              { heading: rp.yaw, volume: 0.61 - 0.30 * rpCrouch });
+          } else worldAudio.resetSteps(rp);
           rp.idlePhase = (rp.idlePhase || 0) + dt * 1.28;
           const wSin = Math.sin(rp.walkPhase) * 0.52;
-          const moving = gSpeed > 0.06;
           const wCos = Math.cos(rp.walkPhase * 2) * 0.055;
-          const rpAirborne = rpGroundOffset > 0.12;
           // ── Gait: knees, body bob, landing squash ──────────────────────────
           // Speed drives everything so a walk and a sprint don't look identical.
           const gait = THREE.MathUtils.clamp(gSpeed / 6.5, 0, 1.35);
@@ -19072,8 +23068,8 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
             // small bend so the legs aren't locked planks.
             const idleBend = 0.10;
             const kneeAmp = 0.30 + 1.05 * stride;
-            const bendR = idleBend + Math.max(0, Math.sin(rp.walkPhase)) * kneeAmp * (moving ? 1 : 0);
-            const bendL = idleBend + Math.max(0, -Math.sin(rp.walkPhase)) * kneeAmp * (moving ? 1 : 0);
+            const bendR = idleBend + Math.max(0, Math.sin(rp.walkPhase)) * kneeAmp * (walking ? 1 : 0);
+            const bendL = idleBend + Math.max(0, -Math.sin(rp.walkPhase)) * kneeAmp * (walking ? 1 : 0);
             const airBend = rpAirborne ? 0.55 : 0;
             const crouchBend = 0.95 * rpCrouch;
             rp.rightKnee.rotation.x = dampScalar(rp.rightKnee.rotation.x, bendR + airBend + crouchBend, dt, 15);
@@ -19096,9 +23092,10 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           // crouching behind cover really does make you harder to hit, with no second
           // hitbox to keep in sync.
           const sq = rp.landSquash;
-          const crouchSquash = 1 - 0.30 * rpCrouch;
-          const wantSY = (1 - sq * 0.09) * crouchSquash;
-          const wantSXZ = (1 + sq * 0.045) * (1 + 0.07 * rpCrouch);
+          rp.crouchDrop = rpCrouch * 0.51;
+          rp.group.userData.crouchDrop = rp.crouchDrop;
+          const wantSY = 1 - sq * 0.06;
+          const wantSXZ = 1 + sq * 0.045;
           if (Math.abs(rp.group.scale.y - wantSY) > 1e-4 || Math.abs(rp.group.scale.x - wantSXZ) > 1e-4) {
             rp.group.scale.set(wantSXZ, wantSY, wantSXZ);
           }
@@ -19111,184 +23108,93 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
               rp.rightLeg.rotation.x = dampScalar(rp.rightLeg.rotation.x, 0.55 * tuck, dt, 10);
               rp.leftLeg.rotation.z  = dampScalar(rp.leftLeg.rotation.z  || 0, -0.18 * tuck, dt, 10);
               rp.rightLeg.rotation.z = dampScalar(rp.rightLeg.rotation.z || 0,  0.18 * tuck, dt, 10);
-              rp.leftLeg.position.y  = dampScalar(rp.leftLeg.position.y,  0.62 - 0.08 * tuck, dt, 10);
-              rp.rightLeg.position.y = dampScalar(rp.rightLeg.position.y, 0.62 - 0.08 * tuck, dt, 10);
+              rp.leftLeg.position.y  = dampScalar(rp.leftLeg.position.y,  0.865 - 0.08 * tuck, dt, 10);
+              rp.rightLeg.position.y = dampScalar(rp.rightLeg.position.y, 0.865 - 0.08 * tuck, dt, 10);
             } else {
               rp.leftLeg.rotation.x = dampScalar(rp.leftLeg.rotation.x, moving ? -wSin * 1.28 : 0, dt, 14);
               rp.rightLeg.rotation.x = dampScalar(rp.rightLeg.rotation.x, moving ? wSin * 1.28 : 0, dt, 14);
               rp.leftLeg.rotation.z  = dampScalar(rp.leftLeg.rotation.z  || 0, 0, dt, 12);
               rp.rightLeg.rotation.z = dampScalar(rp.rightLeg.rotation.z || 0, 0, dt, 12);
-              rp.leftLeg.position.y  = dampScalar(rp.leftLeg.position.y, moving ? 0.62 + Math.max(0,  wSin) * 0.06 : 0.62, dt, 12);
-              rp.rightLeg.position.y = dampScalar(rp.rightLeg.position.y, moving ? 0.62 + Math.max(0, -wSin) * 0.06 : 0.62, dt, 12);
+              rp.leftLeg.position.y  = dampScalar(rp.leftLeg.position.y, moving ? 0.865 + Math.max(0,  wSin) * 0.06 : 0.865, dt, 12);
+              rp.rightLeg.position.y = dampScalar(rp.rightLeg.position.y, moving ? 0.865 + Math.max(0, -wSin) * 0.06 : 0.865, dt, 12);
             }
           }
-          const duelPvp = isBrightIndoorMap(CURRENT_MAP);
-          const adsBlend = dampScalar(rp.adsBlend ?? 0, rp.ads ? 1 : 0, dt, 13);
-          rp.adsBlend = adsBlend;
-          const pitchBlend = (rp.remotePitch || 0) * (0.38 + 0.62 * adsBlend);
-          const adsLiftL = adsBlend * (duelPvp ? 0.36 : 0.30);
-          const adsLiftR = adsBlend * (duelPvp ? 0.50 : 0.42);
-
-          const weaponStance = REMOTE_WEAPON_STANCES[rp.currentWeapon | 0] || REMOTE_WEAPON_STANCES[3];
-          const breathe = Math.sin(rp.idlePhase) * (moving ? 0.022 : 0.032);
-          let targetLX = weaponStance.l + (moving ? wSin * 0.17 : 0) + breathe * 0.55 - adsLiftL;
-          let targetRX = weaponStance.r - (moving ? wSin * 0.15 : 0) - breathe * 0.5 - adsLiftR;
-          let targetLY = weaponStance.ly + Math.sin(rp.idlePhase * 1.15 + 1.05) * (moving ? 0.042 : 0.055);
-          let targetRY = weaponStance.ry + Math.sin(rp.idlePhase * 1.2) * (moving ? 0.048 : 0.062);
-          let targetLZ = weaponStance.lz;
-          let targetRZ = weaponStance.rz;
-          if (!rp.isReloading && adsBlend > 0.04) {
-            const wType = rp.currentWeapon | 0;
-            const aimSide = wType === 3 ? 0.085 : wType === 2 ? 0.065 : 0.055;
-            targetLY += adsBlend * aimSide;
-            targetRY -= adsBlend * (aimSide * 0.62);
-            targetLX -= adsBlend * (duelPvp ? 0.05 : 0.035);
-          }
-          if (rp.isReloading) {
-            rp.reloadPhase = (rp.reloadPhase || 0) + dt * 6.5;
-            const rSin = Math.sin(rp.reloadPhase);
-            targetRX = -0.18 + rSin * 0.75;
-            targetLX = -0.26 + Math.sin(rp.reloadPhase + 0.8) * 0.5;
-            if (rp.gunModel) {
-              rp.gunModel.rotation.z = dampScalar(rp.gunModel.rotation.z, 0.72 + rSin * 0.38, dt, 16);
-              rp.gunModel.rotation.x = dampScalar(rp.gunModel.rotation.x, -0.38 + Math.cos(rp.reloadPhase * 1.35) * 0.14, dt, 14);
-            }
+          if (!rpAirborne && rpCrouch > 0.001) {
+            const pose = (leg, knee, offset) => {
+              const thigh = -1.27 + offset;
+              const shin = 2.46 + offset;
+              leg.rotation.x = THREE.MathUtils.lerp(leg.rotation.x, thigh, rpCrouch);
+              knee.rotation.x = THREE.MathUtils.lerp(knee.rotation.x, shin, rpCrouch);
+              leg.position.y = .38 * Math.cos(leg.rotation.x) + .366 * Math.cos(leg.rotation.x + knee.rotation.x) + .119;
+              leg.userData.ankle.rotation.x = -(leg.rotation.x + knee.rotation.x) * rpCrouch;
+            };
+            pose(rp.leftLeg, rp.leftKnee, 0);
+            pose(rp.rightLeg, rp.rightKnee, -0.04);
           } else {
-            rp.reloadPhase = 0;
-            if (rp.gunModel) {
-              rp.gunModel.rotation.z = dampScalar(rp.gunModel.rotation.z, 0, dt, 14);
-              rp.gunModel.rotation.x = dampScalar(rp.gunModel.rotation.x, 0, dt, 14);
-            }
+            rp.leftLeg.userData.ankle.rotation.x = 0;
+            rp.rightLeg.userData.ankle.rotation.x = 0;
           }
-          // Torso: counter-twists against the legs, leans into the run, and shoulders roll.
-          const torsoTwist = moving && !rpAirborne ? Math.sin(rp.walkPhase) * 0.20 * stride : 0;
-          if (rp.torsoMesh) {
-            rp.torsoMesh.rotation.y = dampScalar(rp.torsoMesh.rotation.y, torsoTwist, dt, 10);
-            const airTuck = rpAirborne ? Math.min(1, rpGroundOffset / 1.5) * 0.28 : 0;
-            const runLean = stride * 0.16;              // lean forward the faster you go
-            const breath = moving ? 0 : Math.sin(rp.idlePhase * 0.9) * 0.02;
-            rp.torsoMesh.rotation.x = dampScalar(
-              rp.torsoMesh.rotation.x,
-              pitchBlend * 0.55 + runLean + breath - airTuck + rp.landSquash * 0.22 + rpCrouch * 0.20,
-              dt,
-              11
-            );
-            rp.torsoMesh.rotation.z = dampScalar(
-              rp.torsoMesh.rotation.z || 0,
-              moving && !rpAirborne ? Math.cos(rp.walkPhase) * 0.07 * stride : 0,
-              dt,
-              10
-            );
-            rp.torsoMesh.position.y = dampScalar(rp.torsoMesh.position.y, 1.24 + (moving && !rpAirborne ? Math.abs(wCos) * 0.08 : 0), dt, 10);
-          }
+          rp.waist.position.y = .72 - rp.crouchDrop;
+          if (rp.carrier) rp.carrier.position.y = 1.24 - rp.crouchDrop;
+          rp.rightArm.position.y = rp.leftArm.position.y = 1.42 - rp.crouchDrop;
+          if (rp.headGroup) rp.headGroup.position.y = 1.76 - rp.crouchDrop;
+          rp.adsBlend = dampScalar(rp.adsBlend || 0, rp.ads ? 1 : 0, dt, 13);
           if (rp.headGroup) {
-            // Head counter-rotates against the torso twist so the gaze stays level instead
-            // of swinging with the shoulders — the single cheapest "alive" cue there is.
-            rp.headGroup.rotation.y = dampScalar(rp.headGroup.rotation.y, -torsoTwist * 0.75, dt, 12);
-            rp.headGroup.rotation.x = dampScalar(
-              rp.headGroup.rotation.x,
-              (moving ? Math.cos(rp.walkPhase) * 0.05 * stride : 0) + pitchBlend * 0.78 - stride * 0.10,
-              dt,
-              10
-            );
-            rp.headGroup.rotation.z = dampScalar(
-              rp.headGroup.rotation.z || 0,
-              moving && !rpAirborne ? -Math.cos(rp.walkPhase) * 0.05 * stride : 0,
-              dt,
-              10
-            );
-          }
-          if (rp.supportSocket) {
-            rp.supportSocket.visible = !rp.isReloading;
-          }
-          if (rp.primarySocket) {
-            // Med kit used to hide this glove (it had no model to hold); it now carries the
-            // case, so the only reason to hide a hand is a reload.
-            rp.primarySocket.visible = !rp.isReloading;
+            rp.headGroup.rotation.x = dampScalar(rp.headGroup.rotation.x, -(rp.remotePitch || 0) * 0.78, dt, 13);
+            rp.headGroup.rotation.z = -wSin * stride * 0.045;
           }
           if (rp.flashMount) {
-            rp.flashMount.visible = !rp.duelBright;
+            rp.flashMount.visible = !isTrainingMap(CURRENT_MAP) && !isBossArenaMap(CURRENT_MAP)
+              && !rp.duelBright && rp.lightOn !== false;
+            rp.flashMount.rotation.x = -(rp.remotePitch || 0);
+            if (CURRENT_MAP === "arena" && rp.flashMount.visible && rp.group.visible && audioNow >= (rp.flashSampleAt || 0)) {
+              rp.flashSampleAt = audioNow + 65;
+              rp.flash.getWorldPosition(arenaRemoteFlashOrigin);
+              rp.flash.getWorldQuaternion(arenaRemoteFlashRotation).multiply(arenaReverseFlashAxis);
+              rp.flash.intensity = getArenaFlashPower(arenaRemoteFlashOrigin, arenaRemoteFlashRotation, ARENA_FLASH_POWER * .68);
+            }
           }
           updateRemoteJetPack(rp, dt);
-          const wTyHold = rp.currentWeapon | 0;
-          const heldPose =
-            !rp.isReloading &&
-            rp.primarySocket &&
-            (isRemoteOneHandItem(wTyHold) || rp.supportSocket);
+          updateRemoteOperator(rp, dt, stride, wSin * stride, rp.adsBlend, audioNow);
 
-          // ── Elbows ─────────────────────────────────────────────────────────
-          // These were built and then frozen at -0.5 forever. Bending them is what turns
-          // the arms from rods into limbs.
-          if (rp.rightElbow && rp.leftElbow) {
-            let elbR;
-            let elbL;
-            if (rp.isReloading) {
-              // Big working bend — the hands are busy at the magazine well.
-              const rs = Math.sin(rp.reloadPhase);
-              elbR = -1.25 - rs * 0.35;
-              elbL = -1.05 + Math.cos(rp.reloadPhase * 1.2) * 0.30;
-            } else if (heldPose) {
-              // Holding a weapon: elbows stay tucked, breathing slightly, tighter on ADS.
-              const tuck = -0.62 - adsBlend * 0.28;
-              const jog = moving ? Math.sin(rp.walkPhase) * 0.09 * stride : 0;
-              elbR = tuck + jog;
-              elbL = tuck - jog;
-            } else {
-              // Free arms (knife / med kit / empty): elbows swing opposite the legs.
-              const swing = moving ? Math.sin(rp.walkPhase) * 0.42 * stride : 0;
-              const idle = Math.sin(rp.idlePhase * 1.1) * 0.05;
-              elbR = -0.42 - Math.max(0, swing) - idle;
-              elbL = -0.42 - Math.max(0, -swing) + idle;
-            }
-            rp.rightElbow.rotation.x = dampScalar(rp.rightElbow.rotation.x, elbR, dt, 12);
-            rp.leftElbow.rotation.x = dampScalar(rp.leftElbow.rotation.x, elbL, dt, 12);
-          }
-
-          if (heldPose) {
-            applyRemoteTwoHandStance(rp, dt, moving, wSin, rp.idlePhase, adsBlend);
-          } else {
-            rp.leftArm.rotation.x = dampScalar(rp.leftArm.rotation.x, targetLX, dt, 11);
-            rp.rightArm.rotation.x = dampScalar(rp.rightArm.rotation.x, targetRX, dt, 11);
-            rp.leftArm.rotation.y = dampScalar(rp.leftArm.rotation.y, targetLY, dt, 10);
-            rp.rightArm.rotation.y = dampScalar(rp.rightArm.rotation.y, targetRY, dt, 10);
-            // Real shoulder swing, opposite the legs, scaled by speed. Previously the arms
-            // were damped to a fixed stance angle and barely moved while running.
-            const armSwing = moving ? -Math.sin(rp.walkPhase) * 0.55 * stride : 0;
-            targetRX += armSwing;
-            targetLX -= armSwing;
-            const lut =
-              REMOTE_WALK_PHASE_LUT[
-                Math.abs(((rp.walkPhase * 15.25) | 0) % REMOTE_WALK_PHASE_LUT.length)
-              ];
-            const lutShoulder = lut ? lut.shoulder : 0;
-            rp.leftArm.rotation.z = dampScalar(
-              rp.leftArm.rotation.z,
-              targetLZ +
-                (moving ? Math.cos(rp.walkPhase * 0.92) * 0.07 : Math.sin(rp.idlePhase) * 0.02) +
-                lutShoulder * 0.1,
-              dt,
-              11
-            );
-            rp.rightArm.rotation.z = dampScalar(
-              rp.rightArm.rotation.z,
-              targetRZ +
-                (moving ? -Math.cos(rp.walkPhase * 0.92) * 0.07 : -Math.sin(rp.idlePhase * 1.1) * 0.02) -
-                lutShoulder * 0.1,
-              dt,
-              11
-            );
-          }
         }
       }
 
-      if (paused || (started && menuEl.style.display === "none" && !gameWorldReady)) {
-        tickFpsMeter(dt);
-        renderer.render(scene, camera);
+      if (paused) {
+        if (paused && isBossArenaMap(CURRENT_MAP)) updateBossVictory(dt);
+        if (paused && MULTIPLAYER && ZOMBIE_AUTHORITY && gameWorldReady) {
+          if (ARENA_COOP) {
+            updateEnemies(dt);
+            updateBossProjectiles(dt);
+            updateBossTelegraphs();
+            bossShakeTimerMs += dt * 1000;
+          } else if (TRAINING_COOP) updateTrainingDummies(dt);
+          publishWorldState(dt);
+        }
+        tickFpsMeter(rawDelta);
+        renderWorld(dt);
         return;
       }
 
+      updateGauntletPlatforms(dt);
+      if (pvpWorld && gameWorldReady && !paused) pvpWorld.update(dt);
+      updateGauntletHover(dt);
+      updateTransientFx(dt);
+      if (gauntletTicks.length) {
+        const feet = { x: player.position.x, y: player.position.y, z: player.position.z };
+        for (const fn of gauntletTicks) fn(dt, feet);
+      }
       updatePlayer(dt);
-      updateWeapon(dt);
+      updateFlashlightExposure(dt, audioNow);
+      if (player.health > 0) updateWeapon(dt);
+      if (playWorldSounds) {
+        footPosition.x = player.position.x;
+        footPosition.y = player.position.y - 1.52;
+        footPosition.z = player.position.z;
+        worldAudio.step(player, footPosition, player.onGround && audioNow >= state.dashActiveUntil,
+          0.89 - crouchAmt * 0.24, isGauntletMap(CURRENT_MAP) ? "steelStep" : "bootStep",
+          { local: true, volume: 0.67 - crouchAmt * 0.34 });
+      }
 
       const fx = getQualityPresentationScale();
       if (player.health > 0 && started) {
@@ -19301,7 +23207,6 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           state.camShake = 0;
         }
         const moving =
-          !isMedKitHoldHealing() &&
           (keys.w || keys.a || keys.s || keys.d) &&
           player.onGround &&
           player.health > 0;
@@ -19312,12 +23217,13 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       }
 
       if (isTrainingMap(CURRENT_MAP) && gameWorldReady) {
-        updateTrainingDummies(dt);
+        if (MULTIPLAYER && TRAINING_COOP && !ZOMBIE_AUTHORITY) updateRemoteEnemies(dt);
+        else updateTrainingDummies(dt);
         updateAnimationShowcase(dt);
       }
       // Outside the training-map block: this was nested inside it, so checkpoints, the
       // fall-reset and the exit check never ran on the gauntlet map at all.
-      updateGauntlet(dt);
+      updateGauntlet();
 
       updateInvBar();
       updateSpeedNeedle(dt);
@@ -19327,8 +23233,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       updateStaminaHud();
       updateHealthBarHud();
 
-      if (isArenaLikeMap(CURRENT_MAP) || isBossArenaMap(CURRENT_MAP)) {
-        // This block only runs on zombie maps, so the map predicates below are constant true.
+      if (!gauntletClearOpen && (isArenaLikeMap(CURRENT_MAP) || isBossArenaMap(CURRENT_MAP) || isGauntletMap(CURRENT_MAP))) {
         const runZombieAi =
           gameWorldReady &&
           (player.health > 0 ||
@@ -19343,7 +23248,8 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           }
         }
         if (gameWorldReady) updateBossProjectiles(dt);
-        if (gameWorldReady) updateBossVictory(dt);
+        if (gameWorldReady) updateBossTelegraphs();
+        if (gameWorldReady && isBossArenaMap(CURRENT_MAP)) updateBossVictory(dt);
         // ── Boss 震 cycle timer + HUD ────────────────────────────────────────
         if (gameWorldReady && isBossArenaMap(CURRENT_MAP)) {
           const _anyBoss = state.enemies.some(e => e.isBoss && e.alive);
@@ -19357,7 +23263,11 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
             if (_prevPos < BOSS_DASH_LOCK_MS && _newPos >= BOSS_DASH_LOCK_MS) {
               // 震 triggered
               state.camShake = Math.max(state.camShake || 0, 0.9);
-              showCombatFeedback(tr("bossShakeDashOpenToast", "⚡ SHAKE · DASH OPEN 4s!"), "#48c778", 1.5);
+              // Felt and heard, not read: the tremor shakes the camera and kicks up dust.
+              for (let _di = 0; _di < 14; _di++) {
+                const _a = Math.random() * Math.PI * 2, _r = 1.5 + Math.random() * 7;
+                createSparks(new THREE.Vector3(player.position.x + Math.cos(_a) * _r, 0.05, player.position.z + Math.sin(_a) * _r), 0x6d655a);
+              }
               // Tremor SFX
               if (audioCtx && audioSfx) {
                 const _t0 = audioCtx.currentTime;
@@ -19380,11 +23290,15 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
             }
             // Detect OPEN→LOCKED (cycle resets while open)
             if (_cycleReset && _prevPos >= BOSS_DASH_LOCK_MS) {
-              showCombatFeedback(tr("bossShakeDashLockedToast", "SHAKE LOCKED 11s"), "#fc8181", 1.0);
+
             }
             // Update HUD bar
             if (_bossShakeBar) {
-              _bossShakeBar.style.display = "block";
+              // The countdown bar never drove anything (dash is not locked by the cycle);
+              // it was text and a timer in the middle of the screen, so it stays hidden.
+              _bossShakeBar.style.display = "none";
+            }
+            if (false) {
               const _ratio = _newPos / BOSS_SHAKE_CYCLE_MS;
               const _isOpen = _newPos >= BOSS_DASH_LOCK_MS;
               const _fill = _bossShakeBarFillEl || (_bossShakeBarFillEl = document.getElementById("bossShakeBarFill"));
@@ -19431,35 +23345,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
             }, 4000);
           }
         }
-        if (gameWorldReady && MULTIPLAYER && ARENA_COOP && ZOMBIE_AUTHORITY) {
-          _zombieSyncAcc += dt;
-          if (_zombieSyncAcc >= 1 / 14) {
-            _zombieSyncAcc = 0;
-            socket.emit("zombieSync", {
-              score: state.score,
-              zombies: state.enemies.map((e, idx) => {
-                const zd = {
-                  i: e.netIndex ?? idx,
-                  x: e.group.position.x,
-                  z: e.group.position.z,
-                  y: e.visYaw,
-                  hp: e.hp,
-                  a: e.alive ? 1 : 0,
-                  rt: e.respawnTimer,
-                };
-                // v33: include boss-specific identity so joiners can spawn missing bosses
-                // (BOSS_FIGHT_COUNT / HELL mode aren't synced via the lobby).
-                if (e.isBoss) {
-                  zd.bm = e.bossMode;
-                  zd.hell = !!e.isHellBoss;
-                  zd.ba = e.bossAnimState || "idle";
-                  zd.bt = e.bossAnimTimer || 0;
-                }
-                return zd;
-              }),
-            });
-          }
-        }
+
       }
 
       if (isArenaLikeMap(CURRENT_MAP) && started && gameWorldReady) {
@@ -19468,28 +23354,27 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         cullMazeLightsNearCamera();
       }
 
+      publishWorldState(dt);
+      if (playWorldSounds) updateZombieAudio(audioNow);
+
       if (isPvpCrossfireMap(CURRENT_MAP) && MULTIPLAYER && player.health <= 0) {
         const first = remotePlayers.values().next().value;
         if (first) {
           const sx = first.visX ?? first.x;
           const sz = first.visZ ?? first.z;
           camera.position.set(sx, first.y, sz);
-          camera.rotation.y = first.visYaw ?? (first.yaw + Math.PI);
-          camera.rotation.x = 0;
+          camera.rotation.y = first.visYaw === undefined ? first.yaw : first.visYaw - Math.PI;
+          camera.rotation.x = first.remotePitch || 0;
         }
       }
 
-      // Death fade + camera drift + revealing the DEFEAT panel. This used to live inside the
-      // `isArenaLikeMap || isBossArenaMap` block, so on any other map (training especially)
-      // nothing ever revealed deathUI: dying just froze you in place with no buttons and no
-      // way out but a reload. Nothing here is arena-specific — the function already returns
-      // immediately when alive or on a PvP map, where showDeathScreen shows the panel itself.
-      if (gameWorldReady) updateDeathAnim(dt);
+      updateDeathAnim(dt, audioNow);
 
       updateEffects(dt);
-      tickFpsMeter(dt);
+      tickFpsMeter(rawDelta);
       _renderTick++;
-      if ((_renderTick & 1) === 0) {
+      if (audioNow >= nextHudUpdate) {
+        nextHudUpdate = audioNow + 80;
         updateHud();
       }
 
@@ -19503,7 +23388,25 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         tryShoot();
       }
 
-      renderer.render(scene, camera);
+      const renderStart = frameDiagnostics ? performance.now() : 0;
+      renderPortalViews();
+      renderWorld(dt);
+      if (frameDiagnostics && (rawDelta > 0.085 || performance.now() - frameStart > 35)) {
+        const sample = {
+          map: CURRENT_MAP, frameMs: Math.round(rawDelta * 1000),
+          simulationMs: Math.round(renderStart - frameStart),
+          renderSubmitMs: Math.round(performance.now() - renderStart),
+          drawCalls: renderer.info.render.calls, triangles: renderer.info.render.triangles,
+          shaders: renderer.info.programs?.length, enemies: state.enemies.length, chunks: mazeChunks.size,
+          resolutionScale: Math.round(resolutionScale * 100) / 100,
+        };
+        frameDiagnostics.push(sample);
+        if (frameDiagnostics.length > 60) frameDiagnostics.shift();
+        if (audioNow >= nextSlowFrameLog) {
+          nextSlowFrameLog = audioNow + 1200;
+          console.info("[fps slow frame]", sample);
+        }
+      }
     }
 
     const clock = new THREE.Clock();
@@ -19579,6 +23482,11 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
 
     async function bootGame(mapName, multiplayer, arenaCoop, trainingCoop) {
       gameWorldReady = false;
+      resolutionScale = 1;
+      slowRenderTime = steadyRenderTime = 0;
+      acousticSampleAt = 0;
+      recentNetworkShots.clear();
+      worldAudio.resetSteps(player);
       _invBarIntroHold = true; // hotbar stays up until the first weapon switch this run
       gameBootOverlay.style.display = "flex";
       gameBootOverlay.setAttribute("aria-busy", "true");
@@ -19588,8 +23496,14 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       state.speedNeedle.phase = 'idle'; state.speedNeedle.timer = 0; state.speedNeedle.charges = 1;
       jetRoot.visible = false;
       state.jet.phase = 'idle'; state.jet.startMs = 0; state.jet.endMs = 0;
-      state.jet.charges = 1; state.jet.netState = 0;
+      state.jet.charges = 1; state.jet.netState = 0; state.jet.cooldownUntil = 0;
+      state.dashActiveUntil = 0;
+      state.dashWasActive = false;
+      state.dashRemainingDist = 0;
       state.dashIsJet = false;
+      state.stamina = STAMINA_MAX;
+      state.dashCooldownEnd = state.staminaRegenAt = state.dashDisabledUntil = 0;
+      crouchAmt = 0;
       player.fallApexY = null;
       if (_healthBarWrap) _healthBarWrap.style.display = "none";
       if (_castBarWrap)   _castBarWrap.style.display   = "none";
@@ -19604,7 +23518,6 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       hitDirContainer.innerHTML = "";
       hitIndicators.length = 0;
       CURRENT_MAP = mapName;
-      if (isBrightIndoorMap(CURRENT_MAP)) playerLightsPreference = false;
       if (multiplayer !== undefined) {
         MULTIPLAYER = multiplayer;
         if (!multiplayer) ARENA_COOP = false;
@@ -19612,7 +23525,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       if (arenaCoop !== undefined) ARENA_COOP = !!arenaCoop;
       if (trainingCoop !== undefined) TRAINING_COOP = !!trainingCoop;
       else if (!isTrainingMap(mapName)) TRAINING_COOP = false;
-      if (MULTIPLAYER && ARENA_COOP) {
+      if (MULTIPLAYER && (ARENA_COOP || TRAINING_COOP)) {
         ZOMBIE_HOST_KNOWN = false;
         ZOMBIE_AUTHORITY = false;
       } else {
@@ -19659,16 +23572,19 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
 
       positionPlayerForCurrentMap();
       if (isBossArenaMap(CURRENT_MAP)) {
-        BOSS_ROUND = BOSS_HELL_MODE ? 4 : 1;
-        BOSS_ROUND_ACTIVE = true;
         bossVictoryActive = false;
         bossVictoryMsgShown = false;
         bossVictoryTimer = 0;
-        const oldOvl = document.getElementById("bossVictoryOverlay");
-        if (oldOvl) oldOvl.remove();
+        closeBossResults();
       }
 
       MAP_BUILDERS[CURRENT_MAP]();
+      moon.castShadow = !isTrainingMap(CURRENT_MAP) && !isArenaLikeMap(CURRENT_MAP);
+      if (moon.castShadow) {
+        renderer.shadowMap.needsUpdate = true;
+        moon.shadow.needsUpdate = true;
+      }
+      applyWallTexture();
       applySceneFogAndCameraFar();
 
       if (isArenaLikeMap(CURRENT_MAP)) {
@@ -19702,10 +23618,11 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       player.yaw = 0;
       player.pitch = 0;
       camera.position.copy(player.position);
+      if (isArenaLikeMap(CURRENT_MAP)) cullMazeLightsNearCamera();
 
       state.score = 0;
       player.health = player.maxHealth;
-      if (MULTIPLAYER && isPvpCrossfireMap(CURRENT_MAP)) {
+      if (MULTIPLAYER) {
         try {
           socket.emit("playerRespawn", { id: socket.id });
         } catch (_) {}
@@ -19727,7 +23644,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       state.weaponBobY = 0;
       state.weaponBobRotZ = 0;
       killerEnemy = null;
-      deathAnimTime = 0;
+      deathAnimStartedAt = null;
 
       for (const w of weapons) {
         w.ammo = w.magSize;
@@ -19761,6 +23678,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
 
       weaponRoot.visible = true;
       gameWorldReady = true;
+      requestMatchSnapshot();
       if (isBossArenaMap(CURRENT_MAP)) tryPlayBossBgm(BOSS_HELL_MODE);
       else if (isArenaLikeMap(CURRENT_MAP)) tryPlayArenaBgm();
       else if (isPvpCrossfireMap(CURRENT_MAP)) tryPlayPvpBgm();
@@ -19797,11 +23715,13 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
 
     function goToMenu() {
       clearActiveLoadout();
-      if (_gClearEl) _gClearEl.style.display = "none";
+      closeBossResults();
+      hideGauntletClear();
       gauntletCourse = null;
       hideDeathScreen();
       hidePause();
       closeSettingsModal();
+      if (MULTIPLAYER) socket.emit("leaveGame");
       MULTIPLAYER = false;
       ROOM_CODE = "";
       activeRoomId = "";
@@ -19813,7 +23733,6 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       _zombieSyncAcc = 0;
       gameWorldReady = false;
       setGameActiveUi(false);
-      clearLocalDeathGhost();
       gameBootOverlay.style.display = "none";
       gameBootOverlay.setAttribute("aria-busy", "false");
       menuEl.style.display = "flex";
@@ -19866,63 +23785,109 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       h.className = "menu-title";
       h.textContent = tr("gauntletTitle", "GAUNTLET");
 
-      const desc = document.createElement("p");
-      desc.className = "menu-desc";
-      desc.textContent = tr(
-        "gauntletDesc",
-        "20 levels. Reach the exit — clearing the room is never required. 1-5 movement, 6-15 zombies, 16-20 boss."
-      );
+      const pager = document.createElement("div");
+      pager.className = "gauntlet-pager";
+      const previous = document.createElement("button");
+      previous.type = "button";
+      previous.textContent = "‹";
+      previous.setAttribute("aria-label", tr("gauntletPrevChapter", "Previous chapter"));
+      previous.addEventListener("click", () => refreshGauntletPanel(_gauntletPanel.chapter - 1));
+      const range = document.createElement("span");
+      range.setAttribute("aria-live", "polite");
+      const next = document.createElement("button");
+      next.type = "button";
+      next.textContent = "›";
+      next.setAttribute("aria-label", tr("gauntletNextChapter", "Next chapter"));
+      next.addEventListener("click", () => refreshGauntletPanel(_gauntletPanel.chapter + 1));
+      pager.append(previous, range, next);
 
       const grid = document.createElement("div");
-      grid.style.cssText =
-        "display:grid;grid-template-columns:repeat(5,58px);gap:8px;margin-top:6px;justify-content:center;";
+      grid.className = "gauntlet-grid";
 
+      const briefing = document.createElement("div");
+      briefing.className = "gauntlet-brief";
+      briefing.setAttribute("aria-live", "polite");
+      const actions = document.createElement("div");
+      actions.className = "gauntlet-actions";
+      const launch = document.createElement("button");
+      launch.type = "button";
+      launch.textContent = tr("menuDeploy", "Start");
+      launch.addEventListener("click", () => startGauntletLevel(_gauntletPanel.selected));
+      actions.append(launch);
       panel.appendChild(back);
       panel.appendChild(h);
-      panel.appendChild(desc);
-      panel.appendChild(grid);
+      panel.append(pager, grid, briefing, actions);
       wrap.appendChild(panel);
-      _gauntletPanel = { panel, grid };
+      _gauntletPanel = { panel, grid, briefing, range, previous, next, launch, chapter: 0, selected: 1 };
     }
 
-    function refreshGauntletPanel() {
+    function refreshGauntletPanel(chapter) {
       buildGauntletPanel();
       if (!_gauntletPanel) return;
-      const { grid } = _gauntletPanel;
-      grid.innerHTML = "";
+      const { grid, range, previous, next } = _gauntletPanel;
       const done = gauntletProgress();
-      for (let lv = 1; lv <= GAUNTLET_LEVEL_COUNT; lv++) {
+      const unlocked = Math.min(done + 1, GAUNTLET_LEVEL_COUNT);
+      chapter = THREE.MathUtils.clamp(chapter ?? Math.floor((unlocked - 1) / GAUNTLET_CHAPTER_SIZE), 0, GAUNTLET_CHAPTERS.length - 1);
+      _gauntletPanel.chapter = chapter;
+      const first = chapter * GAUNTLET_CHAPTER_SIZE + 1;
+      const last = Math.min(GAUNTLET_LEVEL_COUNT, first + GAUNTLET_CHAPTER_SIZE - 1);
+      range.textContent = `${GAUNTLET_CHAPTERS[chapter]} · ${first}–${last} / ${GAUNTLET_LEVEL_COUNT}`;
+      previous.disabled = chapter === 0;
+      next.disabled = last === GAUNTLET_LEVEL_COUNT;
+      grid.replaceChildren();
+      for (let lv = first; lv <= last; lv++) {
         const spec = GAUNTLET_LEVELS[lv - 1];
-        const locked = lv > done + 1;
         const btn = document.createElement("button");
         btn.type = "button";
-        const tint = spec.boss ? "#ff7a7a" : spec.z ? "#ffd36a" : "#8fd8ff";
-        btn.style.cssText =
-          "width:58px;height:52px;border-radius:8px;cursor:" + (locked ? "not-allowed" : "pointer") +
-          ";font:700 17px/1 Audiowide,Arial,sans-serif;display:flex;flex-direction:column;" +
-          "align-items:center;justify-content:center;gap:3px;transition:all .12s;" +
-          (locked
-            ? "border:1px solid #3a4048;background:rgba(20,24,30,0.55);color:#5f6a76;"
-            : "border:1px solid " + tint + ";background:rgba(20,24,30,0.8);color:" + tint + ";");
-        const tag = lv <= done ? "✓" : spec.hell ? "☠" : spec.boss ? "☣" : spec.z ? "z" : "»";
-        btn.innerHTML = lv + '<span style="font-size:9px;opacity:0.8;">' + (locked ? "🔒" : tag) + "</span>";
-        btn.title = locked ? tr("gauntletLocked", "Locked") : (lv + " · " + spec.name);
-        if (!locked) btn.addEventListener("click", () => startGauntletLevel(lv));
+        btn.disabled = lv > unlocked;
+        btn.dataset.level = String(lv);
+        btn.dataset.cleared = String(lv <= done);
+        btn.dataset.levelKind = spec.boss ? "boss" : spec.z ? "zombie" : "movement";
+        btn.textContent = lv + (lv <= done ? " ✓" : "");
+        btn.setAttribute("aria-label", `${tr("gauntletCourse", "Course")} ${lv}${btn.disabled ? " · " + tr("gauntletLocked", "Locked") : ""}`);
+        btn.addEventListener("click", () => selectGauntletBriefing(lv));
         grid.appendChild(btn);
       }
+      selectGauntletBriefing(Math.min(last, Math.max(first, unlocked)));
+    }
+
+    function selectGauntletBriefing(level) {
+      const { grid, briefing, launch } = _gauntletPanel;
+      _gauntletPanel.selected = level;
+      const spec = GAUNTLET_LEVELS[level - 1];
+      const locked = level > gauntletProgress() + 1;
+      for (const btn of grid.children) btn.setAttribute("aria-pressed", String(Number(btn.dataset.level) === level && !locked));
+      launch.disabled = locked;
+      const task = locked ? tr("gauntletClearEarlier", "Clear the earlier courses to start here.")
+        : spec.z ? tr("gauntletFightBrief", "Clear the combat rooms and reach the green exit.")
+        : tr("gauntletMovementBrief", "Reach the green exit. Yellow and black edges mark gaps.");
+      briefing.textContent = `${tr("gauntletCourse", "Course")} ${level} · ${task}`;
     }
 
     function startGauntletLevel(level) {
       gauntletLevel = THREE.MathUtils.clamp(level | 0, 1, GAUNTLET_LEVEL_COUNT);
-      void bootGame("gauntlet", false, false, false);
+      startGame("gauntlet", false, false, false);
     }
+
+    const routeMission = createMissionConsole(menuEl);
 
     function showMenuPanel(id) {
       // Query-based rather than a hardcoded list, so panels injected from JS (the backpack
       // screen) are hidden along with the rest instead of stacking on top of them.
-      for (const p of document.querySelectorAll("#menuMain, .menu-subpanel")) p.style.display = "none";
+      for (const p of menuEl.querySelectorAll(".menu-subpanel")) p.style.display = "none";
       clearLobbyErr();
-      document.getElementById(id).style.display = "flex";
+      const panel = document.getElementById(id);
+      panel.style.display = "flex";
+      routeMission(panel);
+      panel.parentElement.scrollTop = 0;
+      panel.scrollTop = 0;
+      const back = panel.querySelector(".menu-back-btn");
+      if (back) back.setAttribute("aria-label", tr("menuBack", "Back"));
+      const target = panel.querySelector("input, h1, h2");
+      if (target) {
+        if (target.tagName !== "INPUT") target.tabIndex = -1;
+        target.focus({ preventScroll: true });
+      }
     }
 
     /* ── Backpack screen ──────────────────────────────────────────────────
@@ -19932,16 +23897,8 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
      */
     let _loadoutPanel = null;
     let _loadoutCards = [];
+    let loadoutThumbnailsReady = false;
     let _armorCards = { helmet: [], vest: [] };
-
-    function loadoutCardStyle(selected, locked) {
-      const base = "display:flex;flex-direction:column;align-items:center;gap:6px;width:120px;"
-        + "padding:10px 8px;border-radius:10px;cursor:pointer;user-select:none;"
-        + "font:600 12px/1.25 Audiowide,Arial,sans-serif;text-align:center;transition:all .12s;";
-      if (locked) return base + "border:1px solid #3a4048;background:rgba(20,24,30,0.55);color:#5f6a76;cursor:not-allowed;";
-      if (selected) return base + "border:1px solid #4fd1ff;background:rgba(79,209,255,0.20);color:#dff6ff;box-shadow:0 0 12px rgba(79,209,255,0.35);";
-      return base + "border:1px solid #4a5460;background:rgba(20,24,30,0.75);color:#b9c4d0;";
-    }
 
     function buildLoadoutPanel() {
       const wrap = document.querySelector(".menu-panels-wrap");
@@ -19966,19 +23923,23 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       desc.id = "loadoutDesc";
 
       const grid = document.createElement("div");
-      grid.style.cssText = "display:flex;flex-wrap:wrap;justify-content:center;gap:10px;margin:6px 0 14px 0;";
+      grid.className = "loadout-grid";
 
       _loadoutCards = [];
       for (const widx of LOADOUT_GUN_POOL) {
-        const card = document.createElement("div");
+        const card = document.createElement("button");
+        card.type = "button";
+        card.className = "loadout-card";
         card.dataset.widx = widx;
         const cnv = document.createElement("canvas");
-        cnv.width = INV_CW; cnv.height = INV_CH;
+        cnv.width = INV_CW * ICON_SCALE; cnv.height = INV_CH * ICON_SCALE;
         cnv.style.cssText = `width:${INV_CW}px;height:${INV_CH}px;`;
-        try { drawWeaponIcon(cnv.getContext("2d"), widx, INV_CW, INV_CH); } catch (_) {}
-        const nm = document.createElement("div");
-        card.appendChild(cnv);
-        card.appendChild(nm);
+        try { drawWeaponIcon(cnv.getContext("2d"), widx, INV_CW * ICON_SCALE, INV_CH * ICON_SCALE); } catch (_) {}
+        const nm = document.createElement("span");
+        const stats = document.createElement("small");
+        const w = weapons[widx];
+        stats.textContent = `${w.magSize} ${tr("loadoutRounds", "rounds")} · ${(w.reloadTime / 1000).toFixed(2)}s ${tr("loadoutReload", "reload")}`;
+        card.append(cnv, nm, stats);
         card.addEventListener("click", () => toggleLoadoutGun(widx));
         grid.appendChild(card);
         _loadoutCards.push({ card, nm, widx });
@@ -19998,9 +23959,11 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         rowLbl.style.cssText = "font:600 12px/1.6 Audiowide,Arial,sans-serif;color:#9fb0c0;letter-spacing:2px;margin-bottom:4px;";
         rowLbl.textContent = labelTxt;
         const row = document.createElement("div");
-        row.style.cssText = "display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin-bottom:12px;";
+        row.className = "loadout-grid";
         table.forEach((piece, i) => {
-          const c = document.createElement("div");
+          const c = document.createElement("button");
+          c.type = "button";
+          c.className = "loadout-card";
           c.addEventListener("click", () => {
             if (kind === "helmet") armorHelmet = i; else armorVest = i;
             saveArmor();
@@ -20031,9 +23994,67 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         const b = document.createElement("button");
         b.type = "button";
         b.id = "btnLoadout";
+        b.dataset.i18n = "btnLoadout";
+        b.setAttribute("aria-controls", "menuLoadout");
         b.textContent = tr("btnLoadout", "BACKPACK");
-        b.addEventListener("click", () => { syncLoadoutPanel(); showMenuPanel("menuLoadout"); });
+        b.addEventListener("click", () => {
+          syncLoadoutPanel();
+          showMenuPanel("menuLoadout");
+          if (!loadoutThumbnailsReady) {
+            loadoutThumbnailsReady = true;
+            setTimeout(drawLoadoutThumbnails, 160);
+          }
+        });
         trainBtn.insertAdjacentElement("afterend", b);
+      }
+    }
+
+    function drawLoadoutThumbnails() {
+      let preview;
+      try {
+        preview = new THREE.WebGLRenderer({ alpha: true, antialias: true, powerPreference: "low-power" });
+        preview.setSize(270, 120, false);
+        const display = new THREE.Scene();
+        const sky = new THREE.HemisphereLight(0xe9f4ff, 0x768895, 3.4);
+        const key = new THREE.DirectionalLight(0xf5e7d8, 4.3);
+        key.position.set(3, 4, -2);
+        display.add(sky, key);
+        const lens = new THREE.OrthographicCamera(-1, 1, 1, -1, .01, 40);
+        const center = new THREE.Vector3(), size = new THREE.Vector3();
+        for (const { card, widx } of _loadoutCards) {
+          const source = weaponModels[widx]?.userData.gun;
+          if (!source) continue;
+          const model = source.clone();
+          const grips = [];
+          model.traverse(node => {
+            if (/grip[RL]$|hand|sleeve/i.test(node.name)) grips.push(node);
+          });
+          for (const grip of grips) grip.removeFromParent();
+          model.position.set(0, 0, 0);
+          model.rotation.set(0, 0, 0);
+          model.visible = true;
+          display.add(model);
+          const box = new THREE.Box3().setFromObject(model);
+          box.getCenter(center);
+          box.getSize(size);
+          const extent = Math.max(size.z * .56, size.y * 1.32, size.x * .67);
+          lens.left = -extent; lens.right = extent;
+          lens.top = extent / 2.25; lens.bottom = -lens.top;
+          lens.position.copy(center).add(new THREE.Vector3(4.3, .88, -1.75));
+          lens.lookAt(center);
+          lens.updateProjectionMatrix();
+          preview.render(display, lens);
+          const canvas = card.querySelector("canvas");
+          canvas.width = 270;
+          canvas.height = 120;
+          canvas.removeAttribute("style");
+          canvas.getContext("2d").drawImage(preview.domElement, 0, 0);
+          display.remove(model);
+        }
+      } catch (error) {
+        console.warn("[backpack] weapon preview", error);
+      } finally {
+        preview?.dispose();
       }
     }
 
@@ -20059,7 +24080,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         const cur = kind === "helmet" ? armorHelmet : armorVest;
         for (const { el, i, piece } of _armorCards[kind]) {
           const sel = i === cur;
-          el.style.cssText = loadoutCardStyle(sel, false) + "width:132px;";
+          el.setAttribute("aria-pressed", String(sel));
           const cost = kind === "helmet"
             ? `${tr("armorFov", "view")} ${pct(piece.fovMul)} · ${tr("armorSense", "sense")} ${pct(piece.hitFade)}`
             : `${tr("armorSpeed", "speed")} ${pct(piece.speedMul)} · ${tr("armorAction", "actions")} ${pct(1 / piece.actionMul)}`;
@@ -20079,8 +24100,9 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       for (const { card, nm, widx } of _loadoutCards) {
         const locked = !weaponUnlocked[widx];
         const sel = loadoutGuns.includes(widx);
-        card.style.cssText = loadoutCardStyle(sel, locked);
-        const slot = sel ? ` <span style="color:#4fd1ff;">[${loadoutGuns.indexOf(widx) + 1}]</span>` : "";
+        card.disabled = locked;
+        card.setAttribute("aria-pressed", String(sel));
+        const slot = sel ? ` <span>[${loadoutGuns.indexOf(widx) + 1}]</span>` : "";
         nm.innerHTML = locked
           ? `${weaponDisplayName(widx)} 🔒`
           : `${weaponDisplayName(widx)}${slot}`;
@@ -20125,8 +24147,13 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
        * the code we typed (join-by-code). The *display* room code is tagged with the variant so a
        * friend who joins by it builds the same map. activeRoomId stays the real server roomKey.
        */
+      if (roomOpts?.options && pendingLobbyMode === "boss-coop") {
+        BOSS_HELL_MODE = roomOpts.options.hell === true;
+        BOSS_FIGHT_COUNT = BOSS_HELL_MODE ? 1 : THREE.MathUtils.clamp(roomOpts.options.bosses | 0, 1, 3);
+      }
       if (pendingLobbyMode === "crossfire") {
-        mapName = PENDING_PVP_MAP === "crossfire_grid" ? "crossfire_grid" : "crossfire";
+        const chosen = (PENDING_PVP_MAP && PENDING_PVP_MAP !== "crossfire" ? PENDING_PVP_MAP : roomOpts?.map) || PENDING_PVP_MAP;
+        mapName = pvpMaps.MAPS[chosen] ? chosen : "crossfire";
         PENDING_PVP_MAP = mapName;
         ROOM_CODE = makePvpShareCode(ROOM_CODE, mapName);
       }
@@ -20142,12 +24169,15 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       const b = document.createElement("button");
       b.type = "button";
       b.id = "btnGauntlet";
+      b.dataset.i18n = "btnGauntlet";
       b.textContent = tr("btnGauntlet", "GAUNTLET");
       b.addEventListener("click", () => { refreshGauntletPanel(); showMenuPanel("menuGauntlet"); });
       host.appendChild(b);
+      applyMenuDescriptions();
     })();
 
     document.getElementById("btnStart").addEventListener("click", () => showMenuPanel("menuStart"));
+    document.getElementById("btnMenuHome").addEventListener("click", () => showMenuPanel("menuMain"));
     document.getElementById("btnStartBack").addEventListener("click", () => showMenuPanel("menuMain"));
 
     btnArena.addEventListener("click", () => showMenuPanel("menuArenaMode"));
@@ -20170,6 +24200,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       renderAchievementsPanel();
       m.classList.add("open");
       m.style.display = "flex";
+      document.getElementById("btnCloseAchievements").focus({ preventScroll: true });
       // Hide the floating trophy icon so it doesn't sit on top of the modal's
       // own close button (the trophy is fixed bottom-right, the close is
       // fixed top-right inside the shell).
@@ -20182,7 +24213,10 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       m.classList.remove("open");
       m.style.display = "none";
       const trophy = document.getElementById("btnAchievements");
-      if (trophy) trophy.style.visibility = "";
+      if (trophy) {
+        trophy.style.visibility = "";
+        trophy.focus({ preventScroll: true });
+      }
       // Clear the detail panel so the next open starts fresh.
       const d = document.getElementById("achDetail");
       if (d) d.style.display = "none";
@@ -20230,22 +24264,21 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     function selectBossCount(count) {
       BOSS_FIGHT_COUNT = count;
       for (const b of document.querySelectorAll(".bossDiffBtn")) {
-        b.style.background = b.dataset.bossCount === String(count) ? "rgba(79,209,255,0.25)" : "transparent";
+        b.setAttribute("aria-pressed", String(b.dataset.bossCount === String(count)));
       }
       setHellButtonActive(false);
     }
 
     /** Clear every boss-count highlight (used when hell mode takes over the fight). */
     function clearBossDiffSelection() {
-      for (const b of document.querySelectorAll(".bossDiffBtn")) b.style.background = "transparent";
+      for (const b of document.querySelectorAll(".bossDiffBtn")) b.setAttribute("aria-pressed", "false");
     }
 
     /** Toggle the HELL MODE button look (active = lit red, inactive = dimmed). */
     function setHellButtonActive(active) {
       const hellBtn = document.getElementById("btnBossHell");
       if (!hellBtn) return;
-      hellBtn.style.background = active ? "rgba(255,34,68,0.50)" : "rgba(255,34,68,0.22)";
-      hellBtn.style.borderColor = active ? "#ff6688" : "#ff2244";
+      hellBtn.setAttribute("aria-pressed", String(active));
     }
 
     // Hell mode is a standalone mode: it always fights a single boss (that then
@@ -20255,7 +24288,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       const row = document.getElementById("bossCountRow");
       if (!row) return;
       row.style.opacity = enabled ? "1" : "0.35";
-      row.style.pointerEvents = enabled ? "auto" : "none";
+      for (const button of row.querySelectorAll("button")) button.disabled = !enabled;
     }
 
     document.getElementById("btnBossHell").addEventListener("click", () => {
@@ -20301,7 +24334,6 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
 
     btnCrossfire.addEventListener("click", () => {
       pendingLobbyMode = "crossfire";
-      drawPvpMapPreviews();
       showMenuPanel("menuPvpMaps");
     });
 
@@ -20311,6 +24343,14 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     });
     btnPvpMapGrid.addEventListener("click", () => {
       PENDING_PVP_MAP = "crossfire_grid";
+      showLobby("crossfire", tr("lobbyCrossfire", "PVP"));
+    });
+    btnPvpMapRuins.addEventListener("click", () => {
+      PENDING_PVP_MAP = "pvp_ruins";
+      showLobby("crossfire", tr("lobbyCrossfire", "PVP"));
+    });
+    btnPvpMapTown.addEventListener("click", () => {
+      PENDING_PVP_MAP = "pvp_town";
       showLobby("crossfire", tr("lobbyCrossfire", "PVP"));
     });
 
@@ -20326,7 +24366,11 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       // The relay only knows predefined modes; the chosen map travels in the share code we hand
       // back, so a friend who joins by that code lands on the same map.
       _pendingServerMode = pendingLobbyMode;
-      socket.emit(eventName, _pendingServerMode, (res) => {
+      socket.emit(eventName, {
+        // The relay knows two PVP maps; the other two are named by the share code like the rest.
+        mode: _pendingServerMode, map: pendingLobbyMode === "crossfire" && !(PENDING_PVP_MAP === "crossfire" || PENDING_PVP_MAP === "crossfire_grid") ? "crossfire" : lobbyMapFromPending(),
+        bosses: BOSS_FIGHT_COUNT, hell: BOSS_HELL_MODE,
+      }, (res) => {
         if (res == null) {
           showLobbyErr(tr("mpNoServerAck", "No response from server."));
           return;
@@ -20336,7 +24380,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           showLobbyErr(norm.error);
           return;
         }
-        beginMultiplayerGame(lobbyMapFromPending(), { roomKey: norm.roomKey, roomCode: norm.roomCode });
+        beginMultiplayerGame(norm.map || lobbyMapFromPending(), norm);
       });
     }
 
@@ -20348,6 +24392,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       codeInput.value = "";
       clearLobbyErr();
       showMenuPanel("menuJoinCode");
+      codeInput.focus({ preventScroll: true });
     });
 
     btnCodeJoin.addEventListener("click", () => {
@@ -20393,7 +24438,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
             codeError.textContent = norm.error;
             return;
           }
-          beginMultiplayerGame(lobbyMapFromPending(), { roomKey: norm.roomKey, roomCode: norm.roomCode || code });
+          beginMultiplayerGame(norm.map || lobbyMapFromPending(), { ...norm, roomCode: norm.roomCode || code });
         });
       };
       tryJoin();
@@ -20405,7 +24450,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
 
     btnCodeBack.addEventListener("click", () => showMenuPanel("menuLobby"));
     btnLobbyBack.addEventListener("click", () => {
-      if (pendingLobbyMode === "crossfire") showMenuPanel("menuStart");
+      if (pendingLobbyMode === "crossfire") showMenuPanel("menuPvpMaps");
       else if (pendingLobbyMode === "training-coop") showMenuPanel("menuTrainingMode");
       else if (pendingLobbyMode === "boss-coop") showMenuPanel("menuBossDifficulty");
       else showMenuPanel("menuArenaMode");
@@ -20429,8 +24474,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     btnDeathSettings.addEventListener("click", () => openSettingsModal());
     btnDeathQuit.addEventListener("click", goToMenu);
     btnResume.addEventListener("click", () => {
-      hidePause();
-      renderer.domElement.requestPointerLock();
+      renderer.domElement.requestPointerLock()?.catch(() => {});
     });
     btnPauseSettings.addEventListener("click", () => openSettingsModal());
     btnPauseRestart.addEventListener("click", () => restartCurrentMap());
@@ -20439,10 +24483,11 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
 
     btnCloseSettings.addEventListener("click", () => closeSettingsModal());
     document.getElementById("btnCreatorUnlock").addEventListener("click", () => tryCreatorUnlock());
-    document.getElementById("btnDeleteAllData").addEventListener("click", () => {
-      if (!confirm(tr("deleteDataConfirm", "Delete all data? Unlock progress and kill records will be cleared. This cannot be undone."))) return;
+    document.getElementById("btnDeleteAllData").addEventListener("click", async () => {
+      const message = tr("deleteDataConfirm", "Delete all data? Unlock progress and kill records will be cleared. This cannot be undone.");
+      if (!await showSettingsPrompt(message, { cancel: true, acceptLabel: tr("btnDeleteAllData", "Delete all data") })) return;
       deleteAllGameData();
-      alert(tr("deleteDataDone", "All data deleted."));
+      await showSettingsPrompt(tr("deleteDataDone", "All data deleted."));
     });
     settingsModal.addEventListener("click", (e) => {
       if (e.target === settingsModal) closeSettingsModal();
@@ -20586,6 +24631,14 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     btnQualityPrev.addEventListener("click", () => cycleQuality(-1));
     btnQualityNext.addEventListener("click", () => cycleQuality(1));
 
+    for (const id of ["btnPostPrev", "btnPostNext"]) {
+      const btn = document.getElementById(id);
+      if (btn) btn.addEventListener("click", () => {
+        gameSettings.postFx = id === "btnPostNext";
+        syncSettingsUI();
+        saveGameSettings();
+      });
+    }
     btnTexturePrev.addEventListener("click", () => {
       gameSettings.texturesOn = false;
       syncSettingsUI();
@@ -20732,4 +24785,85 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       syncLoadoutPanel();
     } catch (e) {
       console.warn("[loadout] panel init failed:", e);
+    }
+
+    // Test hook, only with ?debug=1: lets a script drop the player anywhere on a gauntlet course
+    // and read the course back, so levels can be checked without playing them through.
+    if (new URLSearchParams(location.search).get("debug") === "1") {
+      window.__zn = {
+        THREE, player, camera, state, keys, scene, renderer,
+        get course() { return gauntletCourse; },
+        get progress() { return gauntletState; },
+        get post() { return postFx; },
+        setPost(on) { gameSettings.postFx = on; },
+        unpause() { hidePause(); },
+        goto(arc, height = 0, lookAhead = 6) {
+          const route = gauntletCourse.path;
+          const i = gauntletIndexAtArc(Math.max(0, arc)), c = route[i], n = route[Math.min(route.length - 1, i + lookAhead)];
+          const dx = n.x - c.x, dz = n.z - c.z;
+          player.position.set(c.x, c.y + 1.65 + height, c.z);
+          player.yaw = Math.atan2(-dx, -dz);
+          player.velocityY = 0;
+          player.onGround = height === 0;
+          gauntletState.progressIdx = i;
+          camera.position.copy(player.position);
+          return { x: c.x, y: c.y, z: c.z };
+        },
+        look(yaw, pitch = 0) { player.yaw = yaw; player.pitch = pitch; },
+        tp(x, y, z, yaw = 0, pitch = 0) { player.position.set(x, y + 1.65, z); player.velocityY = 0; player.yaw = yaw; player.pitch = pitch; camera.position.copy(player.position); },
+        get pvp() { return pvpWorld; },
+        get spawns() { const d = pvpDef(CURRENT_MAP); return d ? d.spawns : null; },
+        collidesAt(x, y, z) { return collidesWithWalls(new THREE.Vector3(x, y + 1.65, z)); },
+        collides(dx = 0, dz = 0) { return collidesWithWalls(new THREE.Vector3(player.position.x + dx, player.position.y, player.position.z + dz)); },
+        near(r = 2.5) {
+          const out = [];
+          forEachNearbyWallBox(player.position.x, player.position.z, (b) => {
+            if (b.min.x - r < player.position.x && b.max.x + r > player.position.x && b.min.z - r < player.position.z && b.max.z + r > player.position.z) {
+              out.push([+b.min.x.toFixed(2), +b.min.y.toFixed(2), +b.min.z.toFixed(2), +b.max.x.toFixed(2), +b.max.y.toFixed(2), +b.max.z.toFixed(2), b.wideTop ? "deck" : "", b.enemyOnly ? "enemy" : "", b.dyn ? "dyn" : ""].join(" "));
+            }
+          });
+          return out;
+        },
+        /**
+         * A clean still of the current view (no HUD, no weapon) at the given size, as a JPEG data URL.
+         * This is how the map-select covers in images/maps/ are made: teleport with `tp()`, then `capture()`.
+         */
+        capture(w = 1320, h = 780, quality = 0.9) {
+          const size = renderer.getSize(new THREE.Vector2()), dpr = renderer.getPixelRatio(), aspect = camera.aspect;
+          const hidden = camera.children.filter((c) => c.visible);
+          hidden.forEach((c) => { c.visible = false; });
+          renderer.setPixelRatio(1); renderer.setSize(w, h, false);
+          camera.aspect = w / h; camera.updateProjectionMatrix();
+          let usedPost = false;
+          if (postFx && postFxWanted()) { try { postFx.setSize(w, h, 1); postFx.update(0, { hurt: 0, fringe: 0 }); postFx.render(0); usedPost = true; } catch (_) { /* raw render below */ } }
+          if (!usedPost) renderer.render(scene, camera);
+          const url = renderer.domElement.toDataURL("image/jpeg", quality);
+          renderer.setPixelRatio(dpr); renderer.setSize(size.x, size.y, false);
+          camera.aspect = aspect; camera.updateProjectionMatrix();
+          if (postFx) postFx.setSize(size.x, size.y, dpr);
+          hidden.forEach((c) => { c.visible = true; });
+          return url;
+        },
+        stats() { return { boxes: wallBoxes.length, meshes: wallMeshes.length, props: gauntletProps.length, path: gauntletCourse?.path.length, length: gauntletCourse?.length, checkpoints: gauntletCourse?.checkpoints.length, calls: renderer.info.render.calls, tris: renderer.info.render.triangles }; },
+        /** Where a ray from (ox,oy,oz) along (dx,dy,dz) meets the first enemy: { t, zone } or null (hit-table testing). */
+        enemyHit(ox, oy, oz, dx, dy, dz) {
+          const ray = new THREE.Raycaster(new THREE.Vector3(ox, oy, oz), new THREE.Vector3(dx, dy, dz).normalize(), 0, 200);
+          let best = null;
+          for (const e of state.enemies) {
+            if (!e.alive) continue;
+            e.group.updateMatrixWorld(true);
+            const h = enemyHitAlongRay(ray, e);
+            if (h && (!best || h.t < best.t)) best = { t: +h.t.toFixed(2), zone: h.zone };
+          }
+          return best;
+        },
+        /** Runs the enemy simulation for `seconds` of game time at a fixed step, without waiting for frames (boss testing). */
+        sim(seconds = 1, step = 0.033, onStep = null) {
+          for (let t = 0; t < seconds; t += step) {
+            updateEnemies(step); updateBossProjectiles(step); updateBossTelegraphs();
+            if (onStep) onStep(t);
+          }
+          return state.enemies.filter((e) => e.isBoss).map((b) => ({ anim: b.bossAnimState, x: b.group.position.x, z: b.group.position.z, hp: b.hp }));
+        },
+      };
     }
