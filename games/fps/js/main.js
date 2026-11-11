@@ -11,7 +11,7 @@
     import { buildOperatorShell } from "./operator-model.js?v=1";
     import { createMissionConsole } from "./mission-console.js?v=2";
     import { extendGauntletCourses, GAUNTLET_CHAPTERS, GAUNTLET_CHAPTER_SIZE } from "./gauntlet-courses.js?v=5";
-    import { createGauntletRuntime } from "./gauntlet-runtime.js?v=15";
+    import { createGauntletRuntime } from "./gauntlet-runtime.js?v=16";
     import { createWorldAudio } from "./world-audio.js?v=4";
     import { createGauntletThemes } from "./gauntlet-themes.js?v=9";
     import { createPostFx, applyDisplayTone } from "./post-fx.js?v=4";
@@ -6246,13 +6246,25 @@
         }
         portalCamera.position.copy(camera.position).add(_portalOffset.copy(portal.partner).sub(portal.center));
         portalCamera.updateMatrixWorld(true);
-        portal.disc.visible = false;
-        renderer.shadowMap.autoUpdate = false;
-        renderer.setRenderTarget(portal.rt);
-        renderer.render(scene, portalCamera);
-        renderer.setRenderTarget(null);
-        renderer.shadowMap.autoUpdate = autoUpdate;
-        portal.disc.visible = true;
+        const previousTarget = renderer.getRenderTarget();
+        const sourceVisible = portal.disc.visible;
+        const exitGate = portal.partnerGate;
+        const exitVisible = exitGate?.visible;
+        try {
+          // Hide the exit assembly in its own view. The virtual camera is already just
+          // before the exit plane, so its opening reveals the actual scene beyond it.
+          // This prevents a stale, recursively sampled portal image from replacing that view.
+          portal.disc.visible = false;
+          if (exitGate) exitGate.visible = false;
+          renderer.shadowMap.autoUpdate = false;
+          renderer.setRenderTarget(portal.rt);
+          renderer.render(scene, portalCamera);
+        } finally {
+          renderer.setRenderTarget(previousTarget);
+          renderer.shadowMap.autoUpdate = autoUpdate;
+          portal.disc.visible = sourceVisible;
+          if (exitGate) exitGate.visible = exitVisible;
+        }
       }
     }
 
@@ -6827,13 +6839,13 @@
           },
           explode(x, y, z) { spawnExplosionFx(x, y, z); },
           shift(dx, dy, dz) {
-            // Portal crossing: a pure translation, so the view is continuous. Velocity is kept.
+            // Apply the same translation used by the live portal view, preserving the player's
+            // view direction and velocity so crossing stays smooth instead of snapping.
             player.position.x += dx;
             player.position.y += dy;
             player.position.z += dz;
             player.fallApexY = null;
             state.camBaseY = undefined;
-            addCamKick({ fov: 9, pitch: 0.012 });
           },
           damage: amount => damagePlayer(amount, null, "body", -1, true),
           signal: kind => {

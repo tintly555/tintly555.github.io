@@ -812,9 +812,8 @@ export function createGauntletArt(THREE, { decorate, solid, scroll, spin, tick, 
   }
 
   // ---- Portals ----------------------------------------------------------------------------
-  // A portal is a gate whose opening shows the real view from the other end (the game renders a
-  // second camera, shifted by the portal offset, into a render target that this shader samples in
-  // screen space). The rim refracts and glows; crossing it is a continuous translation.
+  // A portal is a gate whose opening shows the real view from the other end. The rim can glow,
+  // but the scene image itself stays undistorted so geometry lines up across the threshold.
   const portals = [];
   const PORTAL_RADIUS = 1.15, PORTAL_LIFT = 1.8, PORTAL_STRETCH = 1.4;   // a doorway: 2.3 m wide, 3.2 m tall
   function portalMaterial(tone) {
@@ -827,18 +826,12 @@ export function createGauntletArt(THREE, { decorate, solid, scroll, spin, tick, 
         uniform sampler2D tView; uniform vec2 uRes; uniform float uTime; uniform vec3 uTint; varying vec2 vUv;
         void main() {
           vec2 p = vUv * 2.0 - 1.0;
-          float r = length(p);
           vec2 uv = gl_FragCoord.xy / uRes;
-          float rim = smoothstep(0.5, 1.0, r);
-          float swirl = uTime * 1.6 + r * 7.0 + atan(p.y, p.x) * 2.0;
-          vec2 warp = vec2(cos(swirl), sin(swirl)) * rim * rim * 0.045;
-          vec3 col;
-          col.r = texture2D(tView, uv + warp * 1.25).r;
-          col.g = texture2D(tView, uv + warp).g;
-          col.b = texture2D(tView, uv + warp * 0.75).b;
-          float flow = 0.5 + 0.5 * sin(swirl * 1.7 - uTime * 2.2);
-          col = mix(col, uTint * 0.9, rim * 0.28 * flow);
-          col += uTint * pow(rim, 5.0) * (0.8 + 0.5 * flow);
+          float rim = smoothstep(0.88, 0.99, length(p));
+          float pulse = 0.5 + 0.5 * sin(uTime * 1.8);
+          vec3 col = texture2D(tView, uv).rgb;
+          col = mix(col, uTint, rim * (0.10 + 0.035 * pulse));
+          col += uTint * rim * (0.035 + 0.025 * pulse);
           gl_FragColor = vec4(col, 1.0);
           #include <tonemapping_fragment>
           #include <colorspace_fragment>
@@ -878,7 +871,7 @@ export function createGauntletArt(THREE, { decorate, solid, scroll, spin, tick, 
     group.add(disc);
     add(group);
     portals.push({
-      disc, uniforms: material.uniforms, rt: null,
+      group, disc, uniforms: material.uniforms, rt: null,
       center: new THREE.Vector3(x, y + PORTAL_LIFT, z),
       partner: new THREE.Vector3(partner.x, partner.y + PORTAL_LIFT, partner.z),
     });
@@ -916,7 +909,10 @@ export function createGauntletArt(THREE, { decorate, solid, scroll, spin, tick, 
     }
     if (kind === "portal" && toWorld) {
       const entry = portalGate(tone, x, y, z, toWorld);
-      portalGate(tone, toWorld.x, toWorld.y, toWorld.z, { x, y, z });
+      const exit = portalGate(tone, toWorld.x, toWorld.y, toWorld.z, { x, y, z });
+      const entryPortal = portals[portals.length - 2], exitPortal = portals[portals.length - 1];
+      entryPortal.partnerGate = exit.parent;
+      exitPortal.partnerGate = entry.parent;
       return { mesh: entry };
     }
     if (["portal", "airKick", "fuel"].includes(kind)) {
