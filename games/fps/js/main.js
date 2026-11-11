@@ -914,7 +914,9 @@
     let bossShakeTimerMs = 0;           // ms elapsed (advances only when boss alive)
     // ── Speed Needle constants ──────────────────────────────────────────────
     const NEEDLE_INJECT_DUR_MS = 680;   // ms: injection animation
-    const NEEDLE_BOOST_MS      = 5000;  // ms: speed ×2
+    const PLAYER_SPEED_FACTOR = 7 / 6;
+    const NEEDLE_BOOST_MULT = 2 * (3 / 2) / PLAYER_SPEED_FACTOR;
+    const NEEDLE_BOOST_MS      = 5000;  // ms: 50% faster than the previous boosted speed
     const NEEDLE_WEAK_MS       = 5000;  // ms: speed ×0.25 (weakness after)
     // ── Jet harness (P) ─────────────────────────────────────────────────────
     // Strap-on thruster. Costs JET_STRAP_MS to put on (vulnerable — no firing, no dash),
@@ -7647,7 +7649,7 @@
       yaw: 0,
       pitch: 0,
       radius: 0.34,
-      speed: 6.5 * 7 / 6,
+      speed: 6.5 * PLAYER_SPEED_FACTOR,
       health: 100,
       maxHealth: 100,
       regenTimer: 0,
@@ -20024,7 +20026,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       let _wishX = 0, _wishZ = 0;
       if (move.lengthSq() > 0) {
         const _ndPhase = state.speedNeedle.phase;
-        const _ndMult = (_ndPhase === 'boost' ? 3.0 : _ndPhase === 'weak' ? 0.25 : 1.0)
+        const _ndMult = (_ndPhase === 'boost' ? NEEDLE_BOOST_MULT : _ndPhase === 'weak' ? 0.25 : 1.0)
           * (1 - (1 - CROUCH_SPEED_MUL) * crouchAmt)
           * (isJetActive() && !player.onGround ? 1.3 : 1)   // under power you move faster than you walk
           * myVest().speedMul;   // heavier vest, slower walk
