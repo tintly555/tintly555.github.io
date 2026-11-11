@@ -931,8 +931,8 @@
      * cools down when its flight window closes.
      */
     const JET_COOLDOWN_MS     = 10000;
-    const SAFE_FALL_DROP = 3;
-    const FATAL_FALL_DROP = 12;
+    const SAFE_FALL_DROP = 4.5;
+    const FATAL_FALL_DROP = 24;
     const JET_BRAKED_FALL_SPEED = -6;
     let hellLootRing = null;       // 地狱boss死亡光圈
 
@@ -9401,7 +9401,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     function fallDamage(drop) {
       if (drop <= SAFE_FALL_DROP + 1e-5) return 0;
       const severity = THREE.MathUtils.clamp((drop - SAFE_FALL_DROP) / (FATAL_FALL_DROP - SAFE_FALL_DROP), 0, 1);
-      return Math.ceil(player.maxHealth * severity ** 1.35);
+      return Math.ceil(player.maxHealth * severity ** 1.55);
     }
 
     /**
@@ -13056,10 +13056,15 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       let ammo = String(w.ammo), mag = "/ " + w.magSize, ammoState = "ok";
       if (state.weaponIndex === 7) { ammo = ""; mag = ""; }
       else if (state.weaponIndex === 8) { ammo = "∞"; mag = ""; }
-      else if (state.weaponIndex === 4) { mag = ""; }
+      else if (state.weaponIndex === 4) { ammo = ""; mag = ""; }
       else if (state.reloading) ammoState = "reload";
       else if (w.ammo <= 0) ammoState = "empty";
       else if (w.ammo <= Math.max(1, Math.floor(w.magSize * 0.25))) ammoState = "low";
+      const ammoRow = _hudEls.haAmmo?.parentElement;
+      if (ammoRow) {
+        const display = state.weaponIndex === 4 ? "none" : "";
+        if (ammoRow.style.display !== display) ammoRow.style.display = display;
+      }
       _setText("haAmmo", ammo);
       _setText("haMag", mag);
       _setText("haWeapon", weaponDisplayName(state.weaponIndex));
@@ -18607,7 +18612,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     let _altTextEl = null;
     let _altTickEl = null;
     /** Top of the scale — a bit above the lethal line so the red band is visible. */
-    const ALT_GAUGE_MAX = 20;
+    const ALT_GAUGE_MAX = 30;
 
     function buildAltGauge() {
       if (_altGaugeEl) return;
