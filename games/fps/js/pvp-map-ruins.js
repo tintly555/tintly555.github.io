@@ -36,10 +36,11 @@ export function ruins(core) {
     half: H,
     spawns: SPAWNS,
     env: {
+      water: true,
       bg: 0xa9c9cc, fog: 0xa9c9cc, fogNear: 30, fogFar: 250, bright: true,
       hemi: [0xcfe4f6, 0x58653b, 0.8], sun: [0xfff0d2, 3.4, [-34, 52, 24]], shadow: 62, envIntensity: 0.85,
       sky: { sun: [-34, 52, 24], zenith: 0x3b78bf, horizon: 0xb4d2d4, ground: 0x52623c, sunColor: 0xfff0cf, cloud: 0.5 },
-      look: { tint: 0xfff6e2, vignette: 0.26, bloom: 0.3, threshold: 1.3, saturation: 1.08 },
+      look: { tint: 0xfff6e2, vignette: 0.26, bloom: 0.16, threshold: 1.65, saturation: 1.08 },
     },
     preview: { eye: 1.7, path: [[-35, 14], [-26, 8], [-24, 0], [-14, 0], [-14, -14], [0, -22], [16, -16], [24, 0], [18, 14], [0, 24], [-18, 22], [-35, 14]] },
 

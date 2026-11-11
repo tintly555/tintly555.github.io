@@ -1,4 +1,5 @@
 import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.182.0/build/three.module.js";
+import { BOSS_WATER_GLSL, BOSS_WATER_Y, bossWaterGeometry } from "./water-shape.js";
 
 export const BOSS_ARENA_HALF = 50;
 
@@ -153,6 +154,26 @@ export function createCombatEnvironment(kind, wall, targets = []) {
   floor.position.set(0, -.014, training ? -11 : 0);
   floor.receiveShadow = true;
   root.add(floor);
+  if (!training) {
+    const water = new THREE.MeshStandardMaterial({
+      color: 0x293941, metalness: .18, roughness: .13, transparent: true, depthWrite: true,
+    });
+    water.onBeforeCompile = shader => {
+      shader.vertexShader = "varying vec3 vPuddleWorld;\n" + shader.vertexShader.replace("#include <project_vertex>",
+        "#include <project_vertex>\nvPuddleWorld=(modelMatrix*vec4(transformed,1.0)).xyz;");
+      shader.fragmentShader = "varying vec3 vPuddleWorld;\n" + BOSS_WATER_GLSL + shader.fragmentShader
+        .replace("#include <opaque_fragment>", `
+          float edge=bossWaterBank(vPuddleWorld.xz);
+          float fres=pow(1.-max(0.,dot(normalize(normal),normalize(vViewPosition))),3.);
+          diffuseColor.a=(.29+.53*fres)*smoothstep(0.,.22,edge);
+          #include <opaque_fragment>`);
+    };
+    const puddles = new THREE.Mesh(bossWaterGeometry(THREE), water);
+    puddles.position.y = BOSS_WATER_Y;
+    puddles.receiveShadow = true;
+    puddles.raycast = () => {};
+    root.add(puddles);
+  }
   return root;
 }
 

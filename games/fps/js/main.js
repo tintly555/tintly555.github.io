@@ -3,18 +3,20 @@
     import { RoundedBoxGeometry } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/geometries/RoundedBoxGeometry.js";
     import { mergeGeometries, toCreasedNormals } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/utils/BufferGeometryUtils.js";
     import { clone as cloneSkinnedModel } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/utils/SkeletonUtils.js";
-    import { createPvpMaps } from "./pvp-maps.js?v=33";
-    import { createPvpWorld } from "./pvp-world.js?v=2";
+    import { createPvpMaps } from "./pvp-maps.js?v=34";
+    import { createPvpWorld } from "./pvp-world.js?v=3";
     import { createBossNavigation } from "./boss-navigation.js?v=1";
-    import { BOSS_ARENA_HALF, createCombatEnvironment } from "./combat-environments.js?v=5";
+    import { BOSS_ARENA_HALF, createCombatEnvironment } from "./combat-environments.js?v=6";
     import { createBossCreature, BOSS_RADIUS, CLAW_STRIKE_S, QUAKE_SLAM_S, LOB_RELEASE_S, DURATIONS as BOSS_DURATIONS } from "./boss-creature.js?v=8";
     import { buildOperatorShell } from "./operator-model.js?v=1";
     import { createMissionConsole } from "./mission-console.js?v=2";
     import { extendGauntletCourses, GAUNTLET_CHAPTERS, GAUNTLET_CHAPTER_SIZE } from "./gauntlet-courses.js?v=5";
     import { createGauntletRuntime } from "./gauntlet-runtime.js?v=15";
     import { createWorldAudio } from "./world-audio.js?v=4";
-    import { createGauntletThemes } from "./gauntlet-themes.js?v=8";
-    import { createPostFx } from "./post-fx.js?v=2";
+    import { createGauntletThemes } from "./gauntlet-themes.js?v=9";
+    import { createPostFx, applyDisplayTone } from "./post-fx.js?v=4";
+    import { DEFAULT_FX, loadFxSettings, mountFxSettings } from "./post-fx-settings.js";
+    import { createImpactFx } from "./impact-fx.js";
     import { poseZombieVariant } from "./zombie-variants.js?v=5";
     import { BOSS_IMPACT, ZOMBIE_MELEE, zombieStrikeClipPhase, zombieGait } from "./zombie-motion.js";
     import { ZOMBIE_LOOK_COUNT, loadZombieCharacterMeshes } from "./zombie-character-meshes.js?v=1";
@@ -25,7 +27,7 @@
     // import + catch is kept so a missing/renamed i18n file still lets the menu boot with a minimal stub.
     let GAME_I18N, LANG_META, translateGame;
     try {
-      const _i18n = await import("./translation.js?v=20261113-pvp-tags-v1");
+      const _i18n = await import("./translation.js?v=20261113-pvp-fx");
       GAME_I18N     = _i18n.GAME_I18N;
       LANG_META     = _i18n.LANGUAGE_OPTIONS;
       translateGame = _i18n.translate;
@@ -43,7 +45,7 @@
     const hud = document.getElementById("hud");
     const fpsValueEl = document.getElementById("fpsValue");
     const hint = document.getElementById("hint");
-    const flash = document.getElementById("flash");
+    const impactFx = createImpactFx(document.getElementById("impactFx"));
     const crosshairEl = document.getElementById("crosshair");
     const amrScopeOverlayEl = document.getElementById("amrScopeOverlay");
     const medKitReticleEl = document.getElementById("medkitReticle");
@@ -362,6 +364,7 @@
       soundVolume: 1,
       qualityIndex: 1,
       postFx: true,
+      effects: { ...DEFAULT_FX },
       texturesOn: true,
       renderDistanceIndex: 2,
       mouseDpi: MOUSE_DPI_DEFAULT,
@@ -388,6 +391,7 @@
         if (typeof o.musicVolume === "number") gameSettings.musicVolume = THREE.MathUtils.clamp(o.musicVolume, 0, 1);
         if (typeof o.soundVolume === "number") gameSettings.soundVolume = THREE.MathUtils.clamp(o.soundVolume, 0, 1);
         if (typeof o.postFx === "boolean") gameSettings.postFx = o.postFx;
+        gameSettings.effects = loadFxSettings(o.effects);
         if (typeof o.qualityIndex === "number") gameSettings.qualityIndex = THREE.MathUtils.clamp(o.qualityIndex | 0, 0, QUALITY_LEVELS.length - 1);
         if (typeof o.texturesOn === "boolean") gameSettings.texturesOn = o.texturesOn;
         if (typeof o.renderDistanceIndex === "number") {
@@ -1773,7 +1777,7 @@
       reportArmorAbsorb(rawNet - netDmg);
       player.health = Math.max(0, player.health - netDmg);
       player.regenTimer = 0;
-      state.flashTimer = 0.14;
+      showDamageImpact(netDmg, data.x, data.z);
       addHitIndicator(data.x || 0, data.z || 0);
       triggerCamShake(0.085);
       playReceivedDamageSound(data.hitKind === "melee" ? "melee" : "bullet");
@@ -1927,6 +1931,19 @@
       }
       closeChat();
       renderer.domElement.requestPointerLock();
+    }
+
+    function showDamageImpact(amount, x, z) {
+      let angle = Math.PI * (.27 + Math.random() * .46);
+      if (Number.isFinite(x) && Number.isFinite(z)) {
+        const dx = x - player.position.x, dz = z - player.position.z;
+        if (Math.abs(dx) + Math.abs(dz) > .01) {
+          const side = dx * Math.cos(player.yaw) - dz * Math.sin(player.yaw);
+          const forward = -dx * Math.sin(player.yaw) - dz * Math.cos(player.yaw);
+          angle = Math.atan2(-forward, side);
+        }
+      }
+      impactFx.hit(amount, angle, gameSettings.effects.blood);
     }
 
     function addHitIndicator(fromX, fromZ) {
@@ -2851,6 +2868,11 @@
       return Math.min(getQualityPreset().dpr, dpr);
     }
 
+    function getPostFxRenderScale() {
+      if (!gameWorldReady || !postFxWanted()) return 1;
+      return ({ regular: 0.82, high: 0.90, extreme: 0.96 })[getQualityId()] ?? 1;
+    }
+
     /** Camera motion cannot depend on quality: lower settings must not make aiming easier. */
     function getQualityPresentationScale() {
       return 1;
@@ -3057,8 +3079,14 @@
       if (atmosphericFog) applyAtmosphericFogQuality();
     }
 
-    // ── Post-processing (bloom, grade, anti-aliasing; see js/post-fx.js) ──────────────────
+    // ── Post-processing ──────────────────
     let postFx = null, postFxBroken = false, _postW = 0, _postH = 0, _postDpr = 0, _postLookKey = "";
+    let postConfigDirty = true, postTier = "", fallbackBlur = "";
+    const bossOptics = { water: "puddles" };
+    const syncFxControls = mountFxSettings(document.getElementById("fxSettings"), () => gameSettings.effects, saveGameSettings, () => {
+      postConfigDirty = true;
+      applyDisplayTone(THREE, renderer, gameSettings.effects, FAIR_PRESENTATION.exposure);
+    });
     const POST_LOOKS = {
       "ashen-city": { tint: 0xfff2e4, vignette: 0.38, bloom: 0.4 },
       foundry: { tint: 0xffe8d0, vignette: 0.4, bloom: 0.55, threshold: 0.85 },
@@ -3089,17 +3117,34 @@
       }
       const fogLook = wantFogDisplayLook();
       if (fogLook !== fogDisplayLook) { fogDisplayLook = fogLook; applySceneFogAndCameraFar(); }
-      if (!postFxWanted() || !gameWorldReady) { renderer.render(scene, camera); return; }
+      const usePost = postFxWanted() && gameWorldReady;
+      const cfg = gameSettings.effects;
+      const hurt = gameWorldReady ? THREE.MathUtils.clamp(1 - player.health / (player.maxHealth * .43), 0, 1) : 0;
+      const needle = state.speedNeedle;
+      const weakGoal = gameWorldReady && needle.phase === "weak"
+        ? cfg.weakness * (.52 + .48 * THREE.MathUtils.smoothstep(needle.timer, 0, 1200)) : 0;
+      const weak = impactFx.update(dt, weakGoal, hurt, usePost, cfg.blood);
+      const blur = !usePost && weak > .018 ? `blur(${(weak * 2.1).toFixed(2)}px)` : "";
+      if (blur !== fallbackBlur) { renderer.domElement.style.filter = blur; fallbackBlur = blur; }
+      if (!usePost) { renderer.render(scene, camera); return; }
       try {
         const size = renderer.getSize(_postSizeVec), dpr = renderer.getPixelRatio();
         if (!postFx) {
           postFx = createPostFx(THREE, renderer, scene, camera, { width: size.x, height: size.y, pixelRatio: dpr });
+          postConfigDirty = true;
           _postW = size.x; _postH = size.y; _postDpr = dpr;
         } else if (size.x !== _postW || size.y !== _postH || dpr !== _postDpr) {
           postFx.setSize(size.x, size.y, dpr);
           _postW = size.x; _postH = size.y; _postDpr = dpr;
         }
         const key = CURRENT_MAP + (isGauntletMap(CURRENT_MAP) ? currentGauntletTheme().id : "");
+        const environment = pvpDef(CURRENT_MAP)?.env || (isBossArenaMap(CURRENT_MAP) ? bossOptics : null);
+        const quality = getQualityId();
+        if (postConfigDirty || postTier !== quality || key !== _postLookKey) {
+          postFx.configure(cfg, quality, environment);
+          postConfigDirty = false;
+          postTier = quality;
+        }
         if (key !== _postLookKey) {
           _postLookKey = key;
           if (isGauntletMap(CURRENT_MAP)) postFx.look(POST_LOOKS[currentGauntletTheme().id] || {});
@@ -3109,12 +3154,16 @@
           else if (isBrightIndoorMap(CURRENT_MAP) || isTrainingMap(CURRENT_MAP)) postFx.look({ vignette: 0.22, bloom: 0.2, threshold: 1.4 });
           else postFx.look({ vignette: 0.42, bloom: 0.4, contrast: 1.08 });
         }
-        const hurt = player.health > 0 ? THREE.MathUtils.clamp((0.4 - player.health / player.maxHealth) / 0.4, 0, 1) : 1;
-        postFx.update(dt, { hurt, fringe: performance.now() < state.dashActiveUntil ? 0.004 : 0 });
+        postFx.update(dt, { weak, aiming: state.adsProgress > .50,
+          fringe: performance.now() < state.dashActiveUntil ? .006 : 0,
+          waterTime: environment?.water ? Date.now() / 1000 % 1024 : 0 });
         postFx.render(dt);
       } catch (e) {
         console.warn("[post-fx] disabled:", e);
         postFxBroken = true;
+        postFx?.dispose();
+        postFx = null;
+        renderer.setRenderTarget(null);
         renderer.render(scene, camera);
       }
     }
@@ -3131,8 +3180,7 @@
     /** Local rendering: tone mapping, capped resolution, shadows, fog distance, textures — each step should look more realistic, not just heavier. */
     function applyGraphicsQuality() {
       const p = getQualityPreset();
-      renderer.toneMapping = THREE.ACESFilmicToneMapping;
-      renderer.toneMappingExposure = FAIR_PRESENTATION.exposure;
+      applyDisplayTone(THREE, renderer, gameSettings.effects, FAIR_PRESENTATION.exposure);
       renderer.shadowMap.type = p.shadowSoft ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
       const themedSun = pvpMaps.MAPS[CURRENT_MAP] && pvpMaps.MAPS[CURRENT_MAP].env.shadow;
       moon.shadow.mapSize.set(themedSun ? Math.max(p.shadowSz, 2048) : p.shadowSz, themedSun ? Math.max(p.shadowSz, 2048) : p.shadowSz);
@@ -3187,7 +3235,10 @@
         h = Math.max(2, Math.min(8192, h));
         const aspect = w / h;
         if (!Number.isFinite(aspect) || aspect <= 0) return;
-        const desiredDpr = getPixelRatioForQuality() * resolutionScale;
+        // Post FX adds several full-frame passes. Render the 3D scene a little smaller
+        // while those passes are active; FXAA softens the final upscale without another
+        // blur pass or its extra GPU cost.
+        const desiredDpr = getPixelRatioForQuality() * resolutionScale * getPostFxRenderScale();
         const sizeChanged = w !== appliedRendererWidth || h !== appliedRendererHeight;
         const dprChanged = Math.abs(desiredDpr - appliedRendererDpr) > 0.001;
         if (Math.abs(aspect - appliedCameraAspect) > 0.000001) {
@@ -7596,7 +7647,7 @@
       yaw: 0,
       pitch: 0,
       radius: 0.34,
-      speed: 6.5,
+      speed: 6.5 * 7 / 6,
       health: 100,
       maxHealth: 100,
       regenTimer: 0,
@@ -7636,7 +7687,6 @@
       adsProgress: 0,
       adsFiredWhileScoping: false,
       score: 0,
-      flashTimer: 0,
       recoil: 0,
       weaponIndex: 0,
       lastShot: 0,
@@ -19974,7 +20024,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       let _wishX = 0, _wishZ = 0;
       if (move.lengthSq() > 0) {
         const _ndPhase = state.speedNeedle.phase;
-        const _ndMult = (_ndPhase === 'boost' ? 2.0 : _ndPhase === 'weak' ? 0.25 : 1.0)
+        const _ndMult = (_ndPhase === 'boost' ? 3.0 : _ndPhase === 'weak' ? 0.25 : 1.0)
           * (1 - (1 - CROUCH_SPEED_MUL) * crouchAmt)
           * (isJetActive() && !player.onGround ? 1.3 : 1)   // under power you move faster than you walk
           * myVest().speedMul;   // heavier vest, slower walk
@@ -19990,7 +20040,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         state.velX = state.velZ = 0;
       } else {
         const _hasWish = _wishX !== 0 || _wishZ !== 0;
-        const carryingMomentum = (!!gauntletRuntime && Math.hypot(state.velX, state.velZ) > player.speed + .8)
+        const carryingMomentum = (!!gauntletRuntime && Math.hypot(state.velX, state.velZ) > Math.max(player.speed, Math.hypot(_wishX, _wishZ)) + .8)
           || _nowMs < (state.wallJumpCarryUntil || 0);
         const _jetFlying = isJetActive() && !player.onGround;
         const steering = player.onGround ? (_hasWish ? 22 : 17) : _jetFlying ? (_hasWish ? 10 : 2.4) : carryingMomentum ? 1.2 : (_hasWish ? 7 : 1.2);
@@ -20352,7 +20402,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         state.speedNeedle.timer = NEEDLE_WEAK_MS;
         /* shown on the HUD / in the world, not as text */
       }
-      state.flashTimer = 0.14;
+      showDamageImpact(amount, attacker?.group?.position.x, attacker?.group?.position.z);
       triggerCamShake(0.095);
       {
         // The view snaps toward the side the hit came from, harder for bigger hits.
@@ -20603,6 +20653,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       textureLabel.textContent = gameSettings.texturesOn ? "ON" : "OFF";
       const postLabelEl = document.getElementById("postLabel");
       if (postLabelEl) postLabelEl.textContent = gameSettings.postFx !== false ? "ON" : "OFF";
+      syncFxControls?.();
       const rdi = THREE.MathUtils.clamp(
         gameSettings.renderDistanceIndex | 0,
         0,
@@ -21459,7 +21510,6 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
             + (body.z - _bbPrev.z - _bbSeg.z * t) ** 2 < BOSS_BALL_HIT_RADIUS ** 2;
         };
         if (player.health > 0 && inPath(playerBodyCenter(_bbBody))) {
-          state.flashTimer = 0.25;
           damagePlayer(bp.damage, null);
           destroyBossProjectile(i, true);
           continue;
@@ -22949,13 +22999,6 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         refreshChatVisibility();
       }
 
-      if (state.flashTimer > 0) {
-        state.flashTimer -= dt;
-        flash.style.background = "rgba(255,0,0,0.20)";
-      } else {
-        flash.style.background = "rgba(255,0,0,0)";
-      }
-
       if (state.hitmarkerTimer > 0) {
         state.hitmarkerTimer -= dt;
       } else {
@@ -22977,12 +23020,19 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
 
     function adjustRenderResolution(interval) {
       // Ignore isolated interruptions and use a rolling time budget so a single
-      // slow frame doesn't resize the canvas or change the image.
-      if (interval > .24) return;
-      slowRenderTime = interval > .037 ? slowRenderTime + interval : Math.max(0, slowRenderTime - interval * 2);
-      steadyRenderTime = interval < .020 ? steadyRenderTime + interval : 0;
-      const next = slowRenderTime > .82 ? Math.max(.56, resolutionScale - .11)
-        : steadyRenderTime > 6 ? Math.min(1, resolutionScale + .06) : resolutionScale;
+      // slow frame doesn't resize the canvas or change the image. Start scaling
+      // down near 30 FPS; the old 37 ms trigger waited until below 27 FPS.
+      if (interval > .24) {
+        // Count a large stall as a capped signal. One isolated hitch will not
+        // trigger a resize, while repeated long frames can still lower render cost.
+        slowRenderTime += .12;
+        steadyRenderTime = 0;
+      } else {
+        slowRenderTime = interval >= .032 ? slowRenderTime + interval : Math.max(0, slowRenderTime - interval * 2);
+        steadyRenderTime = interval < .023 ? steadyRenderTime + interval : 0;
+      }
+      const next = slowRenderTime > .48 ? Math.max(.52, resolutionScale - .10)
+        : steadyRenderTime > 4.5 ? Math.min(1, resolutionScale + .05) : resolutionScale;
       if (Math.abs(next - resolutionScale) < .001) return;
       resolutionScale = next;
       slowRenderTime = steadyRenderTime = 0;
@@ -22995,7 +23045,9 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       const dt = Math.min(rawDelta, 0.033);
       const frameStart = frameDiagnostics ? performance.now() : 0;
       if (document.visibilityState === "hidden" || !gameWorldReady) return;
-      if (!paused && player.health > 0 && (isTrainingMap(CURRENT_MAP) || isArenaLikeMap(CURRENT_MAP))) adjustRenderResolution(rawDelta);
+      if (!paused && player.health > 0 && (isTrainingMap(CURRENT_MAP) || isArenaLikeMap(CURRENT_MAP) || postFxWanted())) {
+        adjustRenderResolution(rawDelta);
+      }
       updateAtmosphericFog(dt);
       const audioNow = performance.now();
       publishPlayerState(audioNow);
@@ -23622,6 +23674,8 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
 
       state.score = 0;
       player.health = player.maxHealth;
+      impactFx.reset();
+      postFx?.resetHistory();
       if (MULTIPLAYER) {
         try {
           socket.emit("playerRespawn", { id: socket.id });
@@ -23745,6 +23799,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       pausePvpBgm();
       tryPlayMenuBgm();
       player.health = 100;
+      impactFx.reset();
       weaponRoot.visible = true;
       camera.fov = 75;
       camera.updateProjectionMatrix();
@@ -24635,6 +24690,9 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       const btn = document.getElementById(id);
       if (btn) btn.addEventListener("click", () => {
         gameSettings.postFx = id === "btnPostNext";
+        resolutionScale = 1;
+        slowRenderTime = steadyRenderTime = 0;
+        syncGameRendererSize();
         syncSettingsUI();
         saveGameSettings();
       });
@@ -24795,7 +24853,12 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         get course() { return gauntletCourse; },
         get progress() { return gauntletState; },
         get post() { return postFx; },
-        setPost(on) { gameSettings.postFx = on; },
+        setPost(on) {
+          gameSettings.postFx = on;
+          resolutionScale = 1;
+          slowRenderTime = steadyRenderTime = 0;
+          syncGameRendererSize();
+        },
         unpause() { hidePause(); },
         goto(arc, height = 0, lookAhead = 6) {
           const route = gauntletCourse.path;
@@ -24835,7 +24898,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           renderer.setPixelRatio(1); renderer.setSize(w, h, false);
           camera.aspect = w / h; camera.updateProjectionMatrix();
           let usedPost = false;
-          if (postFx && postFxWanted()) { try { postFx.setSize(w, h, 1); postFx.update(0, { hurt: 0, fringe: 0 }); postFx.render(0); usedPost = true; } catch (_) { /* raw render below */ } }
+          if (postFx && postFxWanted()) { try { postFx.setSize(w, h, 1); postFx.update(0, { waterTime: Date.now() / 1000 % 1024 }); postFx.render(0); usedPost = true; } catch (_) { /* raw render below */ } }
           if (!usedPost) renderer.render(scene, camera);
           const url = renderer.domElement.toDataURL("image/jpeg", quality);
           renderer.setPixelRatio(dpr); renderer.setSize(size.x, size.y, false);

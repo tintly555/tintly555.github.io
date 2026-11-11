@@ -49,3 +49,52 @@ vec2 waterSlope(vec2 p,float t){
     .054*cos(dot(p,vec2(-3.2,5.5))+1.1*t)+.022*cos(dot(p,vec2(12.0,8.8))-.7*t));
 }
 `;
+
+export const BOSS_WATER_Y = .029;
+const BOSS_PUDDLES = [
+  [-20.4, -15.6, 3.3, 1.25, .4], [19.8, 14.6, 1.33, 2.75, 1.6],
+  [11.2, -26.8, 3.65, 1.38, 2.3], [-27.1, 8.5, 1.42, 3.6, 3.2],
+  [7.5, 32.1, 3.25, 1.46, 4.6], [-12.1, 29.9, 2.55, 1.12, 5.7],
+  [-5.9, -9.4, 2.18, 1.20, 2.9], [9.8, 4.4, 2.44, 1.27, 4.3],
+];
+
+function puddleRadius(a, seed) {
+  return 1 + .18 * Math.sin(a * 3 + seed) + .075 * Math.cos(a * 7 - seed) + .04 * Math.sin(a * 11 + seed);
+}
+
+export function bossWaterGeometry(THREE) {
+  const pos = [], index = [];
+  for (const [x, z, rx, rz, seed] of BOSS_PUDDLES) {
+    const first = pos.length / 3;
+    pos.push(x, 0, z);
+    for (let i = 0; i <= 72; i++) {
+      const a = i / 72 * Math.PI * 2;
+      const r = puddleRadius(a, seed);
+      pos.push(x + Math.cos(a) * r * rx, 0, z + Math.sin(a) * r * rz);
+      if (i < 72) index.push(first, first + 2 + i, first + 1 + i);
+    }
+  }
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  geometry.setIndex(index);
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
+const glNum = n => n.toFixed(4);
+export const BOSS_WATER_GLSL = `
+float puddleBank(vec2 p,vec2 at,vec2 extent,float seed){
+  vec2 q=(p-at)/extent;
+  if(dot(q,q)>1.72)return -2.;
+  float a=atan(q.y,q.x);
+  float r=1.+.18*sin(a*3.+seed)+.075*cos(a*7.-seed)+.04*sin(a*11.+seed);
+  return (r-length(q))*min(extent.x,extent.y);
+}
+float bossWaterBank(vec2 p){
+  float bank=-2.;
+  ${BOSS_PUDDLES.map(([x,z,rx,rz,seed]) =>
+    `bank=max(bank,puddleBank(p,vec2(${glNum(x)},${glNum(z)}),vec2(${glNum(rx)},${glNum(rz)}),${glNum(seed)}));`
+  ).join("\n  ")}
+  return bank;
+}
+`;

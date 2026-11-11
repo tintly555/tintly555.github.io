@@ -373,14 +373,6 @@
       box-shadow: 0 8px 24px rgba(0,0,0,0.35);
     }
 
-    .flash {
-      position: fixed;
-      inset: 0;
-      background: rgba(255, 0, 0, 0);
-      pointer-events: none;
-      z-index: 10;
-    }
-
     .blind-text {
       position: fixed;
       left: 50%;
@@ -2145,7 +2137,7 @@
     #needleHud.nh-inject .nh-label { color: #88ccff; text-shadow: 0 0 6px #88ccff88; }
     #needleHud.nh-inject .nh-bar-fill { background: #88ccff; }
 </style>
-  <link rel="stylesheet" href="interface.css?v=16-back-button">
+  <link rel="stylesheet" href="interface.css?v=17-optics">
   <script>
     (function () {
       function normBase(b) {
@@ -2420,7 +2412,7 @@
     <div id="fpsHintFlash" style="opacity:0.72;font-size:11px;margin-top:3px;letter-spacing:0.02em;" data-i18n="hudHelpLight">Press L to toggle light &amp; flashlight</div>
   </div>
   <div class="hint" id="hint" data-i18n="hintClick">Click anywhere</div>
-  <div class="flash" id="flash"></div>
+  <div id="impactFx" aria-hidden="true" hidden><div class="impact-vignette"></div><canvas></canvas></div>
   <div class="blind-text" id="blindText" data-i18n="hudSlowed" aria-hidden="true">IMMOBILIZED</div>
   <div class="crosshair" id="crosshair"></div>
   <div id="amrScopeOverlay" class="amr-scope-overlay" aria-hidden="true"></div>
@@ -2618,9 +2610,13 @@
                 <button type="button" class="cycle-arrow" id="btnPostNext" aria-label="On">▶</button>
               </div>
               <p data-i18n="gfxPostHint" style="font-size:11px;opacity:0.65;margin-top:10px;max-width:480px;line-height:1.45;">
-                Bloom on lights, a colour grade, vignette, film grain and smoothing of jagged edges. Costs some performance; not used on POTATO quality.
+                Lighting, lens effects, and color grading. World effects run on Regular quality and above. Damage and Speed Weak effects work on every tier.
               </p>
             </div>
+            <details class="fx-settings-group fx-settings-root">
+              <summary>Advanced effects and color</summary>
+              <div id="fxSettings"></div>
+            </details>
             <div class="settings-row">
               <label data-i18n="gfxRenderDistLabel">Render distance</label>
               <div class="settings-cycle">
@@ -3733,7 +3729,7 @@ if (typeof window !== "undefined") {
     {"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.182.0/build/three.module.js"}}
   </script>
   <script type="module" src="js/game-cursor.js?v=1"></script>
-  <script type="module" src="js/main.js?v=20261114-zombie-stride-and-strike-warden10"></script>
+  <script type="module" src="js/main.js?v=20261114-optics-and-impact"></script>
   <footer id="pageFooter" style="position:fixed;left:0;right:0;bottom:0;display:flex;justify-content:center;align-items:center;gap:16px;padding:10px 14px;background:transparent;backdrop-filter:none;z-index:101;pointer-events:auto;">
     <img src="images/tintly555.png" alt="Tintly555" style="height:28px;width:auto;display:block;opacity:0.75;" />
     <img src="images/jimmyqrg.png" alt="JimmyQrg" style="height:32px;width:auto;display:block;margin-bottom:2px;opacity:0.75;" />

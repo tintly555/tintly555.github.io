@@ -865,3 +865,49 @@ body :is(input[type="text"], input[type="number"], input[type="password"], selec
 #nameModal .intermission-card { width: min(92vw, 360px); padding: 26px 28px !important; }
 #nameModal .intermission-card h2 { font-size: clamp(20px, 2.4vw, 26px) !important; margin: 0 0 14px !important; white-space: nowrap; }
 #nameModal #nameInput { width: 100% !important; box-sizing: border-box; }
+
+/* The camera effects never cover or warp the reticle and HUD. */
+#impactFx, #impactFx > * { position: fixed; inset: 0; pointer-events: none; }
+#impactFx { z-index: 10; overflow: hidden; }
+#impactFx[hidden] { display: none; }
+#impactFx canvas { width: 100%; height: 100%; }
+.impact-vignette {
+  --impact-red: 0;
+  --impact-dark: 0;
+  background:
+    radial-gradient(ellipse at 50% 47%, transparent 46%, rgb(56 2 12 / calc(var(--impact-red) * .36)) 73%, rgb(104 4 20 / var(--impact-red)) 100%),
+    radial-gradient(ellipse at center, transparent 29%, rgb(4 6 9 / var(--impact-dark)) 94%);
+}
+.fx-settings-group {
+  border: 1px solid var(--console-line);
+  background: linear-gradient(#11171dd9,#151b22ee), var(--game-ui-btn-texture, none) center / 440px 68px repeat, #1c242b;
+  margin: 6px 0;
+}
+.fx-settings-root { margin: 8px 0 14px; }
+.fx-settings-group > summary { padding: 9px 12px; color: var(--console-ink); cursor: pointer; }
+.fx-settings-group[open] > summary { border-bottom: 1px solid var(--console-line); }
+#fxSettings { padding: 4px 9px 9px; }
+#fxSettings > button { margin-top: 7px; }
+.fx-settings-controls { padding: 6px 10px; }
+.fx-setting {
+  display: grid;
+  grid-template-columns: minmax(130px, 1.1fr) minmax(80px, 1fr) 42px;
+  align-items: center;
+  gap: 8px;
+  min-height: 31px;
+  font-size: 11px;
+}
+.fx-setting input, .fx-setting select { min-width: 0; accent-color: #eab275; }
+.fx-setting output { text-align: right; color: #d2b395; font-variant-numeric: tabular-nums; }
+.fx-setting select, .fx-setting input[type="color"] {
+  color: #e7eced;
+  background: #151b20;
+  border: 1px solid var(--console-line);
+  border-radius: 3px;
+  padding: 3px 5px;
+  grid-column: 2 / -1;
+  font: inherit;
+}
+@media (max-width: 480px) {
+  .fx-setting { grid-template-columns: minmax(92px, 1fr) minmax(54px, 1fr) 32px; gap: 5px; }
+}

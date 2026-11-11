@@ -1007,7 +1007,7 @@ export function createGauntletThemes(THREE) {
       scenery: missileSilos,
     },
     {
-      id: "alien-outpost", name: "Outworks", tile: 3, groundDepth: 26, support: "pipe", bg: 0x6a4030, fog: 0x6a4030, fogNear: 12, fogFar: 200, camFar: 600,
+      id: "alien-outpost", name: "Outworks", tile: 3, groundDepth: 26, support: "pipe", bg: 0x6a4030, fog: 0x6a4030, fogNear: 12, fogFar: 200, camFar: 900,
       light: { ambient: [0xd8a888, .8], hemi: [0xe8b898, 0x4a2a1c, .9], sun: [0xffc9a0, 1.2, [-50, 40, -10]], fill: [0xc87850, .6] }, lamp: 0xffd29a,
       roles: s => ({
         deck: s.regolith("out-deck", { base: [168, 98, 66] }), room: s.regolith("out-room", { base: [138, 82, 58] }),

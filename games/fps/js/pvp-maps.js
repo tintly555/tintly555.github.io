@@ -20,10 +20,10 @@
  */
 import { mergeGeometries } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/utils/BufferGeometryUtils.js";
 import { createSurfaces, rngFor, fbm } from "./gauntlet-surfaces.js?v=2";
-import { createNature } from "./pvp-nature.js?v=22";
+import { createNature } from "./pvp-nature.js?v=23";
 import { foundry } from "./pvp-map-foundry.js?v=10";
 import { station } from "./pvp-map-station.js?v=8";
-import { ruins } from "./pvp-map-ruins.js?v=8";
+import { ruins } from "./pvp-map-ruins.js?v=9";
 import { town } from "./pvp-map-town.js?v=8";
 
 const TAU = Math.PI * 2;

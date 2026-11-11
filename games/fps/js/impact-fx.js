@@ -45,7 +45,7 @@ export function createImpactFx(root) {
   const canvas = root.querySelector("canvas");
   const vignette = root.querySelector(".impact-vignette");
   const g = canvas.getContext("2d");
-  let sprites, drops = [], pulse = 0, tired = 0, wasVisible = false;
+  let sprites, drops = [], pulse = 0, tired = 0, canvasDirty = false;
   function hit(damage, angle, blood) {
     if (!(damage > 0)) return;
     pulse = Math.min(1, pulse + .25 + damage / 54);
@@ -68,22 +68,35 @@ export function createImpactFx(root) {
   }
   return {
     hit,
-    reset() { drops = []; pulse = tired = 0; root.hidden = true; if (g) g.clearRect(0, 0, canvas.width, canvas.height); },
+    reset() {
+      drops = []; pulse = tired = 0; root.hidden = true;
+      if (g && canvasDirty) g.clearRect(0, 0, canvas.width, canvas.height);
+      canvasDirty = false;
+    },
     update(dt, weak, health, usePost, blood) {
       pulse *= Math.exp(-dt * 3.6);
       tired += (weak - tired) * (1 - Math.exp(-dt * (weak > tired ? 6 : 3.4)));
       const red = clamp(pulse * .75 + health * .30, 0, .72);
       const dark = usePost ? 0 : tired * .82;
-      const visible = red + dark > .006 || (blood > 0 && drops.length > 0);
-      root.hidden = !visible;
-      vignette.style.setProperty("--impact-red", red.toFixed(3));
-      vignette.style.setProperty("--impact-dark", dark.toFixed(3));
-      if (!g || (!visible && !wasVisible)) return tired;
-      wasVisible = visible;
+      const hasDrops = blood > 0 && drops.length > 0;
+      const visible = red + dark > .006 || hasDrops;
+      if (root.hidden === visible) root.hidden = !visible;
+      if (visible) {
+        vignette.style.setProperty("--impact-red", red.toFixed(3));
+        vignette.style.setProperty("--impact-dark", dark.toFixed(3));
+      }
+      if (!g || (!hasDrops && !canvasDirty)) return tired;
+      if (!hasDrops) {
+        g.clearRect(0, 0, canvas.width, canvas.height);
+        drops = [];
+        canvasDirty = false;
+        return tired;
+      }
+      canvasDirty = true;
       const scale = Math.min(1, 1000 / Math.max(1, root.clientWidth));
       const w = Math.max(1, Math.round(root.clientWidth * scale));
       const h = Math.max(1, Math.round(root.clientHeight * scale));
-      if (visible && (canvas.width !== w || canvas.height !== h)) {
+      if (canvas.width !== w || canvas.height !== h) {
         canvas.width = w; canvas.height = h;
       }
       g.clearRect(0, 0, canvas.width, canvas.height);

@@ -1,4 +1,4 @@
-import { TEMPLE_WATER_GLSL, TEMPLE_WATER_Y } from "./water-shape.js";
+import { BOSS_WATER_GLSL, BOSS_WATER_Y, TEMPLE_WATER_GLSL, TEMPLE_WATER_Y } from "./water-shape.js";
 
 export const VERTEX = `
   varying vec2 vUv;
@@ -74,13 +74,24 @@ export const LIGHTING = `
         vec2 uv=vUv+dir*t*.94;
         if(onScreen(uv)){
           float sky=step(.999999,depthAt(uv));
-          float lit=smoothstep(.85,2.4,luma(texture2D(tScene,uv).rgb));
+          float lit=smoothstep(1.05,3.1,luma(texture2D(tScene,uv).rgb));
           shafts+=sky*lit*(.45+t*.55);
         }
       }
-      shafts*=uSun.z*.10*exp(-1.55*dot(dir,dir))*uShafts;
+      shafts*=uSun.z*.085*exp(-2.8*dot(dir,dir))*uShafts;
     }
     gl_FragColor=vec4(ao,shafts,min(eye,650.),1.);
+  }
+`;
+
+const WATER_MASK = `
+  uniform int uWater;
+  ${TEMPLE_WATER_GLSL}
+  ${BOSS_WATER_GLSL}
+  float waterBank(vec3 world){
+    if(uWater==2&&abs(world.y-${BOSS_WATER_Y})<.014)return bossWaterBank(world.xz);
+    if(uWater==1&&abs(world.y-${TEMPLE_WATER_Y})<.029)return templeBank(world.xz);
+    return -2.;
   }
 `;
 
@@ -90,7 +101,7 @@ export const REFLECTION = `
   uniform float uWaterTime;
   uniform int uRaySteps;
   ${DEPTH}
-  ${TEMPLE_WATER_GLSL}
+  ${WATER_MASK}
 
   void main(){
     gl_FragColor=vec4(0.);
@@ -99,10 +110,9 @@ export const REFLECTION = `
     vec3 p=viewPosition(vUv,depth);
     if(-p.z>86.)return;
     vec3 world=(uCameraWorld*vec4(p,1.)).xyz;
-    if(abs(world.y-${TEMPLE_WATER_Y})>.032)return;
-    float bank=templeBank(world.xz);
+    float bank=waterBank(world);
     if(bank<-.02)return;
-    vec2 slope=waterSlope(world.xz,uWaterTime);
+    vec2 slope=uWater==1?waterSlope(world.xz,uWaterTime):vec2(0.);
     vec3 n=normalize(transpose(mat3(uCameraWorld))*normalize(vec3(slope.x,1.,slope.y)));
     vec3 incoming=normalize(p);
     vec3 ray=reflect(incoming,n);
@@ -175,6 +185,7 @@ export const COMPOSITE = `
   uniform vec2 uLightTexel;
   uniform vec3 uSun,uSunColor;
   ${DEPTH}
+  ${WATER_MASK}
 
   void main(){
     vec3 col=texture2D(tDiffuse,vUv).rgb;
@@ -191,13 +202,13 @@ export const COMPOSITE = `
         }
         col*=1.-min(.34,a/max(.008,sum)*uAOAmount*.79);
       }
-      col+=uSunColor*z.g*.23;
+      col+=uSunColor*z.g*.18;
     }
     if(uSSR>0.){
       float raw=depthAt(vUv);
       if(raw<.999999){
         vec3 wp=(uCameraWorld*vec4(viewPosition(vUv,raw),1.)).xyz;
-        if(abs(wp.y-${TEMPLE_WATER_Y})<.031&&length(wp.xz)>19.&&length(wp.xz)<40.){
+        if(waterBank(wp)>-.015){
           vec4 r=texture2D(tReflection,vUv);
           col=mix(col,r.rgb/max(.001,r.a),r.a*uSSR*.9);
         }
@@ -207,7 +218,7 @@ export const COMPOSITE = `
       float sky=step(.999999,depthAt(uSun.xy));
       float vis=sky*smoothstep(1.25,5.,luma(texture2D(tDiffuse,uSun.xy).rgb))*uSun.z;
       vec2 d=(vUv-uSun.xy)*vec2(uPixel.y/uPixel.x,1.);
-      float bloom=exp(-length(d)*17.)*.7+exp(-dot(d,d)*5500.)*.48;
+      float bloom=exp(-length(d)*25.)*.38+exp(-dot(d,d)*6600.)*.44;
       vec2 axis=vec2(.5)-uSun.xy;
       float ghost=0.;
       for(int i=1;i<4;i++){
@@ -254,16 +265,23 @@ export const GRADE = `
   }
 
   float channelCurve(float x,float mid){
-    float a=(1.-mid*2.), b=(mid*2.);
-    return x<.5 ? x*b : mid+(x-.5)*(1.+a);
+    return abs(mid-.5)<.0001?x:pow(x,-log2(mid));
+  }
+  float curveSlope(float a,float b){
+    return a*b>0.?2.*a*b/(a+b):0.;
+  }
+  float curveSegment(float a,float b,float m,float n,float t){
+    return mix(a,b,t*t*(3.-2.*t))+t*(1.-t)*(m*(1.-t)-n*t);
   }
   float curve(float v){
     float x=clamp(v,0.,1.)*4.;
     float f=fract(x), segment=floor(x);
-    if(segment<1.)return mix(uCurve.x,uCurve.y,f);
-    if(segment<2.)return mix(uCurve.y,uCurve.z,f);
-    if(segment<3.)return mix(uCurve.z,uCurve.w,f);
-    return mix(uCurve.w,uWhitePoint,min(1.,x-3.));
+    vec4 d=vec4(uCurve.yzw,uWhitePoint)-uCurve;
+    float m1=curveSlope(d.x,d.y),m2=curveSlope(d.y,d.z),m3=curveSlope(d.z,d.w);
+    if(segment<1.)return curveSegment(uCurve.x,uCurve.y,d.x,m1,f);
+    if(segment<2.)return curveSegment(uCurve.y,uCurve.z,m1,m2,f);
+    if(segment<3.)return curveSegment(uCurve.z,uCurve.w,m2,m3,f);
+    return curveSegment(uCurve.w,uWhitePoint,m3,d.w,min(1.,x-3.));
   }
 
   void main(){

@@ -2130,7 +2130,7 @@ const V96_EN = {
   gfxQualityLabel: "Quality", gfxQualityPill: "performance / fidelity", gfxQualityHint: "Adjusts render resolution, texture filtering, and shadow fidelity. Visibility, aiming, lighting, fog, and gameplay stay identical.",
   pvpMapFoundry: "CINDERWORKS", pvpMapStation: "HALCYON RING", pvpMapRuins: "SUNKEN TEMPLE", pvpMapTown: "DUSTFALL",
   pvpTagFoundry: "Foundry · lava, lifts, steam", pvpTagStation: "Orbital station · airlocks, low gravity", pvpTagRuins: "Jungle ruins · stream, rolling boulder", pvpTagTown: "Frontier town · the 12:40 train",
-  gfxPostLabel: "Post-processing", gfxPostHint: "Bloom on lights, a colour grade, vignette, film grain and smoothing of jagged edges. Costs some performance; not used on POTATO quality.",
+  gfxPostLabel: "Post-processing", gfxPostHint: "Lighting, lens effects, and color grading. World effects run on Regular quality and above. Damage and Speed Weak effects work on every tier.",
   gfxTextureLabel: "Texture detail", gfxRenderDistLabel: "Render distance", gfxRenderDistHint: "Controls how far the world remains visible through realistic atmospheric fog. Does not affect gameplay.",
   settingsHeadingHotbar: "HOTBAR ORDER", hotbarOrderHint: "Click a slot to select it (glows), then click another to swap. Keys 1–7 and 0 follow the new order.",
   btnResetHotbar: "Reset to default", hbKeyLabel: "Key"
