@@ -1,5 +1,5 @@
 import { makeGauntletObstacle } from "./gauntlet-obstacles.js?v=5";
-import { createGauntletArt } from "./gauntlet-art.js?v=15";
+import { createGauntletArt } from "./gauntlet-art.js?v=16";
 
 const EYE_HEIGHT = 1.65;
 const BURIED = -90;
@@ -27,6 +27,7 @@ export function createGauntletRuntime(THREE, solid, decorate, hooks, style = nul
   const _portalSourceQuaternion = new THREE.Quaternion();
   const _portalExitQuaternion = new THREE.Quaternion();
   const _portalLocalNow = new THREE.Vector3();
+  const _portalTargetLocal = new THREE.Vector3();
   const _portalCrossing = new THREE.Vector3();
 
   /** Map a world pose through the paired gate frames, including their facing directions. */
@@ -95,6 +96,15 @@ export function createGauntletRuntime(THREE, solid, decorate, hooks, style = nul
           node.lamp.material.color.setHex(0x72e5ab);
         };
         section.nodes.push(node);
+        if (piece.kind === "portal" && drawn.partnerPortal) {
+          const partnerNode = {
+            kind: "portal", portal: drawn.partnerPortal, mesh: drawn.partnerPortal.disc,
+            tone: piece.tone, used: false, inside: false, portalPrevious: null,
+          };
+          node.partnerNode = partnerNode;
+          partnerNode.partnerNode = node;
+          section.nodes.push(partnerNode);
+        }
       } else if (piece.type === "ramp") {
         // Collision is a flight of invisible low treads (each under the 0.32 step-up the player
         // walks and dashes over); the visible slope is a wedge that follows them.
@@ -269,13 +279,26 @@ export function createGauntletRuntime(THREE, solid, decorate, hooks, style = nul
       portalTransform(node.portal, _portalTransform);
       _portalLocalNow.copy(player.position).applyMatrix4(_portalSourceInverse);
       const previous = node.portalPrevious;
-      if (previous && previous.z > 0 && _portalLocalNow.z <= 0) {
-        const t = previous.z / Math.max(1e-6, previous.z - _portalLocalNow.z);
+      const crossed = previous && ((previous.z > 0 && _portalLocalNow.z <= 0)
+        || (previous.z < 0 && _portalLocalNow.z >= 0));
+      if (crossed) {
+        const t = previous.z / (previous.z - _portalLocalNow.z);
         _portalCrossing.lerpVectors(previous, _portalLocalNow, t);
         // Leave enough clearance for the player's capsule inside the oval opening.
         const fits = (_portalCrossing.x / .81) ** 2 + (_portalCrossing.y / .77) ** 2 < 1;
         if (fits) {
           hooks.traversePortal?.(_portalTransform, node.portal);
+          // Rebaseline both gates after the coordinate mapping. Otherwise the partner
+          // gate can mistake the same crossing for a second traversal on this frame.
+          _portalLocalNow.copy(player.position).applyMatrix4(_portalSourceInverse);
+          if (node.partnerNode?.portal) {
+            node.partnerNode.portal.group.getWorldQuaternion(_portalExitQuaternion);
+            _portalExitFrame.compose(node.partnerNode.portal.center, _portalExitQuaternion, _portalOne);
+            _portalExitFrame.invert();
+            _portalTargetLocal.copy(player.position).applyMatrix4(_portalExitFrame);
+            if (!node.partnerNode.portalPrevious) node.partnerNode.portalPrevious = new THREE.Vector3();
+            node.partnerNode.portalPrevious.copy(_portalTargetLocal);
+          }
           hooks.signal("portal");
         }
       }

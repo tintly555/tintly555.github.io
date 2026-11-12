@@ -8,6 +8,7 @@
  * roots, forks into limbs, and carries clumps of leaves — never a cone.
  */
 import { mergeGeometries } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/utils/BufferGeometryUtils.js";
+import { Water } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/objects/Water.js";
 import { fbm, rngFor } from "./gauntlet-surfaces.js?v=3";
 import { TEMPLE_WATER_GLSL, TEMPLE_WATER_Y, templeWaterBank, templeWaterGeometry } from "./water-shape.js";
 
@@ -1068,7 +1069,7 @@ const float PHASE[10] = float[10](${waves.map(([,,,, ph]) => ph.toFixed(5)).join
     bed.position.y = .043; bed.receiveShadow = true; bed.raycast = () => {};
     const caustic = new THREE.Mesh(geometry.clone(), new THREE.MeshBasicMaterial({
       map: tiled(causticTexture(), 11, 11), transparent: true, depthWrite: false,
-      opacity: .32, blending: THREE.AdditiveBlending,
+      opacity: .12, blending: THREE.AdditiveBlending,
     }));
     caustic.position.y = .052; caustic.renderOrder = 1; caustic.raycast = () => {};
 
@@ -1083,8 +1084,13 @@ const float PHASE[10] = float[10](${waves.map(([,,,, ph]) => ph.toFixed(5)).join
       uSunDir: { value: new THREE.Vector3(-34, 52, 24).normalize() },
       uSunColor: { value: new THREE.Color(0xfff0cf).multiplyScalar(3.4) },
       uSky: { value: new THREE.Color(0x8fb5c8) },
-      uBody: { value: new THREE.Color(0x0b2a26) },
-      uShallow: { value: new THREE.Color(0x3c7566) },
+      uBody: { value: new THREE.Color(0x3f8f84) },
+      uShallow: { value: new THREE.Color(0x8ccfc2) },
+      uRipN: { value: 0 },
+      uWaves: { value: 10 },
+      uFoamOn: { value: 1 },
+      uHorizon: { value: new THREE.Color(0xc9dedb) },
+      uRip: { value: Array.from({ length: 24 }, () => new THREE.Vector4()) },
     }]);
     const material = new THREE.ShaderMaterial({
       vertexShader: `
@@ -1103,7 +1109,9 @@ const float PHASE[10] = float[10](${waves.map(([,,,, ph]) => ph.toFixed(5)).join
       fragmentShader: `
         uniform sampler2D tReflection;
         uniform float uTime, uMirrorOn;
-        uniform vec3 uSunDir, uSunColor, uSky, uBody, uShallow;
+        uniform vec3 uSunDir, uSunColor, uSky, uBody, uShallow, uHorizon;
+        uniform float uRipN, uWaves, uFoamOn;
+        uniform vec4 uRip[24];
         varying vec4 vMirror;
         varying vec3 vW;
         #include <common>
@@ -1119,31 +1127,52 @@ const float PHASE[10] = float[10](${waves.map(([,,,, ph]) => ph.toFixed(5)).join
           vec2 p = vW.xz;
           vec2 s = vec2(0.0);
           for (int i = 0; i < 10; i++) {
+            if (float(i) >= uWaves) break;
             vec4 w = WAVE[i];
             float ph = dot(w.xy, p) * (w.w * w.w / 9.8) - w.w * uTime + PHASE[i];
             s += w.xy * w.z * cos(ph);
           }
+          // Splashes: each ring grows outward from where the water was hit, with foam on its front.
+          float rfoam = 0.0;
+          vec2 rs = vec2(0.0);
+          for (int i = 0; i < 24; i++) {
+            if (float(i) >= uRipN) break;
+            vec4 e = uRip[i];
+            vec2 d = p - e.xy;
+            float r = max(length(d), 0.001);
+            float age = e.z;
+            float x = r - 0.8 * age;
+            float wid = 0.06 + 0.22 * age;
+            float env = exp(-x * x / (2.0 * wid * wid)) * exp(-1.1 * age) * e.w;
+            float k = 6.2832 / 0.34;
+            rs += d / r * (env * k * cos(k * x) * 0.03);
+            rfoam += exp(-x * x / (2.0 * 0.09 * 0.09)) * exp(-2.0 * age) * e.w * 1.4;
+          }
+          s += rs;
+          rfoam = clamp(rfoam, 0.0, 1.0);
           vec3 N = normalize(vec3(-s.x, 1.0, -s.y));
           vec3 V = normalize(cameraPosition - vW);
           // Schlick fresnel with water's F0 (0.02): clear looking down, a mirror at grazing angles.
           float F = 0.02 + 0.98 * pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 5.0);
           vec2 muv = vMirror.xy / vMirror.w + N.xz * 0.025;
           vec3 mirrored = texture2D(tReflection, clamp(muv, vec2(0.002), vec2(0.998))).rgb;
-          vec3 refl = mix(uSky, mirrored, uMirrorOn);
+          // Without the mirror pass the sky is a gradient, paler toward the horizon, so the water is never one flat colour.
+          vec3 skyRefl = mix(uSky, uHorizon, pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 3.0));
+          vec3 refl = mix(skyRefl, mirrored, uMirrorOn);
           // Depth from the shore: shallow water is clear and pale, deeper water is dark and absorbs.
           float depth = max(templeBank(p), 0.0);
-          vec3 body = mix(uShallow, uBody, smoothstep(0.0, 1.8, depth));
+          vec3 body = mix(uShallow, uBody, smoothstep(0.0, 4.5, depth));
+          body *= 0.9 + 0.2 * smoothstep(0.0, 0.25, length(s));
           vec3 col = mix(body, refl, F);
-          // The sun's glint on the wave faces.
-          vec3 R = reflect(-uSunDir, N);
-          col += uSunColor * pow(max(dot(R, V), 0.0), 900.0) * 0.5;
           // Foam: at the shore and on the steeper crests, broken up by moving noise.
           float n = vnoise(p * 2.6 + vec2(uTime * 0.35, -uTime * 0.27)) * 0.6 + vnoise(p * 6.1 - uTime * 0.6) * 0.4;
           float shore = 1.0 - smoothstep(0.0, 0.3, depth);
-          float crest = smoothstep(0.24, 0.36, length(s));
-          float foam = clamp(shore * smoothstep(0.3, 0.62, n) + crest * smoothstep(0.6, 0.85, n) * 0.5, 0.0, 1.0);
+          float crest = smoothstep(0.32, 0.44, length(s));
+          float foam = clamp(shore * smoothstep(0.3, 0.62, n) + uFoamOn * crest * smoothstep(0.6, 0.85, n) * 0.5, 0.0, 1.0);
+          foam = clamp(foam + rfoam, 0.0, 1.0);
           col = mix(col, vec3(0.9, 0.93, 0.9), foam * 0.85);
-          float alpha = clamp(mix(0.45 + 0.45 * smoothstep(0.0, 1.2, depth), 1.0, F) + foam * 0.3, 0.0, 1.0);
+          // Clear water shows the gravel: the body is see-through, and only the fresnel makes it a mirror.
+          float alpha = clamp(mix(0.55 + 0.25 * smoothstep(0.0, 3.0, depth), 1.0, F) + foam * 0.3, 0.0, 1.0);
           gl_FragColor = vec4(col, alpha);
           #include <tonemapping_fragment>
           #include <colorspace_fragment>
@@ -1156,16 +1185,136 @@ const float PHASE[10] = float[10](${waves.map(([,,,, ph]) => ph.toFixed(5)).join
     surface.receiveShadow = true; surface.raycast = () => {}; surface.renderOrder = 2;
     group.add(bed, caustic, surface);
 
+    // Medium, High and Extreme use the three.js Ocean example's Water (planar reflection, normal-map distortion).
+    // Its normals also take the splash rings, so a hit or a fall still breaks the surface. Potato keeps the custom
+    // surface above, which is cheaper, and the gravel bed is only drawn for Potato (Water is opaque).
+    const normalsTex = new THREE.TextureLoader().load("images/water/waternormals.jpg", (t) => {
+      t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    });
+    const ocean = new Water(geometry.clone(), {
+      textureWidth: 512, textureHeight: 512, waterNormals: normalsTex,
+      sunDirection: new THREE.Vector3(-34, 52, 24).normalize(), sunColor: 0xfff0cf,
+      waterColor: 0x2f7f76, distortionScale: 2.2, fog: true,
+    });
+    ocean.material.uniforms.size.value = 3;
+    ocean.material.uniforms.uRipN = uniforms.uRipN;
+    ocean.material.uniforms.uRip = uniforms.uRip;
+    ocean.material.fragmentShader = ocean.material.fragmentShader
+      .replace("uniform float size;", `uniform float size;
+        uniform float uSunSpec;
+        uniform float uRipN;
+        uniform vec4 uRip[24];
+        vec2 rippleSlope(vec2 p) {
+          vec2 rs = vec2(0.0);
+          for (int i = 0; i < 24; i++) {
+            if (float(i) >= uRipN) break;
+            vec4 e = uRip[i];
+            vec2 d = p - e.xy;
+            float r = max(length(d), 0.001);
+            float age = e.z;
+            float x = r - 0.8 * age;
+            float wid = 0.06 + 0.22 * age;
+            float env = exp(-x * x / (2.0 * wid * wid)) * exp(-1.1 * age) * e.w;
+            float k = 6.2832 / 0.34;
+            rs += d / r * (env * k * cos(k * x) * 0.03);
+          }
+          return rs;
+        }`)
+      .replace("vec3 surfaceNormal = normalize( noise.xzy * vec3( 1.5, 1.0, 1.5 ) );",
+        "vec2 rsl = rippleSlope(worldPosition.xz);\n\t\t\t\t\tvec3 surfaceNormal = normalize( noise.xzy * vec3( 1.5, 1.0, 1.5 ) + vec3( rsl.x, 0.0, rsl.y ) );")
+      // The sun highlight (specular) on the Ocean water: off on every tier but Extreme, where it is toned down.
+      .replace("sunLight( surfaceNormal, eyeDirection, 100.0, 2.0, 0.5, diffuseLight, specularLight );",
+        "sunLight( surfaceNormal, eyeDirection, 100.0, uSunSpec, 0.5, diffuseLight, specularLight );");
+    ocean.material.uniforms.uSunSpec = { value: 0 };
+    ocean.material.needsUpdate = true;
+    ocean.position.y = TEMPLE_WATER_Y;
+    ocean.renderOrder = 2; ocean.raycast = () => {};
+    ocean.visible = false;
+    group.add(ocean);
+    const potatoTier = () => (host ? host.tier() : 1) === 0;
+
+    // ── Splashes ────────────────────────────────────────────────────────────────────
+    // A hit on the water or a fall into it starts a ring (in the shader) and throws up a few drops (sprites).
+    // Wading leaves a small ring at each step. The count of rings and drops depends on the graphics tier.
+    const ripples = [];
+    let ripCap = 24, sprayCap = 16, wade = true;
+    const drops = Array.from({ length: 24 }, () => {
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: sparkTexture(), color: 0xeef8f6, transparent: true, depthWrite: false, opacity: 0, fog: true }));
+      sp.raycast = () => {}; sp.visible = false; sp.scale.setScalar(0.14); group.add(sp);
+      return { sp, age: 0, life: 0, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0 };
+    });
+    function splash(x, z, strength, t) {
+      if (strength <= 0) return;
+      if (ripples.length >= ripCap) ripples.shift();
+      ripples.push({ x, z, t0: t, s: Math.min(1.6, strength) });
+      let n = Math.round(sprayCap * Math.min(1, strength));
+      for (const d of drops) {
+        if (n <= 0) break;
+        if (d.life > 0) continue;
+        const a = Math.random() * TAU, out = (0.4 + Math.random()) * strength, up = (1.4 + 2.2 * strength) * (0.7 + Math.random() * 0.5);
+        d.x = x; d.y = TEMPLE_WATER_Y; d.z = z;
+        d.vx = Math.cos(a) * out; d.vy = up; d.vz = Math.sin(a) * out;
+        d.age = 0; d.life = 0.5 + Math.random() * 0.5;
+        d.sp.visible = true;
+        n--;
+      }
+    }
+    let wasInside = false, wadeAt = null;
+    /** Called once a frame with the player's ground position and vertical speed. */
+    function step(t, p) {
+      const inside = templeWaterBank(p.x, p.z) > 0;
+      if (inside && !wasInside) splash(p.x, p.z, p.vy < -1 ? Math.min(1.6, 0.6 - p.vy * 0.12) : 0.4, t);
+      if (inside && p.grounded && wade) {
+        if (!wadeAt || Math.hypot(p.x - wadeAt.x, p.z - wadeAt.z) > 0.9) {
+          if (wadeAt) splash(p.x, p.z, 0.3, t);
+          wadeAt = { x: p.x, z: p.z };
+        }
+      }
+      if (!inside) wadeAt = null;
+      wasInside = inside;
+    }
+    /** A bullet heading down that reaches the water before anything else hits it leaves a splash. */
+    function shot(origin, dir, maxDist, t) {
+      if (dir.y > -0.05) return;
+      const k = (TEMPLE_WATER_Y - origin.y) / dir.y;
+      if (!(k > 0) || k > maxDist) return;
+      const x = origin.x + dir.x * k, z = origin.z + dir.z * k;
+      if (templeWaterBank(x, z) > 0) splash(x, z, 0.8, t);
+    }
+    /** Graphics tier: potato keeps a few rings and no wading; extreme gets everything. */
+    function setQuality(id) {
+      const tier = { potato: [4, 0, false], regular: [10, 6, true], high: [18, 12, true], extreme: [24, 16, true] }[id] || [24, 16, true];
+      [ripCap, sprayCap, wade] = tier;
+      // Potato: four wave trains instead of ten, no crest foam, and no mirror pass (set in renderWorld).
+      uniforms.uWaves.value = id === "potato" ? 4 : 10;
+      uniforms.uFoamOn.value = id === "potato" ? 0 : 1;
+    }
+    function updateSplashes(dt, t) {
+      while (ripples.length && t - ripples[0].t0 > 7) ripples.shift();
+      uniforms.uRipN.value = ripples.length;
+      ripples.forEach((r, i) => uniforms.uRip.value[i].set(r.x, r.z, t - r.t0, r.s));
+      for (const d of drops) {
+        if (d.life <= 0) continue;
+        d.age += dt;
+        const y = d.y + d.vy * d.age - 4.9 * d.age * d.age;
+        if (d.age >= d.life || y < TEMPLE_WATER_Y) { d.life = 0; d.sp.visible = false; continue; }
+        d.sp.position.set(d.x + d.vx * d.age, y, d.z + d.vz * d.age);
+        d.sp.material.opacity = 0.85 * (1 - d.age / d.life);
+      }
+    }
+
     const virtual = new THREE.PerspectiveCamera();
     const clip = new THREE.Plane(new THREE.Vector3(0, 1, 0), -TEMPLE_WATER_Y);
     const bias = new THREE.Matrix4().set(.5, 0, 0, .5, 0, .5, 0, .5, 0, 0, .5, .5, 0, 0, 0, 1);
     const mirror = {
       uniforms,
+      splash, step, shot, setQuality,
       /** True over the water itself (the bank is the shoreline). */
       inWater: (x, z) => templeWaterBank(x, z) > 0,
       /** Metres from the shore into the water (0 on the bank): how deep the water is at that point. */
       depth: (x, z) => Math.max(0, templeWaterBank(x, z)),
       render(renderer, scene, camera) {
+        if (!surface.visible) return;
         const size = renderer.getDrawingBufferSize(new THREE.Vector2());
         const w = Math.max(64, Math.floor(size.x / 2)), h = Math.max(64, Math.floor(size.y / 2));
         if (reflection.width !== w || reflection.height !== h) reflection.setSize(w, h);
@@ -1191,7 +1340,13 @@ const float PHASE[10] = float[10](${waves.map(([,,,, ph]) => ph.toFixed(5)).join
     };
     if (host && host.waterMirror) host.waterMirror(mirror);
     world.tick((dt, t) => {
+      updateSplashes(dt, t);
       uniforms.uTime.value = t % 1024;
+      const potato = potatoTier();
+      surface.visible = potato; bed.visible = potato; caustic.visible = potato;
+      ocean.visible = !potato;
+      ocean.material.uniforms.time.value = t % 1024;
+      ocean.material.uniforms.uSunSpec.value = host && host.tier() === 3 ? 0.35 : 0;
       caustic.material.map.offset.set((t * .024) % 1, (t * -.017) % 1);
     });
     return surface;

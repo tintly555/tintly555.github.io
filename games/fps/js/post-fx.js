@@ -233,7 +233,7 @@ export function createPostFx(THREE, renderer, scene, camera, { width, height, pi
       api.resetHistory();
     },
     resetHistory() { hasHistory = false; needsExposureReset = true; },
-    update(delta, { weak = 0, fringe = 0, aiming = false, waterTime = 0 } = {}) {
+    update(delta, { weak = 0, fringe = 0, aiming = false, motionBlur = true, waterTime = 0 } = {}) {
       dt = delta;
       gradeU.uTime.value = (gradeU.uTime.value + dt) % 100;
       gradeU.uWeak.value = weak;
@@ -242,7 +242,7 @@ export function createPostFx(THREE, renderer, scene, camera, { width, height, pi
       gradeU.uDistortion.value = aiming ? 0 : cfg.distortion;
       gradeU.uPanini.value = aiming ? 0 : cfg.panini;
       reflectionU.uWaterTime.value = waterTime;
-      motion = cfg.motion * (aiming ? .32 : 1);
+      motion = motionBlur ? cfg.motion * (aiming ? .32 : 1) : 0;
     },
     render(delta) {
       composer.render(delta);

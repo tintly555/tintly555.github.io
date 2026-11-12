@@ -3,19 +3,21 @@
     import { RoundedBoxGeometry } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/geometries/RoundedBoxGeometry.js";
     import { mergeGeometries, toCreasedNormals } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/utils/BufferGeometryUtils.js";
     import { clone as cloneSkinnedModel } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/utils/SkeletonUtils.js";
-    import { createPvpMaps } from "./pvp-maps.js?v=43";
+    import { createPvpMaps } from "./pvp-maps.js?v=48";
     import { createPvpWorld } from "./pvp-world.js?v=4";
     import { createBossNavigation } from "./boss-navigation.js?v=2";
     import { BOSS_ATTACK_BY_ID, chooseBossAttack } from "./boss-attacks.js?v=2";
-    import { BOSS_ARENA_HALF, createCombatEnvironment } from "./combat-environments.js?v=6";
+    import { BOSS_ARENA_HALF, createCombatEnvironment } from "./combat-environments.js?v=7";
+    import { createTrainingWallMaterial, createTrainingDust } from "./training-realism.js?v=20261112-train-v1";
+    import { createArenaRealism } from "./arena-realism.js?v=20261112-arena-v1";
     import { createBossCreature, BOSS_RADIUS, CLAW_STRIKE_S, QUAKE_SLAM_S, LOB_RELEASE_S, DURATIONS as BOSS_DURATIONS } from "./boss-creature.js?v=11";
     import { buildOperatorShell } from "./operator-model.js?v=1";
     import { extendGauntletCourses, GAUNTLET_CHAPTERS, GAUNTLET_CHAPTER_SIZE } from "./gauntlet-courses.js?v=5";
-    import { createGauntletRuntime } from "./gauntlet-runtime.js?v=21";
+    import { createGauntletRuntime } from "./gauntlet-runtime.js?v=22";
     import { createWorldAudio } from "./world-audio.js?v=4";
     import { createGauntletThemes } from "./gauntlet-themes.js?v=10";
-    import { createPostFx, applyDisplayTone } from "./post-fx.js?v=5";
-    import { DEFAULT_FX, loadFxSettings, mountFxSettings } from "./post-fx-settings.js";
+    import { createPostFx, applyDisplayTone } from "./post-fx.js?v=6";
+    import { DEFAULT_FX, loadFxSettings, mountFxSettings } from "./post-fx-settings.js?v=2";
     import { createImpactFx } from "./impact-fx.js?v=4";
     import { poseZombieVariant } from "./zombie-variants.js?v=5";
     import { BOSS_IMPACT, ZOMBIE_MELEE, zombieStrikeClipPhase, zombieGait } from "./zombie-motion.js";
@@ -62,6 +64,7 @@
       return el;
     })();
     const menuWallBackdropCanvas = document.getElementById("menuWallBackdrop");
+    const menuStartupGate = document.getElementById("menuStartupGate");
     const menuEl = document.getElementById("menu");
     const menuMain = document.getElementById("menuMain");
     const menuArenaMode = document.getElementById("menuArenaMode");
@@ -127,6 +130,7 @@
     const nameModal = document.getElementById("nameModal");
     const nameInput = document.getElementById("nameInput");
     const btnNameOk = document.getElementById("btnNameOk");
+    const nameError = document.getElementById("nameError");
     const btnMenuSettings = document.getElementById("btnMenuSettings");
     const settingsModal = document.getElementById("settingsModal");
     const settingsScroll = document.getElementById("settingsScroll");
@@ -369,6 +373,8 @@
       soundVolume: 1,
       qualityIndex: 1,
       postFx: true,
+      motionBlur: true,
+      cameraMotion: true,
       effects: { ...DEFAULT_FX },
       texturesOn: true,
       renderDistanceIndex: 2,
@@ -396,7 +402,15 @@
         if (typeof o.musicVolume === "number") gameSettings.musicVolume = THREE.MathUtils.clamp(o.musicVolume, 0, 1);
         if (typeof o.soundVolume === "number") gameSettings.soundVolume = THREE.MathUtils.clamp(o.soundVolume, 0, 1);
         if (typeof o.postFx === "boolean") gameSettings.postFx = o.postFx;
+        const hasMotionBlurToggle = typeof o.motionBlur === "boolean";
+        if (hasMotionBlurToggle) gameSettings.motionBlur = o.motionBlur;
+        if (typeof o.cameraMotion === "boolean") gameSettings.cameraMotion = o.cameraMotion;
         gameSettings.effects = loadFxSettings(o.effects);
+        // Older saves shipped with motion blur fixed at zero. This new explicit
+        // toggle replaces that implicit default, so migrate once to the gentle default.
+        if (!hasMotionBlurToggle && gameSettings.effects.motion === 0) {
+          gameSettings.effects.motion = DEFAULT_FX.motion;
+        }
         if (typeof o.qualityIndex === "number") gameSettings.qualityIndex = THREE.MathUtils.clamp(o.qualityIndex | 0, 0, QUALITY_LEVELS.length - 1);
         if (typeof o.texturesOn === "boolean") gameSettings.texturesOn = o.texturesOn;
         if (typeof o.renderDistanceIndex === "number") {
@@ -977,6 +991,7 @@
     let paused = false;
     let chatOpen = false;
     let playerName = "Player";
+    let pendingNameAction = null;
     let killerEnemy = null;
     const hitIndicators = [];
     const HIT_DIR_SVG_W = 100;
@@ -1054,7 +1069,9 @@
           if (typeof last !== "function") return;
           const reply = (payload) => queueMicrotask(() => last(payload));
           if (_ev === "joinRoom") {
-            reply({ ok: true, hostId: "offline", roomKey: String(args[0] || "") });
+            const roomArg = args[0];
+            const roomKey = typeof roomArg === "string" ? roomArg : String(roomArg?.roomKey || "");
+            reply({ ok: true, hostId: "offline", roomKey });
             return;
           }
           if (_ev === "quickplay" || _ev === "createRoom") {
@@ -1345,7 +1362,7 @@
       if (!activeRoomId || !MULTIPLAYER) return;
       if (typeof socket.emit !== "function") return;
       const gen = ++_joinRoomGeneration;
-      socket.emit("joinRoom", activeRoomId, (ack) => {
+      socket.emit("joinRoom", { roomKey: activeRoomId, name: playerName }, (ack) => {
         if (gen !== _joinRoomGeneration) return;
         if (!ack || !ack.ok) return;
         requestMatchSnapshot();
@@ -3231,13 +3248,19 @@
       "weapon-factory": { tint: 0xfff4e6, vignette: 0.36, bloom: 0.5, threshold: 0.9 },
     };
     function postFxWanted() {
-      return gameSettings.postFx !== false && !postFxBroken && getQualityId() !== "potato";
+      const potatoMotionPass = getQualityId() === "potato"
+        && gameSettings.motionBlur !== false && gameSettings.effects.motion > 0;
+      return gameSettings.postFx !== false && !postFxBroken && (getQualityId() !== "potato" || potatoMotionPass);
     }
     function renderWorld(dt) {
       // Water reflections are drawn first, from a mirrored camera; the potato tier keeps the sky colour instead.
       if (pvpWaterMirrors.length) {
         const mirrorOn = getQualityId() !== "potato";
+        const now = Date.now() / 1000;
         for (const mirror of pvpWaterMirrors) {
+          // Splashes: wading, falling in, and the graphics tier that sets how many rings and drops there are.
+          mirror.setQuality(getQualityId());
+          mirror.step(now, { x: player.position.x, z: player.position.z, vy: player.velocityY ?? 0, grounded: player.onGround });
           mirror.uniforms.uMirrorOn.value = mirrorOn ? 1 : 0;
           if (mirrorOn) mirror.render(renderer, scene, camera);
         }
@@ -3280,8 +3303,14 @@
         const key = CURRENT_MAP + (isGauntletMap(CURRENT_MAP) ? currentGauntletTheme().id : "");
         const environment = pvpDef(CURRENT_MAP)?.env || (isBossArenaMap(CURRENT_MAP) ? bossOptics : null);
         const quality = getQualityId();
+        const renderCfg = quality === "potato" ? {
+          ...cfg,
+          bloom: 0, ao: "off", aoStrength: 0, ssr: 0,
+          shafts: 0, flare: 0, adapt: 0, dof: 0,
+          fringe: 0, distortion: 0, panini: 0, grain: 0, vignette: 0,
+        } : cfg;
         if (postConfigDirty || postTier !== quality || key !== _postLookKey) {
-          postFx.configure(cfg, quality, environment);
+          postFx.configure(renderCfg, quality, quality === "potato" ? null : environment);
           postConfigDirty = false;
           postTier = quality;
         }
@@ -3294,7 +3323,7 @@
           else if (isBrightIndoorMap(CURRENT_MAP) || isTrainingMap(CURRENT_MAP)) postFx.look({ vignette: 0.22, bloom: 0.2, threshold: 1.4 });
           else postFx.look({ vignette: 0.42, bloom: 0.4, contrast: 1.08 });
         }
-        postFx.update(dt, { weak, aiming: state.adsProgress > .50,
+        postFx.update(dt, { weak, aiming: state.adsProgress > .50, motionBlur: gameSettings.motionBlur !== false,
           fringe: performance.now() < state.dashActiveUntil ? .006 : 0,
           waterTime: environment?.water ? Date.now() / 1000 % 1024 : 0 });
         postFx.render(dt);
@@ -3331,6 +3360,11 @@
         moon.shadow.map.dispose();
         moon.shadow.map = null;
       }
+      // Themed maps turn autoUpdate off after baking static shadows. Mark the
+      // light itself dirty too, so a quality change rebuilds that map instead
+      // of sampling the disposed render target.
+      moon.shadow.needsUpdate = true;
+      try { flashlight.shadow.needsUpdate = true; } catch (_) {}
       renderer.shadowMap.needsUpdate = true;
       ensureTorchShadowMap();
 
@@ -3625,6 +3659,8 @@
     let menuBackdropPoint = null;
     let menuBackdropReady = false;
     let menuBackdropRaf = 0;
+    let resolveMenuBackdropLoaded = null;
+    const menuBackdropLoaded = new Promise((resolve) => { resolveMenuBackdropLoaded = resolve; });
 
     const MENU_BACKDROP_LIGHT_FIXED = 2.0;
     let menuBgmAnalyser = null;
@@ -3714,6 +3750,19 @@
       if (!menuWallBackdropCanvas) return;
       menuWallBackdropCanvas.style.display = visible ? "block" : "none";
       menuWallBackdropCanvas.style.visibility = visible ? "visible" : "hidden";
+    }
+
+    function finishMenuBackdropLoad() {
+      if (menuBackdropReady) return;
+      menuBackdropReady = true;
+      if (menuBackdropRenderer && menuBackdropScene && menuBackdropCamera) {
+        try {
+          updateMenuBackdropLightFromMusic();
+          menuBackdropRenderer.render(menuBackdropScene, menuBackdropCamera);
+        } catch (_) {}
+      }
+      startMenuBackdropLoop();
+      resolveMenuBackdropLoaded?.(true);
     }
 
     function setGameActiveUi(active) {
@@ -3807,36 +3856,41 @@
       menuBackdropRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
       resizeMenuWallBackdrop();
 
-      // Start the render loop immediately — don't wait for the texture to load. Without this,
-      // if the texture load hangs or all URLs fail without firing the error callback (e.g.
-      // CORS-blocked, wrong MIME type, network timeout that the loader doesn't surface), the
-      // canvas stays transparent because the render loop never starts. Starting the loop here
-      // means the lamp + scene background are visible immediately; the wall texture replaces
-      // the solid wallMat.color when it eventually loads.
-      menuBackdropReady = true;
-      startMenuBackdropLoop();
-
       const urls = getMenuWallTextureUrlList();
       let idx = 0;
+      let wallLoadSettled = false;
+      const wallLoadTimeout = setTimeout(() => {
+        if (wallLoadSettled) return;
+        wallLoadSettled = true;
+        wallMat.color.set("#020202");
+        finishMenuBackdropLoad();
+      }, 7000);
+      function useMenuWallFallback() {
+        if (wallLoadSettled) return;
+        wallLoadSettled = true;
+        clearTimeout(wallLoadTimeout);
+        wallMat.color.set("#020202");
+        finishMenuBackdropLoad();
+      }
       function tryWall() {
         if (idx >= urls.length) {
-          wallMat.color.set("#020202");
-          menuBackdropReady = true;
-          startMenuBackdropLoop();
+          useMenuWallFallback();
           return;
         }
         const u = urls[idx];
         texLoader.load(
           u,
           (tex) => {
+            if (wallLoadSettled) { tex.dispose(); return; }
+            wallLoadSettled = true;
+            clearTimeout(wallLoadTimeout);
             // Stretch the texture to fit the wall plane (no tiling).
             tex.wrapS = THREE.ClampToEdgeWrapping;
             tex.wrapT = THREE.ClampToEdgeWrapping;
             tex.colorSpace = THREE.SRGBColorSpace;
             wallMat.map = tex;
             wallMat.needsUpdate = true;
-            menuBackdropReady = true;
-            startMenuBackdropLoop();
+            finishMenuBackdropLoad();
           },
           undefined,
           () => {
@@ -3857,6 +3911,7 @@
           menuWallBackdropCanvas.style.background =
             "radial-gradient(ellipse at 50% 40%, #4a4632 0%, #2b2820 55%, #14110c 100%)";
         }
+        finishMenuBackdropLoad();
       }
     }
 
@@ -3896,43 +3951,81 @@
 
     function resolveGameUiLayersFromProbe() {
       const candidates = getGameAssetBaseCandidates();
-      let bi = 0;
-      let li = 0;
-      function tryNext() {
-        if (bi >= candidates.length) return;
-        if (li >= __GAME_UI_LAYOUTS__.length) {
-          bi++;
-          li = 0;
-          tryNext();
-          return;
+      return new Promise((resolve) => {
+        let bi = 0, li = 0, settled = false;
+        const deadline = setTimeout(() => finish(false), 8000);
+        function finish(ok) {
+          if (settled) return;
+          settled = true;
+          clearTimeout(deadline);
+          resolve(ok);
         }
-        const base = normalizeGameAssetBase(candidates[bi]);
-        const layout = __GAME_UI_LAYOUTS__[li];
-        let testUrl;
-        try {
-          testUrl = new URL(layout.menuBg, base).href;
-        } catch (_) {
-          li++;
-          if (li >= __GAME_UI_LAYOUTS__.length) {
-            bi++;
-            li = 0;
-          }
-          tryNext();
-          return;
+        function tryNext() {
+          if (settled) return;
+          if (bi >= candidates.length) { finish(false); return; }
+          if (li >= __GAME_UI_LAYOUTS__.length) { bi++; li = 0; tryNext(); return; }
+          const base = normalizeGameAssetBase(candidates[bi]);
+          const layout = __GAME_UI_LAYOUTS__[li];
+          const paths = [layout.menuBg, layout.btnTex, layout.settingsBg];
+          const checks = paths.map((path) => new Promise((done) => {
+            let url;
+            try { url = new URL(path, base).href; } catch (_) { done(false); return; }
+            const img = new Image();
+            img.onload = () => done(true);
+            img.onerror = () => done(false);
+            img.src = url;
+          }));
+          Promise.all(checks).then((results) => {
+            if (settled) return;
+            if (results.every(Boolean)) {
+              applyResolvedGameAssetBase(base, layout);
+              finish(true);
+              return;
+            }
+            li++;
+            if (li >= __GAME_UI_LAYOUTS__.length) { bi++; li = 0; }
+            tryNext();
+          });
         }
-        const img = new Image();
-        img.onload = () => applyResolvedGameAssetBase(base, layout);
-        img.onerror = () => {
-          li++;
-          if (li >= __GAME_UI_LAYOUTS__.length) {
-            bi++;
-            li = 0;
-          }
-          tryNext();
-        };
-        img.src = testUrl;
-      }
-      tryNext();
+        tryNext();
+      });
+    }
+
+    function waitForMenuImage(img, timeoutMs = 8000) {
+      return new Promise((resolve) => {
+        let settled = false;
+        const timeout = setTimeout(() => finish(false), timeoutMs);
+        function finish(ok) {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timeout);
+          img.removeEventListener("load", onLoad);
+          img.removeEventListener("error", onError);
+          if (!ok) img.style.visibility = "hidden";
+          resolve(ok);
+        }
+        function decode() {
+          if (typeof img.decode === "function") img.decode().then(() => finish(true)).catch(() => finish(false));
+          else finish(img.naturalWidth > 0);
+        }
+        function onLoad() { decode(); }
+        function onError() { finish(false); }
+        img.addEventListener("load", onLoad, { once: true });
+        img.addEventListener("error", onError, { once: true });
+        if (img.complete) img.naturalWidth > 0 ? decode() : finish(false);
+      });
+    }
+
+    async function revealMenuWhenReady(uiLayersReady) {
+      const menuImages = [...document.querySelectorAll("#menu img, #pageFooter img, #menuBg")];
+      await Promise.all([
+        uiLayersReady,
+        menuBackdropLoaded,
+        Promise.all(menuImages.map((img) => waitForMenuImage(img))),
+        document.fonts?.ready || Promise.resolve(),
+      ]);
+      document.body.classList.add("menu-ready");
+      if (menuStartupGate) setTimeout(() => menuStartupGate.remove(), 240);
     }
 
     function tryLoadWallsTexture(urls, index) {
@@ -3963,7 +4056,8 @@
       );
     }
     tryLoadWallsTexture(getWallTextureUrlList(), 0);
-    resolveGameUiLayersFromProbe();
+    const menuUiLayersReady = resolveGameUiLayersFromProbe();
+    void revealMenuWhenReady(menuUiLayersReady);
 
     const _texturedMeshes = [];
     /** World meters per texture tile. A larger span makes distant repetition far less visible. */
@@ -4370,31 +4464,58 @@
     }
 
     /**
-     * Texture detail OFF on every map. The arena builds its own untextured walls; the other maps build their
-     * materials directly, so this pass applies the setting to whatever is in the scene: the maps are kept
-     * aside the first time a material is seen, and when detail is off the material gets the average colour of
-     * its map instead, so the setting changes the detail and not the brightness. Cut-out and transparent
-     * materials are skipped, since their map is what gives them their shape.
+     * Texture detail applies across opaque map materials, including maps built after
+     * the setting is first read. Keep alpha/cutout maps untouched so they cannot erase
+     * geometry, and preserve every opaque surface slot for a clean toggle back on.
      */
-    /** Kept out of userData: Material.clone() copies userData through JSON, which would turn the textures into plain objects. */
+    /** Kept out of userData: Material.clone() serializes userData and would lose Texture identity. */
     const savedDetail = new WeakMap();
+    const DETAIL_TEXTURE_SLOTS = ["map", "normalMap", "roughnessMap", "metalnessMap", "bumpMap", "displacementMap", "aoMap", "lightMap", "emissiveMap"];
+    function detailTextureSlots(material) {
+      const slots = {};
+      for (const key of DETAIL_TEXTURE_SLOTS) if (key in material) slots[key] = material[key] || null;
+      return slots;
+    }
     function applyTextureDetail() {
       const on = gameSettings.texturesOn;
       scene.traverse((o) => {
         if (!o.isMesh || !o.material) return;
         for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
-          if (!m.isMeshStandardMaterial || m.transparent || m.alphaTest > 0 || m.alphaMap) continue;
+          if (!m.color?.isColor || m.transparent || m.alphaTest > 0 || m.alphaMap) continue;
           let saved = savedDetail.get(m);
           if (!saved) {
-            saved = { map: m.map, normalMap: m.normalMap, roughnessMap: m.roughnessMap, color: m.color.clone() };
+            saved = { slots: detailTextureSlots(m), color: m.color.clone(), disabled: false };
             savedDetail.set(m, saved);
           }
-          const color = on || !saved.map ? saved.color : saved.color.clone().multiply(averageTextureColor(saved.map.image, false));
-          const map = on ? saved.map : null, normalMap = on ? saved.normalMap : null, roughnessMap = on ? saved.roughnessMap : null;
-          if (m.map === map && m.normalMap === normalMap && m.roughnessMap === roughnessMap && m.color.equals(color)) continue;
-          m.map = map; m.normalMap = normalMap; m.roughnessMap = roughnessMap;
-          m.color.copy(color);
-          m.needsUpdate = true;
+          let changed = false;
+          if (on) {
+            if (saved.disabled) {
+              for (const key of Object.keys(saved.slots)) {
+                if (m[key] !== saved.slots[key]) { m[key] = saved.slots[key]; changed = true; }
+              }
+              if (!m.color.equals(saved.color)) { m.color.copy(saved.color); changed = true; }
+              saved.disabled = false;
+            } else {
+              // A mesh can receive its final map after it was first traversed.
+              saved.slots = detailTextureSlots(m);
+              saved.color.copy(m.color);
+            }
+          } else {
+            if (!saved.disabled) {
+              saved.slots = detailTextureSlots(m);
+              saved.color.copy(m.color);
+              saved.disabled = true;
+            }
+            const baseMap = saved.slots.map || null;
+            const flatColor = baseMap
+              ? saved.color.clone().multiply(averageTextureColor(baseMap.image, false))
+              : saved.color;
+            for (const key of Object.keys(saved.slots)) {
+              if (m[key] !== null) { m[key] = null; changed = true; }
+            }
+            if (!m.color.equals(flatColor)) { m.color.copy(flatColor); changed = true; }
+          }
+          if (changed) m.needsUpdate = true;
         }
       });
     }
@@ -4935,6 +5056,13 @@
       return fixture;
     }
 
+    // Arena-only realistic floor/ceiling concrete (normal + roughness mapped). Lazily built so it
+    // picks up the final max anisotropy; materials are cached and flagged _cachedShared.
+    let _arenaRealism = null;
+    function getArenaRealism() {
+      if (!_arenaRealism) _arenaRealism = createArenaRealism(THREE, { anisotropy: getMaxTextureAnisotropy });
+      return _arenaRealism;
+    }
     function buildMazeChunk(cx, cz) {
       const key = `${cx},${cz}`;
       if (mazeChunks.has(key)) return;
@@ -4949,35 +5077,31 @@
       const chunkMeshes = [];
       const slabRepeat = Math.round(MAZE_CHUNK_WORLD / FLOOR_CEILING_METERS_PER_REPEAT);
 
+      // Arena floor: normal + roughness mapped sealed concrete (grime, cracks, damp patches).
+      // Kept out of _texturedMeshes so the shared swap can't overwrite it; the generic
+      // applyTextureDetail() pass still degrades it when "Texture detail" is off.
       const floorPl = new THREE.Mesh(
         new THREE.PlaneGeometry(MAZE_CHUNK_WORLD, MAZE_CHUNK_WORLD),
-        getWallMaterialCached(slabRepeat, slabRepeat, 0x727a84, "floor")
+        getArenaRealism().floorMaterial(slabRepeat)
       );
       floorPl.rotation.x = -Math.PI / 2;
       floorPl.position.set(ox + MAZE_CHUNK_WORLD / 2, 0, oz + MAZE_CHUNK_WORLD / 2);
       floorPl.receiveShadow = true;
       scene.add(floorPl);
       chunkMeshes.push(floorPl);
-      _texturedMeshes.push({
-        mesh: floorPl,
-        rx: slabRepeat, ry: slabRepeat, tint: 0x727a84, surface: "floor",
-      });
 
       // v93: ceiling plane now spans the full chunk (no 0.02 inset). Previously each chunk
       // had a 0.04u gap to its neighbor, letting the sky show through arena (zombie map).
+      // Arena ceiling: cast-concrete panels with form-board seams, leak stains and rust bleed.
       const ceilPl = new THREE.Mesh(
         new THREE.PlaneGeometry(MAZE_CHUNK_WORLD, MAZE_CHUNK_WORLD),
-        getWallMaterialCached(slabRepeat, slabRepeat, 0x606b75, "ceiling")
+        getArenaRealism().ceilingMaterial(slabRepeat)
       );
       ceilPl.rotation.x = Math.PI / 2;
       ceilPl.position.set(ox + MAZE_CHUNK_WORLD / 2, MAZE_WALL_H, oz + MAZE_CHUNK_WORLD / 2);
       ceilPl.receiveShadow = true;
       scene.add(ceilPl);
       chunkMeshes.push(ceilPl);
-      _texturedMeshes.push({
-        mesh: ceilPl,
-        rx: slabRepeat, ry: slabRepeat, tint: 0x606b75, surface: "ceiling",
-      });
 
       // All maze walls share one box material (repeat 1,1) and are merged into a single
       // BufferGeometry per chunk → 1 draw call (main + shadow) instead of ~76 walls ×
@@ -5494,6 +5618,7 @@
     function setMoonShadowSize(size) {
       moon.shadow.mapSize.set(size, size);
       if (moon.shadow.map) { moon.shadow.map.dispose(); moon.shadow.map = null; }
+      moon.shadow.needsUpdate = true;
       renderer.shadowMap.needsUpdate = true;
     }
     function restoreMoon() {
@@ -5651,15 +5776,34 @@
       clearPvpMapLights();
       buildCombatScenery("boss");
 
-      const amb = new THREE.AmbientLight(0xb0bece, 3.6);
+      // The containment deck used to be lit by a flat flood (amb 3.6 + hemi 3.8 + a shadowless
+      // directional 4.6): no shadow anywhere, so the creature read as a cut-out and the whole
+      // room looked like a game. It now has a single raking key that casts a soft shadow, with
+      // a low cool fill and a warm floor bounce, so the 85k-triangle boss sits on the deck and
+      // its plates and sockets catch the light. Still exactly three map lights, so the count
+      // never changes between quality tiers (the fairness rule) and no light is added mid-fight.
+      const amb = new THREE.AmbientLight(0x3b4653, 0.72);
       scene.add(amb); pvpMapLights.push(amb);
-      const hemi = new THREE.HemisphereLight(0x9daec2, 0x504143, 3.8);
+      // Cool skylight from the ceiling slot overhead; warm bounce up off the steel deck and the
+      // orange heat-exchanger units, so shadowed faces stay legible and read as reflected light.
+      const hemi = new THREE.HemisphereLight(0x95aac8, 0x3d2d24, 1.5);
       scene.add(hemi); pvpMapLights.push(hemi);
-      const dim = new THREE.DirectionalLight(0xd0dcef, 4.6);
-      dim.position.set(20, 40, 30);
-      dim.castShadow = false;
-      scene.add(dim); pvpMapLights.push(dim);
-
+      // Key: a hard industrial floodlight raking across the deck. It is the shadow caster.
+      const key = new THREE.DirectionalLight(0xe4edfa, 3.5);
+      key.position.set(36, 50, 24);
+      key.castShadow = true;
+      const kp = getQualityPreset();
+      key.shadow.mapSize.set(kp.shadowSz, kp.shadowSz);
+      const kc = key.shadow.camera;
+      kc.left = -60; kc.right = 60; kc.top = 60; kc.bottom = -60; kc.near = 12; kc.far = 160;
+      kc.updateProjectionMatrix();
+      key.shadow.bias = kp.bias;
+      key.shadow.normalBias = kp.normalBias;
+      key.shadow.radius = kp.shadowSoft ? 3 : 1;
+      scene.add(key); pvpMapLights.push(key);
+      // The creature moves, so its shadow must refresh every frame (boss arena keeps shadow
+      // autoUpdate on); one forced pass now paints the first frame before gameplay starts.
+      renderer.shadowMap.needsUpdate = true;
     }
 
     function resetTrainingSession() {
@@ -5798,7 +5942,7 @@
 
       // Strip the AI state so a target never chases or shoots — updateTrainingDummies owns it.
       dummy.trainingDummy = true;
-      setEnemyShadows(dummy.group, false);
+      setEnemyShadows(dummy.group, true);   // real sun shadow grounds the target on the deck
       if (dummy.flashMount) dummy.flashMount.visible = false;
       dummy.alive = true;
       dummy.aware = false;
@@ -5908,6 +6052,7 @@
       // no-show. Forced true here and re-forced every update below.
       rp.group.visible = true;
       scene.add(rp.group);
+      setEnemyShadows(rp.group, true);   // the demo mannequin casts a sun shadow too
       remotePlayers.set(SHOWCASE_ID, rp);
       showcaseRp = rp;
 
@@ -6173,16 +6318,57 @@
       }
     }
 
+    /** Training-only realism controller (concrete walls, drifting dust). Rebuilt per map build, animated in animate(). */
+    let trainingRealism = null;
     function buildMapTraining() {
       clearPvpMapLights();
       buildCombatScenery("training", TRAINING_TARGETS);
-      const sky = new THREE.HemisphereLight(0xe4f2ff, 0x545b64, 2.7);
-      const sun = new THREE.DirectionalLight(0xfff7e9, 3.2);
-      sun.position.set(18, 42, 14);
-      const fill = new THREE.DirectionalLight(0xc9dfff, 0.9);
-      fill.position.set(-14, 16, -46);
+
+      // ── Re-skin the flat grey "facility" walls as painted / board-formed concrete ──
+      // One training-only material (marked _cachedShared, so the map-clear and the shared
+      // facility-texture pass both leave it alone) replaces the facility material on every
+      // training wall. They are dropped from _texturedMeshes so applyWallTexture never puts
+      // the facility material back; the texture-detail toggle still works, because
+      // applyTextureDetail() toggles any MeshStandardMaterial's map generically.
+      const concrete = createTrainingWallMaterial(THREE);
+      for (let i = _texturedMeshes.length - 1; i >= 0; i--) {
+        const entry = _texturedMeshes[i];
+        if (entry.surface !== "facility") continue;
+        entry.mesh.material = concrete;
+        entry.mesh.castShadow = true;
+        entry.mesh.receiveShadow = true;
+        _texturedMeshes.splice(i, 1);
+      }
+
+      // ── Lighting: a dominant, shadow-casting sun over sky/ground ambient and a cool fill ──
+      const center = new THREE.Vector3(0, 0, -11);
+      const sky = new THREE.HemisphereLight(0xc3d6ea, 0x6a6155, 2.15);
+      const sun = new THREE.DirectionalLight(0xfff1d6, 3.5);
+      const sunDir = new THREE.Vector3(0.46, 0.64, 0.26).normalize();
+      sun.position.copy(center).addScaledVector(sunDir, 95);
+      sun.target.position.copy(center);
+      scene.add(sun.target);
+      // A real soft shadow, without adding or removing a light. Resolution/softness scale with
+      // the quality tier (fidelity and cost only — the shadow is present on every tier).
+      const qp = getQualityPreset();
+      const tier = ({ potato: 0, regular: 1, high: 2, extreme: 3 })[getQualityId()] ?? 1;
+      sun.castShadow = true;
+      sun.shadow.mapSize.set(qp.shadowSz, qp.shadowSz);
+      const sc = sun.shadow.camera;
+      sc.left = -44; sc.right = 44; sc.top = 44; sc.bottom = -44; sc.near = 20; sc.far = 220;
+      sc.updateProjectionMatrix();
+      sun.shadow.bias = qp.bias;
+      sun.shadow.normalBias = qp.normalBias;
+      sun.shadow.radius = qp.shadowSoft ? 3 : 1.5;
+      const fill = new THREE.DirectionalLight(0xb9cce4, 0.55);
+      fill.position.set(-26, 20, -44);
       scene.add(sky, sun, fill);
       pvpMapLights.push(sky, sun, fill);
+
+      // ── Airborne dust over the firing court ──
+      trainingRealism = createTrainingDust(THREE, tier, sunDir);
+      if (combatScenery) combatScenery.add(trainingRealism.points);
+      renderer.shadowMap.needsUpdate = true;
     }
 
     /**
@@ -6410,8 +6596,9 @@
     function renderPortalViews() {
       if (!gauntletRuntime || !gauntletRuntime.portals || !gauntletRuntime.portals.length) return;
       renderer.getDrawingBufferSize(_portalBuffer);
-      const viewScale = resolutionScale < 0.82 ? 0.5 : 0.62;
-      const w = Math.max(64, Math.floor(_portalBuffer.x * viewScale)), h = Math.max(64, Math.floor(_portalBuffer.y * viewScale));
+      // Match the game buffer at 1:1 so the destination is neither magnified nor blurred.
+      const viewScale = 1;
+      const w = Math.max(1, Math.floor(_portalBuffer.x * viewScale)), h = Math.max(1, Math.floor(_portalBuffer.y * viewScale));
       portalCamera.fov = camera.fov;
       portalCamera.aspect = camera.aspect;
       portalCamera.near = camera.near;
@@ -9531,9 +9718,11 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
      */
     const camRig = { pitch: 0, vp: 0, roll: 0, vr: 0, yaw: 0, vy: 0, fov: 0, vf: 0, quake: 0, quakeT: 0 };
     function addCamKick({ pitch = 0, roll = 0, yaw = 0, fov = 0 } = {}) {
+      if (gameSettings.cameraMotion === false) return;
       camRig.vp += pitch * 26; camRig.vr += roll * 26; camRig.vy += yaw * 26; camRig.vf += fov * 26;
     }
     function addQuake(amount) {
+      if (gameSettings.cameraMotion === false) return;
       camRig.quake = Math.min(1.4, camRig.quake + amount);
       camRig.quakeT = 0;
     }
@@ -9557,6 +9746,10 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       const ck = camRig.clock;
       heatVignette.style.opacity = (camRig.heat * (0.62 + Math.sin(ck * 5.2) * 0.1)).toFixed(3);
       if (camRig.heat > 0.4 && nowMs - (camRig.sizzleAt || 0) > 280) { camRig.sizzleAt = nowMs; playSizzleSound(); }
+      if (gameSettings.cameraMotion === false) {
+        camRig.pitch = camRig.vp = camRig.roll = camRig.vr = camRig.yaw = camRig.vy = camRig.fov = camRig.vf = camRig.quake = 0;
+        return { pitch: 0, roll: 0, yaw: 0, y: 0, fov: 0 };
+      }
       let qy = 0, qr = 0, qp = 0;
       if (camRig.quake > 0.002) {
         const a = camRig.quake;
@@ -14750,7 +14943,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         inverseFrame.copy(frame).invert();
         const localOrigin = ray.ray.origin.clone().applyMatrix4(inverseFrame);
         const localDirection = ray.ray.direction.clone().applyQuaternion(rotation.clone().invert());
-        if (localDirection.z >= -1e-5 || localOrigin.z <= 0) continue;
+        if (Math.abs(localDirection.z) <= 1e-5 || localOrigin.z * localDirection.z >= 0) continue;
         const t = -localOrigin.z / localDirection.z;
         if (t <= Math.max(0, ray.near) || t >= ray.far || (closest && t >= closest.distance)) continue;
         const entryPoint = ray.ray.at(t, new THREE.Vector3());
@@ -19980,6 +20173,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           .filter(Boolean)
           .sort((a, b) => a.distance - b.distance)[0] || null;
         const wallDist = obstacleHit ? obstacleHit.distance : Infinity;
+        for (const mirror of pvpWaterMirrors) mirror.shot(ray.ray.origin, ray.ray.direction, wallDist, Date.now() / 1000);
 
         let bestEnemy = null;
         let bestEnemyHitT = Infinity;
@@ -20714,25 +20908,27 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       if (movingNow && player.onGround) {
         state.walkPhase += dt * 10.5 * Math.max(0.55, _stride);
       }
-      const bobTarget = (movingNow && player.onGround)
+      const cameraMotionEnabled = gameSettings.cameraMotion !== false;
+      const bobTarget = (cameraMotionEnabled && movingNow && player.onGround)
         ? Math.abs(Math.sin(state.walkPhase)) * 0.026 * Math.min(1, _stride)
         : 0;
       state.smoothHeadBob = dampScalar(state.smoothHeadBob, bobTarget, dt, 11);
 
       // Landing: the camera sinks with the impact and springs back. Scaled by how fast you
       // were actually falling, so stepping off a kerb is a nudge and a real drop is a thud.
-      if (_wasAirborne && player.onGround && !_dashing && _impactVy < -2.5) {
+      if (cameraMotionEnabled && _wasAirborne && player.onGround && !_dashing && _impactVy < -2.5) {
         state.landDip = Math.max(state.landDip, Math.min(0.2, (-_impactVy - 2.5) * 0.024));
         addCamKick({ pitch: -Math.min(0.06, (-_impactVy - 2.5) * 0.012), roll: (Math.random() - 0.5) * Math.min(0.03, (-_impactVy - 2.5) * 0.006) });
       }
-      state.landDipVis = dampScalar(state.landDipVis, state.landDip, dt, 26);
+      state.landDipVis = dampScalar(state.landDipVis, cameraMotionEnabled ? state.landDip : 0, dt, 26);
       state.landDip = dampScalar(state.landDip, 0, dt, 7.5);
 
       // Lean into a strafe. Roll is derived from sideways velocity, so it eases in and out
       // with the movement itself; under 1° at full speed, identical on every quality tier.
       const _latSpeed = state.velX * right.x + state.velZ * right.z;
-      const _rollTarget = _dashing ? 0 : -THREE.MathUtils.clamp(_latSpeed / player.speed, -1, 1) * 0.036;
+      const _rollTarget = !cameraMotionEnabled || _dashing ? 0 : -THREE.MathUtils.clamp(_latSpeed / player.speed, -1, 1) * 0.036;
       state.camRoll = dampScalar(state.camRoll, _rollTarget, dt, 9);
+      if (!cameraMotionEnabled) state.smoothHeadBob = state.landDip = state.landDipVis = state.camRoll = state.camShake = 0;
 
       camera.position.copy(player.position);
       // Auto-stepping up a kerb or a slope tread moves the body in one go; the camera eases
@@ -20749,7 +20945,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       camera.position.y += rig.y;
       camera.rotation.y = player.yaw + rig.yaw;
       camera.rotation.x = player.pitch + rig.pitch;
-      camera.rotation.z = state.camRoll + rig.roll;
+      camera.rotation.z = cameraMotionEnabled ? state.camRoll + rig.roll : 0;
       state.camFovKick = rig.fov;
     }
 
@@ -21214,6 +21410,10 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       textureLabel.textContent = gameSettings.texturesOn ? "ON" : "OFF";
       const postLabelEl = document.getElementById("postLabel");
       if (postLabelEl) postLabelEl.textContent = gameSettings.postFx !== false ? "ON" : "OFF";
+      const cameraMotionValue = document.getElementById("cameraMotionValue");
+      if (cameraMotionValue) cameraMotionValue.textContent = gameSettings.cameraMotion !== false ? "ON" : "OFF";
+      const motionBlurValue = document.getElementById("motionBlurValue");
+      if (motionBlurValue) motionBlurValue.textContent = gameSettings.motionBlur !== false ? "ON" : "OFF";
       syncFxControls?.();
       const rdi = THREE.MathUtils.clamp(
         gameSettings.renderDistanceIndex | 0,
@@ -24582,7 +24782,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       const fx = getQualityPresentationScale();
       if (player.health > 0 && started) {
         const sh = state.camShake;
-        if (sh > 1e-5) {
+        if (gameSettings.cameraMotion !== false && sh > 1e-5) {
           camera.position.x += (Math.random() - 0.5) * sh * 0.72;
           camera.position.y += (Math.random() - 0.5) * sh * 0.32;
           state.camShake *= Math.pow(0.18, dt * 52);
@@ -24603,6 +24803,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         if (MULTIPLAYER && TRAINING_COOP && !ZOMBIE_AUTHORITY) updateRemoteEnemies(dt);
         else updateTrainingDummies(dt);
         updateAnimationShowcase(dt);
+        trainingRealism?.update(dt);
       }
       // Outside the training-map block: this was nested inside it, so checkpoints, the
       // fall-reset and the exit check never ran on the gauntlet map at all.
@@ -25528,6 +25729,15 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       showMenuPanel("menuLobby");
     }
 
+    function promptForPlayerName(action) {
+      pendingNameAction = action;
+      if (nameError) nameError.textContent = "";
+      nameInput.value = "";
+      btnNameOk.disabled = false;
+      nameModal.style.display = "flex";
+      nameInput.focus();
+    }
+
     function beginMultiplayerGame(mapName, roomOpts) {
       if (typeof roomOpts === "string") {
         activeRoomId = roomOpts;
@@ -25555,10 +25765,10 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         PENDING_PVP_MAP = mapName;
         ROOM_CODE = makePvpShareCode(ROOM_CODE, mapName);
       }
-      nameModal.style.display = "flex";
-      nameInput.value = "";
-      nameInput.focus();
-      nameModal._pendingMap = mapName;
+      const coopArena = (mapName === "arena" && pendingLobbyMode === "arena-coop") ||
+                        (mapName === "boss_arena" && pendingLobbyMode === "boss-coop");
+      const coopTraining = mapName === "training" && pendingLobbyMode === "training-coop";
+      startGame(mapName, true, coopArena, coopTraining);
     }
 
     (function injectGauntletEntry() {
@@ -25755,10 +25965,13 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
 
     btnPvpMapBack.addEventListener("click", () => showMenuPanel("menuStart"));
 
-    /** Emit a lobby room request (quickplay / createRoom) and route the ack into the match flow. */
-    function emitRoomRequest(eventName) {
+    /** Emit a lobby room request only after the player has supplied a name. */
+    function emitRoomRequest(eventName, name) {
       clearLobbyErr();
       if (!pendingLobbyMode) {
+        nameModal.style.display = "none";
+        pendingNameAction = null;
+        btnNameOk.disabled = false;
         showLobbyErr(tr("lobbyPickModeFirst", "Choose CO-OP or a PVP map first."));
         return;
       }
@@ -25768,23 +25981,30 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       socket.emit(eventName, {
         // The relay knows two PVP maps; the other two are named by the share code like the rest.
         mode: _pendingServerMode, map: pendingLobbyMode === "crossfire" && !(PENDING_PVP_MAP === "crossfire" || PENDING_PVP_MAP === "crossfire_grid") ? "crossfire" : lobbyMapFromPending(),
-        bosses: BOSS_FIGHT_COUNT, hell: BOSS_HELL_MODE,
+        bosses: BOSS_FIGHT_COUNT, hell: BOSS_HELL_MODE, name,
       }, (res) => {
         if (res == null) {
-          showLobbyErr(tr("mpNoServerAck", "No response from server."));
+          if (nameError) nameError.textContent = tr("mpNoServerAck", "No response from server.");
+          btnNameOk.disabled = false;
           return;
         }
         const norm = normalizeMatchAck(res);
         if (norm.error) {
+          nameModal.style.display = "none";
+          pendingNameAction = null;
+          btnNameOk.disabled = false;
           showLobbyErr(norm.error);
           return;
         }
+        nameModal.style.display = "none";
+        pendingNameAction = null;
+        btnNameOk.disabled = false;
         beginMultiplayerGame(norm.map || lobbyMapFromPending(), norm);
       });
     }
 
-    btnQuickplay.addEventListener("click", () => emitRoomRequest("quickplay"));
-    btnCreateRoom.addEventListener("click", () => emitRoomRequest("createRoom"));
+    btnQuickplay.addEventListener("click", () => promptForPlayerName({ type: "request", eventName: "quickplay" }));
+    btnCreateRoom.addEventListener("click", () => promptForPlayerName({ type: "request", eventName: "createRoom" }));
 
     btnJoinCode.addEventListener("click", () => {
       codeError.textContent = "";
@@ -25793,6 +26013,47 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       showMenuPanel("menuJoinCode");
       codeInput.focus({ preventScroll: true });
     });
+
+    function emitCodeJoin(code, name) {
+      const RETRY_DELAYS_MS = [600, 1200, 2000];
+      let attempt = 0;
+      const tryJoin = () => {
+        socket.emit("joinByCode", { code, mode: _pendingServerMode, name }, (res) => {
+          if (res == null) {
+            if (nameError) nameError.textContent = tr("mpNoServerAck", "No response from server.");
+            btnNameOk.disabled = false;
+            return;
+          }
+          const norm = normalizeMatchAck(res);
+          if (norm.error) {
+            const lower = norm.error.toLowerCase();
+            if (lower.includes("name") && lower.includes("use")) {
+              if (nameError) nameError.textContent = norm.error;
+              nameInput.focus();
+              nameInput.select();
+              btnNameOk.disabled = false;
+              return;
+            }
+            if (norm.error === "Room not found" && attempt < RETRY_DELAYS_MS.length) {
+              if (nameError) nameError.textContent = tr("mpWaitingForHost", "Waiting for host to reconnect…");
+              const delay = RETRY_DELAYS_MS[attempt++];
+              setTimeout(tryJoin, delay);
+              return;
+            }
+            nameModal.style.display = "none";
+            pendingNameAction = null;
+            btnNameOk.disabled = false;
+            codeError.textContent = norm.error;
+            return;
+          }
+          nameModal.style.display = "none";
+          pendingNameAction = null;
+          btnNameOk.disabled = false;
+          beginMultiplayerGame(norm.map || lobbyMapFromPending(), { ...norm, roomCode: norm.roomCode || code });
+        });
+      };
+      tryJoin();
+    }
 
     btnCodeJoin.addEventListener("click", () => {
       const rawInput = codeInput.value.trim().toUpperCase();
@@ -25814,33 +26075,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         if (parsed.variant) PENDING_PVP_MAP = parsed.variant;
       }
       _pendingServerMode = pendingLobbyMode;
-      // The host may be briefly offline (browser-throttled background tab, momentary network
-      // blip). The relay keeps the room suspended until the host reconnects, so a single
-      // joinByCode call races the host's reconnect. Retry a few times with a short backoff so
-      // the friend doesn't have to mash the button while the host's tab wakes up.
-      const RETRY_DELAYS_MS = [600, 1200, 2000];
-      let attempt = 0;
-      const tryJoin = () => {
-        socket.emit("joinByCode", { code, mode: _pendingServerMode }, (res) => {
-          if (res == null) {
-            codeError.textContent = tr("mpNoServerAck", "No response from server.");
-            return;
-          }
-          const norm = normalizeMatchAck(res);
-          if (norm.error) {
-            if (norm.error === "Room not found" && attempt < RETRY_DELAYS_MS.length) {
-              codeError.textContent = tr("mpWaitingForHost", "Waiting for host to reconnect…");
-              const delay = RETRY_DELAYS_MS[attempt++];
-              setTimeout(tryJoin, delay);
-              return;
-            }
-            codeError.textContent = norm.error;
-            return;
-          }
-          beginMultiplayerGame(norm.map || lobbyMapFromPending(), { ...norm, roomCode: norm.roomCode || code });
-        });
-      };
-      tryJoin();
+      promptForPlayerName({ type: "joinByCode", code });
     });
 
     codeInput.addEventListener("keydown", (e) => {
@@ -25856,13 +26091,18 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     });
 
     btnNameOk.addEventListener("click", () => {
-      playerName = nameInput.value.trim().slice(0, 16) || "Player";
-      nameModal.style.display = "none";
-      const map = nameModal._pendingMap || "crossfire";
-      const coopArena = (map === "arena" && pendingLobbyMode === "arena-coop") ||
-                        (map === "boss_arena" && pendingLobbyMode === "boss-coop");
-      const coopTraining = map === "training" && pendingLobbyMode === "training-coop";
-      startGame(map, true, coopArena, coopTraining);
+      const name = nameInput.value.trim().slice(0, 16);
+      if (!name) {
+        if (nameError) nameError.textContent = tr("enterNameRequired", "Enter a name before joining.");
+        nameInput.focus();
+        return;
+      }
+      if (!pendingNameAction) return;
+      playerName = name;
+      if (nameError) nameError.textContent = "";
+      btnNameOk.disabled = true;
+      if (pendingNameAction.type === "request") emitRoomRequest(pendingNameAction.eventName, name);
+      else if (pendingNameAction.type === "joinByCode") emitCodeJoin(pendingNameAction.code, name);
     });
 
     nameInput.addEventListener("keydown", (e) => {
@@ -26037,6 +26277,23 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         gameSettings.postFx = id === "btnPostNext";
         resetAdaptiveRenderControl(true);
         syncGameRendererSize();
+        syncSettingsUI();
+        saveGameSettings();
+      });
+    }
+    for (const [id, key, enabled] of [
+      ["btnCameraMotionOff", "cameraMotion", false],
+      ["btnCameraMotionOn", "cameraMotion", true],
+      ["btnMotionBlurOff", "motionBlur", false],
+      ["btnMotionBlurOn", "motionBlur", true],
+    ]) {
+      document.getElementById(id)?.addEventListener("click", () => {
+        gameSettings[key] = enabled;
+        if (key === "cameraMotion" && !enabled) {
+          state.camShake = state.camRoll = state.landDip = state.landDipVis = state.smoothHeadBob = 0;
+          for (const k of ["pitch", "vp", "roll", "vr", "yaw", "vy", "fov", "vf", "quake"]) camRig[k] = 0;
+        }
+        if (key === "motionBlur") postFx?.resetHistory();
         syncSettingsUI();
         saveGameSettings();
       });
@@ -26270,6 +26527,10 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           }
           return best;
         },
+        /** Makes a splash on the PVP water at (x, z) with strength 0..1.6 (testing the ripples and spray). */
+        splash(x, z, strength = 1) { for (const m of pvpWaterMirrors) m.splash(x, z, strength, Date.now() / 1000); },
+        /** Fires a shot down from (ox, oy, oz) along (dx, dy, dz) at the water (testing bullet splashes). */
+        shot(ox, oy, oz, dx, dy, dz) { const d = new THREE.Vector3(dx, dy, dz).normalize(); for (const m of pvpWaterMirrors) m.shot(new THREE.Vector3(ox, oy, oz), d, 200, Date.now() / 1000); },
         /** Hurts the local player as a given damage kind (claw, bullet, blast, fall, fire, steam, spine, hazard) to test the screen overlay. */
         hurt(amount, kind) { player.spawnProtectUntil = 0; damagePlayer(amount, null, 'body', -1, true, kind); },
         /** Fires a boss fireball from a point with a velocity (explosion testing); fx() reports what is alive. */

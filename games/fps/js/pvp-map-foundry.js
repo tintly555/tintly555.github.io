@@ -201,6 +201,12 @@ export function foundry(core) {
           // Housings at both ends: crates come out from, and go back into, a hood, and rubber flaps close the outer end.
           for (const [zc, outer] of [[13.85, 13.0], [26.15, 27.0]]) {
             hood.box(2.9, 0.15, 1.7, bx, 2.6, zc).box(0.12, 1.5, 1.7, bx - 1.3, 1.85, zc).box(0.12, 1.5, 1.7, bx + 1.3, 1.85, zc);
+            // The merged meshes above are render-only; give the side walls and
+            // roof matching collision so the conveyor mouths cannot be walked
+            // through. The curtain is intentionally left passable.
+            kit.proxy(0.12, 1.5, 1.7, bx - 1.3, 1.1, zc);
+            kit.proxy(0.12, 1.5, 1.7, bx + 1.3, 1.1, zc);
+            kit.proxy(2.9, 0.15, 1.7, bx, 2.525, zc);
             for (let fx = -1.15; fx <= 1.16; fx += 0.4) flaps.box(0.36, 1.6, 0.05, bx + fx, 1.8, outer);
             hood.box(2.9, 0.2, 0.2, bx, 2.55, outer);
           }
@@ -208,14 +214,29 @@ export function foundry(core) {
           for (let k = 0; k < 4; k++) {
             const c = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.9, 1.0), crate);
             c.position.set(bx, 0.97, 20); c.raycast = () => {}; kit.deco(c);
-            movers.push({ c, dir, phase: k / 4 });
+            const collision = kit.proxy(1.0, 0.9, 1.0, bx, 0.52, 20);
+            movers.push({ c, collision, dir, phase: k / 4 });
           }
           beltBox.box(0.25, 1.1, 14.4, bx - 1.35, 0.55, 20).box(0.25, 1.1, 14.4, bx + 1.35, 0.55, 20);
+          // The belt side rails are merged render meshes, so they are not in the
+          // collision list by themselves. Mirror both waist-high barriers with
+          // solid proxies so players cannot walk straight through the cover.
+          kit.proxy(0.25, 1.1, 14.4, bx - 1.35, 0, 20);
+          kit.proxy(0.25, 1.1, 14.4, bx + 1.35, 0, 20);
         });
         kit.deco(beltBox.mesh(steel));
         kit.deco(hood.mesh(steel, { shadow: true })); kit.deco(flaps.mesh(plain("fx-flap", 0x15110f, { rough: 1 }), { shadow: true }));
         world.tick((dt, t) => {
-          for (const m of movers) { const u = ((t * 3.2 / 12.8 * m.dir + m.phase) % 1 + 1) % 1; m.c.position.z = 13.6 + u * 12.8; }     // inside the hoods at both ends of its trip
+          for (const m of movers) {
+            const u = ((t * 3.2 / 12.8 * m.dir + m.phase) % 1 + 1) % 1;
+            const z = 13.6 + u * 12.8;
+            m.c.position.z = z;
+            m.collision.position.z = z;
+            m.collision.userData.wallBox.setFromCenterAndSize(
+              m.collision.position,
+              new THREE.Vector3(1.0, 0.9, 1.0),
+            );
+          }     // inside the hoods at both ends of its trip
           for (const [tex, dir] of belts_) tex.offset.y = dir * t * 3.2 / 0.5 % 1;
         });
         // Crate stacks and barrels for cover.
@@ -244,6 +265,8 @@ export function foundry(core) {
         const pane = (len, x, z, ry) => {
           const m = new THREE.Mesh(new THREE.PlaneGeometry(len, 2.3), glassMat); m.position.set(x, 5.75, z); m.rotation.y = ry; m.raycast = () => {}; m.renderOrder = 4; kit.deco(m);
           kit.shotBlocker(ry ? 0.12 : len, 2.3, ry ? len : 0.12, x, 4.6, z);
+          // Glass blocks shots already; give the visible pane a matching player collider too.
+          kit.proxy(ry ? 0.12 : len, 2.3, ry ? len : 0.12, x, 4.6, z);
           const n = Math.max(1, Math.round(len / 2.4));
           for (let k = 0; k <= n; k++) { const u = -len / 2 + len * k / n; if (ry) frame.box(0.16, 2.4, 0.16, x, 5.75, z + u); else frame.box(0.16, 2.4, 0.16, x + u, 5.75, z); }
           if (ry) frame.box(0.14, 0.12, len, x, 4.65, z).box(0.14, 0.12, len, x, 6.85, z); else frame.box(len, 0.12, 0.14, x, 4.65, z).box(len, 0.12, 0.14, x, 6.85, z);

@@ -21,7 +21,7 @@ export const FX_GROUPS = [
     slider("blood", "Blood droplets", .78),
     slider("weakness", "Speed Weak effect", .82),
     slider("dof", "Depth of field", 0),
-    slider("motion", "Camera motion blur", 0),
+    slider("motion", "Camera motion blur intensity", .16),
     slider("fringe", "Chromatic aberration", .14),
     slider("distortion", "Lens distortion", 0, -.35, .35),
     slider("panini", "Panini projection", 0),

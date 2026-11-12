@@ -1005,7 +1005,7 @@ export function createGauntletArt(THREE, { decorate, solid, scroll, spin, tick, 
       exitPortal.partnerGate = entry.parent;
       entryPortal.partnerPortal = exitPortal;
       exitPortal.partnerPortal = entryPortal;
-      return { mesh: entry, portal: entryPortal };
+      return { mesh: entry, portal: entryPortal, partnerPortal: exitPortal };
     }
     if (["portal", "airKick", "fuel"].includes(kind)) {
       const radius = (kind === "airKick" ? 1.65 : kind === "portal" ? 1.2 : .72) / 2;

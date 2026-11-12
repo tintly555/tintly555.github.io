@@ -198,9 +198,7 @@
             img.src = href;
           } catch (eP) {}
         }
-        _probeAndSet("--game-ui-menu-bg",     L0.menuBg);
-        _probeAndSet("--game-ui-btn-texture", L0.btnTex);
-        _probeAndSet("--game-ui-settings-bg", L0.settingsBg);
+        // Resolve CSS image layers together in main.js; avoid late independent swaps.
       } catch (e1) {}
     })();
   </script>
@@ -265,8 +263,16 @@
       cursor: none;
     }
 
-    #app canvas {
+    #app,
+    #app canvas,
+    #app canvas:focus,
+    #app canvas:focus-visible {
       display: block;
+      outline: none !important;
+      border: 0 !important;
+      box-shadow: none !important;
+    }
+    #app canvas {
       width: 100%;
       height: 100%;
     }
@@ -372,6 +378,7 @@
       text-align: center;
       box-shadow: 0 8px 24px rgba(0,0,0,0.35);
     }
+    body:not(.game-active) #hint { display: none !important; }
 
     .blind-text {
       position: fixed;
@@ -812,6 +819,23 @@
       letter-spacing: 0.12em;
       color: rgba(232, 238, 252, 0.88);
       text-shadow: 0 2px 16px rgba(0, 0, 0, 0.65);
+    }
+
+    /* Opaque startup cover: the menu is revealed only after its first complete frame. */
+    #menuStartupGate {
+      position: fixed;
+      inset: 0;
+      z-index: 10000;
+      background: #05070a;
+      opacity: 1;
+      visibility: visible;
+      pointer-events: auto;
+      transition: opacity 180ms ease, visibility 0s linear 180ms;
+    }
+    body.menu-ready #menuStartupGate {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
     }
 
     /* Full-screen WebGL wall (same texture + Lambert as in-game); sits under #menu */
@@ -1900,19 +1924,12 @@
       opacity: 0;
       transition: opacity 0.35s ease;
       background:
-        repeating-linear-gradient(
-          0deg,
-          transparent,
-          transparent 2px,
-          rgba(0,0,0,0.045) 2px,
-          rgba(0,0,0,0.045) 3px
-        ),
         radial-gradient(ellipse at center, transparent 35%, rgba(15,12,8,0.28) 100%),
         rgba(58,48,32,0.07);
       mix-blend-mode: multiply;
     }
 
-    /* Dark red vignette + angular highlights (inspired by shade.svg mask stack) */
+    /* Smooth dark red vignette; avoid scan lines or angular screen bands. */
     #shadeOverlay {
       position: fixed;
       inset: 0;
@@ -1922,44 +1939,6 @@
       transition: opacity 0.35s ease;
       mix-blend-mode: multiply;
       background:
-        conic-gradient(
-          from -15deg at 50% 50%,
-          transparent 0deg,
-          rgba(220, 40, 45, 0.14) 2deg,
-          transparent 7deg,
-          rgba(200, 35, 40, 0.08) 11deg,
-          transparent 18deg,
-          rgba(240, 50, 55, 0.18) 23deg,
-          transparent 31deg,
-          rgba(210, 38, 42, 0.11) 78deg,
-          transparent 85deg,
-          rgba(230, 48, 52, 0.15) 92deg,
-          transparent 101deg,
-          rgba(200, 36, 38, 0.09) 156deg,
-          transparent 164deg,
-          rgba(245, 55, 58, 0.2) 171deg,
-          transparent 182deg,
-          rgba(215, 42, 44, 0.12) 241deg,
-          transparent 248deg,
-          rgba(235, 50, 52, 0.16) 257deg,
-          transparent 268deg,
-          rgba(220, 44, 46, 0.1) 312deg,
-          transparent 322deg,
-          transparent 360deg
-        ),
-        conic-gradient(
-          from 165deg at 50% 50%,
-          transparent 0deg,
-          rgba(225, 46, 48, 0.12) 38deg,
-          transparent 46deg,
-          rgba(210, 40, 42, 0.07) 112deg,
-          transparent 120deg,
-          rgba(238, 52, 54, 0.17) 198deg,
-          transparent 206deg,
-          rgba(205, 38, 40, 0.1) 278deg,
-          transparent 286deg,
-          transparent 360deg
-        ),
         radial-gradient(
           ellipse 105% 105% at 50% 50%,
           rgba(255, 45, 50, 0) 52%,
@@ -2199,7 +2178,7 @@
     #needleHud.nh-inject .nh-label { color: #88ccff; text-shadow: 0 0 6px #88ccff88; }
     #needleHud.nh-inject .nh-bar-fill { background: #88ccff; }
 </style>
-  <link rel="stylesheet" href="interface.css?v=19-hit-feedback">
+  <link rel="stylesheet" href="interface.css?v=21-canvas-focus-ring">
   <script>
     (function () {
       function normBase(b) {
@@ -2330,6 +2309,7 @@
   </script>
 </head>
 <body>
+  <div id="menuStartupGate" aria-hidden="true"></div>
   <canvas id="menuWallBackdrop" aria-hidden="true"></canvas>
   <img id="menuBg" alt="" aria-hidden="true" src="images/bulkhead-key-art.jpg" fetchpriority="high" />
   <div id="menu" class="menu">
@@ -2349,7 +2329,7 @@
       <p class="menu-lead" data-i18n="menuLead">Find your way through the dark. Fight alone or bring a squad.</p>
       <nav class="home-actions" aria-label="Play and equipment">
         <button type="button" id="btnStart" aria-controls="menuStart" aria-expanded="false" data-i18n="menuDeploy">Start</button>
-        <button type="button" id="btnTraining" aria-controls="menuTrainingMode" data-i18n="btnTrainingCamp">Training Camp</button>
+        <button type="button" id="btnTraining" aria-controls="menuTrainingMode" data-i18n="btnTrainingCamp">TRAINING CAMP</button>
       </nav>
     </div>
     <div id="menuStart" class="menu-subpanel">
@@ -2586,6 +2566,7 @@
     <div class="intermission-card" style="background:#1a2236;border-radius:14px;padding:32px 38px;text-align:center;box-shadow:0 8px 32px rgba(0,0,0,0.5);">
       <h2 id="nameModalTitle" data-i18n="enterYourName" style="font-family:'Audiowide',sans-serif;margin:0 0 16px 0;font-size:22px;">ENTER YOUR NAME</h2>
       <input id="nameInput" type="text" maxlength="16" placeholder="Player" data-i18n-placeholder="playerPlaceholder" style="font-family:'Audiowide',sans-serif;width:200px;padding:10px 14px;font-size:16px;border:2px solid #4fd1ff;border-radius:8px;background:#0d111b;color:#fff;outline:none;text-align:center;">
+      <p id="nameError" role="status" style="font-family:var(--game-font-ui);color:#ff927f;font-size:12px;margin:8px 0 0;min-height:16px;"></p>
       <br>
       <button class="overlay-btn" type="button" id="btnNameOk" data-i18n="btnJoin" style="margin-top:16px;">JOIN</button>
     </div>
@@ -2687,6 +2668,28 @@
               </div>
               <p data-i18n="gfxPostHint" style="font-size:11px;opacity:0.65;margin-top:10px;max-width:480px;line-height:1.45;">
                 Lighting, lens effects, and color grading. World effects run on Regular quality and above. Damage and Speed Weak effects work on every tier.
+              </p>
+            </div>
+            <div class="settings-row">
+              <label data-i18n="gfxCameraMotionLabel">Camera shake and tilt</label>
+              <div class="settings-cycle">
+                <button type="button" class="cycle-arrow" id="btnCameraMotionOff" aria-label="Disable camera motion">◀</button>
+                <div class="cycle-value" id="cameraMotionValue">ON</div>
+                <button type="button" class="cycle-arrow" id="btnCameraMotionOn" aria-label="Enable camera motion">▶</button>
+              </div>
+              <p data-i18n="gfxCameraMotionHint" style="font-size:11px;opacity:0.65;margin-top:10px;max-width:480px;line-height:1.45;">
+                Toggles view shake, leaning, and landing bob. Movement and aiming still work normally.
+              </p>
+            </div>
+            <div class="settings-row">
+              <label data-i18n="gfxMotionBlurLabel">Motion blur</label>
+              <div class="settings-cycle">
+                <button type="button" class="cycle-arrow" id="btnMotionBlurOff" aria-label="Disable motion blur">◀</button>
+                <div class="cycle-value" id="motionBlurValue">ON</div>
+                <button type="button" class="cycle-arrow" id="btnMotionBlurOn" aria-label="Enable motion blur">▶</button>
+              </div>
+              <p data-i18n="gfxMotionBlurHint" style="font-size:11px;opacity:0.65;margin-top:10px;max-width:480px;line-height:1.45;">
+                Adds subtle directional blur during quick camera movement. Fine-tune intensity under Advanced Effects.
               </p>
             </div>
             <details class="fx-settings-group fx-settings-root">
@@ -3805,7 +3808,7 @@ if (typeof window !== "undefined") {
     {"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.182.0/build/three.module.js"}}
   </script>
   <script type="module" src="js/game-cursor.js?v=1"></script>
-  <script type="module" src="js/main.js?v=20261111-crossfire-hack-chat-lava-dustfall-water-portal-adaptive-v6-render-cap-lava4-blood4"></script>
+  <script type="module" src="js/main.js?v=20261112-names-solid-cinderworks-quality-shadow-rock-roll-v2"></script>
   <footer id="pageFooter" style="position:fixed;left:0;right:0;bottom:0;display:flex;justify-content:center;align-items:center;gap:16px;padding:10px 14px;background:transparent;backdrop-filter:none;z-index:101;pointer-events:auto;">
     <img src="images/tintly555.png" alt="Tintly555" style="height:28px;width:auto;display:block;opacity:0.75;" />
     <img src="images/jimmyqrg.png" alt="JimmyQrg" style="height:32px;width:auto;display:block;margin-bottom:2px;opacity:0.75;" />

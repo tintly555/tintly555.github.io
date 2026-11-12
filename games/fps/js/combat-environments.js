@@ -146,6 +146,10 @@ export function createCombatEnvironment(kind, wall, targets = []) {
       dummy.updateMatrix(); mesh.setMatrixAt(i, dummy.matrix);
     });
     mesh.receiveShadow = true;
+    // The boss deck now has a shadow-casting key light, so the heat-exchanger units, cornice
+    // beams and corner blocks drop real shadows onto the floor. The training court has no such
+    // key (its sun casts nothing), so leave its fixtures off to save the shadow pass there.
+    mesh.castShadow = !training;
     root.add(mesh);
   }
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(training ? 68 : 100, training ? 74 : 100),

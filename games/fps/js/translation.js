@@ -2128,6 +2128,8 @@ const V96_EN = {
   mapArena: "Zombie Arena", mapBossArena: "BOSS FIGHT — Boss", mapPvpClassic: "PVP — Classic", mapPvpGrid: "PVP — Grid", hudBrightDuel: "Bright duel map — flashlight stays off",
   musicByPrefix: "Music by ", musicAuthor: "JimmyQrg", chooseModeToPlay: "CHOOSE A MODE TO PLAY",
   gfxQualityLabel: "Quality", gfxQualityPill: "performance / fidelity", gfxQualityHint: "Adjusts render resolution, texture filtering, and shadow fidelity. Visibility, aiming, lighting, fog, and gameplay stay identical.",
+  gfxCameraMotionLabel: "Camera shake and tilt", gfxCameraMotionHint: "Toggles view shake, leaning, and landing bob. Movement and aiming still work normally.",
+  gfxMotionBlurLabel: "Motion blur", gfxMotionBlurHint: "Adds subtle directional blur during quick camera movement. Fine-tune intensity under Advanced Effects.",
   pvpMapFoundry: "CINDERWORKS", pvpMapStation: "HALCYON RING", pvpMapRuins: "SUNKEN TEMPLE", pvpMapTown: "DUSTFALL",
   pvpTagFoundry: "Foundry · lava, lifts, steam", pvpTagStation: "Orbital station · airlocks, low gravity", pvpTagRuins: "Jungle ruins · stream, rolling boulder", pvpTagTown: "Frontier town · the 12:40 train",
   gfxPostLabel: "Post-processing", gfxPostHint: "Lighting, lens effects, and color grading. World effects run on Regular quality and above. Damage and Speed Weak effects work on every tier.",

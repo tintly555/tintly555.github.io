@@ -384,7 +384,16 @@ export function ruins(core) {
         world.tick((dt, t) => {
           const z = posAt(t), c = (t + lane.phase) % cycle;
           boulder.visible = z !== null;
-          if (z !== null) { boulder.position.z = z; boulder.rotation.x = z * -0.5 * lane.dir; }
+          if (z !== null) {
+            boulder.position.z = z;
+            // No-slip rolling: at the bottom contact point, angular velocity
+            // opposes the boulder's forward surface travel. For motion along +Z,
+            // that is a positive X rotation; the opposite lane uses the inverse.
+            // Derive the angle from displacement, not elapsed time: the angle
+            // must advance with the same sign as the boulder's actual travel.
+            const runStartZ = -lane.dir * 29;
+            boulder.rotation.x = (z - runStartZ) / 1.9;
+          }
           dust.material.opacity = c >= 21 && c < 25 ? 0.3 + 0.2 * Math.sin(t * 9) : 0;
         });
       }
