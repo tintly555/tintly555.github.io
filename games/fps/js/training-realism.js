@@ -226,10 +226,11 @@ export function createTrainingWallMaterial(THREE) {
       .replace("#include <map_fragment>", "#include <map_fragment>\n" +
         "  float trN = trNoise(vTrWorld.xz*0.055) * 0.6 + trNoise(vTrWorld.xz*0.17) * 0.4;\n" +
         "  diffuseColor.rgb *= 0.82 + 0.34 * trN;\n")
-      .replace("#include <normal_fragment_maps>", "#include <normal_fragment_maps>\n" +
+      .replace("#include <normal_fragment_maps>",
+        "vec3 trBaseNormal = normal;\n#include <normal_fragment_maps>\n" +
         "  float trDist = length(cameraPosition - vTrWorld);\n" +
         "  float trFade = 1.0 - smoothstep(10.0, 34.0, trDist);\n" +
-        "  normal = normalize(mix(geometryNormal, normal, 0.25 + 0.75 * trFade));\n");
+        "  normal = normalize(mix(trBaseNormal, normal, 0.25 + 0.75 * trFade));\n");
   };
   mat.customProgramCacheKey = () => "trainingConcreteV1";
   return mat;

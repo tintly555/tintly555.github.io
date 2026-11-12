@@ -8,7 +8,7 @@
     import { createBossNavigation } from "./boss-navigation.js?v=2";
     import { BOSS_ATTACK_BY_ID, chooseBossAttack } from "./boss-attacks.js?v=2";
     import { BOSS_ARENA_HALF, createCombatEnvironment } from "./combat-environments.js?v=7";
-    import { createTrainingWallMaterial, createTrainingDust } from "./training-realism.js?v=20261112-train-v1";
+    import { createTrainingWallMaterial, createTrainingDust } from "./training-realism.js?v=20261112-train-v2";
     import { createArenaRealism } from "./arena-realism.js?v=20261112-arena-v1";
     import { createBossCreature, BOSS_RADIUS, CLAW_STRIKE_S, QUAKE_SLAM_S, LOB_RELEASE_S, DURATIONS as BOSS_DURATIONS } from "./boss-creature.js?v=11";
     import { buildOperatorShell } from "./operator-model.js?v=1";
@@ -1680,6 +1680,18 @@
       if (!MULTIPLAYER || !data) return;
       const rp = remotePlayers.get(data.id);
       if (rp && performance.now() - (rp.firedAt ?? -Infinity) > 55) rp.firedAt = performance.now();
+      // Host aggro: a teammate's gunfire wakes nearby zombies, exactly as your own
+      // shots do in singleplayer (tryShoot -> alertZombiesToNoise). Only the zombie
+      // authority runs the AI, so only it needs to react.
+      if (ZOMBIE_AUTHORITY && ARENA_COOP
+          && String(extractShooterId(data)) !== String(socket.id)) {
+        const nx = Number.isFinite(data.sx) ? data.sx : rp?.x;
+        const nz = Number.isFinite(data.sz) ? data.sz : rp?.z;
+        if (Number.isFinite(nx) && Number.isFinite(nz)) {
+          const suppressed = data.weaponIndex === 9 || data.weapon === 9;
+          alertZombiesToNoise(nx, nz, suppressed ? GUNSHOT_HEAR_RADIUS_SUPPRESSED : GUNSHOT_HEAR_RADIUS);
+        }
+      }
       if (String(extractShooterId(data)) !== String(socket.id)) playNetworkShot(data);
       if (shootDataLooksLikeDart(data)) {
         const sid = extractShooterId(data);
@@ -7914,6 +7926,10 @@
 
     const ZOMBIE_POPULATION_MULTIPLIER = 2;
     const ZOMBIE_COUNT = 18 * ZOMBIE_POPULATION_MULTIPLIER;
+    // Hell boss co-op syncs the complete enemy roster several times a second.
+    // Keep the lifetime summon roster bounded even when a large hit crosses
+    // multiple health thresholds at once.
+    const HELL_BOSS_MINIONS_PER_STAGE = 2;
     /** Multiplier for how far from players a zombie must spawn (0.4 = tighter / closer spawns). */
     const ZOMBIE_SPAWN_PLAYER_CLEAR_SCALE = 0.4;
     const SPAWN_MIN_DIST_BASE = 18 * ZOMBIE_SPAWN_PLAYER_CLEAR_SCALE;
@@ -21459,6 +21475,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     let navMinX = 0, navMinZ = 0, navCols = 0, navRows = 0;
     let flowDirX = null, flowDirZ = null;
     let flowPlayerC = -1, flowPlayerR = -1;
+    let _flowGoalSig = -1;
     let _flowDistBuf = null;
     let _flowDistBufLen = 0;
 
@@ -21504,12 +21521,31 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
 
     function rebuildFlowField() {
       if (!navGrid) return;
-      const pc = Math.min(navCols - 1, Math.max(0, ((player.position.x - navMinX) / NAV_CELL) | 0));
-      const pr = Math.min(navRows - 1, Math.max(0, ((player.position.z - navMinZ) / NAV_CELL) | 0));
-      // Rebuild only every ~3 nav cells (~6 units) of movement — a full BFS is a few ms,
-      // so halving/tripling its frequency smooths movement without stale pathing (the
-      // player's cell only moves a few units between rebuilds; enemies steer fine).
-      if (Math.abs(pc - flowPlayerC) + Math.abs(pr - flowPlayerR) < 3) return;
+      const clampC = (x) => Math.min(navCols - 1, Math.max(0, ((x - navMinX) / NAV_CELL) | 0));
+      const clampR = (z) => Math.min(navRows - 1, Math.max(0, ((z - navMinZ) / NAV_CELL) | 0));
+      const pc = clampC(player.position.x);
+      const pr = clampR(player.position.z);
+      // In arena co-op the host pulls zombies toward whichever teammate is nearest,
+      // not only itself: seed the BFS from every live player's cell so a zombie
+      // beside a remote player still gets a path to it through the maze. In
+      // singleplayer there are no remotes, so this is just the player's cell.
+      const goals = [[pc, pr]];
+      if (MULTIPLAYER && ARENA_COOP && ZOMBIE_AUTHORITY) {
+        for (const rp of remotePlayers.values()) {
+          if (!rp.group.visible || rp.isDown) continue;
+          goals.push([clampC(rp.x), clampR(rp.z)]);
+        }
+      }
+      // Rebuild only every ~3 nav cells (~6 units) of goal movement — a full BFS is
+      // a few ms, so bucketing by 3 keeps it off most ticks. The signature folds
+      // every goal, so a teammate moving triggers a rebuild too. flowPlayerC === -1
+      // (grid just (re)built or invalidated) always forces a rebuild.
+      let sig = 0;
+      for (const [c, r] of goals) {
+        sig = (sig * 131 + (((r / 3) | 0) * navCols + ((c / 3) | 0)) + 1) >>> 0;
+      }
+      if (flowPlayerC !== -1 && sig === _flowGoalSig) return;
+      _flowGoalSig = sig;
       flowPlayerC = pc;
       flowPlayerR = pr;
 
@@ -21520,11 +21556,12 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       }
       const dist = _flowDistBuf;
       dist.fill(65535, 0, total);
-      const goalIdx = pr * navCols + pc;
-      dist[goalIdx] = 0;
-
-      const queue = [goalIdx];
+      const queue = [];
       let head = 0;
+      for (const [c, r] of goals) {
+        const gi = r * navCols + c;
+        if (dist[gi] !== 0) { dist[gi] = 0; queue.push(gi); }
+      }
       while (head < queue.length) {
         const idx = queue[head++];
         const cr = (idx / navCols) | 0;
@@ -21718,17 +21755,32 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         enemy.hiddenTimer = 0;
         return;
       }
-      const target = getEnemyTarget(enemy);
       const ex = enemy.group.position.x;
       const ez = enemy.group.position.z;
-      const ratio = computeVisibility(ex, ez, target.x, target.z, (enemy.baseY || 0) + 1.6, target.y);
+      const eyeY = (enemy.baseY || 0) + 1.6;
 
       if (!enemy.aware) {
-        if (ratio > 0) {
+        // Co-op: a zombie wakes for whichever teammate it can see, not only the
+        // host. Singleplayer has just the one local player, so this collapses to
+        // the old LOS-to-player check. Whoever it first sees becomes its target.
+        let bestRatio = 0, bestId = null;
+        const hostRatio = computeVisibility(ex, ez, player.position.x, player.position.z, eyeY, player.position.y);
+        if (hostRatio > bestRatio) { bestRatio = hostRatio; bestId = null; }
+        if (MULTIPLAYER && ARENA_COOP) {
+          for (const [rpId, rp] of remotePlayers) {
+            if (!rp.group.visible || rp.isDown) continue;
+            const r = computeVisibility(ex, ez, rp.x, rp.z, eyeY, rp.y ?? 1.65);
+            if (r > bestRatio) { bestRatio = r; bestId = rpId; }
+          }
+        }
+        if (bestRatio > 0) {
           enemy.aware = true;
           enemy.hiddenTimer = 0;
+          enemy.targetId = bestId;
         }
       } else {
+        const target = getEnemyTarget(enemy);
+        const ratio = computeVisibility(ex, ez, target.x, target.z, eyeY, target.y);
         if (ratio < LOSE_RATIO) {
           enemy.hiddenTimer += dt;
           if (enemy.hiddenTimer >= LOSE_TIME) {
@@ -21860,6 +21912,10 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         }
         const wasAlive = e.alive;
         e.alive = z.a !== 0;
+        // A respawned zombie hides its bar again until the LOCAL player hits it
+        // (the host clears this in updateEnemies; clients clear it on the sync'd
+        // death->alive transition so the singleplayer rule holds in co-op).
+        if (!wasAlive && e.alive) e.playerHit = false;
         if (!wasAlive && e.alive && !hydrate) beginZombieEmergence(e);
         if (wasAlive && !e.alive && !hydrate && e.group.visible) spawnHumanoidDissolve(e.group, e.group.position);
         if (e.alive) e.dissolveTimer = 0;
@@ -21886,6 +21942,13 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       const blend = 1 - Math.exp(-17 * dt);
       for (const enemy of state.enemies) {
         if (!enemy.group.visible && !enemy.spawnEmergence) continue;
+        // Co-op clients gate the HP bar exactly like singleplayer: a zombie's bar
+        // shows only once the LOCAL player has hit it. (The host path does this in
+        // updateEnemies; non-host clients return before that loop, so do it here.)
+        // Bosses and training dummies always show their bar.
+        if (enemy.hpSprite) {
+          enemy.hpSprite.visible = enemy.isBoss || enemy.trainingDummy || !!enemy.playerHit;
+        }
         const { x, z } = enemy.group.position;
         if (enemy.syncPosition) enemy.group.position.lerp(enemy.syncPosition, blend);
         if (Number.isFinite(enemy.syncYaw)) {
@@ -23571,26 +23634,26 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
             const hpPct = enemy.hp / enemy.maxHp;
             const stage = Math.floor((1 - hpPct) * 10);
             if (stage > enemy._hellSummonStage && hpPct > 0.10 && enemy.bossAnimState === "idle") {
-              const wavesToSpawn = stage - enemy._hellSummonStage;
+              // Advance straight to the current stage and spawn one small wave.
+              // Do not replay every skipped stage: a single heavy hit must never
+              // create a burst of dozens of full animated rigs.
               enemy._hellSummonStage = stage;
               enemy.bossAnimState = "summoning";
               enemy.bossAnimTimer = 0;
               playBossRoarSfx(enemy);
               const types = ["normal", "fast", "gunner", "tank"];
-              const waveSize = 10 * ZOMBIE_POPULATION_MULTIPLIER;
-              for (let w = 0; w < wavesToSpawn; w++) {
-                for (let si = 0; si < waveSize; si++) {
-                  const angle = (si / waveSize) * Math.PI * 2 + w * 0.5;
-                  const { x: sx, z: sz } = bossMinionSpawn(enemy, angle, 5 + Math.random() * 3);
-                  const t = types[Math.floor(Math.random() * types.length)];
-                  const minion = makeZombie(sx, sz, t);
-                  minion.netIndex = state.enemies.length;
-                  minion.aware = true;
-                  minion._summonedByBoss = enemy;
-                  beginZombieEmergence(minion);
-                  drawEnemyHp(minion);
-                  state.enemies.push(minion);
-                }
+              const waveSize = HELL_BOSS_MINIONS_PER_STAGE;
+              for (let si = 0; si < waveSize; si++) {
+                const angle = stage * 0.55 + si * Math.PI;
+                const { x: sx, z: sz } = bossMinionSpawn(enemy, angle, 5 + Math.random() * 3);
+                const t = types[Math.floor(Math.random() * types.length)];
+                const minion = makeZombie(sx, sz, t);
+                minion.netIndex = state.enemies.length;
+                minion.aware = true;
+                minion._summonedByBoss = enemy;
+                beginZombieEmergence(minion);
+                drawEnemyHp(minion);
+                state.enemies.push(minion);
               }
             }
             if (!enemy._hellBossSummoned && hpPct <= 0.10 && enemy.bossAnimState === "idle") {
