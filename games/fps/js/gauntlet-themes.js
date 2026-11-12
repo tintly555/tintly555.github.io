@@ -8,7 +8,7 @@
  * 9 weapon factory.
  */
 import { mergeGeometries } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/utils/BufferGeometryUtils.js";
-import { createSurfaces, rngFor, fbm } from "./gauntlet-surfaces.js?v=2";
+import { createSurfaces, rngFor, fbm } from "./gauntlet-surfaces.js?v=3";
 
 const TAU = Math.PI * 2;
 const glowCache = new Map();

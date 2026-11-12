@@ -8,8 +8,8 @@
  * roots, forks into limbs, and carries clumps of leaves — never a cone.
  */
 import { mergeGeometries } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/utils/BufferGeometryUtils.js";
-import { fbm, rngFor } from "./gauntlet-surfaces.js?v=2";
-import { TEMPLE_WATER_GLSL, TEMPLE_WATER_Y, templeWaterGeometry } from "./water-shape.js";
+import { fbm, rngFor } from "./gauntlet-surfaces.js?v=3";
+import { TEMPLE_WATER_GLSL, TEMPLE_WATER_Y, templeWaterBank, templeWaterGeometry } from "./water-shape.js";
 
 const TAU = Math.PI * 2;
 
@@ -587,21 +587,29 @@ export function createNature(THREE) {
     float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
     float noise(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
       return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), f.x), mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), f.x), f.y); }
-    float fbm(vec2 p) { float s = 0.0, a = 0.5; for (int i = 0; i < 4; i++) { s += a * noise(p); p = p * 2.03 + 7.1; a *= 0.5; } return s; }
+    float fbm(vec2 p) { float s = 0.0, a = 0.5; for (int i = 0; i < 5; i++) { s += a * noise(p); p = p * 2.03 + 7.1; a *= 0.5; } return s; }
     void main() {
       vec2 p = vW.xz * uScale + uFlow * uTime;
-      // Domain warping: the whole surface slowly churns as it flows.
+      // Domain warping: the crust drifts, splits and heals as the melt moves underneath it.
       vec2 q = vec2(fbm(p + vec2(0.0, uTime * 0.02)), fbm(p + vec2(5.2, 1.3) - uTime * 0.016));
       vec2 r = vec2(fbm(p + 3.0 * q + vec2(1.7, 9.2) + uTime * 0.03), fbm(p + 3.0 * q + vec2(8.3, 2.8) - uTime * 0.025));
       float f = fbm(p + 3.4 * r);
-      float plate = smoothstep(0.43, 0.52, f);                      // 1 = cooled crust
-      float seam = exp(-pow((f - 0.465) / 0.035, 2.0));             // the cracks between plates glow
-      float swirl = fbm(p * 2.2 - r * 2.0 + uTime * 0.05);
-      vec3 melt = mix(vec3(0.9, 0.16, 0.01), vec3(1.0, 0.55, 0.08), smoothstep(0.3, 0.7, swirl));
-      melt = mix(melt, vec3(1.0, 0.8, 0.35), smoothstep(0.34, 0.1, f) * 0.6);   // white hot where it is thinnest
-      vec3 crust = mix(vec3(0.028, 0.022, 0.02), vec3(0.14, 0.045, 0.02), fbm(p * 5.0 + r));
-      crust += vec3(0.55, 0.13, 0.02) * seam * plate * 1.2;
-      vec3 col = mix(melt * uGain, crust, plate) + melt * seam * 1.1 * (1.0 - plate);
+      // Plates of cooled crust, and the seams between them. The seams are the light: they are driven well above
+      // 1.0 so bloom picks them up, and their colour runs from deep red at the edge to white-yellow at the core.
+      float plate = smoothstep(0.44, 0.5, f);
+      float seam = exp(-pow((f - 0.46) / 0.028, 2.0));
+      float halo = exp(-pow((f - 0.46) / 0.085, 2.0));
+      // Temperature varies across the melt; the hotter parts are yellower.
+      float heat = smoothstep(0.25, 0.8, fbm(p * 1.7 - r * 1.5 + uTime * 0.04));
+      vec3 hot = mix(vec3(1.0, 0.2, 0.015), vec3(1.0, 0.7, 0.22), heat);
+      // Crust: near-black basalt with grey ash and warm highlights where the plates are thin.
+      float ash = fbm(p * 6.0 + r * 2.0);
+      vec3 crust = mix(vec3(0.018, 0.015, 0.014), vec3(0.085, 0.07, 0.06), smoothstep(0.45, 0.8, ash));
+      crust += hot * halo * 0.18 * plate;
+      // Liquid parts (between plates) glow on their own; the seams add the hot line where the crust breaks.
+      vec3 liquid = hot * (0.75 + 0.5 * heat) * 1.6;
+      vec3 emission = hot * (seam * 3.4 + halo * 0.45) * (0.9 + 0.1 * sin(uTime * 7.0 + p.x * 13.0));
+      vec3 col = mix(liquid, crust, plate) * uGain + emission * uGain;
       gl_FragColor = vec4(col, 1.0);
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
@@ -639,19 +647,20 @@ export function createNature(THREE) {
    * A column of steam: puffs rise, slow, swell and drift on a curl, fading in and out smoothly. `intensity(t)` in 0..1
    * eases the whole column on and off, so a vent builds and dies away instead of popping.
    */
-  function steam(group, world, { x, z, height = 4.6, count = 14, intensity = () => 1, size = 1.1, opacity = 0.3 }) {
+  function steam(group, world, { x, z, height = 4.6, count = 14, intensity = () => 1, size = 1.1, opacity = 0.3, color = 0xe6e9ec, riseRate = 0.28, spread = 0.9 }) {
     const tex = cloudTexture(), puffs = [];
     for (let k = 0; k < count; k++) {
-      const m = new THREE.SpriteMaterial({ map: tex, color: 0xe6e9ec, transparent: true, depthWrite: false, opacity: 0, fog: true, rotation: Math.random() * TAU });
+      const m = new THREE.SpriteMaterial({ map: tex, color, transparent: true, depthWrite: false, opacity: 0, fog: true, rotation: Math.random() * TAU });
       const sp = new THREE.Sprite(m); sp.raycast = () => {}; group.add(sp);
       puffs.push({ sp, o: k / count, rot: (Math.random() - 0.5) * 0.5, ph: Math.random() * TAU, sx: (Math.random() - 0.5) * 0.6 });
     }
     world.tick((dt, t) => {
       const live = intensity(t);
       for (const p of puffs) {
-        const u = (t * 0.28 + p.o) % 1, rise = 1 - Math.pow(1 - u, 1.7);
+        const u = (t * riseRate + p.o) % 1, rise = 1 - Math.pow(1 - u, 1.7);
         {
-          p.sp.position.set(x + Math.sin(t * 0.6 + p.ph + u * 2.5) * (0.15 + u * 0.9) + p.sx * u, 0.3 + rise * height, z + Math.cos(t * 0.5 + p.ph + u * 2.2) * (0.15 + u * 0.9));
+          const drift = 0.15 + u * spread;
+          p.sp.position.set(x + Math.sin(t * 0.9 + p.ph + u * 3.2) * drift + p.sx * u, 0.3 + rise * height, z + Math.cos(t * 0.72 + p.ph + u * 2.8) * drift);
           p.sp.scale.setScalar(size * (0.9 + u * 3.6));
           p.sp.material.rotation += p.rot * dt;
           p.sp.material.opacity = live * opacity * Math.pow(1 - u, 1.5) * Math.min(1, u / 0.14);
@@ -721,6 +730,30 @@ export function createNature(THREE) {
         const u = (tt * p.rate + p.o) % 1;
         p.s.position.set(x + p.vx * u + Math.sin(tt * 3 + p.o * 9) * 0.1 * u, y + height * 0.4 + u * height * 1.6, z + p.vz * u);
         p.s.material.opacity = Math.sin(Math.PI * Math.min(1, u * 1.15)) * 0.9 * (1 - u);
+      }
+    });
+  }
+
+  /**
+   * Embers lifting off a hot surface over a rectangle (x, z, w by d): each one rises on the heat, drifts with the air,
+   * cools from white-yellow to orange and goes out. `rate` is the number of new embers per second.
+   */
+  function embers(group, world, { x, z, w = 4, d = 10, height = 6, count = 22, rate = 1, size = 0.1 }) {
+    const tex = sparkTexture(), items = [];
+    for (let k = 0; k < count; k++) {
+      const m = new THREE.SpriteMaterial({ map: tex, color: 0xffb060, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0, fog: false });
+      const sp = new THREE.Sprite(m); sp.raycast = () => {}; sp.scale.setScalar(size); group.add(sp);
+      items.push({ sp, o: k / count, ph: Math.random() * TAU, px: (Math.random() - 0.5), pz: (Math.random() - 0.5), life: 2.6 + Math.random() * 2.2 });
+    }
+    world.tick((dt, t) => {
+      for (const e of items) {
+        const u = ((t * rate) / e.life + e.o) % 1;
+        const rise = Math.pow(u, 0.8) * height;
+        e.sp.position.set(x + e.px * w + Math.sin(t * 0.9 + e.ph) * 0.35 * u + u * 0.6, 0.4 + rise, z + e.pz * d + Math.cos(t * 0.7 + e.ph) * 0.35 * u);
+        const cool = Math.min(1, u * 2.2);
+        e.sp.material.color.setRGB(1, 0.62 + 0.25 * (1 - cool), 0.2 * (1 - cool));
+        e.sp.material.opacity = Math.sin(Math.PI * Math.min(1, u * 1.1)) * (1 - u * 0.6) * 0.95;
+        e.sp.scale.setScalar(size * (1 - u * 0.5));
       }
     });
   }
@@ -1015,52 +1048,150 @@ export function createNature(THREE) {
     return { surface, caustics };
   }
   /** The Temple's water and gravel share an irregular mesh and world-space ripples. */
-  function templeWater(group, world) {
+  function templeWater(group, world, host = null) {
     const geometry = templeWaterGeometry(THREE);
+    // Dispersion waves (deep-water gravity waves: speed = sqrt(g / k)), from ripples a few centimetres long to
+    // swells two metres long. Each is [dir x, dir z, slope amplitude, angular frequency, phase].
+    const waves = Array.from({ length: 10 }, (_, i) => {
+      const k = TAU / (2.4 * Math.pow(0.66, i)), angle = i * 2.39996 + 0.3;
+      return [Math.cos(angle), Math.sin(angle), 0.07 * Math.pow(0.72, i), Math.sqrt(9.8 * k), i * 1.73];
+    });
+    const waveGLSL = `
+const vec4 WAVE[10] = vec4[10](${waves.map(([x, z, a, w]) => `vec4(${x.toFixed(5)},${z.toFixed(5)},${a.toFixed(5)},${w.toFixed(5)})`).join(",")});
+const float PHASE[10] = float[10](${waves.map(([,,,, ph]) => ph.toFixed(5)).join(",")});`;
     const gravel = pebbles();
-    const bedMat = new THREE.MeshStandardMaterial({
+    const bed = new THREE.Mesh(geometry.clone(), new THREE.MeshStandardMaterial({
       map: tiled(gravel.map, 56 / 2.6, 56 / 2.6),
       normalMap: tiled(gravel.normalMap, 56 / 2.6, 56 / 2.6),
       roughness: .96, metalness: 0,
-    });
-    const bed = new THREE.Mesh(geometry.clone(), bedMat);
+    }));
     bed.position.y = .043; bed.receiveShadow = true; bed.raycast = () => {};
     const caustic = new THREE.Mesh(geometry.clone(), new THREE.MeshBasicMaterial({
       map: tiled(causticTexture(), 11, 11), transparent: true, depthWrite: false,
       opacity: .32, blending: THREE.AdditiveBlending,
     }));
     caustic.position.y = .052; caustic.renderOrder = 1; caustic.raycast = () => {};
-    const time = { value: 0 };
-    const material = new THREE.MeshStandardMaterial({
-      color: 0x3b6357, roughness: .075, metalness: 0, transparent: true,
-      depthWrite: true, envMapIntensity: 1.22,
+
+    // Planar reflection: the scene is rendered once more from a camera mirrored in the water, at half resolution,
+    // and the surface samples it at its own screen position. The mirror pass clips everything below the water.
+    const reflection = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, depthBuffer: true });
+    const uniforms = THREE.UniformsUtils.merge([THREE.UniformsLib.fog, {
+      tReflection: { value: reflection.texture },
+      uTextureMatrix: { value: new THREE.Matrix4() },
+      uMirrorOn: { value: 1 },
+      uTime: { value: 0 },
+      uSunDir: { value: new THREE.Vector3(-34, 52, 24).normalize() },
+      uSunColor: { value: new THREE.Color(0xfff0cf).multiplyScalar(3.4) },
+      uSky: { value: new THREE.Color(0x8fb5c8) },
+      uBody: { value: new THREE.Color(0x0b2a26) },
+      uShallow: { value: new THREE.Color(0x3c7566) },
+    }]);
+    const material = new THREE.ShaderMaterial({
+      vertexShader: `
+        uniform mat4 uTextureMatrix;
+        varying vec4 vMirror;
+        varying vec3 vW;
+        #include <fog_pars_vertex>
+        void main() {
+          vec4 wp = modelMatrix * vec4(position, 1.0);
+          vW = wp.xyz;
+          vMirror = uTextureMatrix * wp;
+          vec4 mvPosition = viewMatrix * wp;
+          gl_Position = projectionMatrix * mvPosition;
+          #include <fog_vertex>
+        }`,
+      fragmentShader: `
+        uniform sampler2D tReflection;
+        uniform float uTime, uMirrorOn;
+        uniform vec3 uSunDir, uSunColor, uSky, uBody, uShallow;
+        varying vec4 vMirror;
+        varying vec3 vW;
+        #include <common>
+        #include <fog_pars_fragment>
+        ${TEMPLE_WATER_GLSL}
+        ${waveGLSL}
+        float hash2(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+        float vnoise(vec2 p) {
+          vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+          return mix(mix(hash2(i), hash2(i + vec2(1.0, 0.0)), f.x), mix(hash2(i + vec2(0.0, 1.0)), hash2(i + vec2(1.0, 1.0)), f.x), f.y);
+        }
+        void main() {
+          vec2 p = vW.xz;
+          vec2 s = vec2(0.0);
+          for (int i = 0; i < 10; i++) {
+            vec4 w = WAVE[i];
+            float ph = dot(w.xy, p) * (w.w * w.w / 9.8) - w.w * uTime + PHASE[i];
+            s += w.xy * w.z * cos(ph);
+          }
+          vec3 N = normalize(vec3(-s.x, 1.0, -s.y));
+          vec3 V = normalize(cameraPosition - vW);
+          // Schlick fresnel with water's F0 (0.02): clear looking down, a mirror at grazing angles.
+          float F = 0.02 + 0.98 * pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 5.0);
+          vec2 muv = vMirror.xy / vMirror.w + N.xz * 0.025;
+          vec3 mirrored = texture2D(tReflection, clamp(muv, vec2(0.002), vec2(0.998))).rgb;
+          vec3 refl = mix(uSky, mirrored, uMirrorOn);
+          // Depth from the shore: shallow water is clear and pale, deeper water is dark and absorbs.
+          float depth = max(templeBank(p), 0.0);
+          vec3 body = mix(uShallow, uBody, smoothstep(0.0, 1.8, depth));
+          vec3 col = mix(body, refl, F);
+          // The sun's glint on the wave faces.
+          vec3 R = reflect(-uSunDir, N);
+          col += uSunColor * pow(max(dot(R, V), 0.0), 900.0) * 0.5;
+          // Foam: at the shore and on the steeper crests, broken up by moving noise.
+          float n = vnoise(p * 2.6 + vec2(uTime * 0.35, -uTime * 0.27)) * 0.6 + vnoise(p * 6.1 - uTime * 0.6) * 0.4;
+          float shore = 1.0 - smoothstep(0.0, 0.3, depth);
+          float crest = smoothstep(0.24, 0.36, length(s));
+          float foam = clamp(shore * smoothstep(0.3, 0.62, n) + crest * smoothstep(0.6, 0.85, n) * 0.5, 0.0, 1.0);
+          col = mix(col, vec3(0.9, 0.93, 0.9), foam * 0.85);
+          float alpha = clamp(mix(0.45 + 0.45 * smoothstep(0.0, 1.2, depth), 1.0, F) + foam * 0.3, 0.0, 1.0);
+          gl_FragColor = vec4(col, alpha);
+          #include <tonemapping_fragment>
+          #include <colorspace_fragment>
+          #include <fog_fragment>
+        }`,
+      uniforms, fog: true, transparent: true, depthWrite: false,
     });
-    material.onBeforeCompile = shader => {
-      shader.uniforms.waterTime = time;
-      shader.vertexShader = "varying vec3 vWaterWorld;\n" + shader.vertexShader.replace("#include <project_vertex>",
-        "#include <project_vertex>\nvWaterWorld=(modelMatrix*vec4(transformed,1.0)).xyz;");
-      shader.fragmentShader = "varying vec3 vWaterWorld; uniform float waterTime;\n" + TEMPLE_WATER_GLSL +
-        shader.fragmentShader
-          .replace("#include <normal_fragment_maps>", `
-            #include <normal_fragment_maps>
-            vec2 slope=waterSlope(vWaterWorld.xz,waterTime);
-            normal=normalize((viewMatrix*vec4(normalize(vec3(slope.x,1.,slope.y)),0.)).xyz);`)
-          .replace("#include <opaque_fragment>", `
-            float edge=templeBank(vWaterWorld.xz);
-            float ripple=.54+.27*sin(vWaterWorld.x*6.7+vWaterWorld.z*2.2+waterTime)+
-              .19*sin(vWaterWorld.z*5.2-vWaterWorld.x*3.7-waterTime*.7);
-            float foam=(1.-smoothstep(.065,.44,edge))*smoothstep(.38,.9,ripple);
-            float fres=pow(1.-max(0.,dot(normalize(normal),normalize(vViewPosition))),3.0);
-            outgoingLight=mix(outgoingLight,vec3(.30,.38,.31),foam*.65);
-            diffuseColor.a=mix(.23,.94,fres)*mix(.56,1.,smoothstep(0.,.55,edge))+foam*.14;
-            #include <opaque_fragment>`);
-    };
     const surface = new THREE.Mesh(geometry, material);
     surface.position.y = TEMPLE_WATER_Y;
     surface.receiveShadow = true; surface.raycast = () => {}; surface.renderOrder = 2;
     group.add(bed, caustic, surface);
+
+    const virtual = new THREE.PerspectiveCamera();
+    const clip = new THREE.Plane(new THREE.Vector3(0, 1, 0), -TEMPLE_WATER_Y);
+    const bias = new THREE.Matrix4().set(.5, 0, 0, .5, 0, .5, 0, .5, 0, 0, .5, .5, 0, 0, 0, 1);
+    const mirror = {
+      uniforms,
+      /** True over the water itself (the bank is the shoreline). */
+      inWater: (x, z) => templeWaterBank(x, z) > 0,
+      /** Metres from the shore into the water (0 on the bank): how deep the water is at that point. */
+      depth: (x, z) => Math.max(0, templeWaterBank(x, z)),
+      render(renderer, scene, camera) {
+        const size = renderer.getDrawingBufferSize(new THREE.Vector2());
+        const w = Math.max(64, Math.floor(size.x / 2)), h = Math.max(64, Math.floor(size.y / 2));
+        if (reflection.width !== w || reflection.height !== h) reflection.setSize(w, h);
+        camera.updateMatrixWorld(true);
+        const dir = camera.getWorldDirection(new THREE.Vector3()), c = camera.position, Y2 = 2 * TEMPLE_WATER_Y;
+        virtual.position.set(c.x, Y2 - c.y, c.z);
+        virtual.lookAt(c.x + dir.x, Y2 - (c.y + dir.y), c.z + dir.z);
+        virtual.fov = camera.fov; virtual.aspect = camera.aspect; virtual.near = camera.near; virtual.far = camera.far;
+        virtual.updateProjectionMatrix(); virtual.updateMatrixWorld(true);
+        uniforms.uTextureMatrix.value.copy(bias).multiply(virtual.projectionMatrix).multiply(virtual.matrixWorldInverse);
+        const prevTarget = renderer.getRenderTarget(), prevClip = renderer.clippingPlanes, prevAuto = renderer.shadowMap.autoUpdate;
+        surface.visible = false;
+        renderer.shadowMap.autoUpdate = false;
+        renderer.clippingPlanes = [clip];
+        renderer.setRenderTarget(reflection);
+        renderer.clear();
+        renderer.render(scene, virtual);
+        renderer.setRenderTarget(prevTarget);
+        renderer.clippingPlanes = prevClip;
+        renderer.shadowMap.autoUpdate = prevAuto;
+        surface.visible = true;
+      },
+    };
+    if (host && host.waterMirror) host.waterMirror(mirror);
     world.tick((dt, t) => {
-      time.value = t % 1024;
+      uniforms.uTime.value = t % 1024;
       caustic.material.map.offset.set((t * .024) % 1, (t * -.017) % 1);
     });
     return surface;
@@ -1363,5 +1494,5 @@ export function createNature(THREE) {
     return target.texture;
   }
 
-  return { motion, wake, fire, steam, cloudTexture, Mesher, molten, dirt, road, strata, shingles, tumbleTexture, cactus, butte, skyline, setFromCanvas, ground, bed, tiled, fbm, soil, pebbles, glyphs, normalFromHeight, material, tree, fern, grass, bush, vine, palm, rock, water, foam, templeWater, sky, space, glass, solarTexture, environment, windTime, leafAtlas, groundAtlas, barkTexture, canvasTexture, rngFor, mergeGeometries };
+  return { motion, wake, fire, embers, steam, cloudTexture, Mesher, molten, dirt, road, strata, shingles, tumbleTexture, cactus, butte, skyline, setFromCanvas, ground, bed, tiled, fbm, soil, pebbles, glyphs, normalFromHeight, material, tree, fern, grass, bush, vine, palm, rock, water, foam, templeWater, sky, space, glass, solarTexture, environment, windTime, leafAtlas, groundAtlas, barkTexture, canvasTexture, rngFor, mergeGeometries };
 }

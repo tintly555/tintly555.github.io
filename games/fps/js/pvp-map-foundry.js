@@ -72,7 +72,16 @@ export function foundry(core) {
       world.zone({ kind: "damage", x: 0, z: 0, w: 6, d: H * 2, y0: 0, h: 0.6, amount: 26, rate: 0.4, label: "lava" });
       world.zone({ kind: "damage", x: 0, z: 0, w: H * 2, d: 6, y0: 0, h: 0.6, amount: 26, rate: 0.4, label: "lava" });
       // The metal lights the hall from below: one lamp at the crossing and one over each arm (a map gets six lights in all).
-      for (const [x, z, k] of [[0, 0, 80], [0, 21, 46], [0, -21, 46]]) { const gl = new THREE.PointLight(0xff6a22, k, 38, 2); gl.position.set(x, 2.4, z); kit.light(gl); }
+      // The metal's glow lights the hall from close above the surface, so the floor and the walls catch the orange.
+      for (const [x, z, k] of [[0, 0, 150], [0, 21, 90], [0, -21, 90]]) { const gl = new THREE.PointLight(0xff6a22, k, 40, 2); gl.position.set(x, 1.5, z); kit.light(gl); }
+      // Smoke off the molten metal: dark and heavy, rising from the channels and thinning into the roof.
+      const smokeGroup = new THREE.Group(); kit.deco(smokeGroup);
+      const emberGroup = new THREE.Group(); kit.deco(emberGroup);
+      for (const [x, z, p] of [[-14, 0, 0], [14, 0, 1.7], [0, -14, 3.1], [0, 14, 4.4], [-7, 0, 5.2], [7, 0, 0.9]]) {
+        N.steam(smokeGroup, world, { x, z, height: 11, size: 2.6, opacity: 0.34, count: 12, color: 0x3d3a37,
+          intensity: (t) => 0.75 + 0.25 * Math.sin(t * 0.37 + p) });
+        N.embers(emberGroup, world, { x, z, w: 3.4, d: 3.4, height: 5, count: 14, rate: 0.5 + (p % 1) * 0.3, size: 0.12 });
+      }
 
       // ── Bridges over the channels ───────────────────────────────────────────────────
       const bridge = (cx, cz, alongX) => {
@@ -326,7 +335,7 @@ export function foundry(core) {
         world.zone({ kind: "damage", x, z, r: 1.7, w: 3.4, d: 3.4, y0: 0, h: 3.2, amount: 14, rate: 0.4, label: "steam", active });
         // The column builds over a second, holds while it burns, and thins away: never a pop.
         const smooth = (v) => { const u = Math.max(0, Math.min(1, v)); return u * u * (3 - 2 * u); };
-        N.steam(steamGroup, world, { x, z, height: 4.6, size: 0.8, opacity: 0.22, count: 10, intensity: (t) => { const c = (t + phase) % 8; return Math.max(smooth((c - 5.6) / 1.2), c < 1.2 ? 1 - smooth(c / 1.2) : 0); } });
+        N.steam(steamGroup, world, { x, z, height: 6.5, size: 1.15, opacity: 0.52, count: 22, riseRate: 0.46, spread: 1.15, color: 0xe8e8e5, intensity: (t) => { const c = (t + phase) % 8; return Math.max(smooth((c - 5.6) / 1.2), c < 1.2 ? 1 - smooth(c / 1.2) : 0); } });
       });
       // ── Roof trusses, hanging lamps, drifting sparks (scenery) ───────────────────────
       const tr = kit.batch(3);

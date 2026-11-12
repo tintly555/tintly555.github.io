@@ -3,7 +3,7 @@
     import { RoundedBoxGeometry } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/geometries/RoundedBoxGeometry.js";
     import { mergeGeometries, toCreasedNormals } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/utils/BufferGeometryUtils.js";
     import { clone as cloneSkinnedModel } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/utils/SkeletonUtils.js";
-    import { createPvpMaps } from "./pvp-maps.js?v=40";
+    import { createPvpMaps } from "./pvp-maps.js?v=43";
     import { createPvpWorld } from "./pvp-world.js?v=4";
     import { createBossNavigation } from "./boss-navigation.js?v=2";
     import { BOSS_ATTACK_BY_ID, chooseBossAttack } from "./boss-attacks.js?v=2";
@@ -11,12 +11,12 @@
     import { createBossCreature, BOSS_RADIUS, CLAW_STRIKE_S, QUAKE_SLAM_S, LOB_RELEASE_S, DURATIONS as BOSS_DURATIONS } from "./boss-creature.js?v=11";
     import { buildOperatorShell } from "./operator-model.js?v=1";
     import { extendGauntletCourses, GAUNTLET_CHAPTERS, GAUNTLET_CHAPTER_SIZE } from "./gauntlet-courses.js?v=5";
-    import { createGauntletRuntime } from "./gauntlet-runtime.js?v=20";
+    import { createGauntletRuntime } from "./gauntlet-runtime.js?v=21";
     import { createWorldAudio } from "./world-audio.js?v=4";
-    import { createGauntletThemes } from "./gauntlet-themes.js?v=9";
-    import { createPostFx, applyDisplayTone } from "./post-fx.js?v=4";
+    import { createGauntletThemes } from "./gauntlet-themes.js?v=10";
+    import { createPostFx, applyDisplayTone } from "./post-fx.js?v=5";
     import { DEFAULT_FX, loadFxSettings, mountFxSettings } from "./post-fx-settings.js";
-    import { createImpactFx } from "./impact-fx.js?v=2";
+    import { createImpactFx } from "./impact-fx.js?v=4";
     import { poseZombieVariant } from "./zombie-variants.js?v=5";
     import { BOSS_IMPACT, ZOMBIE_MELEE, zombieStrikeClipPhase, zombieGait } from "./zombie-motion.js";
     import { ZOMBIE_LOOK_COUNT, loadZombieCharacterMeshes } from "./zombie-character-meshes.js?v=1";
@@ -174,14 +174,14 @@
     /**
      * Per-tier rendering preset. Values stay strictly monotonic so the performance
      * ladder (potato fastest → extreme slowest) and the realism ladder (extreme best
-     * → potato worst) are both preserved. Resolution, filtering, and shadow fidelity
+     * → potato worst) are both preserved. Filtering and shadow fidelity
      * scale independently; visibility and player/camera behavior never do.
      */
     const QUALITY_PRESETS = {
-      potato:  { label: "POTATO",  dpr: 0.65, aniso: 2,  shadowSz: 256,  shadowDist: 28, shadowSoft: false, bias: -0.0009,  normalBias: 0.018 },
-      regular: { label: "REGULAR", dpr: 0.85, aniso: 6,  shadowSz: 512,  shadowDist: 40, shadowSoft: false, bias: -0.0008,  normalBias: 0.015 },
-      high:    { label: "HIGH",    dpr: 1.00, aniso: 12, shadowSz: 1024, shadowDist: 55, shadowSoft: true,  bias: -0.00065, normalBias: 0.012 },
-      extreme: { label: "EXTREME", dpr: 1.25, aniso: 16, shadowSz: 2048, shadowDist: 72, shadowSoft: true,  bias: -0.00055, normalBias: 0.008 },
+      potato:  { label: "POTATO",  aniso: 2,  shadowSz: 256,  shadowDist: 28, shadowSoft: false, bias: -0.0009,  normalBias: 0.018 },
+      regular: { label: "REGULAR", aniso: 6,  shadowSz: 512,  shadowDist: 40, shadowSoft: false, bias: -0.0008,  normalBias: 0.015 },
+      high:    { label: "HIGH",    aniso: 12, shadowSz: 1024, shadowDist: 55, shadowSoft: true,  bias: -0.00065, normalBias: 0.012 },
+      extreme: { label: "EXTREME", aniso: 16, shadowSz: 2048, shadowDist: 72, shadowSoft: true,  bias: -0.00055, normalBias: 0.008 },
     };
     // Fairness-critical presentation is intentionally identical on every tier.
     // Quality may change fidelity and cost, never visibility, brightness, camera
@@ -2030,7 +2030,7 @@
       vitals.classList.add("damage-hit");
     }
 
-    function showDamageImpact(amount, x, z) {
+    function showDamageImpact(amount, x, z, kind = "claw") {
       let angle = Math.PI * (.27 + Math.random() * .46);
       if (Number.isFinite(x) && Number.isFinite(z)) {
         const dx = x - player.position.x, dz = z - player.position.z;
@@ -2040,7 +2040,7 @@
           angle = Math.atan2(-forward, side);
         }
       }
-      impactFx.hit(amount, angle, gameSettings.effects.blood);
+      impactFx.hit(amount, angle, gameSettings.effects.blood, kind);
     }
 
     function addHitIndicator(fromX, fromZ) {
@@ -2917,7 +2917,7 @@
     let appliedRendererDpr = _initialRendererDpr;
     let resolutionScale = 0.76;
     const ADAPTIVE_RENDER_SCALE_MIN = 0.65;
-    const ADAPTIVE_AA_SCALES = Object.freeze([1, 1.06, 1.12, 1.18, 1.24]);
+    const ADAPTIVE_AA_LEVELS = 5;
     const RENDER_SAMPLE_WINDOW_S = 1.0;
     const RENDER_LOW_HOLD_S = 2.0;
     const RENDER_HIGH_HOLD_S = 2.5;
@@ -2973,13 +2973,8 @@
       return QUALITY_PRESETS[getQualityId()] || QUALITY_PRESETS.regular;
     }
 
-    function getPixelRatioForQuality() {
-      const dpr = window.devicePixelRatio || 1;
-      return Math.min(getQualityPreset().dpr, dpr);
-    }
-
-    function getAdaptiveAAScale() {
-      return resolutionScale >= 0.999 ? ADAPTIVE_AA_SCALES[adaptiveAaLevel] || 1 : 1;
+    function getNativePixelRatio() {
+      return Math.min(window.devicePixelRatio || 1, 1);
     }
 
     function clearAdaptiveRenderWindow() {
@@ -2993,8 +2988,7 @@
         adaptiveAaLevel--;
         return true;
       }
-      const effectiveScale = getPixelRatioForQuality() * resolutionScale * getAdaptiveAAScale();
-      if (resolutionScale > ADAPTIVE_RENDER_SCALE_MIN && effectiveScale > ADAPTIVE_RENDER_SCALE_MIN + 0.001) {
+      if (resolutionScale > ADAPTIVE_RENDER_SCALE_MIN) {
         resolutionScale = Math.max(ADAPTIVE_RENDER_SCALE_MIN, resolutionScale - 0.05);
         return true;
       }
@@ -3240,6 +3234,14 @@
       return gameSettings.postFx !== false && !postFxBroken && getQualityId() !== "potato";
     }
     function renderWorld(dt) {
+      // Water reflections are drawn first, from a mirrored camera; the potato tier keeps the sky colour instead.
+      if (pvpWaterMirrors.length) {
+        const mirrorOn = getQualityId() !== "potato";
+        for (const mirror of pvpWaterMirrors) {
+          mirror.uniforms.uMirrorOn.value = mirrorOn ? 1 : 0;
+          if (mirrorOn) mirror.render(renderer, scene, camera);
+        }
+      }
       if (showcaseRp?.group.visible) {
         const tag = showcaseRp.nameSprite;
         const at = showcaseRp.group.position;
@@ -3274,6 +3276,7 @@
           postFx.setSize(size.x, size.y, dpr);
           _postW = size.x; _postH = size.y; _postDpr = dpr;
         }
+        postFx.setAntialiasLevel(adaptiveAaLevel);
         const key = CURRENT_MAP + (isGauntletMap(CURRENT_MAP) ? currentGauntletTheme().id : "");
         const environment = pvpDef(CURRENT_MAP)?.env || (isBossArenaMap(CURRENT_MAP) ? bossOptics : null);
         const quality = getQualityId();
@@ -3376,8 +3379,7 @@
         // while those passes are active; FXAA softens the final upscale without another
         // blur pass or its extra GPU cost.
         // Only the 3D canvas backing store is scaled; all HUD/menu elements remain DOM-sized.
-        const desiredDpr = Math.max(ADAPTIVE_RENDER_SCALE_MIN,
-          getPixelRatioForQuality() * resolutionScale * getAdaptiveAAScale());
+        const desiredDpr = getNativePixelRatio() * Math.min(1, Math.max(ADAPTIVE_RENDER_SCALE_MIN, resolutionScale));
         const sizeChanged = w !== appliedRendererWidth || h !== appliedRendererHeight;
         const dprChanged = Math.abs(desiredDpr - appliedRendererDpr) > 0.001;
         if (Math.abs(aspect - appliedCameraAspect) > 0.000001) {
@@ -4367,7 +4369,38 @@
       return out;
     }
 
+    /**
+     * Texture detail OFF on every map. The arena builds its own untextured walls; the other maps build their
+     * materials directly, so this pass applies the setting to whatever is in the scene: the maps are kept
+     * aside the first time a material is seen, and when detail is off the material gets the average colour of
+     * its map instead, so the setting changes the detail and not the brightness. Cut-out and transparent
+     * materials are skipped, since their map is what gives them their shape.
+     */
+    /** Kept out of userData: Material.clone() copies userData through JSON, which would turn the textures into plain objects. */
+    const savedDetail = new WeakMap();
+    function applyTextureDetail() {
+      const on = gameSettings.texturesOn;
+      scene.traverse((o) => {
+        if (!o.isMesh || !o.material) return;
+        for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+          if (!m.isMeshStandardMaterial || m.transparent || m.alphaTest > 0 || m.alphaMap) continue;
+          let saved = savedDetail.get(m);
+          if (!saved) {
+            saved = { map: m.map, normalMap: m.normalMap, roughnessMap: m.roughnessMap, color: m.color.clone() };
+            savedDetail.set(m, saved);
+          }
+          const color = on || !saved.map ? saved.color : saved.color.clone().multiply(averageTextureColor(saved.map.image, false));
+          const map = on ? saved.map : null, normalMap = on ? saved.normalMap : null, roughnessMap = on ? saved.roughnessMap : null;
+          if (m.map === map && m.normalMap === normalMap && m.roughnessMap === roughnessMap && m.color.equals(color)) continue;
+          m.map = map; m.normalMap = normalMap; m.roughnessMap = roughnessMap;
+          m.color.copy(color);
+          m.needsUpdate = true;
+        }
+      });
+    }
+
     function applyWallTexture() {
+      applyTextureDetail();
       if (!wallTexture && !facilityWallTexture) return;
       const textures = [..._wallTextureCache.values(), ..._wallNormalCache.values(), ...mazeSlabTextures.values()];
       if (facilityWallTexture) textures.push(facilityWallTexture);
@@ -5453,6 +5486,8 @@
 
     /** ── Themed PVP maps (js/pvp-maps.js) ─────────────────────────────────────────────── */
     let pvpWorld = null, pvpMapRoot = null;
+    /** Planar water reflections of the current PVP map (each has a render(renderer, scene, camera)). */
+    const pvpWaterMirrors = [];
     const pvpGlassShotMeshes = [];
     /** The sun of a themed map is the game's moon light, with a static shadow baked over the whole map. */
     let pvpMoonSaved = null;
@@ -5490,6 +5525,7 @@
       }
       if (pvpWorld) { pvpWorld.clear(); pvpWorld = null; }
       pvpGlassShotMeshes.length = 0;
+      pvpWaterMirrors.length = 0;
     }
     function buildPvpThemed(id) {
       clearPvpMapLights();
@@ -5505,7 +5541,7 @@
           }
           return all;
         },
-        damage: (amount) => damagePlayer(amount, null, "body", -1, true),
+        damage: (amount, label) => damagePlayer(amount, null, "body", -1, true, pvpDamageKind(label)),
         launch(vertical, x, z) {
           player.velocityY = vertical;
           player.onGround = false;
@@ -5523,6 +5559,7 @@
         tier: () => ({ potato: 0, regular: 1, high: 2, extreme: 3 })[getQualityId()] ?? 1,
         quality: () => ({ potato: 0, regular: 1, high: 2, extreme: 2 })[getQualityId()] ?? 1,
         shotBlocker(mesh) { pvpGlassShotMeshes.push(mesh); },
+        waterMirror(mirror) { pvpWaterMirrors.push(mirror); },
         environment(texture, intensity) {
           scene.environment = texture;
           scene.environmentIntensity = intensity;
@@ -7035,6 +7072,8 @@
             // Use the same source-to-exit frame transform as the portal camera. The pose,
             // heading and momentum therefore continue through the opening without a facing snap.
             const rotation = new THREE.Quaternion().setFromRotationMatrix(transform);
+            camera.position.applyMatrix4(transform);
+            camera.quaternion.premultiply(rotation);
             player.position.applyMatrix4(transform);
             const facing = new THREE.Quaternion().setFromEuler(new THREE.Euler(player.pitch, player.yaw, 0, "YXZ"));
             facing.premultiply(rotation);
@@ -7054,6 +7093,7 @@
             state.lastMoveZ = move.z;
             player.fallApexY = player.position.y;
             state.camBaseY = undefined;
+            camera.updateMatrixWorld(true);
           },
           damage: amount => damagePlayer(amount, null, "body", -1, true),
           signal: kind => {
@@ -9617,10 +9657,19 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       return top;
     }
 
-    function fallDamage(drop) {
+    /**
+     * Water breaks the fall: up to 30% less damage, scaled by how deep the water is where you land (the deepest
+     * point of the pool, 3 m or more from the shore, gets the full 30%; the shallows get little).
+     */
+    function waterFallReduction() {
+      let depth = 0;
+      for (const m of pvpWaterMirrors) depth = Math.max(depth, m.depth(player.position.x, player.position.z));
+      return 0.3 * THREE.MathUtils.clamp(depth / 3, 0, 1);
+    }
+    function fallDamage(drop, reduction = 0) {
       if (drop <= SAFE_FALL_DROP + 1e-5) return 0;
       const severity = THREE.MathUtils.clamp((drop - SAFE_FALL_DROP) / (FATAL_FALL_DROP - SAFE_FALL_DROP), 0, 1);
-      return Math.ceil(player.maxHealth * severity ** 1.55);
+      return Math.ceil(player.maxHealth * severity ** 1.55 * (1 - reduction));
     }
 
     /**
@@ -14714,7 +14763,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         const mappedRotation = new THREE.Quaternion().setFromRotationMatrix(mapping);
         const exitDirection = ray.ray.direction.clone().applyQuaternion(mappedRotation).normalize();
         const exitRayOrigin = exitPoint.clone().addScaledVector(exitDirection, 0.035);
-        closest = { portal, distance: t, entryPoint, exitPoint, exitRayOrigin, exitDirection, mapping };
+        closest = { portal, distance: t, entryPoint, exitPoint, exitRayOrigin, exitDirection, mapping: mapping.clone() };
       }
       return closest;
     }
@@ -19107,7 +19156,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
 
       let color = "#17c85b";
       let label = "#8de08d";
-      const lethal = fallDamage(drop) >= player.health;
+      const lethal = fallDamage(drop, waterFallReduction()) >= player.health;
       if (lethal) {
         color = "#ff2f2f";
         label = "#ff6a6a";
@@ -19415,7 +19464,9 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
                 const prePortalFrame = getGauntletPortalFrameShotHit(clearRay);
                 if (!preWall && !preGlass && !prePortalFrame && !portalRayHasEarlierHit(clearRay, crossing.distance)) {
                   p.portalPath = crossing;
-                  p.pos.add(crossing.offset);
+                  const portalRotation = new THREE.Quaternion().setFromRotationMatrix(crossing.mapping);
+                  p.pos.applyMatrix4(crossing.mapping);
+                  p.vel.applyQuaternion(portalRotation);
                   p.prev.copy(crossing.exitRayOrigin);
                   if (p.mesh) p.mesh.position.copy(p.pos);
                 }
@@ -20649,8 +20700,8 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       } else if (!_dashing) {
         const drop = (player.fallApexY ?? beforeMoveY) - player.position.y;
         if (_wasAirborne && !braked) {
-          const damage = fallDamage(drop);
-          if (damage > 0) damagePlayer(damage, null, "body", -1, true);
+          const damage = fallDamage(drop, waterFallReduction());
+          if (damage > 0) damagePlayer(damage, null, "body", -1, true, "fall");
         }
         player.fallApexY = null;
       }
@@ -20840,7 +20891,14 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       }
     }
 
-    function damagePlayer(amount, attacker, zone = "body", widx = -1, ignoreArmor = false) {
+    /** Damage kinds for the screen overlay: a claw, a bullet, a blast, a fall, fire, steam, a spine or a generic hazard. */
+    function pvpDamageKind(label) {
+      if (label === "lava" || label === "molten metal") return "fire";
+      if (label === "steam") return "steam";
+      if (label === "cactus") return "spine";
+      return "hazard";
+    }
+    function damagePlayer(amount, attacker, zone = "body", widx = -1, ignoreArmor = false, kind = null) {
       if (player.health <= 0) return;
       if (performance.now() < player.spawnProtectUntil) return;
       // Armour is applied here so every incoming source funnels through one place.
@@ -20856,7 +20914,8 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         state.speedNeedle.timer = NEEDLE_WEAK_MS;
         /* shown on the HUD / in the world, not as text */
       }
-      showDamageImpact(amount, attacker?.group?.position.x, attacker?.group?.position.z);
+      const impactKind = kind ?? (attacker ? (attacker.type === "gunner" ? "bullet" : "claw") : "hazard");
+      showDamageImpact(amount, attacker?.group?.position.x, attacker?.group?.position.z, impactKind);
       triggerCamShake(0.095);
       {
         // The view snaps toward the side the hit came from, harder for bigger hits.
@@ -22178,7 +22237,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         const d = origin.distanceTo(body), f = blastFalloff(d, R);
         // Cover works: a pillar between the blast and you takes it (unless you are right on top of it).
         if (f > 0 && (d < 1.1 || !soundBlocked(origin, body, 0.1))) {
-          damagePlayer(bp.damage * f, null);
+          damagePlayer(bp.damage * f, null, "body", -1, false, "blast");
           blastPush(origin, body, f);
         }
       }
@@ -24290,7 +24349,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
 
       if (performance.now() >= renderChangeCooldownUntil && renderHighSeconds >= RENDER_HIGH_HOLD_S) {
         if (resolutionScale < 0.999) resolutionScale = Math.min(1, resolutionScale + 0.05);
-        else if (adaptiveAaLevel < ADAPTIVE_AA_SCALES.length - 1) adaptiveAaLevel++;
+        else if (adaptiveAaLevel < ADAPTIVE_AA_LEVELS - 1) adaptiveAaLevel++;
         else {
           clearAdaptiveRenderWindow();
           return;
@@ -24508,6 +24567,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         for (const fn of gauntletTicks) fn(dt, feet);
       }
       updatePlayer(dt);
+      gauntletRuntime?.updatePortals(player);
       updateFlashlightExposure(dt, audioNow);
       if (player.health > 0) updateWeapon(dt);
       if (playWorldSounds) {
@@ -26210,6 +26270,8 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           }
           return best;
         },
+        /** Hurts the local player as a given damage kind (claw, bullet, blast, fall, fire, steam, spine, hazard) to test the screen overlay. */
+        hurt(amount, kind) { player.spawnProtectUntil = 0; damagePlayer(amount, null, 'body', -1, true, kind); },
         /** Fires a boss fireball from a point with a velocity (explosion testing); fx() reports what is alive. */
         ball(ox, oy, oz, vx, vy, vz, damage = 24, hell = false) { return spawnBossProjectile(ox, oy, oz, vx, vy, vz, damage, null, null, { hell, floorY: 0 }); },
         fx() { return { balls: bossProjectiles.length, blasts: bossBlasts.length, scorch: bossScorches.length, lights: bossFxLights.map((l) => +l.intensity.toFixed(1)) }; },

@@ -1,5 +1,5 @@
 import { makeGauntletObstacle } from "./gauntlet-obstacles.js?v=5";
-import { createGauntletArt } from "./gauntlet-art.js?v=14";
+import { createGauntletArt } from "./gauntlet-art.js?v=15";
 
 const EYE_HEIGHT = 1.65;
 const BURIED = -90;
@@ -325,9 +325,7 @@ export function createGauntletRuntime(THREE, solid, decorate, hooks, style = nul
       }
     }
     if (!entered || node.used) return;
-    if (node.kind === "portal") {
-      hooks.teleport(node.to);
-    } else if (node.kind === "airKick" && airborne) {
+    if (node.kind === "airKick" && airborne) {
       hooks.launch(node.lift, 0, node.zForce);
       hooks.notice?.("AIR BOOST", 1.2);
       node.used = true;
@@ -474,6 +472,15 @@ export function createGauntletRuntime(THREE, solid, decorate, hooks, style = nul
     hooks.zone?.(zone);
   }
 
+  /** Run after movement so portal traversal is applied before the frame is rendered. */
+  function updatePortals(player) {
+    const p = player.position;
+    for (const section of sections) {
+      if (!near(section, p, 10)) continue;
+      for (const node of section.nodes) if (node.kind === "portal") useNode(section, node, player);
+    }
+  }
+
   function resetAfter(checkpointArc) {
     lastDamage = -Infinity;
     shieldUntil = 0;
@@ -486,6 +493,7 @@ export function createGauntletRuntime(THREE, solid, decorate, hooks, style = nul
       for (const node of section.nodes) {
         node.used = node.inside = false;
         node.lastSide = undefined;
+        node.portalPrevious = null;
         node.armed = null;
         node.mesh.visible = true;
         (node.lamp || node.mesh).material.color.setHex(node.tone);
@@ -497,5 +505,5 @@ export function createGauntletRuntime(THREE, solid, decorate, hooks, style = nul
   const movers = () => sections.flatMap(s => s.movers.filter(m => m.type === "deck" && m.motion && ["slide", "orbit", "weight", "ride"].includes(m.motion.kind)));
   const shieldLeft = () => Math.max(0, shieldUntil - time);
   const _portalTransform = new THREE.Matrix4();
-  return { build, update, modifiers, resetAfter, ramps, movers, portals: art.portals, portalTransform, shieldLeft };
+  return { build, update, updatePortals, modifiers, resetAfter, ramps, movers, portals: art.portals, portalTransform, shieldLeft };
 }

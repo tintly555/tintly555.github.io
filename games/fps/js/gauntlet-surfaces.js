@@ -173,7 +173,7 @@ export function createSurfaces(THREE) {
         cracks(c, crack);
         for (let k = 0; k < 2; k++) seam(c, 0, k * size / 2 + 2, size, k * size / 2 + 2, 2.5);
         for (let k = 0; k < 2; k++) seam(c, k * size / 2 + 2, 0, k * size / 2 + 2, size, 2.5);
-      }, { rough: true });
+        }, { rough: true });
     },
     /** Steel plate: brushed grain, panel seams with rivets, optional rust and paint wear. */
     steel(name, { base = [112, 122, 132], rust = 0, size = 512, panels = 2, paint = null } = {}) {
@@ -360,15 +360,25 @@ export function createSurfaces(THREE) {
         pits(c, 200, .7, 1.6, .25);
       }, { rough: true, normal: 2 });
     },
-    /** Factory floor: dark painted slab, oil stains and a worn yellow safety line. */
+    /** Factory floor: dark painted slab, broken wet patches and a worn yellow safety line. */
     factory(name, { base = [66, 68, 72], size = 512 } = {}) {
       return S("factory:" + name, size, c => {
-        const n = c.noise(5, 4, .55), oil = c.noise(3, 3, .6, 2);
+        const n = c.noise(5, 5, .55), puddleForm = c.noise(5, 8, .58, 2), puddleBreakup = c.noise(4, 23, .58, 9);
         c.fill((x, y, i) => {
-          const v = .78 + n[i] * .4;
-          const o = oil[i] > .6 ? (oil[i] - .6) * 1.4 : 0;
-          return [base[0] * v * (1 - o * .6), base[1] * v * (1 - o * .6), base[2] * v * (1 - o * .55)];
-        }, (x, y, i) => n[i] * .5 + .35, (x, y, i) => (oil[i] > .6 ? .15 : .6 + n[i] * .2));
+          const v = .82 + n[i] * .3;
+          const wetness = puddleForm[i] * .78 + puddleBreakup[i] * .22;
+          const edge = THREE.MathUtils.smoothstep(wetness, .64, .77);
+          const o = edge * .52;
+          return [base[0] * v * (1 - o * .27), base[1] * v * (1 - o * .25), base[2] * v * (1 - o * .22)];
+        }, (x, y, i) => {
+          const wetness = puddleForm[i] * .78 + puddleBreakup[i] * .22;
+          const edge = THREE.MathUtils.smoothstep(wetness, .64, .77);
+          return n[i] * .38 + edge * .055 + .32;
+        }, (x, y, i) => {
+          const wetness = puddleForm[i] * .78 + puddleBreakup[i] * .22;
+          const edge = THREE.MathUtils.smoothstep(wetness, .64, .77);
+          return .76 * (1 - edge) + (.19 + puddleBreakup[i] * .08) * edge;
+        });
         const wear = c.noise(3, 10, .6, 5);
         for (let y = 0; y < size; y++) for (let x = 0; x < 22; x++) {
           const w = wear[y * size + x];

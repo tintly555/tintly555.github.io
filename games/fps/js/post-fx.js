@@ -100,7 +100,12 @@ export function createPostFx(THREE, renderer, scene, camera, { width, height, pi
   const grade = new ShaderPass(material(GRADE, gradeU));
 
   let cfg = DEFAULT_FX, tier = "regular", look = {}, surface = false, sky = null;
-  let rawW = 0, rawH = 0, dt = 0, motion = 0;
+  let rawW = 0, rawH = 0, dt = 0, motion = 0, antialiasLevel = 0;
+  const fxaaFootprints = [1, 1.1, 1.2, 1.32, 1.46];
+  function applyAntialiasLevel() {
+    const footprint = fxaaFootprints[antialiasLevel];
+    fxaa.uniforms.resolution.value.set(matrices.uPixel.value.x * footprint, matrices.uPixel.value.y * footprint);
+  }
   const analysis = new Pass();
   analysis.needsSwap = false;
   analysis.render = (activeRenderer, writeBuffer, readBuffer) => {
@@ -180,11 +185,17 @@ export function createPostFx(THREE, renderer, scene, camera, { width, height, pi
 
   const api = {
     composer, bloom, grade,
+    setAntialiasLevel(level) {
+      const next = THREE.MathUtils.clamp(Math.round(level || 0), 0, fxaaFootprints.length - 1);
+      if (next === antialiasLevel) return;
+      antialiasLevel = next;
+      applyAntialiasLevel();
+    },
     setSize(w, h, dpr) {
       rawW = Math.max(1, Math.round(w * dpr)); rawH = Math.max(1, Math.round(h * dpr));
       composer.setSize(rawW, rawH);
       matrices.uPixel.value.set(1 / rawW, 1 / rawH);
-      fxaa.uniforms.resolution.value.copy(matrices.uPixel.value);
+      applyAntialiasLevel();
       resizeAnalysis();
       hasHistory = false;
     },

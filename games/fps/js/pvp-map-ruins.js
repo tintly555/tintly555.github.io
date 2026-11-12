@@ -84,7 +84,7 @@ export function ruins(core) {
       // ── Sky is the core's; ground, stream bed ────────────────────────────────────────
       N.ground(group, { size: 230, tile: 6, tint: [1.05, 1.0, 0.92], moss: 0.55 });
       const moatIn = 21, moatOut = 27, mt = moatOut - moatIn;
-      N.templeWater(group, world);
+      N.templeWater(group, world, host);
       world.zone({ kind: "slow", x: 0, z: 0, w: 58, d: 58, y0: 0, h: .25,
         speed: .55, jump: .8, contains: (p) => inWater(p.x, p.z) });
 

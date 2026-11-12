@@ -5,7 +5,7 @@
  * course never disposes them. Per-piece materials (anything the runtime recolours) are
  * created fresh and disposed with the piece.
  */
-import { fbm } from "./gauntlet-surfaces.js?v=2";
+import { fbm } from "./gauntlet-surfaces.js?v=3";
 
 const TAU = Math.PI * 2;
 const cache = new Map();
@@ -202,17 +202,49 @@ export function createGauntletArt(THREE, { decorate, solid, scroll, spin, tick, 
     g.fillStyle = core;
     g.fillRect(-64, -64, 128, 128);
   }, false);
-  const rippleMap = () => texture("ripple", 256, 256, (g, w, h, rnd) => {
-    g.fillStyle = "rgba(60,150,210,.45)";
-    g.fillRect(0, 0, w, h);
-    for (let i = 0; i < 22; i++) {
-      g.strokeStyle = `rgba(255,255,255,${(.18 + rnd() * .3).toFixed(2)})`;
-      g.lineWidth = 2 + rnd() * 3;
-      g.beginPath();
-      g.ellipse(rnd() * w, rnd() * h, 14 + rnd() * 40, 6 + rnd() * 16, 0, 0, TAU);
-      g.stroke();
+  const waterSurface = () => {
+    const hit = cache.get("water-surface");
+    if (hit) return hit;
+    const size = 512;
+    const broad = fbm(size, 141, 5, 4), flow = fbm(size, 163, 5, 9), fine = fbm(size, 181, 4, 22);
+    const colorCanvas = document.createElement("canvas"), normalCanvas = document.createElement("canvas");
+    colorCanvas.width = colorCanvas.height = normalCanvas.width = normalCanvas.height = size;
+    const cc = colorCanvas.getContext("2d"), nc = normalCanvas.getContext("2d");
+    const colors = cc.createImageData(size, size), normals = nc.createImageData(size, size);
+    const height = new Float32Array(size * size);
+    for (let i = 0; i < height.length; i++) {
+      const turbulence = broad[i] * .62 + flow[i] * .28 + fine[i] * .10;
+      height[i] = .5 + (turbulence - .5) * .23 + (fine[i] - .5) * .035;
+      const glint = Math.max(0, (flow[i] * .62 + fine[i] * .38 - .64) / .36);
+      const shade = .76 + broad[i] * .18 + fine[i] * .09;
+      const k = i * 4;
+      colors.data[k] = 25 * shade + glint * 18;
+      colors.data[k + 1] = 46 * shade + glint * 29;
+      colors.data[k + 2] = 55 * shade + glint * 35;
+      colors.data[k + 3] = 255;
     }
-  });
+    const at = (x, y) => height[((y + size) % size) * size + ((x + size) % size)];
+    for (let y = 0, i = 0; y < size; y++) for (let x = 0; x < size; x++, i += 4) {
+      const dx = (at(x + 1, y) - at(x - 1, y)) * 5.5;
+      const dy = (at(x, y + 1) - at(x, y - 1)) * 5.5;
+      const inv = 1 / Math.hypot(dx, dy, 1);
+      normals.data[i] = (-dx * inv * .5 + .5) * 255;
+      normals.data[i + 1] = (dy * inv * .5 + .5) * 255;
+      normals.data[i + 2] = (inv * .5 + .5) * 255;
+      normals.data[i + 3] = 255;
+    }
+    cc.putImageData(colors, 0, 0); nc.putImageData(normals, 0, 0);
+    const map = new THREE.CanvasTexture(colorCanvas);
+    map.colorSpace = THREE.SRGBColorSpace;
+    map.wrapS = map.wrapT = THREE.RepeatWrapping;
+    const normalMap = new THREE.CanvasTexture(normalCanvas);
+    normalMap.colorSpace = THREE.NoColorSpace;
+    normalMap.wrapS = normalMap.wrapT = THREE.RepeatWrapping;
+    map.anisotropy = normalMap.anisotropy = 4;
+    const result = { map, normalMap };
+    cache.set("water-surface", result);
+    return result;
+  };
   const iceMap = () => texture("ice", 128, 128, (g, w, h, rnd) => {
     const base = g.createLinearGradient(0, 0, w, h);
     base.addColorStop(0, "#d6f0fb");
@@ -833,9 +865,31 @@ export function createGauntletArt(THREE, { decorate, solid, scroll, spin, tick, 
       const map = copy(gooMap(), Math.max(1, w / 2.2), Math.max(1, d / 2.2));
       floorPlane(w, d, new THREE.MeshStandardMaterial({ map, roughness: .9, metalness: 0 }), x, y + .035, z);
     } else if (kind === "water") {
-      const map = copy(rippleMap(), Math.max(1, w / 3), Math.max(1, d / 3));
-      scroll(map, .05, .12);
-      floorPlane(w, d, new THREE.MeshStandardMaterial({ map, color: 0xa8dcff, roughness: .08, metalness: .15, transparent: true, opacity: .72, depthWrite: false }), x, y + .05, z);
+      const water = waterSurface();
+      const repeatX = Math.max(1, w / 4.5), repeatY = Math.max(1, d / 4.5);
+      const map = copy(water.map, repeatX, repeatY), normalMap = copy(water.normalMap, repeatX, repeatY);
+      scroll(map, .008, .019); scroll(normalMap, .008, .019);
+      const geometry = new THREE.PlaneGeometry(w, d, 28, 36);
+      const positions = geometry.attributes.position;
+      for (let i = 0; i < positions.count; i++) {
+        const px = positions.getX(i), py = positions.getY(i);
+        const nx = px / (w / 2), ny = py / (d / 2), edge = Math.max(Math.abs(nx), Math.abs(ny));
+        if (edge > .68) {
+          const angle = Math.atan2(ny, nx);
+          const roughEdge = Math.sin(angle * 5 + x * .31) * .025 + Math.sin(angle * 11 + z * .19) * .018 + Math.sin(angle * 17) * .009;
+          const scale = 1 + roughEdge * THREE.MathUtils.smoothstep(edge, .68, 1);
+          positions.setXY(i, px * scale, py * scale);
+        }
+      }
+      geometry.computeVertexNormals();
+      const mesh = new THREE.Mesh(geometry, new THREE.MeshPhysicalMaterial({
+        map, normalMap, color: 0xc4dbe2, roughness: .24, metalness: .08,
+        clearcoat: .72, clearcoatRoughness: .18, transparent: true, opacity: .86, depthWrite: false,
+        side: THREE.DoubleSide,
+      }));
+      mesh.rotation.x = -Math.PI / 2;
+      mesh.position.set(x, y + .05, z);
+      add(mesh);
     }
     // wallKick and ladder zones are invisible: wall jumps work on any wall, and the ladder is its rungs.
   }

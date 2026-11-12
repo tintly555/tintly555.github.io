@@ -853,12 +853,14 @@ body :is(input[type="text"], input[type="number"], input[type="password"], selec
 .impact-vignette {
   --impact-red: 0;
   --impact-dark: 0;
+  --impact-heat: 0;
   --impact-x: 50%;
   --impact-y: 50%;
   background:
     radial-gradient(ellipse at var(--impact-x) var(--impact-y), rgba(170, 18, 30, calc(var(--impact-red) * .48)) 0%, rgba(110, 5, 17, calc(var(--impact-red) * .30)) 23%, transparent 58%),
     radial-gradient(ellipse at 50% 47%, transparent 35%, rgb(56 2 12 / calc(var(--impact-red) * .52)) 66%, rgb(104 4 20 / var(--impact-red)) 100%),
-    radial-gradient(ellipse at center, transparent 29%, rgb(4 6 9 / var(--impact-dark)) 94%);
+    radial-gradient(ellipse at center, transparent 29%, rgb(4 6 9 / var(--impact-dark)) 94%),
+    radial-gradient(ellipse at 50% 50%, transparent 42%, rgb(255 112 36 / calc(var(--impact-heat) * .42)) 80%, rgb(255 70 20 / calc(var(--impact-heat) * .3)) 100%);
 }
 #hudVitals.damage-hit { animation: hudDamageHit 520ms ease-out; }
 #hudVitals.damage-hit #hvHpNum { animation: hpNumberHit 520ms ease-out; }
