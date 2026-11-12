@@ -2830,8 +2830,20 @@
     let appliedRendererHeight = Math.floor(_vpInit.h);
     let appliedRendererDpr = _initialRendererDpr;
     let resolutionScale = 1;
-    let slowRenderTime = 0;
-    let steadyRenderTime = 0;
+    const ADAPTIVE_RENDER_SCALE_MIN = 0.65;
+    const ADAPTIVE_AA_SCALES = Object.freeze([1, 1.06, 1.12, 1.18, 1.24]);
+    const RENDER_SAMPLE_WINDOW_S = 1.5;
+    const RENDER_LOW_HOLD_S = 5.5;
+    const RENDER_HIGH_HOLD_S = 8;
+    const RENDER_CHANGE_COOLDOWN_MS = 16000;
+    let adaptiveAaLevel = 0;
+    let renderFrameSamples = [];
+    let renderSampleSeconds = 0;
+    let renderLowSeconds = 0;
+    let renderHighSeconds = 0;
+    let renderLongFrameRun = 0;
+    let renderChangeCooldownUntil = 0;
+    let renderSamplingSuspended = false;
     let appliedCameraAspect = _vpInit.w / _vpInit.h;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.shadowMap.enabled = true;
@@ -2884,6 +2896,38 @@
       if (!gameWorldReady || !postFxWanted()) return 1;
       // Keep the scene deliberately soft and reduce the pixel cost of the full-frame FX stack.
       return ({ regular: 0.62, high: 0.72, extreme: 0.82 })[getQualityId()] ?? 0.72;
+    }
+
+    function getAdaptiveAAScale() {
+      return resolutionScale >= 0.999 ? ADAPTIVE_AA_SCALES[adaptiveAaLevel] || 1 : 1;
+    }
+
+    function clearAdaptiveRenderWindow() {
+      renderFrameSamples = [];
+      renderSampleSeconds = 0;
+      renderLowSeconds = renderHighSeconds = renderLongFrameRun = 0;
+    }
+
+    function lowerAdaptiveRenderCost() {
+      if (adaptiveAaLevel > 0) {
+        adaptiveAaLevel--;
+        return true;
+      }
+      const effectiveScale = getPixelRatioForQuality() * getPostFxRenderScale() * getAdaptiveAAScale();
+      if (resolutionScale > ADAPTIVE_RENDER_SCALE_MIN && effectiveScale > ADAPTIVE_RENDER_SCALE_MIN + 0.001) {
+        resolutionScale = Math.max(ADAPTIVE_RENDER_SCALE_MIN, resolutionScale - 0.05);
+        return true;
+      }
+      return false;
+    }
+
+    function resetAdaptiveRenderControl(resetLevels = false) {
+      if (resetLevels) {
+        resolutionScale = 1;
+        adaptiveAaLevel = 0;
+      }
+      clearAdaptiveRenderWindow();
+      renderChangeCooldownUntil = performance.now() + 3000;
     }
 
     /** Camera motion cannot depend on quality: lower settings must not make aiming easier. */
@@ -3251,7 +3295,9 @@
         // Post FX adds several full-frame passes. Render the 3D scene a little smaller
         // while those passes are active; FXAA softens the final upscale without another
         // blur pass or its extra GPU cost.
-        const desiredDpr = getPixelRatioForQuality() * resolutionScale * getPostFxRenderScale();
+        // Only the 3D canvas backing store is scaled; all HUD/menu elements remain DOM-sized.
+        const desiredDpr = Math.max(ADAPTIVE_RENDER_SCALE_MIN,
+          getPixelRatioForQuality() * resolutionScale * getPostFxRenderScale() * getAdaptiveAAScale());
         const sizeChanged = w !== appliedRendererWidth || h !== appliedRendererHeight;
         const dprChanged = Math.abs(desiredDpr - appliedRendererDpr) > 0.001;
         if (Math.abs(aspect - appliedCameraAspect) > 0.000001) {
@@ -22929,8 +22975,9 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
                 const sx = enemy.group.position.x + Math.cos(angle) * 8;
                 const sz = enemy.group.position.z + Math.sin(angle) * 8;
                 const miniBoss = makeHormoneZombie(sx, sz, false);
-                // The spawn at the end of the hell fight is a pressure phase, not a second full health bar.
-                miniBoss.hp = miniBoss.maxHp = miniBoss.baseTankHp = miniBoss.baseGunnerHp = 1500;
+                // These end-phase mini-bosses use one third of a normal boss's starting health.
+                const miniBossHp = Math.max(1, Math.round(miniBoss.baseTankHp / 3));
+                miniBoss.hp = miniBoss.maxHp = miniBoss.baseTankHp = miniBoss.baseGunnerHp = miniBoss.baseSpeedHp = miniBossHp;
                 miniBoss.netIndex = state.enemies.length;
                 miniBoss.aware = true;
                 beginZombieEmergence(miniBoss);
@@ -23823,24 +23870,70 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     let nextSlowFrameLog = 0;
 
     function adjustRenderResolution(interval) {
-      // Ignore isolated interruptions and use a rolling time budget so a single
-      // slow frame doesn't resize the canvas or change the image. Start scaling
-      // down near 30 FPS; the old 37 ms trigger waited until below 27 FPS.
-      if (interval > .24) {
-        // Count a large stall as a capped signal. One isolated hitch will not
-        // trigger a resize, while repeated long frames can still lower render cost.
-        slowRenderTime += .12;
-        steadyRenderTime = 0;
-      } else {
-        slowRenderTime = interval >= .032 ? slowRenderTime + interval : Math.max(0, slowRenderTime - interval * 2);
-        steadyRenderTime = interval < .023 ? steadyRenderTime + interval : 0;
+      if (!Number.isFinite(interval) || interval <= 0) return;
+      if (interval > 0.12) {
+        // Treat long event stalls as outliers. A 1–3 second hitch must not cause
+        // a resolution change that adds another expensive resize to the recovery.
+        renderFrameSamples = [];
+        renderSampleSeconds = 0;
+        renderHighSeconds = 0;
+        renderLongFrameRun += interval;
+        if (renderLongFrameRun < 4.5) { renderLowSeconds = 0; return; }
+        renderLowSeconds += interval;
+        if (renderLowSeconds < RENDER_LOW_HOLD_S || performance.now() < renderChangeCooldownUntil) return;
+        if (!lowerAdaptiveRenderCost()) return;
+        renderChangeCooldownUntil = performance.now() + RENDER_CHANGE_COOLDOWN_MS;
+        clearAdaptiveRenderWindow();
+        syncGameRendererSize();
+        return;
       }
-      const next = slowRenderTime > .48 ? Math.max(.52, resolutionScale - .10)
-        : steadyRenderTime > 4.5 ? Math.min(1, resolutionScale + .05) : resolutionScale;
-      if (Math.abs(next - resolutionScale) < .001) return;
-      resolutionScale = next;
-      slowRenderTime = steadyRenderTime = 0;
-      syncGameRendererSize();
+      renderLongFrameRun = 0;
+      renderFrameSamples.push(interval);
+      renderSampleSeconds += interval;
+      if (renderSampleSeconds < RENDER_SAMPLE_WINDOW_S || renderFrameSamples.length < 24) return;
+
+      // Trim the slowest 10% of samples so a few animation, GC, or network spikes
+      // do not masquerade as the game's sustained frame rate.
+      const sorted = renderFrameSamples.slice().sort((a, b) => a - b);
+      const kept = sorted.slice(0, Math.max(1, Math.floor(sorted.length * 0.9)));
+      const measuredFps = kept.length / kept.reduce((sum, frameTime) => sum + frameTime, 0);
+      const stableSeconds = renderSampleSeconds;
+      if (measuredFps < 55) {
+        renderLowSeconds += stableSeconds;
+        renderHighSeconds = 0;
+      } else if (measuredFps > 60) {
+        renderHighSeconds += stableSeconds;
+        renderLowSeconds = 0;
+      } else {
+        renderLowSeconds = renderHighSeconds = 0;
+      }
+
+      if (performance.now() >= renderChangeCooldownUntil && renderLowSeconds >= RENDER_LOW_HOLD_S) {
+        if (!lowerAdaptiveRenderCost()) {
+          clearAdaptiveRenderWindow();
+          return;
+        }
+        renderChangeCooldownUntil = performance.now() + RENDER_CHANGE_COOLDOWN_MS;
+        clearAdaptiveRenderWindow();
+        syncGameRendererSize();
+        return;
+      }
+
+      if (performance.now() >= renderChangeCooldownUntil && renderHighSeconds >= RENDER_HIGH_HOLD_S) {
+        if (resolutionScale < 0.999) resolutionScale = Math.min(1, resolutionScale + 0.05);
+        else if (adaptiveAaLevel < ADAPTIVE_AA_SCALES.length - 1) adaptiveAaLevel++;
+        else {
+          clearAdaptiveRenderWindow();
+          return;
+        }
+        renderChangeCooldownUntil = performance.now() + RENDER_CHANGE_COOLDOWN_MS;
+        clearAdaptiveRenderWindow();
+        syncGameRendererSize();
+        return;
+      }
+
+      renderFrameSamples = [];
+      renderSampleSeconds = 0;
     }
 
     function animate() {
@@ -23848,10 +23941,15 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       const rawDelta = clock.getDelta();
       const dt = Math.min(rawDelta, 0.033);
       const frameStart = frameDiagnostics ? performance.now() : 0;
-      if (document.visibilityState === "hidden" || !gameWorldReady) return;
-      if (!paused && player.health > 0 && (isTrainingMap(CURRENT_MAP) || isArenaLikeMap(CURRENT_MAP) || postFxWanted())) {
-        adjustRenderResolution(rawDelta);
+      if (document.visibilityState === "hidden") { renderSamplingSuspended = true; return; }
+      if (renderSamplingSuspended) {
+        renderSamplingSuspended = false;
+        clearAdaptiveRenderWindow();
+        renderChangeCooldownUntil = performance.now() + 3000;
       }
+      if (!gameWorldReady) return;
+      if (!paused && player.health > 0) adjustRenderResolution(rawDelta);
+      else clearAdaptiveRenderWindow();
       updateAtmosphericFog(dt);
       const audioNow = performance.now();
       publishPlayerState(audioNow);
@@ -24247,6 +24345,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           drawCalls: renderer.info.render.calls, triangles: renderer.info.render.triangles,
           shaders: renderer.info.programs?.length, enemies: state.enemies.length, chunks: mazeChunks.size,
           resolutionScale: Math.round(resolutionScale * 100) / 100,
+          adaptiveAaLevel,
         };
         frameDiagnostics.push(sample);
         if (frameDiagnostics.length > 60) frameDiagnostics.shift();
@@ -24330,8 +24429,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
 
     async function bootGame(mapName, multiplayer, arenaCoop, trainingCoop) {
       gameWorldReady = false;
-      resolutionScale = 1;
-      slowRenderTime = steadyRenderTime = 0;
+      resetAdaptiveRenderControl(true);
       acousticSampleAt = 0;
       recentNetworkShots.clear();
       worldAudio.resetSteps(player);
@@ -25481,6 +25579,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
 
     function cycleQuality(delta) {
       gameSettings.qualityIndex = (gameSettings.qualityIndex + delta + QUALITY_LEVELS.length) % QUALITY_LEVELS.length;
+      resetAdaptiveRenderControl(true);
       syncSettingsUI();
       saveGameSettings();
       applyGraphicsQuality();
@@ -25492,8 +25591,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       const btn = document.getElementById(id);
       if (btn) btn.addEventListener("click", () => {
         gameSettings.postFx = id === "btnPostNext";
-        resolutionScale = 1;
-        slowRenderTime = steadyRenderTime = 0;
+        resetAdaptiveRenderControl(true);
         syncGameRendererSize();
         syncSettingsUI();
         saveGameSettings();
@@ -25657,8 +25755,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         get post() { return postFx; },
         setPost(on) {
           gameSettings.postFx = on;
-          resolutionScale = 1;
-          slowRenderTime = steadyRenderTime = 0;
+          resetAdaptiveRenderControl(true);
           syncGameRendererSize();
         },
         unpause() { hidePause(); },
