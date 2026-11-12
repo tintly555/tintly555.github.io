@@ -89,6 +89,7 @@ export function station(core) {
         // [centre x, centre z, along x?]
         for (const [cx, cz, alongX] of [[-H - th / 2 + at + 4, -H - th / 2, true], [-H - th / 2 + at + 4, H + th / 2, true], [-H - th / 2, -H + at + 4, false], [H + th / 2, -H + at + 4, false]]) {
           kit.proxy(alongX ? 8 : 0.2, 4, alongX ? 0.2 : 8, cx, 2.2, cz);             // what stops you; the glass itself is below
+          kit.shotBlocker(alongX ? 8 : 0.2, 4, alongX ? 0.2 : 8, cx, 2.2, cz);
           const pane = new THREE.Mesh(new THREE.PlaneGeometry(8, 4), glass);
           pane.position.set(cx, 4.2, cz); if (!alongX) pane.rotation.y = Math.PI / 2; pane.raycast = () => {}; pane.renderOrder = 4; kit.deco(pane);
           // Frame: a deep bezel, a mullion each way, and a sill.
@@ -234,6 +235,7 @@ export function station(core) {
           : [[x, z - oz * 1.44, false], [x - 1.44, z, true], [x + 1.44, z, true]];
         for (const [wx, wz, nx] of walls) {
           kit.proxy(nx ? 0.12 : 3.0, 4.8, nx ? 3.0 : 0.12, wx, 0, wz);
+          kit.shotBlocker(nx ? 0.12 : 3.0, 4.8, nx ? 3.0 : 0.12, wx, 0, wz);
           const pane = new THREE.Mesh(new THREE.PlaneGeometry(3.0, 4.6), glass);
           pane.position.set(wx, 2.5, wz); if (nx) pane.rotation.y = Math.PI / 2; pane.raycast = () => {}; pane.renderOrder = 4; kit.deco(pane);
         }
@@ -284,6 +286,7 @@ export function station(core) {
         const body = new THREE.Mesh(new THREE.CapsuleGeometry(1.0, 3.4, 8, 20), hullLight); body.rotation.x = Math.PI / 2; body.position.y = 1.35; body.scale.set(1.05, 1, 0.85);
         const nose = new THREE.Mesh(new THREE.SphereGeometry(1.0, 20, 14), hullLight); nose.scale.set(1.05, 0.85, 1.4); nose.position.set(0, 1.35, 2.7);
         const cockpit = new THREE.Mesh(new THREE.SphereGeometry(0.9, 20, 12, 0, TAU, 0, Math.PI / 2), glass); cockpit.scale.set(1, 0.7, 1.5); cockpit.position.set(0, 1.9, 2.15); cockpit.renderOrder = 4;
+        kit.shotSurface(cockpit);
         const wingGeo = new THREE.BoxGeometry(2.6, 0.12, 2.2);
         const wl = new THREE.Mesh(wingGeo, hullDark), wr = new THREE.Mesh(wingGeo, hullDark);
         wl.position.set(-2.1, 1.1, -0.5); wr.position.set(2.1, 1.1, -0.5); wl.rotation.z = 0.06; wr.rotation.z = -0.06;

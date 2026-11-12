@@ -234,6 +234,7 @@ export function foundry(core) {
         const frame = kit.batch(2);
         const pane = (len, x, z, ry) => {
           const m = new THREE.Mesh(new THREE.PlaneGeometry(len, 2.3), glassMat); m.position.set(x, 5.75, z); m.rotation.y = ry; m.raycast = () => {}; m.renderOrder = 4; kit.deco(m);
+          kit.shotBlocker(ry ? 0.12 : len, 2.3, ry ? len : 0.12, x, 4.6, z);
           const n = Math.max(1, Math.round(len / 2.4));
           for (let k = 0; k <= n; k++) { const u = -len / 2 + len * k / n; if (ry) frame.box(0.16, 2.4, 0.16, x, 5.75, z + u); else frame.box(0.16, 2.4, 0.16, x + u, 5.75, z); }
           if (ry) frame.box(0.14, 0.12, len, x, 4.65, z).box(0.14, 0.12, len, x, 6.85, z); else frame.box(len, 0.12, 0.14, x, 4.65, z).box(len, 0.12, 0.14, x, 6.85, z);

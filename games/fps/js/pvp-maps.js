@@ -21,8 +21,8 @@
 import { mergeGeometries } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/utils/BufferGeometryUtils.js";
 import { createSurfaces, rngFor, fbm } from "./gauntlet-surfaces.js?v=2";
 import { createNature } from "./pvp-nature.js?v=23";
-import { foundry } from "./pvp-map-foundry.js?v=10";
-import { station } from "./pvp-map-station.js?v=8";
+import { foundry } from "./pvp-map-foundry.js?v=12";
+import { station } from "./pvp-map-station.js?v=10";
 import { ruins } from "./pvp-map-ruins.js?v=9";
 import { town } from "./pvp-map-town.js?v=8";
 
@@ -178,6 +178,25 @@ export function createPvpMaps(THREE) {
       proxy(w, h, d, x, y, z) {
         const mesh = host.solid(w, h, d, x, y + h / 2, z, plain("proxy", 0x000000));
         mesh.visible = false; mesh.castShadow = false;
+        return mesh;
+      },
+      /** A ray-only volume for glass that blocks bullets without changing player movement. */
+      shotBlocker(w, h, d, x, y, z, rotationY = 0) {
+        const material = new THREE.MeshBasicMaterial({
+          colorWrite: false, depthWrite: false, depthTest: false, side: THREE.DoubleSide,
+        });
+        const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
+        mesh.position.set(x, y + h / 2, z);
+        mesh.rotation.y = rotationY;
+        mesh.castShadow = false; mesh.receiveShadow = false;
+        mesh.userData.glassShotBlocker = true;
+        scene.add(mesh);
+        host.shotBlocker?.(mesh);
+        return mesh;
+      },
+      /** Register an existing transparent surface (such as a curved cockpit) as bullet blocking. */
+      shotSurface(mesh) {
+        host.shotBlocker?.(mesh);
         return mesh;
       },
       /**

@@ -3,7 +3,7 @@
     import { RoundedBoxGeometry } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/geometries/RoundedBoxGeometry.js";
     import { mergeGeometries, toCreasedNormals } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/utils/BufferGeometryUtils.js";
     import { clone as cloneSkinnedModel } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/utils/SkeletonUtils.js";
-    import { createPvpMaps } from "./pvp-maps.js?v=34";
+    import { createPvpMaps } from "./pvp-maps.js?v=36";
     import { createPvpWorld } from "./pvp-world.js?v=3";
     import { createBossNavigation } from "./boss-navigation.js?v=2";
     import { BOSS_ATTACK_BY_ID, chooseBossAttack } from "./boss-attacks.js?v=2";
@@ -906,6 +906,7 @@
     });
     let DEV_GUN_UNLOCKED = false;
     let CREATOR_UNLOCKED = false;
+    let SERVER_VERIFIED_DEV = false;
     let bossDeathPickupPos = null;
     // ── Boss 震 cycle mechanic ──────────────────────────────────────────────
     const BOSS_SHAKE_CYCLE_MS = 15000;  // 15s per cycle
@@ -1225,12 +1226,29 @@
     const socket = _ioFactory
       ? _ioFactory(`${multiplayerOrigin}/game`, {
           transports: ["websocket", "polling"],
+          withCredentials: true,
           reconnection: true,
           reconnectionAttempts: 12,
           reconnectionDelay: 800,
           timeout: 20000,
         })
       : createOfflineSocketStub();
+
+    socket.on("gameDeveloperStatus", (data) => {
+      SERVER_VERIFIED_DEV = data?.verified === true;
+      if (SERVER_VERIFIED_DEV) {
+        CREATOR_UNLOCKED = true;
+        unlockAllWeapons();
+        unlockAchievement("creator");
+        persistUnlocks();
+        updateQuestHud();
+      }
+      sanitizeLoadoutSelection();
+      syncLoadoutPanel();
+      _buildInvBar();
+      if (MULTIPLAYER && !SERVER_VERIFIED_DEV && state.weaponIndex === LOADOUT_HIDDEN) setWeapon(0);
+      updateHud();
+    });
 
     let activeRoomId = "";
     let _joinRoomGeneration = 0;
@@ -1606,7 +1624,8 @@
         createBulletTrail(
           new THREE.Vector3(data.sx, data.sy, data.sz),
           new THREE.Vector3(data.x, data.y, data.z),
-          data.color ?? 0x6bd4ff
+          data.color ?? 0x6bd4ff,
+          data.weaponIndex === LOADOUT_HIDDEN ? 0.09 : 0.018
         );
       }
       if (data.type === "miss") return;
@@ -5232,13 +5251,15 @@
     }
 
     const pvpMapLights = [];
+    // Keep the shader light count safe on low-end WebGL devices. Apply the same cap
+    // on every quality preset so map lighting cannot change player visibility.
+    const PVP_MAP_POINT_LIGHT_LIMIT = 6;
     function clearPvpMapLights() {
       while (pvpMapLights.length) {
         const L = pvpMapLights.pop();
         scene.remove(L);
       }
     }
-
     /**
      * Every decorative object the gauntlet adds straight to the scene. clearMap() only ever
      * removed wallMeshes, so the glowing platform rims and the exit beacon survived the map
@@ -5371,6 +5392,7 @@
 
     /** ── Themed PVP maps (js/pvp-maps.js) ─────────────────────────────────────────────── */
     let pvpWorld = null, pvpMapRoot = null;
+    const pvpGlassShotMeshes = [];
     /** The sun of a themed map is the game's moon light, with a static shadow baked over the whole map. */
     let pvpMoonSaved = null;
     function setMoonShadowSize(size) {
@@ -5406,6 +5428,7 @@
         pvpMapRoot = null;
       }
       if (pvpWorld) { pvpWorld.clear(); pvpWorld = null; }
+      pvpGlassShotMeshes.length = 0;
     }
     function buildPvpThemed(id) {
       clearPvpMapLights();
@@ -5430,6 +5453,7 @@
         scene: pvpMapRoot, world: pvpWorld, renderer,
         tier: () => ({ potato: 0, regular: 1, high: 2, extreme: 3 })[getQualityId()] ?? 1,
         quality: () => ({ potato: 0, regular: 1, high: 2, extreme: 2 })[getQualityId()] ?? 1,
+        shotBlocker(mesh) { pvpGlassShotMeshes.push(mesh); },
         environment(texture, intensity) {
           scene.environment = texture;
           scene.environmentIntensity = intensity;
@@ -5444,9 +5468,9 @@
           return mesh;
         },
         light(l) {
-          // Every material compiles with every point light in the scene; past about eight the shader
-          // fails and lit surfaces vanish, so a map gets six and the rest stay scenery.
-          if (l.isPointLight && pvpMapLights.filter((x) => x.isPointLight).length >= 6) return;
+          // Every material compiles with every point light in the scene. Keep room for
+          // the sun and player spotlight on GPUs with smaller shader budgets.
+          if (l.isPointLight && pvpMapLights.filter((x) => x.isPointLight).length >= PVP_MAP_POINT_LIGHT_LIMIT) return;
           scene.add(l); pvpMapLights.push(l);
         },
       };
@@ -8111,7 +8135,8 @@
       },
       {
         name: "～～～",
-        fireDelay: 480,
+        // Match the SMG, currently the fastest standard weapon.
+        fireDelay: 78,
         auto: true,
         pellets: 1,
         spreadBase: 0,
@@ -8257,11 +8282,15 @@
     let loadoutGuns = [0, 2];
     let activeLoadout = null;
 
+    function hasDevWeaponAccess() {
+      return CREATOR_UNLOCKED && DEV_GUN_UNLOCKED && (!MULTIPLAYER || SERVER_VERIFIED_DEV);
+    }
     /** Drop anything locked/invalid, then top back up to two so you never spawn gunless. */
     function sanitizeLoadoutSelection() {
       const seen = new Set();
+      const keepDevGun = hasDevWeaponAccess() && weaponUnlocked[LOADOUT_HIDDEN] && loadoutGuns.includes(LOADOUT_HIDDEN);
       loadoutGuns = loadoutGuns.filter((i) => {
-        if (!LOADOUT_GUN_POOL.includes(i) || !weaponUnlocked[i] || seen.has(i)) return false;
+        if (i === LOADOUT_HIDDEN || !LOADOUT_GUN_POOL.includes(i) || !weaponUnlocked[i] || seen.has(i)) return false;
         seen.add(i);
         return true;
       }).slice(0, LOADOUT_MAX_GUNS);
@@ -8270,6 +8299,7 @@
         if (weaponUnlocked[g] && !loadoutGuns.includes(g)) loadoutGuns.push(g);
       }
       if (!loadoutGuns.length) loadoutGuns = [0];
+      if (keepDevGun) loadoutGuns.push(LOADOUT_HIDDEN);
     }
 
     function saveLoadout() {
@@ -8294,13 +8324,13 @@
 
     function weaponInLoadout(idx) {
       if (!activeLoadout) return true;
-      if (idx === LOADOUT_MED || idx === LOADOUT_KNIFE || idx === LOADOUT_HIDDEN) return true;
+      if (idx === LOADOUT_MED || idx === LOADOUT_KNIFE) return true;
       return activeLoadout.includes(idx);
     }
     /** The single gate every weapon-selection path goes through. */
     function weaponAvailable(idx) {
-      // Training camp is a sandbox: the whole armoury is unlocked there, dev gun
-      // included, no matter what progression or backpack the player carries.
+      if (idx === LOADOUT_HIDDEN) return hasDevWeaponAccess() && weaponInLoadout(idx);
+      // Training camp is a sandbox for the normal armoury.
       if (isTrainingMap(CURRENT_MAP)) return true;
       return !!weaponUnlocked[idx] && weaponInLoadout(idx);
     }
@@ -8314,12 +8344,18 @@
     // there threw a TDZ ReferenceError that aborted the whole module.
     const LOADOUT_SLOT_KEYS = ["1", "2", "3", "4", "5", "6", "7", "0", "8"];
     function activeHotbarSlots() {
+      let out;
       if (!activeLoadout) {
-        return gameSettings.weaponSlotOrder.map((w, i) => ({ key: LOADOUT_SLOT_KEYS[i], widx: w }));
+        out = gameSettings.weaponSlotOrder.map((w, i) => ({ key: LOADOUT_SLOT_KEYS[i], widx: w }));
+      } else {
+        const packedGuns = activeLoadout.filter((w) => w !== LOADOUT_HIDDEN);
+        out = packedGuns.map((w, i) => ({ key: String(i + 1), widx: w }));
+        out.push({ key: String(out.length + 1), widx: LOADOUT_MED });
+        out.push({ key: "0", widx: LOADOUT_KNIFE });
       }
-      const out = activeLoadout.map((w, i) => ({ key: String(i + 1), widx: w }));
-      out.push({ key: String(out.length + 1), widx: LOADOUT_MED });
-      out.push({ key: "0", widx: LOADOUT_KNIFE });
+      if (hasDevWeaponAccess() && (!activeLoadout || activeLoadout.includes(LOADOUT_HIDDEN))) {
+        out.push({ key: "/", widx: LOADOUT_HIDDEN });
+      }
       return out;
     }
 
@@ -9001,6 +9037,9 @@
       unlockAchievement("creator");
       persistUnlocks();
       updateQuestHud();
+      sanitizeLoadoutSelection();
+      syncLoadoutPanel();
+      _buildInvBar();
       updateHud();
       await showSettingsPrompt(tr("creatorUnlockedMsg", "Creator mode unlocked. All weapons available."));
     }
@@ -12784,10 +12823,12 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         ctx.closePath();ctx.fill();
       }
       if(widx===8){
-        ctx.fillStyle='rgba(255,215,0,0.6)';
-        ctx.font=`bold ${Math.round(ch*0.58)}px 'Audiowide',monospace`;
-        ctx.textAlign='center';ctx.textBaseline='middle';
-        ctx.fillText('?',cw/2,ch/2);
+        fr(0.10,0.34,0.64,0.30,'#323943',3);
+        fr(0.68,0.40,0.28,0.16,'#ff3b31',2);
+        fr(0.18,0.27,0.44,0.07,'#d6b66f',1);
+        fr(0.30,0.60,0.14,0.29,'#1c2229',2);
+        fr(0.47,0.18,0.18,0.17,'#8feeff',3);
+        fr(0.51,0.21,0.10,0.11,'#e8fbff',2);
         return;
       }
       const M='#6a7280', MD='#374151', MB='#1f2937', ML='#9ca3af';
@@ -12914,10 +12955,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       _invCanvases.length = 0;
       // Loadout matches show only what you packed. Unrestricted maps keep the full bar
       // (8 configurable + the fixed hidden slot).
-      const slotDefs = activeLoadout
-        ? activeHotbarSlots()
-        : [...gameSettings.weaponSlotOrder.map((w, i) => ({ key: LOADOUT_SLOT_KEYS[i], widx: w })),
-           { key: "/", widx: 8 }];
+      const slotDefs = activeHotbarSlots();
       slotDefs.forEach(({ key: slotKey, widx }, slotIdx) => {
         const div = document.createElement("div");
         div.className = "inv-slot";
@@ -12942,7 +12980,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         // click to select
         div.addEventListener("mousedown", (e) => {
           e.preventDefault();
-          if (widx === 8) { if (DEV_GUN_UNLOCKED) weaponUnlocked[8]=true; trySelectWeapon(8); }
+          if (widx === 8) { if (hasDevWeaponAccess()) weaponUnlocked[8]=true; trySelectWeapon(8); }
           else trySelectWeapon(widx);
         });
         _invBar.appendChild(div);
@@ -14459,7 +14497,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       updateInstancedPool(sparkGroup, _sparkP, 8, dt);
     }
 
-    function createBulletTrail(muzzle, hit, color) {
+    function createBulletTrail(muzzle, hit, color, radius = state.weaponIndex === LOADOUT_HIDDEN ? 0.09 : 0.018) {
       const { start, end } = bulletTrailEndpoints(muzzle, hit);
       const hex = typeof color === "number" ? color : new THREE.Color(color).getHex();
       const geomCore = new THREE.BufferGeometry().setFromPoints([start, end]);
@@ -14492,11 +14530,11 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       _trailVecDir.subVectors(end, start);
       if (_trailVecDir.lengthSq() > 1e-6) _trailVecDir.normalize();
       else _trailVecDir.set(0, 0, -1);
-      const cylGeom = new THREE.CylinderGeometry(0.012, 0.018, segLen, 6, 1, true);
+      const cylGeom = new THREE.CylinderGeometry(radius * 0.72, radius, segLen, 8, 1, true);
       const matCyl = new THREE.MeshBasicMaterial({
         color: hex,
         transparent: true,
-        opacity: 0.55,
+        opacity: radius > 0.02 ? 0.82 : 0.55,
         blending: THREE.AdditiveBlending,
         depthWrite: false,
         depthTest: true,
@@ -14540,6 +14578,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         z: end.z,
         color,
         type: hitType,
+        weaponIndex: state.weaponIndex,
         ...extras,
       });
     }
@@ -17459,7 +17498,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         } }
       if (k === "/" || e.code === "Slash") {
         e.preventDefault();
-        if (DEV_GUN_UNLOCKED) weaponUnlocked[8] = true;
+        if (hasDevWeaponAccess()) weaponUnlocked[8] = true;
         trySelectWeapon(8);
       }
       if (isAction(e, "reload")) startReload();
@@ -18025,23 +18064,17 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       return best;
     }
 
-    function getVerticalWallDist(ray) {
-      const hits = ray.intersectObjects(wallMeshes, false);
-      for (let i = 0; i < hits.length; i++) {
-        const h = hits[i];
-        if (h.face && h.object) {
-          _ehLd.copy(h.face.normal).transformDirection(h.object.matrixWorld).normalize();
-          if (Math.abs(_ehLd.y) > 0.65) continue;
-        }
-        return h.distance;
-      }
-      return Infinity;
+    function getGlassShotHit(ray) {
+      if (pvpGlassShotMeshes.length === 0) return null;
+      const hits = ray.intersectObjects(pvpGlassShotMeshes, false);
+      return hits.length ? hits[0] : null;
     }
 
     function performDevGunPierce(ray, muzzleStart, w) {
-      const wallDist = getVerticalWallDist(ray);
+      const glassHit = getGlassShotHit(ray);
+      const glassDist = glassHit ? glassHit.distance : Infinity;
       const demoHit = hitAnimationShowcase(ray);
-      if (demoHit && demoHit.distance < wallDist) showAnimationShowcaseHit(demoHit);
+      if (demoHit && demoHit.distance < glassDist) showAnimationShowcaseHit(demoHit);
       const pierceHits = [];
       for (const enemy of state.enemies) {
         if (!enemyBlockingHits(enemy)) continue;
@@ -18050,7 +18083,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         // the old dummy-only branch always used the man-sized hitbox, which would miss most
         // of the (much larger) boss target now standing at the back of the range.
         const hit = enemyHitAlongRay(ray, enemy);
-        if (hit && hit.t < wallDist) {
+        if (hit && hit.t < glassDist) {
           pierceHits.push({ enemy, t: hit.t, zone: hit.zone });
         }
       }
@@ -18082,26 +18115,50 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         }
         trailEnd = bp;
       }
-      if (pierceHits.length === 0) {
-        const wallHits = ray.intersectObjects(wallMeshes, false);
-        let wallHit = null;
-        for (let i = 0; i < wallHits.length; i++) {
-          const h = wallHits[i];
-          if (h.face && h.object) {
-            _ehLd.copy(h.face.normal).transformDirection(h.object.matrixWorld).normalize();
-            if (Math.abs(_ehLd.y) > 0.65) continue;
+      let bestRpId = null, bestRpHit = null;
+      if (MULTIPLAYER && !ARENA_COOP && isPvpCrossfireMap(CURRENT_MAP)) {
+        let bestRpT = glassDist;
+        for (const [rpId, rp] of remotePlayers) {
+          if (rp.isDown || !rp.group.visible) continue;
+          rp.group.updateMatrixWorld(true);
+          const hit = humanoidHitAlongRay(ray, rp.group);
+          if (hit && hit.t < bestRpT) {
+            bestRpId = rpId;
+            bestRpHit = hit;
+            bestRpT = hit.t;
           }
-          wallHit = h;
-          break;
-        }
-        if (wallHit) {
-          trailEnd = wallHit.point;
-          createSparks(wallHit.point.clone(), 0xffdd88);
-        } else {
-          trailEnd = _ehHitWorld.copy(ray.ray.origin).addScaledVector(ray.ray.direction, 80);
         }
       }
-      if (trailEnd) createBulletTrail(muzzleStart, trailEnd, w.color);
+      if (bestRpId != null && bestRpHit) {
+        const bp = bestRpHit.point || _ehHitWorld.copy(ray.ray.origin).addScaledVector(ray.ray.direction, bestRpHit.t);
+        createBlood(bp);
+        const rpVictim = remotePlayers.get(bestRpId);
+        let predictedKill = false;
+        if (rpVictim && !rpVictim.isDown) {
+          rpVictim.hpEstimate = (typeof rpVictim.hpEstimate === "number" ? rpVictim.hpEstimate : 100) - 10000;
+          predictedKill = applyPvpKillToVictim(rpVictim, bp.clone ? bp.clone() : bp);
+        }
+        triggerHitFeedback(predictedKill, bestRpHit.zone === "head");
+        if (predictedKill) createSparks(bp.clone(), 0xff5555);
+        socket.emit("hit", {
+          target: bestRpId,
+          damage: 10000,
+          x: player.position.x,
+          z: player.position.z,
+          hitKind: "bullet",
+          weaponIndex: LOADOUT_HIDDEN,
+        });
+        trailEnd = bp;
+      }
+      if (glassHit && (!trailEnd || glassDist >= trailEnd.distanceTo(ray.ray.origin))) {
+        trailEnd = glassHit.point;
+        createSparks(glassHit.point.clone(), 0xffdd88);
+      }
+      if (!trailEnd) trailEnd = _ehHitWorld.copy(ray.ray.origin).addScaledVector(ray.ray.direction, 80);
+      if (trailEnd) {
+        createBulletTrail(muzzleStart, trailEnd, w.color);
+        emitShootNetwork(muzzleStart, trailEnd, w.color, glassHit && trailEnd === glassHit.point ? "spark" : (pierceHits.length || bestRpId != null ? "blood" : "miss"), { weaponIndex: LOADOUT_HIDDEN });
+      }
     }
 
     function enemyBlockingHits(enemy) {
@@ -18996,6 +19053,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         x: hx,
         z: hz,
         hitKind: "dartSlow", // server strips this; receiver detects via damage===1
+        weaponIndex: 6,
       });
       const muzzle = muzzleOpt && muzzleOpt.isVector3
         ? muzzleOpt
@@ -19135,6 +19193,13 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           segDir.multiplyScalar(1 / segLen);
           const segRay = new THREE.Raycaster(p.prev, segDir, 0, segLen + 0.08);
           segRay.camera = camera;
+          const segmentWallHits = segRay.intersectObjects(wallMeshes, false);
+          const segmentGlassHit = getGlassShotHit(segRay);
+          const segmentWallHit = segmentWallHits[0] || null;
+          const segmentBlocker = segmentGlassHit && (!segmentWallHit || segmentGlassHit.distance < segmentWallHit.distance)
+            ? segmentGlassHit
+            : segmentWallHit;
+          const segmentBlockerT = segmentBlocker ? segmentBlocker.distance : Infinity;
 
           const localImmune = p.age < 0.06;
 
@@ -19143,17 +19208,17 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
               if (rp.isDown || !rp.group.visible) continue;
               rp.group.updateMatrixWorld(true);
               const rh = humanoidHitAlongRayPadded(segRay, rp.group, hitPad);
-              if (rh) {
+              if (rh && rh.t < segmentBlockerT) {
                 if (!p.netHitSent) {
-                p.netHitSent = true;
-                emitDartSlowNetwork(rpId, p.slowDuration, rh.point || p.pos, p._dartMuzzle);
-              }
+                  p.netHitSent = true;
+                  emitDartSlowNetwork(rpId, p.slowDuration, rh.point || p.pos, p._dartMuzzle);
+                }
                 createSparks(rh.point || p.pos.clone(), 0x6bd4ff);
                 consumed = true;
                 break;
               }
             }
-            if (!consumed && !p.netHitSent) {
+            if (!consumed && !p.netHitSent && !segmentBlocker) {
               consumed = probeParalysisDartProximityHit(p.pos, hitPad, p.slowDuration, p._dartMuzzle);
               if (consumed) {
                 p.netHitSent = true;
@@ -19176,7 +19241,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
 
           if (!consumed && p.fromShooter && isTrainingMap(CURRENT_MAP)) {
             const demoHit = hitAnimationShowcase(segRay);
-            if (demoHit && !segRay.intersectObjects(wallMeshes, false).some(hit => hit.distance < demoHit.distance)) {
+            if (demoHit && demoHit.distance < segmentBlockerT) {
               showAnimationShowcaseHit(demoHit);
               consumed = true;
             }
@@ -19187,7 +19252,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
               if (!enemyBlockingHits(enemy)) continue;
               enemy.group.updateMatrixWorld(true);
               const hit = humanoidHitAlongRayPadded(segRay, enemy.group, hitPad, !!enemy.isBoss, enemy);
-              if (hit) {
+              if (hit && hit.t < segmentBlockerT) {
                 createSparks(hit.point || p.pos.clone(), 0x6bd4ff);
                 if (enemy.trainingDummy) {
                   registerTrainingHit(hit.zone || "body");
@@ -19198,7 +19263,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
                 break;
               }
             }
-            if (!consumed && !p.netHitSent) {
+            if (!consumed && !p.netHitSent && !segmentBlocker) {
               consumed = probeParalysisDartProximityHit(p.pos, hitPad, p.slowDuration, p._dartMuzzle);
               if (consumed) {
                 p.netHitSent = true;
@@ -19207,13 +19272,13 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
             }
           }
 
-          if (!consumed) {
-            const hits = segRay.intersectObjects(wallMeshes, false);
-            if (hits.length > 0) {
-              const wp = hits[0].point;
+          if (!consumed && segmentBlocker) {
+            const wp = segmentBlocker.point;
+            if (wp) {
+              p.pos.copy(wp);
               createSparks(wp.clone(), 0x6bd4ff);
-              consumed = true;
             }
+            consumed = true;
           }
 
           if (consumed || p.age > p.maxAge || p.pos.y < -10) {
@@ -19326,6 +19391,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
             x: player.position.x,
             z: player.position.z,
             hitKind: "melee",
+            weaponIndex: state.weaponIndex,
           });
         }
         return;
@@ -19434,6 +19500,10 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
 
     function tryShoot() {
       if (!controlsInputReady()) return;
+      if (state.weaponIndex === LOADOUT_HIDDEN && !hasDevWeaponAccess()) {
+        setWeapon(0);
+        return;
+      }
       if (state.weaponIndex === 4) return;
       // Both hands are on the harness straps for the 3 s strap-on — that commitment is the
       // cost of the item, so no shooting until it is on.
@@ -19485,6 +19555,13 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         if (MULTIPLAYER && !ARENA_COOP && !isTrainingMap(CURRENT_MAP)) {
           const dartRay = new THREE.Raycaster(muzzle, dir, 0.02, 120);
           dartRay.camera = camera;
+          const dartWallHits = dartRay.intersectObjects(wallMeshes, false);
+          const dartGlassHit = getGlassShotHit(dartRay);
+          const dartWallHit = dartWallHits[0] || null;
+          const dartBlocker = dartGlassHit && (!dartWallHit || dartGlassHit.distance < dartWallHit.distance)
+            ? dartGlassHit
+            : dartWallHit;
+          const dartBlockerT = dartBlocker ? dartBlocker.distance : Infinity;
           let bestRpId = null;
           let bestRpT = Infinity;
           let bestRpPoint = null;
@@ -19492,7 +19569,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
             if (rp.isDown || !rp.group.visible) continue;
             rp.group.updateMatrixWorld(true);
             const rh = humanoidHitAlongRayPadded(dartRay, rp.group, 1.32);
-            if (rh && rh.t < bestRpT) {
+            if (rh && rh.t < bestRpT && rh.t < dartBlockerT) {
               bestRpId = rpId;
               bestRpT = rh.t;
               bestRpPoint = rh.point || null;
@@ -19607,7 +19684,9 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
 
         const wallHits = ray.intersectObjects(wallMeshes, false);
         const wallHit = wallHits.length > 0 ? wallHits[0] : null;
-        const wallDist = wallHit ? wallHit.distance : Infinity;
+        const glassHit = getGlassShotHit(ray);
+        const obstacleHit = glassHit && (!wallHit || glassHit.distance < wallHit.distance) ? glassHit : wallHit;
+        const wallDist = obstacleHit ? obstacleHit.distance : Infinity;
 
         let bestEnemy = null;
         let bestEnemyHitT = Infinity;
@@ -19784,14 +19863,15 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
             x: player.position.x,
             z: player.position.z,
             hitKind: "bullet",
+            weaponIndex: state.weaponIndex,
           });
-        } else if (wallHit) {
-          wallHit.object.userData.gauntletTarget?.();
-          const wp = wallHit.point.clone();
-          const normal = wallHit.face.normal.clone().transformDirection(wallHit.object.matrixWorld);
+        } else if (obstacleHit) {
+          obstacleHit.object.userData.gauntletTarget?.();
+          const wp = obstacleHit.point.clone();
+          const normal = obstacleHit.face.normal.clone().transformDirection(obstacleHit.object.matrixWorld);
           createBulletTrail(muzzleStart, wp, w.color);
           createSparks(wp.clone(), w.color);
-          createBulletMark(wp.clone(), normal, wallHit.object);
+          createBulletMark(wp.clone(), normal, obstacleHit.object);
           emitShootNetwork(muzzleStart, wp, w.color, "spark", {
             nx: normal.x,
             ny: normal.y,
@@ -24880,7 +24960,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       grid.className = "loadout-grid";
 
       _loadoutCards = [];
-      for (const widx of LOADOUT_GUN_POOL) {
+      for (const widx of [...LOADOUT_GUN_POOL, LOADOUT_HIDDEN]) {
         const card = document.createElement("button");
         card.type = "button";
         card.className = "loadout-card";
@@ -24892,7 +24972,9 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         const nm = document.createElement("span");
         const stats = document.createElement("small");
         const w = weapons[widx];
-        stats.textContent = `${w.magSize} ${tr("loadoutRounds", "rounds")} · ${(w.reloadTime / 1000).toFixed(2)}s ${tr("loadoutReload", "reload")}`;
+        stats.textContent = widx === LOADOUT_HIDDEN
+          ? "∞ ammo · 0.08s fire · wall piercing"
+          : `${w.magSize} ${tr("loadoutRounds", "rounds")} · ${(w.reloadTime / 1000).toFixed(2)}s ${tr("loadoutReload", "reload")}`;
         card.append(cnv, nm, stats);
         card.addEventListener("click", () => toggleLoadoutGun(widx));
         grid.appendChild(card);
@@ -25013,15 +25095,26 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     }
 
     function toggleLoadoutGun(widx) {
+      if (widx === LOADOUT_HIDDEN && !hasDevWeaponAccess()) return;
       if (!weaponUnlocked[widx]) return;
       const at = loadoutGuns.indexOf(widx);
+      if (widx === LOADOUT_HIDDEN) {
+        if (at >= 0) loadoutGuns.splice(at, 1);
+        else loadoutGuns.push(widx);
+        saveLoadout();
+        syncLoadoutPanel();
+        return;
+      }
       if (at >= 0) {
         // Never let the bag go empty — you would spawn with nothing but a knife.
-        if (loadoutGuns.length <= 1) return;
+        if (loadoutGuns.filter((gun) => gun !== LOADOUT_HIDDEN).length <= 1) return;
         loadoutGuns.splice(at, 1);
       } else {
         // Full bag: the oldest pick drops out, so a click always does something visible.
-        if (loadoutGuns.length >= LOADOUT_MAX_GUNS) loadoutGuns.shift();
+        const standardGuns = loadoutGuns.filter((gun) => gun !== LOADOUT_HIDDEN);
+        if (standardGuns.length >= LOADOUT_MAX_GUNS) {
+          loadoutGuns.splice(loadoutGuns.findIndex((gun) => gun !== LOADOUT_HIDDEN), 1);
+        }
         loadoutGuns.push(widx);
       }
       saveLoadout();
@@ -25052,11 +25145,12 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       syncArmorCards();
       sanitizeLoadoutSelection();
       for (const { card, nm, widx } of _loadoutCards) {
+        card.hidden = widx === LOADOUT_HIDDEN && !hasDevWeaponAccess();
         const locked = !weaponUnlocked[widx];
         const sel = loadoutGuns.includes(widx);
         card.disabled = locked;
         card.setAttribute("aria-pressed", String(sel));
-        const slot = sel ? ` <span>[${loadoutGuns.indexOf(widx) + 1}]</span>` : "";
+        const slot = sel ? ` <span>[${widx === LOADOUT_HIDDEN ? "/" : loadoutGuns.filter((gun) => gun !== LOADOUT_HIDDEN).indexOf(widx) + 1}]</span>` : "";
         nm.innerHTML = locked
           ? `${weaponDisplayName(widx)} 🔒`
           : `${weaponDisplayName(widx)}${slot}`;
@@ -25067,7 +25161,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           "Pick <b>{n}</b> guns. Locked once a match starts — back out to the menu to change it. "
           + "The training range ignores the backpack and gives you everything.")
           .replace("{n}", String(LOADOUT_MAX_GUNS))
-          + `<br><span style="color:#4fd1ff;">${loadoutGuns.length} / ${LOADOUT_MAX_GUNS}</span>`;
+          + `<br><span style="color:#4fd1ff;">${loadoutGuns.filter((gun) => gun !== LOADOUT_HIDDEN).length} / ${LOADOUT_MAX_GUNS}</span>`;
       }
       const f = document.getElementById("loadoutFixed");
       if (f) {
