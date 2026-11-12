@@ -516,23 +516,6 @@ body:has(#menu[data-route]:not([data-route=""])) #menuBg {
 #menu #menuStart > button[data-desc]:is(:hover,:focus-visible) {
   box-shadow: inset 3px 0 var(--console-accent), inset 0 1px #ffffff28;
 }
-.mission-trace {
-  position: absolute;
-  z-index: 2 !important;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  pointer-events: none;
-  overflow: visible;
-  display: none;
-}
-#menu[data-route]:not([data-route=""]) .mission-trace { display: block; }
-.mission-trace path { fill: none; vector-effect: non-scaling-stroke; }
-.mission-trace-bed { stroke: #543c2b; stroke-width: 4; }
-.mission-trace-signal { stroke: #ffb870; stroke-width: 1.5; stroke-dasharray: 1; filter: drop-shadow(0 0 5px #ff872c); }
-.mission-trace circle { fill: #ffca8d; filter: drop-shadow(0 0 4px #ff9c49); }
-.mission-trace.routing .mission-trace-signal { animation: consoleSignal 410ms cubic-bezier(.2,.65,.34,1) both; }
-@keyframes consoleSignal { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
 @keyframes consolePanelIn { from { opacity: 0; transform: translateX(13px) scale(.987); } to { opacity: 1; transform: none; } }
 @keyframes consoleDialogIn { from { opacity: 0; transform: translateY(9px) scale(.98); } to { opacity: 1; transform: none; } }
 .settings-shell, .ach-modal-shell, .intermission-card, #gauntletClear .gc-card {
@@ -550,12 +533,11 @@ body:has(#menu[data-route]:not([data-route=""])) #menuBg {
   #menu .menu-panels-wrap { display: flex; align-items: stretch; gap: 0; }
   #menu[data-route]:not([data-route=""]) #menuMain { display: none !important; }
   #menu .menu-subpanel { width: min(100%, 760px); }
-  #menu[data-route] .mission-trace { display: none !important; }
 }
 @media (prefers-reduced-motion: reduce) {
   #menuBg { transition: none; }
   #menu .menu-subpanel, .settings-shell, .ach-modal-shell, .intermission-card,
-  #gauntletClear .gc-card, .mission-trace.routing .mission-trace-signal { animation: none; }
+  #gauntletClear .gc-card { animation: none; }
 }
 #gauntletObjective {
   position: fixed;
@@ -633,9 +615,6 @@ body:not(.game-active) #gauntletObjective { display: none; }
 }
 #menu .loadout-card small { color: #b6c0c9; font-size: 9px; line-height: 1.2; }
 #menu .loadout-card canvas { image-rendering: auto; }
-.mission-trace { overflow: hidden; z-index: 3 !important; }
-#menu .mission-trace:not([data-visible="true"]) { display: none; }
-
 /* Game cursor: the browser's own pointer, so it moves with the mouse and never lags.
    js/game-cursor.js adds html.game-pointer-painted when the cursor should be shown. */
 html.game-pointer-painted,
@@ -874,9 +853,25 @@ body :is(input[type="text"], input[type="number"], input[type="password"], selec
 .impact-vignette {
   --impact-red: 0;
   --impact-dark: 0;
+  --impact-x: 50%;
+  --impact-y: 50%;
   background:
-    radial-gradient(ellipse at 50% 47%, transparent 46%, rgb(56 2 12 / calc(var(--impact-red) * .36)) 73%, rgb(104 4 20 / var(--impact-red)) 100%),
+    radial-gradient(ellipse at var(--impact-x) var(--impact-y), rgba(170, 18, 30, calc(var(--impact-red) * .48)) 0%, rgba(110, 5, 17, calc(var(--impact-red) * .30)) 23%, transparent 58%),
+    radial-gradient(ellipse at 50% 47%, transparent 35%, rgb(56 2 12 / calc(var(--impact-red) * .52)) 66%, rgb(104 4 20 / var(--impact-red)) 100%),
     radial-gradient(ellipse at center, transparent 29%, rgb(4 6 9 / var(--impact-dark)) 94%);
+}
+#hudVitals.damage-hit { animation: hudDamageHit 520ms ease-out; }
+#hudVitals.damage-hit #hvHpNum { animation: hpNumberHit 520ms ease-out; }
+@keyframes hudDamageHit {
+  0% { transform: translateX(0); filter: brightness(1.35); box-shadow: 0 0 0 2px #ff4545c9, 0 0 24px #ed1c2c99; }
+  18% { transform: translateX(-5px); }
+  38% { transform: translateX(4px); }
+  58% { transform: translateX(-2px); }
+  100% { transform: translateX(0); filter: none; box-shadow: none; }
+}
+@keyframes hpNumberHit {
+  0% { color: #ffb5a8; text-shadow: 0 0 14px #ff263d; transform: scale(1.18); }
+  100% { color: inherit; text-shadow: none; transform: scale(1); }
 }
 .fx-settings-group {
   border: 1px solid var(--console-line);

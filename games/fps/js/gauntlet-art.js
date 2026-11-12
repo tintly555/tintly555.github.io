@@ -986,38 +986,29 @@ export function createGauntletArt(THREE, { decorate, solid, scroll, spin, tick, 
     return { mesh: add(base) };
   }
 
-  // Every pickup says what it is: a floating tag over it, so nobody has to guess what a ring or a
-  // plate does (and walking into one is never a mystery).
-  const NODE_TAGS = {
-    fuel: ["JET FUEL", "refills the harness in flight"],
-    airKick: ["AIR BOOST", "jump through it for a kick"],
-    dashCharge: ["DASH CHARGE", "refills your dashes"],
-    shield: ["HEAT SHIELD", "step on, then cross the heat"],
-    memoryReplay: ["REPLAY", "shows the safe tiles again"],
-    switch: ["SWITCH", "step on to use"],
-    pickup: ["KEY", "collect to open the way"],
+  // Every pickup says what it is with a floating icon over it, no words: a flame for fuel, an arrow for the
+  // air boost, chevrons for dashes, a shield, a looping arrow, a lever, a key.
+  const NODE_ICONS = {
+    fuel: (g, c) => { g.fillStyle = c; g.beginPath(); g.moveTo(64, 14); g.bezierCurveTo(94, 44, 98, 70, 80, 96); g.bezierCurveTo(74, 106, 54, 106, 48, 96); g.bezierCurveTo(30, 70, 50, 56, 64, 14); g.fill(); g.fillStyle = "rgba(10,14,18,.85)"; g.beginPath(); g.ellipse(64, 86, 12, 16, 0, 0, 7); g.fill(); },
+    airKick: (g, c) => { g.fillStyle = c; g.beginPath(); g.moveTo(64, 14); g.lineTo(100, 58); g.lineTo(76, 58); g.lineTo(76, 108); g.lineTo(52, 108); g.lineTo(52, 58); g.lineTo(28, 58); g.closePath(); g.fill(); },
+    dashCharge: (g, c) => { g.fillStyle = c; for (const x of [26, 58]) { g.beginPath(); g.moveTo(x, 24); g.lineTo(x + 40, 64); g.lineTo(x, 104); g.lineTo(x + 14, 104); g.lineTo(x + 54, 64); g.lineTo(x + 14, 24); g.closePath(); g.fill(); } },
+    shield: (g, c) => { g.fillStyle = c; g.beginPath(); g.moveTo(64, 12); g.lineTo(104, 28); g.bezierCurveTo(104, 76, 90, 100, 64, 116); g.bezierCurveTo(38, 100, 24, 76, 24, 28); g.closePath(); g.fill(); g.fillStyle = "rgba(10,14,18,.85)"; g.beginPath(); g.moveTo(64, 30); g.lineTo(88, 40); g.bezierCurveTo(88, 70, 78, 86, 64, 96); g.bezierCurveTo(50, 86, 40, 70, 40, 40); g.closePath(); g.fill(); },
+    memoryReplay: (g, c) => { g.strokeStyle = c; g.lineWidth = 14; g.lineCap = "round"; g.beginPath(); g.arc(64, 66, 34, -2.4, 3.2); g.stroke(); g.fillStyle = c; g.beginPath(); g.moveTo(22, 32); g.lineTo(52, 30); g.lineTo(36, 58); g.closePath(); g.fill(); },
+    switch: (g, c) => { g.fillStyle = c; g.beginPath(); g.arc(64, 64, 40, 0, 7); g.fill(); g.fillStyle = "rgba(10,14,18,.85)"; g.beginPath(); g.arc(64, 64, 26, 0, 7); g.fill(); g.fillStyle = c; g.beginPath(); g.arc(64, 64, 14, 0, 7); g.fill(); },
+    pickup: (g, c) => { g.strokeStyle = c; g.fillStyle = c; g.lineWidth = 12; g.beginPath(); g.arc(44, 44, 22, 0, 7); g.stroke(); g.lineCap = "round"; g.beginPath(); g.moveTo(60, 60); g.lineTo(104, 104); g.stroke(); g.fillRect(84, 88, 10, 22); g.fillRect(98, 98, 10, 20); },
   };
   const tagMaterials = new Map();
   function nodeTag(kind, tone) {
-    const text = NODE_TAGS[kind];
-    if (!text) return null;
+    const icon = NODE_ICONS[kind];
+    if (!icon) return null;
     const key = kind + tone;
     let material = tagMaterials.get(key);
     if (!material) {
       const canvas = document.createElement("canvas");
-      canvas.width = 512; canvas.height = 144;
+      canvas.width = canvas.height = 128;
       const g = canvas.getContext("2d");
       const css = "#" + new THREE.Color(tone).getHexString();
-      g.fillStyle = "rgba(10,14,18,.78)";
-      g.beginPath();
-      if (g.roundRect) g.roundRect(6, 6, 500, 132, 22); else g.rect(6, 6, 500, 132);
-      g.fill();
-      g.lineWidth = 4; g.strokeStyle = css; g.stroke();
-      g.textAlign = "center"; g.textBaseline = "middle";
-      g.fillStyle = css; g.font = "bold 58px sans-serif";
-      g.fillText(text[0], 256, 52);
-      g.fillStyle = "#d9e2ea"; g.font = "34px sans-serif";
-      g.fillText(text[1], 256, 106);
+      icon(g, css);
       const map = new THREE.CanvasTexture(canvas);
       map.colorSpace = THREE.SRGBColorSpace;
       material = new THREE.SpriteMaterial({ map, transparent: true, fog: false, depthWrite: false });
@@ -1025,7 +1016,7 @@ export function createGauntletArt(THREE, { decorate, solid, scroll, spin, tick, 
       tagMaterials.set(key, material);
     }
     const sprite = new THREE.Sprite(material);
-    sprite.scale.set(2.6, 0.73, 1);
+    sprite.scale.set(1.0, 1.0, 1);
     sprite.raycast = () => {};
     return sprite;
   }

@@ -1,6 +1,6 @@
 /*
- * Course layout. Every authored course is a short list of segments; this module stretches it
- * into a long, winding one and lays each segment onto the path.
+ * Course layout. Authored segments stay recognizable; short invented legs add parkour links
+ * between them and lay each segment onto the path.
  *
  * A "leg" is a stretch of invented walkway between two authored segments: roads that bend by any
  * angle, climb and descend, spiral up or down, with the level's own obstacles (pits, beams,
@@ -17,8 +17,8 @@ export const GAP_JUMP = 4.2;
 export const GAP_DASH = 7.0;
 /** Segments that are built axis-aligned at the current position, heading straight down -Z. */
 export const FIXED = new Set(["room", "mechanic", "lift", "shuttle"]);
-/** How much longer than the authored course a level is. */
-export const COURSE_STRETCH = 5.8;
+/** Keep each course focused on its authored challenges instead of long travel stretches. */
+export const COURSE_STRETCH = 1.85;
 /** Inner edge of a bend never gets tighter than this many metres of radius. */
 const EDGE_RADIUS = 4;
 const MAX_SLOPE = 0.17;
@@ -133,83 +133,50 @@ function candidate(rng, req, startY, attempt) {
     if (!kinds.length || !lastPlat) return;
     const kind = kinds[Math.floor(rng() * kinds.length)];
     if (kind === "beam") {
-      const len = u(12, 26), w = round2(u(1.9, 2.8)), lim = maxTurn(len, w) / DEG;
+      const len = u(8, 17), w = round2(u(1.9, 2.8)), lim = maxTurn(len, w) / DEG;
       segs.push({ t: "beam", len: round2(len), w, turn: round2(rng() < .5 ? sign() * Math.min(lim, u(6, 38)) : 0), rise: round2(settle(climb * u(0, .08) * len)) });
       turnSum += segs[segs.length - 1].turn;
       total += len; lastPlat = true; width = GAUNTLET_W;
-      road(u(9, 13), GAUNTLET_W);
+      road(u(6, 9), GAUNTLET_W, rng() < .55 ? sign() * u(16, 38) : 0, climb * u(0, .05) * 10);
     } else if (kind === "crawl") {
-      const len = u(8, 13), lim = maxTurn(len, 10) / DEG, turn = round2(rng() < .4 ? sign() * Math.min(lim, u(5, 26)) : 0);
+      const len = u(7, 10), lim = maxTurn(len, 10) / DEG, turn = round2(rng() < .4 ? sign() * Math.min(lim, u(5, 26)) : 0);
       segs.push({ t: "crawl", len: round2(len), w: 10, turn });
       turnSum += turn; total += len + 5.2; lastPlat = true; width = 10;
-      road(u(8, 12), GAUNTLET_W);
+      road(u(6, 9), GAUNTLET_W, rng() < .45 ? sign() * u(16, 36) : 0);
     } else if (kind === "jump" || kind === "dash") {
       const gap = kind === "jump" ? round2(u(3.3, GAP_JUMP)) : round2(u(6.4, GAP_DASH));
       segs.push({ t: kind, gap });
       total += gap; lastPlat = false;
-      road(u(9, 18), u(8.5, GAUNTLET_W));
+      road(u(6, 10), u(8, GAUNTLET_W), rng() < .5 ? sign() * u(18, 42) : 0, climb * u(0, .045) * 10);
     } else if (kind === "pads") {
-      const n = 3 + Math.floor(rng() * 3), len = round2(u(3.2, 3.8)), w = round2(u(3.6, 4.6));
+      const n = 3 + Math.floor(rng() * 2), len = round2(u(3.2, 3.8)), w = round2(u(3.6, 4.6));
       const span = n * len + (n - 1) * GAP_JUMP, lim = maxTurn(span, w) / DEG;
       const turn = round2(sign() * Math.min(lim, u(0, 42)));
       segs.push({ t: "pads", n, len, gap: GAP_JUMP, w, turn });
       turnSum += turn; total += span; lastPlat = true; width = GAUNTLET_W;
-      road(u(8, 12), GAUNTLET_W);
+      road(u(6, 9), GAUNTLET_W, rng() < .5 ? sign() * u(18, 40) : 0);
     } else if (kind === "steps") {
-      const n = 4 + Math.floor(rng() * 5), rise = settle(climb * 0.95 * n);
-      if (rise !== 0) { segs.push({ t: "steps", n, rise: rise / n, len: 4, w: 8 }); total += n * 4; lastPlat = true; width = 8; }
-      road(u(8, 12), GAUNTLET_W);
+      const n = 3 + Math.floor(rng() * 3), rise = settle(climb * 0.85 * n);
+      if (rise !== 0) { segs.push({ t: "steps", n, rise: rise / n, len: 3.5, w: 7 }); total += n * 3.5; lastPlat = true; width = 8; }
+      road(u(6, 9), GAUNTLET_W, rng() < .45 ? sign() * u(16, 34) : 0);
     }
   };
 
-  road(u(8, 11), GAUNTLET_W);
-  // Each motif is a stretch of road with a shape of its own; `min` is the least room it needs.
-  const catalogue = [
-    { name: "plain", min: 16, weight: 1.4 },
-    { name: "sBend", min: 80, weight: 2 },
-    { name: "wideArc", min: 100, weight: 2 },
-    { name: "roller", min: 90, weight: 1.6 },
-    { name: "hairpin", min: 120, weight: level < 4 ? 0 : 1.8 },
-    { name: "spiral", min: 60, weight: level < 2 ? .6 : 1.5 },
-  ];
+  road(u(6, 9), GAUNTLET_W);
+  const traverse = () => {
+    const len = u(6, 10), turn = rng() < .72 ? sign() * u(20, 58) : 0;
+    road(len, u(7.5, 11), turn, climb * u(.025, .11) * len);
+    if (rng() < .3) climb = -climb;
+  };
+  // Chain short, readable platforming moves with only enough deck to line up the next jump.
+  // The authored vocabulary preserves gradual introductions across the 200-course campaign.
   let guard = 0;
-  while (guard++ < 30) {
-    const room = target - total - 24;
-    if (room < 16) break;
-    const fits = catalogue.filter(m => m.weight > 0 && m.min <= room * 1.15 && (attempt < 30 || m.name === "plain" || m.name === "roller"));
-    if (!fits.length) break;
-    let pick = rng() * fits.reduce((a, m) => a + m.weight, 0), motif = fits[0].name;
-    for (const m of fits) { pick -= m.weight; if (pick <= 0) { motif = m.name; break; } }
-    if (rng() < .25) climb = -climb;
-    const w = u(8.5, GAUNTLET_W);
-    if (motif === "plain") road(u(16, 34), w, rng() < .6 ? sign() * u(8, 48) : 0, climb * u(0, .14) * 30);
-    else if (motif === "sBend") {
-      // Swing out one way, straighten, swing back: 31.96°, 58.2°, whatever it turns out to be.
-      const a = sign() * u(30, 90), l1 = u(26, 44), l2 = u(26, 44);
-      road(l1, w, a, climb * u(.07, .17) * l1);
-      road(u(10, 22), w, 0, climb * u(0, .12) * 14);
-      road(l2, w, -a, climb * u(.07, .17) * l2);
-    } else if (motif === "wideArc") {
-      const a = sign() * u(70, 140), l1 = u(40, 70);
-      road(l1, w, a, climb * u(.06, .16) * l1);
-      road(u(18, 40), w, 0, climb * u(.02, .1) * 24);
-      road(l1 * u(.9, 1.1), w, -a, climb * u(.06, .16) * l1);
-    } else if (motif === "roller") {
-      const l = u(36, 60), h = u(9, 24);
-      road(l, w, rng() < .5 ? sign() * u(0, 30) : 0, climb * Math.min(h, MAX_SLOPE * l));
-      road(u(10, 16), w);
-      road(l, w, 0, -climb * Math.min(h * u(.5, 1), MAX_SLOPE * l));
-    } else if (motif === "hairpin") {
-      // Double back on yourself, a storey higher (or lower): a switchback climb.
-      const s2 = sign(), len = u(40, 52), rise = climb * u(14, 22);
-      road(len, w, s2 * 180, rise / 2);
-      road(u(24, 46), w, 0, rise / 2);
-      road(len, w, -s2 * 180 + (rng() < .5 ? s2 * u(0, 30) : 0), 0);
-    } else if (motif === "spiral") {
-      const s2 = sign(), len = u(50, 70);
-      road(len, Math.min(w, 10), s2 * u(200, 300), climb * u(12, 22));
-    }
-    if (rng() < .55 && target - total - 24 > 30) obstacle();
+  while (guard++ < 16 && total < target - 20) {
+    const before = total;
+    if (guard === 1 || rng() < .8) obstacle();
+    else traverse();
+    if (total <= before) traverse();
+    if (total < target - 32 && rng() < .35) traverse();
   }
   // Heading finishes straight again, always on a plain deck.
   const w2 = 10;
@@ -296,17 +263,15 @@ const rough = s => {
 };
 
 /**
- * Turn an authored segment list into one roughly COURSE_STRETCH times as long: legs are
- * interleaved with every authored segment (which all stay, in order). Legs are placeholders
- * the builder resolves in order, because each one has to know what has been built before it.
+ * Add compact parkour legs between authored segments (which all stay, in order). Legs are
+ * placeholders the builder resolves in order, because each one has to know what has been built.
  */
 export function lengthenSegs(segs, { level, tier = 1, stretch = COURSE_STRETCH }) {
   const base = segs.reduce((sum, s) => sum + rough(s), 0) + 26;
-  const extra = Math.max(80, base * (stretch - 1));
+  const extra = Math.max(62, base * (stretch - 1));
   const vocab = vocabularyOf(segs);
-  // Every leg carries about 40 m of fixed overhead (the plain decks at either end), so a leg is
-  // worth having only if it is long enough to hold a real bend: few, long legs rather than many.
-  const slots = clamp(Math.round(extra / 130), 2, segs.length);
+  // Spread short platforming links through the route so it does not become a long run.
+  const slots = clamp(Math.round(extra / 100), 2, segs.length);
   const gapEvery = segs.length / slots;
   const legAfter = new Set();
   for (let k = 0; k < slots; k++) legAfter.add(Math.min(segs.length - 1, Math.floor((k + 1) * gapEvery - 1e-6)));
@@ -314,7 +279,7 @@ export function lengthenSegs(segs, { level, tier = 1, stretch = COURSE_STRETCH }
   const out = [];
   segs.forEach((s, i) => {
     out.push(s);
-    if (legAfter.has(i)) out.push({ t: "leg", target: Math.max(70, share), vocab, tier, level, seed: level * 7919 + i * 104729 + 13 });
+    if (legAfter.has(i)) out.push({ t: "leg", target: Math.max(54, share), vocab, tier, level, seed: level * 7919 + i * 104729 + 13 });
   });
   return out;
 }

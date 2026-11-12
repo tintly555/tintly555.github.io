@@ -48,20 +48,22 @@ export function createImpactFx(root) {
   let sprites, drops = [], pulse = 0, tired = 0, canvasDirty = false;
   function hit(damage, angle, blood) {
     if (!(damage > 0)) return;
-    pulse = Math.min(1, pulse + .25 + damage / 54);
+    pulse = Math.min(1, pulse + .44 + damage / 34);
+    vignette.style.setProperty("--impact-x", `${(50 + Math.cos(angle) * 42).toFixed(1)}%`);
+    vignette.style.setProperty("--impact-y", `${(50 + Math.sin(angle) * 42).toFixed(1)}%`);
     if (!blood || !g) return;
     sprites ||= [1, 4, 6, 8, 12].map(droplet);
     const severe = clamp(damage / 38, .16, 1);
-    const count = Math.round((11 + severe * 19) * blood);
+    const count = Math.round((18 + severe * 26) * blood);
     for (let i = 0; i < count; i++) {
       const a = angle + (Math.random() - .5) * (i < count * .75 ? 1.55 : 3.9);
       const edge = .73 + Math.random() * .29;
-      const size = (.007 + Math.pow(Math.random(), 2.9) * .115 * (.55 + severe * .45)) * (.55 + blood * .45);
+      const size = (.01 + Math.pow(Math.random(), 2.35) * .135 * (.55 + severe * .45)) * (.6 + blood * .4);
       drops.push({
         x: .5 + Math.cos(a) * edge * .49, y: .5 + Math.sin(a) * edge * .48,
         size, spin: a + (Math.random() - .5) * 1.2, long: .9 + Math.random() * 1.4,
         slide: .014 + Math.random() * .028, age: 0, life: 1.7 + Math.random() * 1.6,
-        alpha: .46 + blood * .49, sprite: sprites[i % sprites.length],
+        alpha: .58 + blood * .36, sprite: sprites[i % sprites.length],
       });
     }
     if (drops.length > 64) drops.splice(0, drops.length - 64);
@@ -74,9 +76,9 @@ export function createImpactFx(root) {
       canvasDirty = false;
     },
     update(dt, weak, health, usePost, blood) {
-      pulse *= Math.exp(-dt * 3.6);
+      pulse *= Math.exp(-dt * 2.7);
       tired += (weak - tired) * (1 - Math.exp(-dt * (weak > tired ? 6 : 3.4)));
-      const red = clamp(pulse * .75 + health * .30, 0, .72);
+      const red = clamp(pulse * 1.02 + health * .4, 0, .94);
       const dark = usePost ? 0 : tired * .82;
       const hasDrops = blood > 0 && drops.length > 0;
       const visible = red + dark > .006 || hasDrops;

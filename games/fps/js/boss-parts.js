@@ -28,10 +28,13 @@ export const topY = (z) => {
 /** Chitin colouring: dark brown with wear and baked occlusion. `base` is the lit colour. */
 function chitin(base, extra) {
   return (o, x, y, z, nx, ny, nz, ao) => {
-    const wear = 0.74 + 0.5 * vnoise(x * 3.1, y * 3.1, z * 3.1);
+    const mottling = vnoise(x * 1.7 + 8, y * 2.3, z * 1.8);
+    const wear = 0.70 + 0.35 * vnoise(x * 3.1, y * 3.1, z * 3.1) + 0.22 * mottling;
     const lit = 0.58 + 0.42 * (ny * 0.5 + 0.5);
     const k = (0.24 + 0.76 * ao) * wear * lit;
-    o[0] = base[0] * k; o[1] = base[1] * k; o[2] = base[2] * k;
+    o[0] = base[0] * k * (0.92 + mottling * 0.16);
+    o[1] = base[1] * k * (0.94 + mottling * 0.12);
+    o[2] = base[2] * k * (1.04 - mottling * 0.12);
     if (extra) extra(o, x, y, z, nx, ny, nz, ao, k);
   };
 }
@@ -47,6 +50,9 @@ function bodyField(x, y, z) {
   d = smin(d, sdEllipsoid(sx, y, z + 1.95, 0.98, 0.6, 1.6), 0.4);
   d = smin(d, sdEllipsoid(sx, y - 0.04, z + 0.55, 0.7, 0.45, 0.5), 0.3);
   d = smin(d, sdEllipsoid(sx, y + 0.05, z - 2.2, 0.74, 0.5, 0.74), 0.45);
+  // Merge a raised brow and cheek ridges into the head, so the face reads as anatomy.
+  d = smin(d, sdEllipsoid(sx - 0.47, y - 0.21, z - 2.43, 0.29, 0.18, 0.5), 0.18);
+  d = smin(d, sdEllipsoid(sx - 0.62, y + 0.16, z - 2.05, 0.29, 0.29, 0.63), 0.2);
   d = smin(d, sdRoundCone(sx, y, z, 0.18, 0.38, 2.7, 0.64, 0.2, 2.25, 0.13, 0.09), 0.12);
   for (let e = 0; e < 3; e++) d = smin(d, sdSphere(sx - EYES[e][0], y - EYES[e][1], z - EYES[e][2], EYES[e][3]), 0.06);
   d = smax(d, -sdEllipsoid(sx, y + 0.4, z - 2.85, 0.32, 0.17, 0.33), 0.08);
@@ -58,7 +64,8 @@ function bodyField(x, y, z) {
     // Back-swept horns down the spine.
     for (let i = 0; i < 9; i++) {
       const zi = 1.55 - i * 0.5, yb = topY(zi) - 0.06;
-      d = smin(d, spineTo(x, y, z, 0, yb, zi, 0, yb + 0.5 - i * 0.025, zi - 0.4, 0.13 - i * 0.005), 0.14);
+      const height = 0.32 + 0.13 * Math.sin(i * 1.7 + 0.4);
+      d = smin(d, spineTo(x, y, z, 0, yb, zi, 0.04 * Math.sin(i * 2.1), yb + height, zi - 0.34, 0.12 - i * 0.004), 0.14);
     }
   }
   if (sx > 0.7 && y > -0.1 && y < 0.9) {
@@ -72,7 +79,7 @@ function bodyField(x, y, z) {
   // A pocket in the back where the split armour plates sit; the core lies at its bottom.
   d = smax(d, -sdEllipsoid(sx, y - 0.8, z + 0.45, 0.6, 0.55, 1.0), 0.1);
   // Plate seams cut across the back.
-  const seam = ridge(z / 0.62 + 0.25, 7) * 0.06 * smoothstep(-0.15, 0.25, y) * smoothstep(-3.3, -2.9, z) * (1 - smoothstep(1.3, 1.7, z));
+  const seam = ridge(z / 0.62 + 0.25 + 0.08 * sin(x * 3 + z), 7) * 0.035 * smoothstep(-0.15, 0.25, y) * smoothstep(-3.3, -2.9, z) * (1 - smoothstep(1.3, 1.7, z));
   d += seam;
   d += (fbm(x * 5, y * 5, z * 5) - 0.5) * 0.05 + (vnoise(x * 1.7, y * 1.7, z * 1.7) - 0.5) * 0.07;
   return d;
@@ -81,7 +88,7 @@ function bodyField(x, y, z) {
 const bodyShade = chitin([0.24, 0.19, 0.15], (o, x, y, z, nx, ny, nz, ao, k) => {
   const sx = abs(x);
   if (y < -0.25) { o[0] *= 0.6; o[1] *= 0.6; o[2] *= 0.6; }
-  const band = 0.88 + 0.12 * cos(z * TAU / 0.62);
+  const band = 0.94 + 0.06 * cos(z * TAU / 0.62 + 0.35 * sin(x * 3));
   o[0] *= band; o[1] *= band; o[2] *= band;
   for (let e = 0; e < 3; e++) {
     const dist = hypot(sx - EYES[e][0], y - EYES[e][1], z - EYES[e][2]);
@@ -214,6 +221,7 @@ function legUpperField(x, y, z) {
   const bound = sdEllipsoid(x, y - 0.78, z, 0.7, 1.35, 0.7);
   if (bound > 0.25) return bound;
   let d = sdRoundCone(x, y, z, 0, 0, 0, 0, LEG_L1, 0, 0.29, 0.2);
+  d = smin(d, sdEllipsoid(x - 0.08, y - 0.55, z + 0.02, 0.3, 0.55, 0.22), 0.16);
   d = smin(d, sdSphere(x, y, z, 0.31), 0.18);
   d = smin(d, sdSphere(x, y - LEG_L1, z, 0.27), 0.16);
   for (let i = 0; i < 3; i++) {
@@ -228,6 +236,7 @@ function legLowerField(x, y, z) {
   const bound = sdEllipsoid(x, y - 1.1, z, 0.7, 1.65, 0.7);
   if (bound > 0.25) return bound;
   let d = sdRoundCone(x, y, z, 0, 0, 0, 0, LEG_L2, 0, 0.21, 0.065);
+  d = smin(d, sdEllipsoid(x + 0.045, y - 0.48, z, 0.22, 0.48, 0.17), 0.12);
   d = smin(d, sdSphere(x, y, z, 0.24), 0.14);
   d = smin(d, sdRoundCone(x, y, z, 0, LEG_L2 - 0.05, 0, 0.0, LEG_L2 + 0.22, 0.12, 0.065, 0.015), 0.05);
   for (let i = 0; i < 6; i++) {
@@ -289,18 +298,18 @@ export function getBossParts(THREE) {
   if (cache) return cache;
   const t0 = performance.now();
   const parts = {
-    body: meshField(THREE, bodyField, [-1.75, -0.95, -3.85], [1.75, 1.5, 3.3], 0.085, bodyShade),
-    plate: meshField(THREE, plateField, [-0.95, -0.1, -0.7], [0.95, 0.65, 0.7], 0.04, plateShade),
-    core: meshField(THREE, coreField, [-0.5, -0.45, -0.5], [0.5, 0.55, 0.5], 0.03, coreShade),
-    fang: meshField(THREE, fangField, [-0.4, -0.7, -0.2], [0.4, 0.3, 1.25], 0.03, fangShade),
-    clawUpper: meshField(THREE, clawUpperField, [-0.75, -0.8, -0.55], [0.75, 0.85, 1.95], 0.05, clawShade),
-    clawFore: meshField(THREE, clawForeField, [-0.7, -0.75, -0.5], [0.7, 0.85, 1.95], 0.05, clawShade),
-    clawPalm: [-1, 1].map((s) => meshField(THREE, clawPalmField(s), [-0.75, -0.65, -0.45], [0.75, 0.7, 2.45], 0.045, bladeShade)),
-    clawFinger: [-1, 1].map((s) => meshField(THREE, clawFingerField(s), [-0.55, -0.4, -0.3], [0.55, 0.4, 1.65], 0.035, bladeShade)),
-    legUpper: meshField(THREE, legUpperField, [-0.75, -0.45, -0.75], [0.75, LEG_L1 + 0.45, 0.75], 0.05, legShade),
-    legLower: meshField(THREE, legLowerField, [-0.75, -0.4, -0.75], [0.75, LEG_L2 + 0.5, 0.75], 0.05, legShade),
-    tail: TAIL_LEN.map((len, i) => meshField(THREE, tailField(i), [-TAIL_R[i] - 0.75, -TAIL_R[i] - 0.4, -0.5], [TAIL_R[i] + 0.75, TAIL_R[i] + 0.8, len + 0.5], 0.05, tailShade)),
-    stinger: meshField(THREE, stingerField, [-0.65, -0.95, -0.55], [0.65, 0.5, 1.6], 0.035, stingerShade),
+    body: meshField(THREE, bodyField, [-1.75, -0.95, -3.85], [1.75, 1.5, 3.3], 0.115, bodyShade),
+    plate: meshField(THREE, plateField, [-0.95, -0.1, -0.7], [0.95, 0.65, 0.7], 0.075, plateShade),
+    core: meshField(THREE, coreField, [-0.5, -0.45, -0.5], [0.5, 0.55, 0.5], 0.05, coreShade),
+    fang: meshField(THREE, fangField, [-0.4, -0.7, -0.2], [0.4, 0.3, 1.25], 0.045, fangShade),
+    clawUpper: meshField(THREE, clawUpperField, [-0.75, -0.8, -0.55], [0.75, 0.85, 1.95], 0.07, clawShade),
+    clawFore: meshField(THREE, clawForeField, [-0.7, -0.75, -0.5], [0.7, 0.85, 1.95], 0.07, clawShade),
+    clawPalm: [-1, 1].map((s) => meshField(THREE, clawPalmField(s), [-0.75, -0.65, -0.45], [0.75, 0.7, 2.45], 0.065, bladeShade)),
+    clawFinger: [-1, 1].map((s) => meshField(THREE, clawFingerField(s), [-0.55, -0.4, -0.3], [0.55, 0.4, 1.65], 0.055, bladeShade)),
+    legUpper: meshField(THREE, legUpperField, [-0.75, -0.45, -0.75], [0.75, LEG_L1 + 0.45, 0.75], 0.075, legShade),
+    legLower: meshField(THREE, legLowerField, [-0.75, -0.4, -0.75], [0.75, LEG_L2 + 0.5, 0.75], 0.075, legShade),
+    tail: TAIL_LEN.map((len, i) => meshField(THREE, tailField(i), [-TAIL_R[i] - 0.75, -TAIL_R[i] - 0.4, -0.5], [TAIL_R[i] + 0.75, TAIL_R[i] + 0.8, len + 0.5], 0.07, tailShade)),
+    stinger: meshField(THREE, stingerField, [-0.65, -0.95, -0.55], [0.65, 0.5, 1.6], 0.05, stingerShade),
   };
   parts.buildMs = Math.round(performance.now() - t0);
   cache = parts;

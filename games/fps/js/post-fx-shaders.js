@@ -312,7 +312,7 @@ export const GRADE = `
         }
       }
     }
-    float blur=uWeak*smoothstep(.06,.62,radial)*5.4;
+    float blur=uWeak*smoothstep(.06,.62,radial)*8.5;
     if(uDOF>0.&&eye>.72){
       float focus=clamp(eyeDepth(depthAt(vec2(.5,.512))),2.4,26.);
       float coc=abs(1./max(.7,eye)-1./focus);

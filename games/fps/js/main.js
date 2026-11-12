@@ -5,23 +5,22 @@
     import { clone as cloneSkinnedModel } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/utils/SkeletonUtils.js";
     import { createPvpMaps } from "./pvp-maps.js?v=34";
     import { createPvpWorld } from "./pvp-world.js?v=3";
-    import { createBossNavigation } from "./boss-navigation.js?v=1";
+    import { createBossNavigation } from "./boss-navigation.js?v=2";
     import { BOSS_ARENA_HALF, createCombatEnvironment } from "./combat-environments.js?v=6";
-    import { createBossCreature, BOSS_RADIUS, CLAW_STRIKE_S, QUAKE_SLAM_S, LOB_RELEASE_S, DURATIONS as BOSS_DURATIONS } from "./boss-creature.js?v=8";
+    import { createBossCreature, BOSS_RADIUS, CLAW_STRIKE_S, QUAKE_SLAM_S, LOB_RELEASE_S, DURATIONS as BOSS_DURATIONS } from "./boss-creature.js?v=10";
     import { buildOperatorShell } from "./operator-model.js?v=1";
-    import { createMissionConsole } from "./mission-console.js?v=2";
     import { extendGauntletCourses, GAUNTLET_CHAPTERS, GAUNTLET_CHAPTER_SIZE } from "./gauntlet-courses.js?v=5";
-    import { createGauntletRuntime } from "./gauntlet-runtime.js?v=16";
+    import { createGauntletRuntime } from "./gauntlet-runtime.js?v=17";
     import { createWorldAudio } from "./world-audio.js?v=4";
     import { createGauntletThemes } from "./gauntlet-themes.js?v=9";
     import { createPostFx, applyDisplayTone } from "./post-fx.js?v=4";
     import { DEFAULT_FX, loadFxSettings, mountFxSettings } from "./post-fx-settings.js";
-    import { createImpactFx } from "./impact-fx.js";
+    import { createImpactFx } from "./impact-fx.js?v=2";
     import { poseZombieVariant } from "./zombie-variants.js?v=5";
     import { BOSS_IMPACT, ZOMBIE_MELEE, zombieStrikeClipPhase, zombieGait } from "./zombie-motion.js";
     import { ZOMBIE_LOOK_COUNT, loadZombieCharacterMeshes } from "./zombie-character-meshes.js?v=1";
     import { Footprints, slabBoxes, sampleAt, forwardOf, createPathGeometry } from "./gauntlet-path.js?v=2";
-    import { layoutSeg, composeLeg, lengthenSegs, FIXED, mulberry32 as legRng } from "./gauntlet-legs.js?v=4";
+    import { layoutSeg, composeLeg, lengthenSegs, FIXED, mulberry32 as legRng } from "./gauntlet-legs.js?v=5";
     // The deployed file is translation.js (not translate.js — earlier versions of this HTML had the
     // wrong path and 404'd, which aborted the whole module and left Start unresponsive). The dynamic
     // import + catch is kept so a missing/renamed i18n file still lets the menu boot with a minimal stub.
@@ -894,8 +893,8 @@
     // rifle, not spent in a 30-minute sponge. Hell is harder through its attacks, not its
     // health: it has about twice the pool of normal, not five times.
     const BOSS_HP = Object.freeze({ normalTank: 6000, normalGunner: 4000, hellTank: 12000, hellGunner: 8000 });
-    /** Obstacle margin the boss pathing grid keeps, a little over the hell creature's body radius (2.0). */
-    const BOSS_NAV_RADIUS = 2.1;
+    /** Obstacle margin the boss pathing grid keeps: the creature's body is up to ~2.8 m wide each side with its legs. */
+    const BOSS_NAV_RADIUS = 3.0;
     // The creature's moves. Damage is per landed hit on a 100 HP player; cooldowns are seconds from the
     // start of the move. Hell is faster and more frequent, not a bigger health bar.
     const BOSS_TUNING = Object.freeze({
@@ -1780,10 +1779,11 @@
       player.health = Math.max(0, player.health - netDmg);
       player.regenTimer = 0;
       showDamageImpact(netDmg, data.x, data.z);
-      addHitIndicator(data.x || 0, data.z || 0);
+      if (Number.isFinite(data.x) && Number.isFinite(data.z)) addHitIndicator(data.x, data.z);
       triggerCamShake(0.085);
       playReceivedDamageSound(data.hitKind === "melee" ? "melee" : "bullet");
       updateHud();
+      if (netDmg > 0) pulseDamageHud();
       if (player.health <= 0) {
         showDeathScreen(null);
       }
@@ -1935,6 +1935,14 @@
       renderer.domElement.requestPointerLock();
     }
 
+    function pulseDamageHud() {
+      const vitals = _hudEls.hudVitals;
+      if (!vitals) return;
+      vitals.classList.remove("damage-hit");
+      void vitals.offsetWidth;
+      vitals.classList.add("damage-hit");
+    }
+
     function showDamageImpact(amount, x, z) {
       let angle = Math.PI * (.27 + Math.random() * .46);
       if (Number.isFinite(x) && Number.isFinite(z)) {
@@ -1973,7 +1981,7 @@
         `<path d="${HIT_DIR_SVG_PATH}" fill="#FF0000"/>` +
         "</svg>";
       hitDirContainer.appendChild(el);
-      const indicator = { el, relAngle, life: 1.5 };
+      const indicator = { el, relAngle, life: 1.8 };
       hitIndicators.push(indicator);
       updateHitIndicatorPos(indicator);
     }
@@ -1997,7 +2005,8 @@
         ind.life -= dt;
         // Helmets muffle where damage is coming from: the tier's hitFade scales the
         // direction indicator down, so a Mk III wearer barely sees it.
-        ind.el.style.opacity = (Math.max(0, ind.life / 1.5) * myHelmet().hitFade).toString();
+        const visibility = .55 + .45 * myHelmet().hitFade;
+        ind.el.style.opacity = (Math.max(0, ind.life / 1.8) * visibility).toString();
         const dx = ind.el._fromX != null ? ind.el._fromX - player.position.x : 0;
         const dz = ind.el._fromZ != null ? ind.el._fromZ - player.position.z : 0;
         if (ind.life <= 0) {
@@ -2872,7 +2881,8 @@
 
     function getPostFxRenderScale() {
       if (!gameWorldReady || !postFxWanted()) return 1;
-      return ({ regular: 0.82, high: 0.90, extreme: 0.96 })[getQualityId()] ?? 1;
+      // Keep the scene deliberately soft and reduce the pixel cost of the full-frame FX stack.
+      return ({ regular: 0.62, high: 0.72, extreme: 0.82 })[getQualityId()] ?? 0.72;
     }
 
     /** Camera motion cannot depend on quality: lower settings must not make aiming easier. */
@@ -3126,7 +3136,7 @@
       const weakGoal = gameWorldReady && needle.phase === "weak"
         ? cfg.weakness * (.52 + .48 * THREE.MathUtils.smoothstep(needle.timer, 0, 1200)) : 0;
       const weak = impactFx.update(dt, weakGoal, hurt, usePost, cfg.blood);
-      const blur = !usePost && weak > .018 ? `blur(${(weak * 2.1).toFixed(2)}px)` : "";
+      const blur = !usePost && weak > .018 ? `blur(${(weak * 5.5).toFixed(2)}px)` : "";
       if (blur !== fallbackBlur) { renderer.domElement.style.filter = blur; fallbackBlur = blur; }
       if (!usePost) { renderer.render(scene, camera); return; }
       try {
@@ -5199,6 +5209,7 @@
     }
 
     function clearMap() {
+      removeBossFxLights();
       clearPvpThemed();
       // Boss Fight uses arena lighting and does not enable the player flashlight.
       flashlight.castShadow = !isBossArenaMap(CURRENT_MAP);
@@ -6291,34 +6302,27 @@
       }
     }
 
-    /** A short line in the middle of the screen (pickup feedback), plus a live timer while shielded. */
-    let _gNoticeEl = null, _gNoticeUntil = 0, _gShieldEl = null;
-    function showGauntletNotice(text, seconds = 1.6) {
-      if (!_gNoticeEl) {
-        _gNoticeEl = document.createElement("div");
-        _gNoticeEl.style.cssText = "position:fixed;left:50%;top:26%;transform:translateX(-50%);z-index:60;padding:10px 22px;"
-          + "font:700 22px/1 'Audiowide',sans-serif;letter-spacing:.08em;color:#bff7d8;background:rgba(8,16,14,.72);"
-          + "border:1px solid rgba(120,255,190,.55);border-radius:6px;pointer-events:none;transition:opacity .25s;opacity:0";
-        document.body.appendChild(_gNoticeEl);
-      }
-      _gNoticeEl.textContent = text;
-      _gNoticeEl.style.opacity = "1";
-      _gNoticeUntil = performance.now() + Math.min(2.4, seconds) * 1000;
-    }
+    /** Pickup feedback used to be a line of text in the middle of the screen. The pickups, the effects they
+     *  cause and the sounds already show what happened, so this is deliberately silent. Kept so callers need no change. */
+    let _gShieldEl = null, _gShieldFill = null, _gShieldMax = 1;
+    function showGauntletNotice() {}
     function updateGauntletStatus() {
-      if (_gNoticeEl && _gNoticeEl.style.opacity === "1" && performance.now() > _gNoticeUntil) _gNoticeEl.style.opacity = "0";
       const left = gauntletRuntime && gauntletRuntime.shieldLeft ? gauntletRuntime.shieldLeft() : 0;
       if (left > 0) {
+        // A bar that drains, not a countdown in words.
         if (!_gShieldEl) {
           _gShieldEl = document.createElement("div");
-          _gShieldEl.style.cssText = "position:fixed;left:50%;bottom:19%;transform:translateX(-50%);z-index:60;padding:6px 16px;"
-            + "font:700 18px/1 'Audiowide',sans-serif;color:#7dffb4;background:rgba(6,20,14,.75);border:1px solid #3fe08a;"
-            + "border-radius:4px;pointer-events:none;box-shadow:0 0 18px rgba(60,255,150,.35)";
+          _gShieldEl.style.cssText = "position:fixed;left:50%;bottom:19%;transform:translateX(-50%);z-index:60;width:150px;height:7px;"
+            + "background:rgba(6,20,14,.7);border:1px solid #3fe08a;border-radius:4px;pointer-events:none;overflow:hidden;"
+            + "box-shadow:0 0 18px rgba(60,255,150,.35)";
+          _gShieldFill = document.createElement("div");
+          _gShieldFill.style.cssText = "height:100%;background:#7dffb4;transform-origin:left center";
+          _gShieldEl.appendChild(_gShieldFill);
           document.body.appendChild(_gShieldEl);
         }
         _gShieldEl.style.display = "block";
-        _gShieldEl.textContent = "HEAT SHIELD  " + left.toFixed(1) + "s";
-      } else if (_gShieldEl) _gShieldEl.style.display = "none";
+        _gShieldFill.style.transform = `scaleX(${Math.min(1, left / (_gShieldMax = Math.max(_gShieldMax, left)))})`;
+      } else { _gShieldMax = 1; if (_gShieldEl) _gShieldEl.style.display = "none"; }
     }
 
     function updateGauntletDoors() {
@@ -6514,6 +6518,53 @@
         });
       }
     }
+    function beginZombieEmergence(enemy) {
+      if (!isBossArenaMap(CURRENT_MAP) || !enemy?.group || enemy.spawnEmergence) return;
+      let visual = enemy._spawnVisualRoot;
+      if (!visual) {
+        visual = new THREE.Group();
+        for (const child of [...enemy.group.children]) {
+          enemy.group.remove(child);
+          visual.add(child);
+        }
+        enemy.group.add(visual);
+        enemy._spawnVisualRoot = visual;
+      }
+      const fast = enemy.type === "fast";
+      const heavy = enemy.type === "tank" || enemy.isBoss;
+      const duration = enemy.isBoss ? 2.0 : fast ? 1.05 : heavy ? 1.65 : 1.35;
+      visual.position.set(0, -1.45, 0.28);
+      visual.rotation.set(0.72, 0, 0);
+      visual.scale.set(0.86, 0.48, 0.86);
+      enemy.spawnEmergence = { visual, elapsed: 0, duration };
+
+      const { x, z } = enemy.group.position;
+      const y = enemy.baseY || 0;
+      spawnFx({ x, y: y + 0.05, z, size: 0.62, grow: 3.4, life: 0.72, color: 0x353a3e, opacity: 0.42, additive: false, drag: 0.8 });
+      spawnBurstFx(x, y + 0.10, z, {
+        color: 0x4b4944, count: 5, speed: 1.25, size: 1.05, life: 0.7, additive: false, up: 0.38, opacity: 0.48,
+      });
+    }
+
+    function updateZombieEmergence(enemy, dt) {
+      const emergence = enemy.spawnEmergence;
+      if (!emergence) return;
+      emergence.elapsed = Math.min(emergence.duration, emergence.elapsed + dt);
+      const p = emergence.elapsed / emergence.duration;
+      const rise = THREE.MathUtils.smoothstep(p, 0.04, 0.88);
+      const remaining = 1 - rise;
+      const struggle = Math.sin(emergence.elapsed * 17 + enemy.walkTime) * remaining;
+      const visual = emergence.visual;
+      visual.position.set(struggle * 0.045, -1.45 * remaining + Math.abs(struggle) * 0.045, 0.28 * remaining);
+      visual.rotation.set(0.72 * remaining, 0, struggle * 0.055);
+      visual.scale.set(0.86 + 0.14 * rise, 0.48 + 0.52 * rise, 0.86 + 0.14 * rise);
+      if (p < 1) return;
+      visual.position.set(0, 0, 0);
+      visual.rotation.set(0, 0, 0);
+      visual.scale.set(1, 1, 1);
+      enemy.spawnEmergence = null;
+    }
+
     function spawnExplosionFx(x, y, z) {
       spawnFx({ x, y, z, size: 2, grow: 5, life: 0.22, color: 0xffe0a0, opacity: 1 });
       spawnFx({ x, y, z, size: 3, grow: 3, life: 0.45, color: 0xff7a2a, opacity: 0.85 });
@@ -8923,16 +8974,8 @@
      *  boss handlers that call it need no changes. */
     function checkWeaponUnlocks() {}
 
-    function showWeaponUnlockMsg(label) {
-      const msg = document.createElement("div");
-      msg.style.cssText = "position:fixed;top:30%;left:50%;transform:translate(-50%,-50%);font-size:32px;font-weight:900;color:#4fd1ff;text-shadow:0 0 20px rgba(79,209,255,0.8),0 0 40px rgba(79,209,255,0.4);letter-spacing:3px;z-index:9999;pointer-events:none;opacity:0;animation:bossVicFadeIn 1s ease forwards;white-space:nowrap;";
-      msg.textContent = `解锁武器: ${label}`;
-      document.body.appendChild(msg);
-      setTimeout(() => {
-        msg.style.animation = "bossVicFadeOut 1.5s ease forwards";
-        setTimeout(() => { if (msg.parentNode) msg.remove(); }, 1600);
-      }, 3000);
-    }
+    /** Unlock text removed (the unlock ladder is gone too). */
+    function showWeaponUnlockMsg() {}
 
     function trySelectWeapon(idx) {
       // The first switch of the run ends the intro hold, so the bar starts auto-hiding again.
@@ -10497,19 +10540,33 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       enemy.creature.update(dt, {
         anim: enemy.alive ? (enemy.bossAnimState || "idle") : "idle",
         t: enemy.bossAnimTimer || 0,
-        moving: enemy.alive,
+        moving: enemy.alive && !enemy.spawnEmergence,
         flinch: left > 0 ? Math.min(1, left / Math.max(1, enemy._flinchMs)) : 0,
       });
     }
 
     function updateZombieVisual(enemy, dt, travel = 0) {
-      if (enemy.creature) { updateBossCreatureVisual(enemy, dt); return; }
+      if (enemy.creature) {
+        updateBossCreatureVisual(enemy, dt);
+        updateZombieEmergence(enemy, dt);
+        return;
+      }
+      if (enemy.spawnEmergence) {
+        enemy.moving = false;
+        enemy.gaitAction = null;
+        enemy.meleeElapsed = null;
+        if (enemy.modelMixer) updateRealZombieAnimation(enemy, dt);
+        else if (enemy.alive && Object.hasOwn(ZOMBIE_MIX, enemy.type)) animateProceduralZombie(enemy, dt);
+        updateZombieEmergence(enemy, dt);
+        return;
+      }
       updateZombieGait(enemy, dt, travel);
       if (enemy.modelMixer) {
         updateRealZombieAnimation(enemy, dt);
       } else if (enemy.alive && Object.hasOwn(ZOMBIE_MIX, enemy.type)) {
         animateProceduralZombie(enemy, dt);
       }
+      updateZombieEmergence(enemy, dt);
     }
 
     function animateProceduralZombie(enemy, dt) {
@@ -11222,6 +11279,8 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       };
       root.rotation.y = 0;
       creature.update(0.016, { anim: "idle", t: 0, moving: false });
+      // The fixed pool of effect lights must exist before the first shader compile, so the light count never changes.
+      if (!isTrainingMap(CURRENT_MAP)) ensureBossFxLights();
       return enemy;
     }
 
@@ -17664,8 +17723,10 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     function bossRouteClear(fromX, fromZ, toX, toZ, floorY, radius = 0.68) {
       const dx = toX - fromX, dz = toZ - fromZ;
       const steps = Math.max(1, Math.ceil(Math.hypot(dx, dz) / 0.45));
+      // A big body (the creature) is tested as wall boxes only, from above the floor; small ones keep the old test.
+      const hits = radius > 1 ? (x, z) => circleHitsWallBox(x, z, radius, floorY) : (x, z) => enemyCollidesWall(x, z, radius, floorY);
       for (let i = 1; i <= steps; i++) {
-        if (enemyCollidesWall(fromX + dx * i / steps, fromZ + dz * i / steps, radius, floorY)) return false;
+        if (hits(fromX + dx * i / steps, fromZ + dz * i / steps)) return false;
       }
       return true;
     }
@@ -17853,6 +17914,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           const boss = makeHormoneZombie(x, z, BOSS_HELL_MODE);
           boss.netIndex = i;
           drawEnemyHp(boss);
+          beginZombieEmergence(boss);
           state.enemies.push(boss);
         }
         _spawnRng = null;
@@ -20438,6 +20500,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         addHitIndicator(attacker.group.position.x, attacker.group.position.z);
       }
       updateHud();
+      if (amount > 0) pulseDamageHud();
       if (player.health <= 0) {
         showDeathScreen(attacker);
       }
@@ -21024,6 +21087,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
             state.enemies.push({ alive: false, group: new THREE.Group(), _placeholder: true });
           }
           state.enemies[ei] = e;
+          if (!hydrate && z.a !== 0) beginZombieEmergence(e);
         }
         if (!e || e._placeholder) continue;
         const delta = Math.hypot(z.x - e.group.position.x, z.z - e.group.position.z);
@@ -21108,6 +21172,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         }
         const wasAlive = e.alive;
         e.alive = z.a !== 0;
+        if (!wasAlive && e.alive && !hydrate) beginZombieEmergence(e);
         if (wasAlive && !e.alive && !hydrate && e.group.visible) spawnHumanoidDissolve(e.group, e.group.position);
         if (e.alive) e.dissolveTimer = 0;
         e.group.visible = e.alive;
@@ -21132,7 +21197,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     function updateRemoteEnemies(dt) {
       const blend = 1 - Math.exp(-17 * dt);
       for (const enemy of state.enemies) {
-        if (!enemy.group.visible) continue;
+        if (!enemy.group.visible && !enemy.spawnEmergence) continue;
         const { x, z } = enemy.group.position;
         if (enemy.syncPosition) enemy.group.position.lerp(enemy.syncPosition, blend);
         if (Number.isFinite(enemy.syncYaw)) {
@@ -21220,10 +21285,10 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       const shots = p.fan || [p];
       // Each ball of a fan does less, so the spread is a pressure tool, not a multiplied hit.
       const per = p.damage * (shots.length > 1 ? 0.7 : 1);
-      for (const s of shots) spawnBossProjectile(p.ox, p.oy, p.oz, s.dx, s.dy, s.dz, per, p.target);
+      for (const s of shots) spawnBossProjectile(p.ox, p.oy, p.oz, s.dx, s.dy, s.dz, per, p.target, null, { hell: !!p.hell, floorY: p.floorY ?? 0 });
     }
 
-    function spawnBossProjectile(ox, oy, oz, dx, dy, dz, damage, target = null, netId = null) {
+    function spawnBossProjectile(ox, oy, oz, dx, dy, dz, damage, target = null, netId = null, opts = {}) {
       if (netId == null) netId = ++bossProjectileSerial;
       else bossProjectileSerial = Math.max(bossProjectileSerial, netId);
       const mesh = new THREE.Group();
@@ -21280,7 +21345,8 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       ringA.rotation.x = Math.PI * 0.5;
       ringB.rotation.set(Math.PI * 0.22, Math.PI * 0.5, 0);
       mesh.add(ringA, ringB);
-      mesh.add(new THREE.PointLight(0xff3a08, 4.5, 9, 2));
+      // (No light here: a light added and removed per fireball changes the scene's light count, which recompiles
+      // every lit shader and froze the game for seconds. The ball borrows one of a fixed pool, see bossFxLights.)
 
       const trailPositions = new Float32Array(12 * 3);
       const trailColors = new Float32Array(12 * 3);
@@ -21309,6 +21375,8 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         life: 5,
         damage: damage || 8,
         hp: 60,
+        hell: !!opts.hell,
+        floorY: opts.floorY ?? 0,
       };
       bossProjectiles.push(projectile);
       return projectile;
@@ -21340,12 +21408,368 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       bossLavaImpacts.push({ group, flash, ring, life: 0.48, maxLife: 0.48 });
     }
 
-    function destroyBossProjectile(idx, impact = false) {
+    // ── Fireball explosions ─────────────────────────────────────────────────────
+    // A ball explodes on whatever it touches: a wall or pillar (at the real contact point), the floor, a
+    // player, or a bullet that shoots it down. The blast hurts everything inside its radius with a falloff,
+    // unless cover is in the way, shoves players off the point of impact, and shows itself as a white-hot
+    // flash, a shock ring on the surface, fire and smoke, flying embers, a cooling scorch mark, a light
+    // flash and a thump you feel. The lights come from a FIXED pool made once per map: adding or removing a
+    // light recompiles every lit shader (seconds of freeze), so nothing here ever creates one mid-fight.
+    const BOSS_FX_LIGHTS = 4;             // 0..2 ride fireballs, 3 is the blast flash
+    let bossFxLights = [];
+    let bossFxWarm = false;
+    const bossBlasts = [];
+    const bossScorches = [];
+    let _blastTex = null, _blastNoise = null;
+    const _scorchGeo = new THREE.CircleGeometry(1, 28);
+    const _ringGeo = new THREE.RingGeometry(0.82, 1, 44);
+    const _blastO = new THREE.Vector3(), _blastN = new THREE.Vector3(), _blastP = new THREE.Vector3();
+    const _blastUp = new THREE.Vector3(0, 1, 0), _blastZ = new THREE.Vector3(0, 0, 1);
+
+    function ensureBossFxLights() {
+      if (bossFxLights.length) return;
+      for (let i = 0; i < BOSS_FX_LIGHTS; i++) {
+        const light = new THREE.PointLight(0xff5a1a, 0, i === BOSS_FX_LIGHTS - 1 ? 14 : 9, 2);
+        light.position.set(0, -120, 0);
+        scene.add(light);
+        bossFxLights.push(light);
+      }
+    }
+
+    function removeBossFxLights() {
+      for (const light of bossFxLights) scene.remove(light);
+      bossFxLights.length = 0;
+      bossFxWarm = false;
+    }
+
+    function blastTextures() {
+      if (_blastTex) return _blastTex;
+      let seed = 0x2545f491;
+      const rnd = () => { seed = (Math.imul(seed ^ (seed >>> 15), 1 | seed) + 0x6d2b79f5) >>> 0; return seed / 4294967296; };
+      const make = (size, paint) => {
+        const c = document.createElement("canvas");
+        c.width = c.height = size;
+        paint(c.getContext("2d"), size);
+        const t = new THREE.CanvasTexture(c);
+        t.colorSpace = THREE.SRGBColorSpace;
+        return t;
+      };
+      // Irregular, lumpy puffs (several overlapping soft blobs), never a perfect disc.
+      const puffs = (g, size, n, spread, rMin, rMax, stops) => {
+        for (let i = 0; i < n; i++) {
+          const x = size / 2 + (rnd() - 0.5) * spread * size, y = size / 2 + (rnd() - 0.5) * spread * size;
+          const r = size * (rMin + rnd() * (rMax - rMin));
+          const grd = g.createRadialGradient(x, y, 0, x, y, r);
+          for (const [o, col] of stops) grd.addColorStop(o, col);
+          g.fillStyle = grd;
+          g.fillRect(0, 0, size, size);
+        }
+      };
+      _blastTex = {
+        fire: make(128, (g, n) => puffs(g, n, 18, 0.36, 0.14, 0.3, [[0, "rgba(255,246,220,.8)"], [0.4, "rgba(255,150,50,.5)"], [1, "rgba(255,60,10,0)"]])),
+        smoke: make(128, (g, n) => puffs(g, n, 22, 0.34, 0.14, 0.3, [[0, "rgba(78,70,64,.5)"], [0.6, "rgba(44,40,37,.26)"], [1, "rgba(22,20,18,0)"]])),
+        ember: make(32, (g, n) => { const grd = g.createRadialGradient(16, 16, 0, 16, 16, 16); grd.addColorStop(0, "rgba(255,255,255,1)"); grd.addColorStop(0.35, "rgba(255,190,90,.8)"); grd.addColorStop(1, "rgba(255,90,20,0)"); g.fillStyle = grd; g.fillRect(0, 0, n, n); }),
+        scorch: make(128, (g, n) => {
+          puffs(g, n, 10, 0.18, 0.2, 0.34, [[0, "rgba(255,255,255,.95)"], [0.7, "rgba(255,255,255,.55)"], [1, "rgba(255,255,255,0)"]]);
+          for (let i = 0; i < 26; i++) {
+            const a = rnd() * 6.283, d = 0.28 + rnd() * 0.18, r = n * (0.012 + rnd() * 0.03);
+            g.fillStyle = "rgba(255,255,255,.7)";
+            g.beginPath(); g.arc(n / 2 + Math.cos(a) * d * n, n / 2 + Math.sin(a) * d * n, r, 0, 6.283); g.fill();
+          }
+        }),
+      };
+      return _blastTex;
+    }
+
+    function playBossBlastSfx(distance) {
+      if (!audioCtx || !audioSfx) return;
+      const vol = THREE.MathUtils.clamp(1.15 - distance / 45, 0.12, 1);
+      const now = audioCtx.currentTime;
+      if (!_blastNoise) {
+        _blastNoise = audioCtx.createBuffer(1, Math.floor(audioCtx.sampleRate * 0.42), audioCtx.sampleRate);
+        const d = _blastNoise.getChannelData(0);
+        for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      }
+      const src = audioCtx.createBufferSource(); src.buffer = _blastNoise;
+      const lp = audioCtx.createBiquadFilter(); lp.type = "lowpass";
+      lp.frequency.setValueAtTime(2400, now); lp.frequency.exponentialRampToValueAtTime(150, now + 0.36);
+      const g = audioCtx.createGain();
+      g.gain.setValueAtTime(0.0001, now); g.gain.linearRampToValueAtTime(vol, now + 0.012);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + 0.4);
+      src.connect(lp); lp.connect(g); g.connect(audioSfx); src.start(now); src.stop(now + 0.42);
+      const osc = audioCtx.createOscillator(); osc.type = "sine";
+      osc.frequency.setValueAtTime(115, now); osc.frequency.exponentialRampToValueAtTime(30, now + 0.32);
+      const og = audioCtx.createGain();
+      og.gain.setValueAtTime(vol * 0.75, now); og.gain.exponentialRampToValueAtTime(0.0001, now + 0.34);
+      osc.connect(og); og.connect(audioSfx); osc.start(now); osc.stop(now + 0.36);
+    }
+
+    /** The scorch left on a surface: glows orange, cools to black, then fades. `surf` is how far the point sits off the surface. */
+    function spawnBossScorch(point, normal, size, surf) {
+      const T = blastTextures();
+      const mat = new THREE.MeshBasicMaterial({
+        map: T.scorch, color: 0xff7a22, transparent: true, opacity: 0.92, depthWrite: false,
+        polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
+      });
+      const mesh = new THREE.Mesh(_scorchGeo, mat);
+      mesh.quaternion.setFromUnitVectors(_blastZ, normal);
+      mesh.position.copy(point).addScaledVector(normal, 0.03 - surf);
+      mesh.rotateZ(Math.random() * 6.283);
+      mesh.scale.setScalar(1.7 * size * (0.85 + Math.random() * 0.3));
+      mesh.raycast = () => {};
+      mesh.renderOrder = 2;
+      scene.add(mesh);
+      bossScorches.push({ mesh, mat, age: 0 });
+      while (bossScorches.length > 10) disposeBossScorch(bossScorches.shift());
+    }
+
+    function disposeBossScorch(sc) {
+      scene.remove(sc.mesh);
+      sc.mat.dispose();
+    }
+
+    function disposeBossBlast(b) {
+      scene.remove(b.group);
+      b.group.traverse((n) => { if (n.material) n.material.dispose(); });
+      b.embers.geometry.dispose();
+    }
+
+    function spawnBossBlast(point, normal, size = 1, surf = 0, quiet = false) {
+      const T = blastTextures();
+      const group = new THREE.Group();
+      group.position.copy(point);
+      const sprite = (map, color, blending, opacity) => {
+        const m = new THREE.Sprite(new THREE.SpriteMaterial({ map, color, transparent: true, opacity, depthWrite: false, blending }));
+        m.raycast = () => {};
+        return m;
+      };
+      const flash = sprite(T.fire, 0xfff0c8, THREE.AdditiveBlending, 1);
+      group.add(flash);
+      const fire = [], smoke = [];
+      for (let i = 0; i < 5; i++) {
+        const sp = sprite(T.fire, 0xff8a2a, THREE.AdditiveBlending, 0.9);
+        sp.userData = { v: new THREE.Vector3((Math.random() - 0.5) * 3.4, 1.2 + Math.random() * 3.4, (Math.random() - 0.5) * 3.4).multiplyScalar(size), size: (1.7 + Math.random() * 1.5) * size, spin: (Math.random() - 0.5) * 3 };
+        group.add(sp); fire.push(sp);
+      }
+      for (let i = 0; i < 5; i++) {
+        const sp = sprite(T.smoke, 0x4a423c, THREE.NormalBlending, 0);
+        sp.userData = { v: new THREE.Vector3((Math.random() - 0.5) * 2.2, 0.9 + Math.random() * 1.6, (Math.random() - 0.5) * 2.2).multiplyScalar(size), size: (2.4 + Math.random() * 1.6) * size, spin: (Math.random() - 0.5) * 1.2 };
+        group.add(sp); smoke.push(sp);
+      }
+      const ring = new THREE.Mesh(_ringGeo, new THREE.MeshBasicMaterial({ color: 0xffa04a, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false }));
+      ring.quaternion.setFromUnitVectors(_blastZ, normal);
+      ring.position.copy(normal).multiplyScalar(0.05 - surf);
+      ring.raycast = () => {};
+      group.add(ring);
+      // Embers fly out of the surface, bend down under gravity and die.
+      const N = 26, pos = new Float32Array(N * 3), vel = new Float32Array(N * 3);
+      const tangent = _blastO.set(0, 1, 0).cross(normal);
+      if (tangent.lengthSq() < 1e-4) tangent.set(1, 0, 0);
+      tangent.normalize();
+      const bitangent = _blastP.copy(normal).cross(tangent);
+      for (let i = 0; i < N; i++) {
+        const a = Math.random() * 6.283, spread = Math.random() * 0.9, speed = (4 + Math.random() * 7) * size;
+        const nx = normal.x * (0.5 + Math.random() * 0.7), ny = normal.y * (0.5 + Math.random() * 0.7), nz = normal.z * (0.5 + Math.random() * 0.7);
+        vel[i * 3] = (nx + (tangent.x * Math.cos(a) + bitangent.x * Math.sin(a)) * spread) * speed;
+        vel[i * 3 + 1] = (ny + (tangent.y * Math.cos(a) + bitangent.y * Math.sin(a)) * spread) * speed;
+        vel[i * 3 + 2] = (nz + (tangent.z * Math.cos(a) + bitangent.z * Math.sin(a)) * spread) * speed;
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+      const embers = new THREE.Points(geo, new THREE.PointsMaterial({ map: T.ember, size: 0.26, color: 0xffa040, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: true }));
+      embers.frustumCulled = false;
+      group.add(embers);
+      scene.add(group);
+      bossBlasts.push({ group, flash, fire, smoke, ring, embers, pos, vel, N, age: 0, life: 2.4, size, normal: normal.clone() });
+      spawnBossScorch(point, normal, size, surf);
+      // What the player feels and hears, by distance.
+      if (quiet) return;
+      const dist = point.distanceTo(player.position), near = THREE.MathUtils.clamp(1 - dist / 16, 0, 1);
+      if (near > 0) { state.camShake = Math.max(state.camShake || 0, 0.38 * near); addQuake(0.7 * near); }
+      playBossBlastSfx(dist);
+    }
+
+    /**
+     * Compiles every shader the boss fight will use (the creature, a fireball and its blast, the ground
+     * warnings, and the zombies it summons) while the loading screen is still up. A shader compiles the first
+     * time something that needs it is drawn, and each of those used to freeze the game for seconds mid-fight.
+     */
+    async function prewarmBossFight() {
+      const boss = state.enemies.find((e) => e.isCreatureBoss && !e.trainingDummy);
+      if (!boss || bossFxWarm) return;
+      ensureBossFxLights();
+      bossFxWarm = true;
+      // Everything is put in front of the camera for one real frame: compile() alone skips the shadow-pass
+      // shaders (skinned zombies, the creature), which would otherwise compile on first sight mid-fight.
+      const fwd = camera.getWorldDirection(new THREE.Vector3());
+      const base = camera.position.clone().addScaledVector(fwd, 5);
+      base.y = camera.position.y - 1.6;
+      spawnBossProjectile(base.x, base.y + 1, base.z, 0, 0, 0, 1, null, null, { floorY: -500 });
+      spawnBossBlast(base.clone(), _blastUp.clone(), 1, 0, true);
+      spawnBossTelegraph(boss, 1, 0.1, 0xff5a2a);
+      spawnBossLane(boss, 0xff5a2a);
+      const extras = [];
+      for (const type of boss.isHellBoss ? ["normal", "fast", "gunner", "tank"] : ["normal"]) {
+        const z = makeZombie(base.x, base.z, type);
+        z.group.position.set(base.x + extras.length * 0.8, base.y, base.z);
+        extras.push(z);
+      }
+      try {
+        // Never let loading hang on the compile (a hidden tab can stall it): give it a few seconds at most.
+        if (typeof renderer.compileAsync === "function") {
+          await Promise.race([renderer.compileAsync(scene, camera), new Promise((resolve) => setTimeout(resolve, 8000))]);
+        } else renderer.compile(scene, camera);
+        renderer.render(scene, camera);
+      } catch (error) {
+        console.warn("[boss prewarm]", error);
+      }
+      for (const z of extras) scene.remove(z.group);
+      clearBossProjectileEffects();
+    }
+
+    function updateBossBlasts(dt) {
+      let flashLit = false;
+      const smoothstep = THREE.MathUtils.smoothstep;
+      for (let i = bossBlasts.length - 1; i >= 0; i--) {
+        const b = bossBlasts[i];
+        b.age += dt;
+        const a = b.age;
+        const fk = Math.min(1, a / 0.16);
+        b.flash.visible = a < 0.2;
+        b.flash.scale.setScalar(b.size * (1.6 + 7 * fk));
+        b.flash.material.opacity = 1 - fk * fk;
+        const rk = Math.min(1, a / 0.5), ease = 1 - (1 - rk) * (1 - rk);
+        b.ring.scale.setScalar(Math.max(0.01, b.size * (0.6 + 5.8 * ease)));
+        b.ring.material.opacity = (1 - rk) * 0.85;
+        for (const sp of b.fire) {
+          const k = a / 0.9;
+          sp.visible = k < 1;
+          if (!sp.visible) continue;
+          const u = sp.userData;
+          sp.position.copy(u.v).multiplyScalar(a * (1 - 0.45 * k));
+          const sz = u.size * (0.5 + 1.1 * Math.sqrt(k));
+          sp.scale.set(sz, sz, 1);
+          sp.material.opacity = 0.9 * (1 - k) * (1 - k);
+          sp.material.rotation = a * u.spin;
+        }
+        for (const sp of b.smoke) {
+          const k = a / 2.2, u = sp.userData;
+          sp.visible = k < 1;
+          if (!sp.visible) continue;
+          sp.position.copy(u.v).multiplyScalar(a * (1 - 0.35 * k));
+          const sz = u.size * (0.5 + 0.9 * Math.sqrt(k));
+          sp.scale.set(sz, sz, 1);
+          sp.material.opacity = 0.5 * smoothstep(a, 0.1, 0.32) * (1 - k);
+          sp.material.rotation = a * u.spin;
+        }
+        // Embers: ballistic, fading.
+        const pos = b.pos, vel = b.vel;
+        for (let e = 0; e < b.N; e++) {
+          vel[e * 3 + 1] -= 15 * dt;
+          pos[e * 3] += vel[e * 3] * dt; pos[e * 3 + 1] += vel[e * 3 + 1] * dt; pos[e * 3 + 2] += vel[e * 3 + 2] * dt;
+        }
+        b.embers.geometry.attributes.position.needsUpdate = true;
+        b.embers.material.opacity = Math.max(0, 1 - a / 1.3);
+        if (a < 0.45 && !flashLit) {
+          const light = bossFxLights[BOSS_FX_LIGHTS - 1];
+          if (light) {
+            light.position.copy(b.group.position).addScaledVector(b.normal, 0.7);
+            light.intensity = 90 * b.size * (1 - a / 0.45) ** 2;
+            light.color.setHex(0xff8a30);
+            flashLit = true;
+          }
+        }
+        if (a >= b.life) { disposeBossBlast(b); bossBlasts.splice(i, 1); }
+      }
+      const flashLight = bossFxLights[BOSS_FX_LIGHTS - 1];
+      if (flashLight && !flashLit) flashLight.intensity = 0;
+      for (let i = bossScorches.length - 1; i >= 0; i--) {
+        const sc = bossScorches[i];
+        sc.age += dt;
+        sc.mat.color.setHex(0xff7a22).lerp(_scorchCool, Math.min(1, sc.age / 2.6));
+        sc.mat.opacity = 0.92 * (1 - smoothstep(sc.age, 11, 16));
+        if (sc.age > 16) { disposeBossScorch(sc); bossScorches.splice(i, 1); }
+      }
+    }
+    const _scorchCool = new THREE.Color(0x0d0a08);
+
+    /** How much of a blast reaches a body `d` metres from its centre: all of it close in, 30% at the edge. */
+    function blastFalloff(d, R) { return d <= 1 ? 1 : d >= R ? 0 : 0.3 + 0.7 * (1 - (d - 1) / (R - 1)); }
+
+    /** Where along from -> to a ball first meets a wall box (the last free point), or null. */
+    function bossBallWallHit(from, to, out) {
+      if (!soundBlocked(from, to, 0.24)) return null;
+      let lo = 0, hi = 1;
+      for (let i = 0; i < 7; i++) {
+        const mid = (lo + hi) / 2;
+        _blastO.copy(from).lerp(to, mid);
+        if (soundBlocked(from, _blastO, 0.24)) hi = mid; else lo = mid;
+      }
+      return out.copy(from).lerp(to, lo);
+    }
+
+    /** The face a ball hit, from which way it was travelling and which axis is actually blocked. */
+    function bossBallSurfaceNormal(p, dir, out) {
+      const ax = Math.abs(dir.x), ay = Math.abs(dir.y), az = Math.abs(dir.z);
+      if (ay > ax && ay > az) return out.set(0, -Math.sign(dir.y), 0);
+      const blockedX = soundBlocked(p, _blastO.set(p.x + Math.sign(dir.x) * 0.6, p.y, p.z), 0.24);
+      const blockedZ = soundBlocked(p, _blastO.set(p.x, p.y, p.z + Math.sign(dir.z) * 0.6), 0.24);
+      if (blockedX && !blockedZ) return out.set(-Math.sign(dir.x), 0, 0);
+      if (blockedZ && !blockedX) return out.set(0, 0, -Math.sign(dir.z));
+      return ax > az ? out.set(-Math.sign(dir.x), 0, 0) : out.set(0, 0, -Math.sign(dir.z));
+    }
+
+    /** A shove away from the blast, a few steps so walls stop it, plus a little pop off the floor. */
+    function blastPush(origin, body, f) {
+      if (!controlsInputReady()) return;
+      const dx = body.x - origin.x, dz = body.z - origin.z, h = Math.hypot(dx, dz) || 1;
+      const steps = 3, per = 3.2 * f / steps;
+      const target = new THREE.Vector3();
+      for (let i = 0; i < steps; i++) {
+        target.set(player.position.x + dx / h * per, player.position.y, player.position.z + dz / h * per);
+        const resolved = resolveWallSliding(target);
+        if (resolved.equals(player.position)) break;
+        player.position.copy(resolved);
+      }
+      if (player.onGround && f > 0.5) player.velocityY = Math.max(player.velocityY, 4.5 * f);
+    }
+
+    /** Explode a ball: area damage (host only) and the blast itself. `surf` is how far the point is off the surface. */
+    function detonateBossBall(idx, point, normal, surf = 0) {
+      const bp = bossProjectiles[idx];
+      if (!bp) return;
+      const R = bp.hell ? 4.2 : 3.4;
+      const origin = _blastO.copy(normal).multiplyScalar(0.3).add(point);
+      const body = _bbBody;
+      if (player.health > 0) {
+        playerBodyCenter(body);
+        const d = origin.distanceTo(body), f = blastFalloff(d, R);
+        // Cover works: a pillar between the blast and you takes it (unless you are right on top of it).
+        if (f > 0 && (d < 1.1 || !soundBlocked(origin, body, 0.1))) {
+          damagePlayer(bp.damage * f, null);
+          blastPush(origin, body, f);
+        }
+      }
+      if (MULTIPLAYER && ARENA_COOP) {
+        for (const [id, rp] of remotePlayers) {
+          if (rp.isDown || !rp.group.visible) continue;
+          body.set(rp.x, rp.y - 0.45, rp.z);
+          const d = origin.distanceTo(body), f = blastFalloff(d, R);
+          if (f > 0 && (d < 1.1 || !soundBlocked(origin, body, 0.1))) {
+            socket.emit("hit", { target: id, damage: bp.damage * f, x: point.x, z: point.z, hitKind: "boss" });
+          }
+        }
+      }
+      destroyBossProjectile(idx, true, point, normal, surf);
+    }
+
+    function destroyBossProjectile(idx, impact = false, point = null, normal = null, surf = 0) {
       const bp = bossProjectiles[idx];
       if (!bp) return;
       if (impact) {
-        spawnBossLavaImpact(bp.mesh.position);
-        createSparks(bp.mesh.position.clone(), 0xff7a2a);
+        const at = point ? _blastP.copy(point) : _blastP.copy(bp.mesh.position);
+        spawnBossBlast(at.clone(), normal || _blastUp, bp.hell ? 1.25 : 1, surf);
+        createSparks(at.clone(), 0xff7a2a);
       }
       scene.remove(bp.mesh);
       scene.remove(bp.trail);
@@ -21448,6 +21872,11 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         disposeBossVisual(fx.group);
       }
       bossLavaImpacts.length = 0;
+      for (const b of bossBlasts) disposeBossBlast(b);
+      bossBlasts.length = 0;
+      for (const sc of bossScorches) disposeBossScorch(sc);
+      bossScorches.length = 0;
+      for (const light of bossFxLights) light.intensity = 0;
     }
 
     /**
@@ -21480,7 +21909,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     }
 
     function updateBossProjectiles(dt) {
-      updateBossLavaImpacts(dt);
+      updateBossBlasts(dt);
       const authoritative = !MULTIPLAYER || !ARENA_COOP || ZOMBIE_AUTHORITY;
       for (let i = bossProjectiles.length - 1; i >= 0; i--) {
         const bp = bossProjectiles[i];
@@ -21501,9 +21930,24 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         bp.mesh.position.x += bp.velocity.x * dt;
         bp.mesh.position.y += bp.velocity.y * dt;
         bp.mesh.position.z += bp.velocity.z * dt;
-        if (authoritative && soundBlocked(_bbPrev, bp.mesh.position, .24)) {
-          destroyBossProjectile(i, true);
-          continue;
+        if (authoritative) {
+          // Wall or pillar: explode at the contact point, on the face it hit.
+          _bbSeg.subVectors(bp.mesh.position, _bbPrev);
+          if (bossBallWallHit(_bbPrev, bp.mesh.position, _blastP)) {
+            const hitAt = _blastP.clone();
+            bossBallSurfaceNormal(hitAt, _bbSeg, _blastN);
+            detonateBossBall(i, hitAt, _blastN.clone(), 0.24);
+            continue;
+          }
+          // Floor: a ball that misses you comes down and bursts there instead of sailing through it.
+          if (bp.velocity.y < 0 && bp.mesh.position.y <= bp.floorY + 0.2) {
+            const span = _bbPrev.y - bp.mesh.position.y;
+            const k = span > 1e-4 ? THREE.MathUtils.clamp((_bbPrev.y - (bp.floorY + 0.2)) / span, 0, 1) : 1;
+            const hitAt = _bbPrev.clone().lerp(bp.mesh.position, k);
+            hitAt.y = bp.floorY + 0.05;
+            detonateBossBall(i, hitAt, _blastUp.clone(), 0);
+            continue;
+          }
         }
         const tp = bp.trailPositions;
         for (let ti = 11; ti > 0; ti--) {
@@ -21515,7 +21959,9 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         bp.trail.geometry.attributes.position.needsUpdate = true;
         bp.life -= dt;
         if (bp.life <= 0 || bp.hp <= 0) {
-          destroyBossProjectile(i, bp.hp <= 0);
+          // Shot down: it bursts where it is (and still hurts if you are close). A timeout just fizzles.
+          if (bp.hp <= 0 && authoritative) detonateBossBall(i, bp.mesh.position.clone(), _blastUp.clone(), 0);
+          else destroyBossProjectile(i, bp.hp <= 0);
           continue;
         }
         if (!authoritative) continue;
@@ -21528,19 +21974,26 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           return (body.x - _bbPrev.x - _bbSeg.x * t) ** 2 + (body.y - _bbPrev.y - _bbSeg.y * t) ** 2
             + (body.z - _bbPrev.z - _bbSeg.z * t) ** 2 < BOSS_BALL_HIT_RADIUS ** 2;
         };
-        if (player.health > 0 && inPath(playerBodyCenter(_bbBody))) {
-          damagePlayer(bp.damage, null);
-          destroyBossProjectile(i, true);
-          continue;
-        }
-        if (MULTIPLAYER && ARENA_COOP) {
-          for (const [id, rp] of remotePlayers) {
+        // A body in the ball's path sets it off (the blast then hurts everyone in range, this body most).
+        let struck = player.health > 0 && inPath(playerBodyCenter(_bbBody));
+        if (!struck && MULTIPLAYER && ARENA_COOP) {
+          for (const rp of remotePlayers.values()) {
             if (rp.isDown || !rp.group.visible || !inPath(_bbBody.set(rp.x, rp.y - 0.45, rp.z))) continue;
-            socket.emit("hit", { target: id, damage: bp.damage, x: bp.mesh.position.x, z: bp.mesh.position.z, hitKind: "boss" });
-            destroyBossProjectile(i, true);
+            struck = true;
             break;
           }
         }
+        if (struck) {
+          _blastN.copy(bp.velocity).normalize().negate();
+          detonateBossBall(i, bp.mesh.position.clone(), _blastN.clone(), 0);
+          continue;
+        }
+      }
+      // Fireballs borrow the pool's first lights; unused ones stay at zero (the count never changes).
+      for (let k = 0; k < BOSS_FX_LIGHTS - 1; k++) {
+        const light = bossFxLights[k], ball = bossProjectiles[k];
+        if (!light) break;
+        if (ball) { light.position.copy(ball.mesh.position); light.intensity = 4.5; } else light.intensity = 0;
       }
     }
 
@@ -21611,17 +22064,49 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
 
     function bossCollisionRadius(enemy) { return BOSS_RADIUS * enemy.creature.scale * 0.9; }
 
+    // The boss's footprint: circles laid over its body (metres at scale 1, x right, z forward): head, thorax,
+    // abdomen, leg roots and feet, and the two claws. They turn with the creature, so its whole length and
+    // width are solid, not one circle round its middle. A circle only counts walls and pillars (not the
+    // floor), tested from 0.45 m up so a gauntlet deck under it is not an obstacle.
+    const BOSS_FOOTPRINT = [
+      [0, 2.3, 1.0], [0, 1.0, 1.35], [0, -0.4, 1.35], [0, -1.8, 1.3], [0, -3.0, 1.0],
+      [2.6, 1.9, 0.5], [-2.6, 1.9, 0.5], [2.6, 0.5, 0.5], [-2.6, 0.5, 0.5], [2.6, -0.9, 0.5], [-2.6, -0.9, 0.5],
+      [1.4, 3.3, 0.9], [-1.4, 3.3, 0.9], [1.2, 4.6, 0.7], [-1.2, 4.6, 0.7],
+    ];
+    const BOSS_FOOTPRINT_REACH = 4.9;     // every circle lies within this distance of the origin (radius included)
+
+    function circleHitsWallBox(x, z, r, floorY) {
+      _enemyWallSphere.center.set(x, floorY + 0.45 + r, z);
+      _enemyWallSphere.radius = r;
+      let hit = false;
+      forEachNearbyWallBox(x, z, (box) => { if (!hit && !box.wideTop && box.intersectsSphere(_enemyWallSphere)) hit = true; });
+      return hit;
+    }
+
+    /** Is the boss, standing at (x, z) facing `yaw`, overlapping a wall, pillar or machine (or off its deck)? */
+    function bossBlockedAt(enemy, x, z, yaw = enemy.visYaw) {
+      const sc = enemy.creature.scale, floorY = enemy.baseY || 0;
+      if (isGauntletMap(CURRENT_MAP) && enemyCollidesWall(x, z, 0.3, floorY)) return true;   // no floor under it
+      if (!circleHitsWallBox(x, z, BOSS_FOOTPRINT_REACH * sc, floorY)) return false;          // nothing near: skip the detail
+      const c = Math.cos(yaw), sn = Math.sin(yaw);
+      for (let i = 0; i < BOSS_FOOTPRINT.length; i++) {
+        const f = BOSS_FOOTPRINT[i], lx = f[0] * sc, lz = f[1] * sc;
+        if (circleHitsWallBox(x + lx * c + lz * sn, z - lx * sn + lz * c, f[2] * sc, floorY)) return true;
+      }
+      return false;
+    }
+
     /** Walk the boss along (dirX, dirZ). With `slide` it slides along walls; without, any contact stops it (a charge). */
     function moveBossBody(enemy, dirX, dirZ, speed, dt, slide = true) {
-      const pos = enemy.group.position, floorY = enemy.baseY || 0, cr = bossCollisionRadius(enemy);
+      const pos = enemy.group.position;
       const total = speed * dt;
       const steps = Math.max(1, Math.ceil(total / 0.4)), sl = total / steps;
       for (let i = 0; i < steps; i++) {
         const nx = pos.x + dirX * sl, nz = pos.z + dirZ * sl;
-        if (!enemyCollidesWall(nx, nz, cr, floorY)) { pos.x = nx; pos.z = nz; continue; }
+        if (!bossBlockedAt(enemy, nx, nz)) { pos.x = nx; pos.z = nz; continue; }
         if (slide) {
-          if (Math.abs(dirX) > 0.05 && !enemyCollidesWall(nx, pos.z, cr, floorY)) { pos.x = nx; continue; }
-          if (Math.abs(dirZ) > 0.05 && !enemyCollidesWall(pos.x, nz, cr, floorY)) { pos.z = nz; continue; }
+          if (Math.abs(dirX) > 0.05 && !bossBlockedAt(enemy, nx, pos.z)) { pos.x = nx; continue; }
+          if (Math.abs(dirZ) > 0.05 && !bossBlockedAt(enemy, pos.x, nz)) { pos.z = nz; continue; }
         }
         return true;
       }
@@ -21630,13 +22115,13 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
 
     /** If the boss is embedded in geometry (spawned against a pillar), step it out. */
     function freeBossFromWalls(enemy) {
-      const pos = enemy.group.position, floorY = enemy.baseY || 0, cr = bossCollisionRadius(enemy);
-      if (!enemyCollidesWall(pos.x, pos.z, cr, floorY)) return;
-      for (let d = 0.2; d <= 4; d += 0.2) {
+      const pos = enemy.group.position;
+      if (!bossBlockedAt(enemy, pos.x, pos.z)) return;
+      for (let d = 0.3; d <= 6; d += 0.3) {
         for (let a = 0; a < 16; a++) {
           const ang = a * Math.PI / 8 + d * 0.3;
           const tx = pos.x + Math.sin(ang) * d, tz = pos.z + Math.cos(ang) * d;
-          if (!enemyCollidesWall(tx, tz, cr, floorY)) { pos.x = tx; pos.z = tz; return; }
+          if (!bossBlockedAt(enemy, tx, tz)) { pos.x = tx; pos.z = tz; return; }
         }
       }
     }
@@ -21663,8 +22148,10 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       const creature = enemy.creature, scale = creature.scale;
       const pos = enemy.group.position, floorY = enemy.baseY || 0;
       const cr = bossCollisionRadius(enemy);
+      const routeR = BOSS_RADIUS * scale * 1.3;   // pathing keeps this much clear (a bit under the nav grid's margin)
       const target = getEnemyTarget(enemy);
-      const tx = target.x, tz = target.z, ty = target.y ?? 1.65;
+      const tx = target.x, ty0 = target.y;
+      const tz = target.z, ty = ty0 ?? 1.65;
       const dx = tx - pos.x, dz = tz - pos.z;
       const dist = Math.hypot(dx, dz);
       const enraged = enemy.hp < enemy.maxHp * 0.5;
@@ -21702,7 +22189,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
             enemy.cdQuake = tune.cdQuake * cdMul + BOSS_DURATIONS.quaking;
             spawnBossTelegraph(enemy, tune.quakeR, QUAKE_SLAM_S, lineColor);
           } else if (los && dist >= 9 && dist <= 42 && enemy.cdCharge <= 0
-            && bossRouteClear(pos.x, pos.z, pos.x + dx / dist * 11, pos.z + dz / dist * 11, floorY, cr)) {
+            && bossRouteClear(pos.x, pos.z, pos.x + dx / dist * 11, pos.z + dz / dist * 11, floorY, routeR)) {
             begin("chargeWind");
             enemy._chargeLocked = false;
             enemy.cdCharge = tune.cdCharge * cdMul + BOSS_DURATIONS.chargeWind + 1.5;
@@ -21713,10 +22200,10 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
             enemy._rangedBallReleased = false;
             enemy._lobAim = { x: tx, y: ty - 0.45, z: tz };
             enemy.cdLob = tune.cdLob * cdMul + BOSS_DURATIONS.rangedAttack;
-          } else if (dist > cr + 1.9) {
+          } else if (dist > cr + 2.6) {
             // Stalk: straight at the player when the lane is clear, otherwise round the obstacles.
             const ox = pos.x, oz = pos.z;
-            const canReach = (x, z) => bossRouteClear(ox, oz, x, z, floorY, cr);
+            const canReach = (x, z) => bossRouteClear(ox, oz, x, z, floorY, routeR);
             const probe = Math.min(3.4, dist);
             const px = ox + dx / dist * probe, pz = oz + dz / dist * probe;
             const next = los && canReach(px, pz) ? { x: px, z: pz } : (bossWaypoint ? bossWaypoint(ox, oz, tx, tz, canReach) : null);
@@ -21732,7 +22219,36 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
               }
             }
             enemy._speedNow = THREE.MathUtils.damp(enemy._speedNow || 0, tune.speed * (enraged ? 1.12 : 1), 3, dt);
-            if (dirX || dirZ) { moveBossBody(enemy, dirX, dirZ, enemy._speedNow, dt); moved = true; }
+            const nowMs = performance.now();
+            if (nowMs < (enemy._escapeUntil || 0) && enemy._escapeDir) {
+              // Unsticking: crab-walk along the clear direction it found, whatever way it is facing. If that
+              // way closes up (the body turns as it goes), drop it and look again next frame.
+              const ex0 = pos.x, ez0 = pos.z;
+              moveBossBody(enemy, enemy._escapeDir.x, enemy._escapeDir.z, 3.6, dt);
+              moved = true;
+              if (Math.hypot(pos.x - ex0, pos.z - ez0) < 3.6 * dt * 0.3) enemy._escapeUntil = 0;
+            } else if (dirX || dirZ) {
+              const sx = pos.x, sz = pos.z;
+              moveBossBody(enemy, dirX, dirZ, enemy._speedNow, dt);
+              moved = true;
+              // A long body can end up pinned beside a pillar: it cannot turn (the turned body would hit it) and the
+              // way ahead is blocked by its own claws. If it makes no headway, it picks a clear direction instead.
+              const progress = Math.hypot(pos.x - sx, pos.z - sz) / Math.max(1e-4, enemy._speedNow * dt);
+              enemy._stuckT = progress < 0.3 ? (enemy._stuckT || 0) + dt : Math.max(0, (enemy._stuckT || 0) - dt * 2);
+              if (enemy._stuckT > 0.3) {
+                enemy._stuckT = 0.25;
+                let best = null, bestScore = -9;
+                const gx = dx / Math.max(dist, 1e-4), gz = dz / Math.max(dist, 1e-4);
+                for (let k = 0; k < 16; k++) {
+                  const ang = k * Math.PI / 8, ex = Math.sin(ang), ez = Math.cos(ang);
+                  // Clear at two distances, so it is a real way out and not just a gap.
+                  if (bossBlockedAt(enemy, pos.x + ex * 1.2, pos.z + ez * 1.2) || bossBlockedAt(enemy, pos.x + ex * 2.4, pos.z + ez * 2.4)) continue;
+                  const score = 0.55 * (ex * gx + ez * gz) + 0.45 * (ex * dirX + ez * dirZ);
+                  if (score > bestScore) { bestScore = score; best = { x: ex, z: ez }; }
+                }
+                if (best) { enemy._escapeDir = best; enemy._escapeUntil = nowMs + 900; }
+              }
+            }
           }
           if (!moved) enemy._speedNow = THREE.MathUtils.damp(enemy._speedNow || 0, 0, 6, dt);
           break;
@@ -21778,6 +22294,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
             releaseBossBalls({
               ox: _bossTip.x, oy: _bossTip.y, oz: _bossTip.z,
               fan: bossLobFan(_bossTip, aim, enemy.isHellBoss), damage: tune.ball,
+              hell: enemy.isHellBoss, floorY,
               target: enemy.targetId || (MULTIPLAYER ? socket.id : null),
             });
             state.camShake = Math.max(state.camShake || 0, 0.1);
@@ -21847,10 +22364,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         }
         case "stunned": {
           turnRate = 0;
-          if (!enemy._stunNotified) {
-            enemy._stunNotified = true;
-            showGauntletNotice(tr("bossStunNotice", "ARMOUR CRACKED — SHOOT THE CORE"), 1.8);
-          }
+          // No text: the split armour, the glowing core and the crash itself say it is open.
           if (t >= (enemy.stunFor || BOSS_DURATIONS.stunned)) {
             playBossRoarSfx(enemy);
             finish();
@@ -21861,7 +22375,16 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           finish();
       }
 
-      if (turnRate > 0) enemy.visYaw = dampAngle(enemy.visYaw, wantYaw, dt, turnRate);
+      if (turnRate > 0) {
+        // A long body cannot swing into a wall: if the turned footprint would overlap something, turn half
+        // as far, or hold, until the way is clear.
+        const want = dampAngle(enemy.visYaw, wantYaw, dt, turnRate);
+        if (!bossBlockedAt(enemy, pos.x, pos.z, want)) enemy.visYaw = want;
+        else {
+          const half = enemy.visYaw + (want - enemy.visYaw) * 0.5;
+          if (!bossBlockedAt(enemy, pos.x, pos.z, half)) enemy.visYaw = half;
+        }
+      }
       enemy.facingYaw = enemy.visYaw;
       enemy.group.rotation.y = enemy.visYaw;
       enemy.group.position.y = floorY;
@@ -21969,6 +22492,13 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
             enemy.group.traverse((o) => { if (o.isMesh) o.castShadow = shadowOn; });
           }
         }
+        if (enemy.alive && enemy.spawnEmergence) {
+          if (!enemy.isBoss) enemy.group.visible = d2 < cullDistance * cullDistance;
+          enemy.moving = false;
+          enemy.meleeElapsed = null;
+          updateZombieVisual(enemy, dt);
+          continue;
+        }
         // Distance gate: skip AI for enemies far from the player. Boss always runs
         // (it's the only enemy and must react globally). For zombies, only run the
         // heavy AI logic when the enemy is within ~60 units of the player.
@@ -22048,6 +22578,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
             enemy.group.visible = true;
             const sp = findSpawnPosition(SPAWN_MIN_DIST_BASE);
             enemy.group.position.set(sp.x, 0, sp.z);
+            beginZombieEmergence(enemy);
             enemy.aware = false;
             enemy.hiddenTimer = 0;
             enemy.targetId = null;
@@ -22131,6 +22662,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
                   minion.netIndex = state.enemies.length;
                   minion.aware = true;
                   minion._summonedByBoss = enemy;
+                  beginZombieEmergence(minion);
                   drawEnemyHp(minion);
                   state.enemies.push(minion);
                 }
@@ -22150,6 +22682,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
                 miniBoss.hp = miniBoss.maxHp = miniBoss.baseTankHp = miniBoss.baseGunnerHp = 1500;
                 miniBoss.netIndex = state.enemies.length;
                 miniBoss.aware = true;
+                beginZombieEmergence(miniBoss);
                 drawEnemyHp(miniBoss);
                 state.enemies.push(miniBoss);
               }
@@ -22171,6 +22704,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
               minion.netIndex = state.enemies.length;
               minion.summonedBy = enemy;
               minion._summonedByBoss = enemy;
+              beginZombieEmergence(minion);
               drawEnemyHp(minion);
               state.enemies.push(minion);
               enemy.summonCount++;
@@ -23406,14 +23940,6 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
               clearHellLootRing();
             }
             persistUnlocks();
-            const msg = document.createElement("div");
-            msg.style.cssText = "position:fixed;top:35%;left:50%;transform:translate(-50%,-50%);font-size:36px;font-weight:900;color:#ffd700;text-shadow:0 0 20px rgba(255,215,0,0.8),0 0 40px rgba(255,165,0,0.5);letter-spacing:4px;z-index:9999;pointer-events:none;opacity:0;animation:bossVicFadeIn 1s ease forwards;";
-            msg.textContent = tr("devGunPickup", "Got ～～～ — press / to equip");
-            document.body.appendChild(msg);
-            setTimeout(() => {
-              msg.style.animation = "bossVicFadeOut 1.5s ease forwards";
-              setTimeout(() => { if (msg.parentNode) msg.remove(); }, 1600);
-            }, 4000);
           }
         }
 
@@ -23747,6 +24273,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         }
       }
 
+      try { await prewarmBossFight(); } catch (err) { console.warn("[boss prewarm]", err); }
       compileSceneShaders();
 
       weaponRoot.visible = true;
@@ -23943,8 +24470,6 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       startGame("gauntlet", false, false, false);
     }
 
-    const routeMission = createMissionConsole(menuEl);
-
     function showMenuPanel(id) {
       // Query-based rather than a hardcoded list, so panels injected from JS (the backpack
       // screen) are hidden along with the rest instead of stacking on top of them.
@@ -23952,7 +24477,13 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       clearLobbyErr();
       const panel = document.getElementById(id);
       panel.style.display = "flex";
-      routeMission(panel);
+      const routeOpen = id !== "menuMain";
+      const routeEntry = id === "menuLoadout" ? "btnLoadout"
+        : id === "menuTrainingMode" ? "btnTraining" : "btnStart";
+      menuEl.dataset.route = routeOpen ? id : "";
+      for (const buttonId of ["btnStart", "btnTraining", "btnLoadout"]) {
+        document.getElementById(buttonId)?.setAttribute("aria-expanded", String(routeOpen && buttonId === routeEntry));
+      }
       panel.parentElement.scrollTop = 0;
       panel.scrollTop = 0;
       const back = panel.querySelector(".menu-back-btn");
@@ -24939,6 +25470,11 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           }
           return best;
         },
+        /** Fires a boss fireball from a point with a velocity (explosion testing); fx() reports what is alive. */
+        ball(ox, oy, oz, vx, vy, vz, damage = 24, hell = false) { return spawnBossProjectile(ox, oy, oz, vx, vy, vz, damage, null, null, { hell, floorY: 0 }); },
+        fx() { return { balls: bossProjectiles.length, blasts: bossBlasts.length, scorch: bossScorches.length, lights: bossFxLights.map((l) => +l.intensity.toFixed(1)) }; },
+        /** Is the boss (standing at x, z facing yaw) overlapping a wall? (footprint testing) */
+        bossBlocked(x, z, yaw) { const b = state.enemies.find((e) => e.isCreatureBoss && !e.trainingDummy); return b ? bossBlockedAt(b, x, z, yaw) : null; },
         /** Runs the enemy simulation for `seconds` of game time at a fixed step, without waiting for frames (boss testing). */
         sim(seconds = 1, step = 0.033, onStep = null) {
           for (let t = 0; t < seconds; t += step) {

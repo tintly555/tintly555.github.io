@@ -1,5 +1,5 @@
 import { makeGauntletObstacle } from "./gauntlet-obstacles.js?v=5";
-import { createGauntletArt } from "./gauntlet-art.js?v=11";
+import { createGauntletArt } from "./gauntlet-art.js?v=12";
 
 const EYE_HEIGHT = 1.65;
 const BURIED = -90;

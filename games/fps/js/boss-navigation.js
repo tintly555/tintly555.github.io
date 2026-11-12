@@ -16,8 +16,8 @@ export function createBossNavigation(isBlocked, min = -49, max = 49, cellSize = 
   function closest(x, z, accept) {
     const cx = column(x), cz = column(z);
     let best = -1, bestDistance = Infinity;
-    for (let dz = -2; dz <= 2; dz++) {
-      for (let dx = -2; dx <= 2; dx++) {
+    for (let dz = -4; dz <= 4; dz++) {
+      for (let dx = -4; dx <= 4; dx++) {
         const col = cx + dx, row = cz + dz;
         if (col < 0 || col >= size || row < 0 || row >= size) continue;
         const idx = row * size + col;

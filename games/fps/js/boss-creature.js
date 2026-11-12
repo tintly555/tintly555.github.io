@@ -15,7 +15,7 @@
  * moves the whole animal while the planted feet stay put.
  */
 
-import { getBossParts, TAIL_LEN, STINGER_TIP, topY } from "./boss-parts.js?v=3";
+import { getBossParts, TAIL_LEN, STINGER_TIP, topY } from "./boss-parts.js?v=5";
 
 const TAU = Math.PI * 2;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -97,8 +97,8 @@ export function createBossCreature(THREE, { hell = false } = {}) {
     const w = 0.86 - Math.abs(z - 0.2) * 0.07;
     const split = i >= 2 && i <= 4;
     if (!split) {
-      const m = part(P.plate, skin.mat);
-      m.scale.set(w / 0.8, 1, 0.46 / 0.5);
+      const m = part(P.plate, skin.mat, false);
+      m.scale.set(w / 0.8, 0.72 + (i % 3) * 0.06, (0.43 + (i % 2) * 0.025) / 0.5);
       m.position.set(0, topY(z) - 0.09, z);
       m.rotation.x = -Math.atan2(topY(z + 0.2) - topY(z - 0.2), 0.4) * 0.9;
       body.add(m);
@@ -106,7 +106,7 @@ export function createBossCreature(THREE, { hell = false } = {}) {
       for (const side of [-1, 1]) {
         const hinge = new THREE.Group();
         hinge.position.set(side * 0.62, topY(z) - 0.07, z);
-        const half = part(P.plate, skin.mat);
+        const half = part(P.plate, skin.mat, false);
         half.scale.set(w * 0.5 / 0.8, 1, 0.48 / 0.5);
         half.position.set(-side * w * 0.36, 0.02, 0);
         hinge.add(half);
