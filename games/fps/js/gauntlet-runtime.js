@@ -1,5 +1,5 @@
 import { makeGauntletObstacle } from "./gauntlet-obstacles.js?v=5";
-import { createGauntletArt } from "./gauntlet-art.js?v=12";
+import { createGauntletArt } from "./gauntlet-art.js?v=14";
 
 const EYE_HEIGHT = 1.65;
 const BURIED = -90;
@@ -19,6 +19,27 @@ export function createGauntletRuntime(THREE, solid, decorate, hooks, style = nul
   const ramps = [];
   let time = 0;
   let shieldUntil = 0;
+  const _portalOne = new THREE.Vector3(1, 1, 1);
+  const _portalSourceFrame = new THREE.Matrix4();
+  const _portalSourceInverse = new THREE.Matrix4();
+  const _portalExitFrame = new THREE.Matrix4();
+  const _portalHalfTurn = new THREE.Matrix4().makeRotationY(Math.PI);
+  const _portalSourceQuaternion = new THREE.Quaternion();
+  const _portalExitQuaternion = new THREE.Quaternion();
+  const _portalLocalNow = new THREE.Vector3();
+  const _portalCrossing = new THREE.Vector3();
+
+  /** Map a world pose through the paired gate frames, including their facing directions. */
+  function portalTransform(source, target = new THREE.Matrix4()) {
+    const exit = source?.partnerPortal;
+    if (!source?.group || !exit?.group) return target.identity();
+    source.group.getWorldQuaternion(_portalSourceQuaternion);
+    exit.group.getWorldQuaternion(_portalExitQuaternion);
+    _portalSourceFrame.compose(source.center, _portalSourceQuaternion, _portalOne);
+    _portalSourceInverse.copy(_portalSourceFrame).invert();
+    _portalExitFrame.compose(exit.center, _portalExitQuaternion, _portalOne);
+    return target.copy(_portalExitFrame).multiply(_portalHalfTurn).multiply(_portalSourceInverse);
+  }
 
   const art = createGauntletArt(THREE, {
     decorate,
@@ -68,7 +89,6 @@ export function createGauntletRuntime(THREE, solid, decorate, hooks, style = nul
         const drawn = art.drawNode(piece, x, y, z, toWorld);
         const node = { ...piece, ...drawn, x, y, z, used: false, inside: false, armed: null };
         if (piece.to) node.to = { x: originX + piece.to.x, y: originY + piece.to.y + EYE_HEIGHT, z: originZ - piece.to.z };
-        if (piece.kind === "portal" && toWorld) node.shift = { dx: toWorld.x - x, dy: toWorld.y - y, dz: toWorld.z - z };
         if (piece.kind === "target") node.mesh.userData.gauntletTarget = () => {
           section.links.set(node.id, { from: time, until: Infinity });
           node.used = true;
@@ -120,7 +140,9 @@ export function createGauntletRuntime(THREE, solid, decorate, hooks, style = nul
       const heldOpen = opened || (inDoorway && m.amount > .7);
       m.amount = m.breakable && opened ? 1 : clamp(m.amount + dt * (heldOpen ? 5 : -2.4), 0, 1);
       active = !m.breakable || !opened;
-      dy = m.amount * (m.h + .45);
+      // A gate slides down into the deck. Rising would leave the slab hanging in the air above the opening,
+      // since nothing holds its top up. Fully open it sits below the deck surface, so nothing is left in the gap.
+      dy = -m.amount * (m.h + .45);
     } else {
       const { kind, period = 4, phase = 0, trigger } = motion;
       const age = section.started === null ? 0 : time - section.started;
@@ -243,17 +265,22 @@ export function createGauntletRuntime(THREE, solid, decorate, hooks, style = nul
   function useNode(section, node, player) {
     if (node.kind === "target") return;
     if (node.kind === "portal") {
-      // Crossing the opening from the front shifts the player by the portal offset, so what they
-      // saw through it is exactly what is around them next frame.
-      if (!node.shift) return;
-      const q = player.position;
-      const side = Math.sign(q.z - node.z) || 1;
-      const crossed = node.lastSide !== undefined && node.lastSide > 0 && side < 0;
-      node.lastSide = side;
-      if (crossed && (((q.x - node.x) / 1.2) ** 2 + ((q.y - (node.y + 1.95)) / 1.6) ** 2) < 1) {
-        hooks.shift(node.shift.dx, node.shift.dy, node.shift.dz);
-        hooks.signal("portal");
+      if (!node.portal?.partnerPortal) return;
+      portalTransform(node.portal, _portalTransform);
+      _portalLocalNow.copy(player.position).applyMatrix4(_portalSourceInverse);
+      const previous = node.portalPrevious;
+      if (previous && previous.z > 0 && _portalLocalNow.z <= 0) {
+        const t = previous.z / Math.max(1e-6, previous.z - _portalLocalNow.z);
+        _portalCrossing.lerpVectors(previous, _portalLocalNow, t);
+        // Leave enough clearance for the player's capsule inside the oval opening.
+        const fits = (_portalCrossing.x / .81) ** 2 + (_portalCrossing.y / .77) ** 2 < 1;
+        if (fits) {
+          hooks.traversePortal?.(_portalTransform, node.portal);
+          hooks.signal("portal");
+        }
       }
+      if (!node.portalPrevious) node.portalPrevious = new THREE.Vector3();
+      node.portalPrevious.copy(_portalLocalNow);
       return;
     }
     const p = player.position;
@@ -469,5 +496,6 @@ export function createGauntletRuntime(THREE, solid, decorate, hooks, style = nul
 
   const movers = () => sections.flatMap(s => s.movers.filter(m => m.type === "deck" && m.motion && ["slide", "orbit", "weight", "ride"].includes(m.motion.kind)));
   const shieldLeft = () => Math.max(0, shieldUntil - time);
-  return { build, update, modifiers, resetAfter, ramps, movers, portals: art.portals, shieldLeft };
+  const _portalTransform = new THREE.Matrix4();
+  return { build, update, modifiers, resetAfter, ramps, movers, portals: art.portals, portalTransform, shieldLeft };
 }

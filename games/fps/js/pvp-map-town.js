@@ -126,7 +126,35 @@ export function town(core) {
       // Boardwalks (0.2 high) in front of the buildings: props that stand on one are lifted onto it, never half sunk in it.
       const boards = [];
       const lift = (x, z, r = 0.3) => (boards.some((b) => x + r >= b[0] && x - r <= b[1] && z + r >= b[2] && z - r <= b[3]) ? 0.2 : 0);
-      const trim = kit.batch(2), shutters = kit.batch(2), steps = kit.batch(3), roofTrim = kit.batch(2), braces = kit.batch(2), doorLeaves = kit.batch(2);
+      const glassPanes = kit.batch(2), windowGlass = N.glass({ tint: 0xd2e8ee, min: 0.09, max: 0.7 }), trim = kit.batch(2), shutters = kit.batch(2), steps = kit.batch(3), roofTrim = kit.batch(2), braces = kit.batch(2);
+      const swingDoors = [];
+      const addSwingDoor = (cx, cz, y0, width, height, alongX, out) => {
+        const leafW = width - 0.08, leafH = height - 0.1, baseYaw = alongX ? 0 : -Math.PI / 2;
+        const hingeX = alongX ? cx - leafW / 2 : cx, hingeZ = alongX ? cz : cz - leafW / 2;
+        const pivot = new THREE.Group();
+        pivot.position.set(hingeX, y0, hingeZ);
+        pivot.rotation.y = baseYaw;
+        const panel = new THREE.Mesh(new THREE.BoxGeometry(leafW, leafH, 0.14), woodDark);
+        panel.position.set(leafW / 2, leafH / 2, 0);
+        panel.castShadow = panel.receiveShadow = true;
+        pivot.add(panel);
+        for (const side of [-1, 1]) {
+          const knob = new THREE.Mesh(new THREE.SphereGeometry(0.055, 10, 8), brass);
+          knob.position.set(leafW * 0.78, leafH * 0.42, side * 0.09);
+          pivot.add(knob);
+        }
+        kit.deco(pivot);
+        const segments = 8, segmentLength = leafW / segments, colliders = [];
+        for (let i = 0; i < segments; i++) {
+          const distance = (i + 0.5) * segmentLength;
+          const angle = baseYaw;
+          const bx = hingeX + Math.cos(angle) * distance, bz = hingeZ - Math.sin(angle) * distance;
+          const collider = kit.proxy(segmentLength + 0.025, leafH, 0.18, bx, y0, bz);
+          collider.userData.wallBox.dyn = true;
+          colliders.push(collider);
+        }
+        swingDoors.push({ cx, cz, y0, width, height, leafW, segmentLength, hingeX, hingeZ, baseYaw, out, alongX, pivot, colliders, angle: 0, openUntil: -Infinity, pushSign: 1 });
+      };
       /** An upper floor slab with a rectangular hole (for a stair). */
       const slab = (x0, x1, z0, z1, y, hole, material) => {
         const t = 0.3;
@@ -151,6 +179,10 @@ export function town(core) {
           put(0.15, hole.h + 0.1, 0.16, -w / 2 - 0.075, ym); put(0.15, hole.h + 0.1, 0.16, w / 2 + 0.075, ym);   // jambs
           if (isWindow) {
             put(w + 0.5, 0.1, 0.34, 0, y0 - 0.04, 0.08);                                            // sill
+            // The pane stops bullets and the invisible proxy makes its glass a real barrier to movement.
+            put(w, hole.h, 0.04, 0, ym, -(t / 2 + 0.07), glassPanes);
+            if (alongX) kit.shotBlocker(w, hole.h, 0.1, cx, y0, cz); else kit.shotBlocker(0.1, hole.h, w, cx, y0, cz);
+            if (alongX) kit.proxy(w, hole.h, 0.16, cx, y0, cz); else kit.proxy(0.16, hole.h, w, cx, y0, cz);
             if (alongX) { trim.box(0.06, hole.h, 0.06, cx, ym, cz).box(w, 0.06, 0.06, cx, ym + hole.h * 0.1, cz); }
             else { trim.box(0.06, hole.h, 0.06, cx, ym, cz).box(0.06, 0.06, w, cx, ym + hole.h * 0.1, cz); }
             if (w < 2.4) {
@@ -164,13 +196,9 @@ export function town(core) {
               }
             }
           } else {
-            // A door: a worn step in front, and the leaf standing open against the wall.
+            // A worn threshold and a hinged leaf that swings away when the player pushes through.
             put(w + 0.5, 0.12, 0.5, 0, 0.06, 0.2, steps);
-            if (w < 2.6) {
-              const leafW = w - 0.1;
-              if (alongX) doorLeaves.box(leafW, hole.h - 0.1, 0.13, cx - w / 2 - 0.2 - leafW / 2 * 0, ym, cz + out * (t / 2 + 0.05 + leafW / 2), Math.PI / 2);
-              else doorLeaves.box(leafW, hole.h - 0.1, 0.13, cx + out * (t / 2 + 0.05 + leafW / 2), ym, cz - w / 2 - 0.2, 0);
-            }
+            if (w < 2.6) addSwingDoor(cx, cz, y0, w, hole.h, alongX, out);
           }
         }
       };
@@ -336,9 +364,45 @@ export function town(core) {
       building({ x0: 13, x1: 23, z0: 7, z1: 17, front: "n", wall: adobe, label: "DOCTOR", door: 0.4 });
       kit.box(2.2, 0.8, 1.0, 21, 0, 15.6, woodDark); kit.box(1.8, 0.5, 0.9, 15.5, 0, 15.5, plank); kit.box(1.0, 1.9, 1.0, 14, 0, 9.5, woodDark);
 
+      // Dustfall doors swing on the shared map clock and collide as short oriented slabs.
+      // The leaf opens before the player reaches it, then eases back shut after they pass.
+      world.tick((dt, t, p) => {
+        const people = world.players?.() || (p ? [p] : []);
+        for (const door of swingDoors) {
+          let target = 0;
+          const actor = people.map(person => {
+            const dx = person.x - door.cx, dz = person.z - door.cz;
+            const planeDistance = door.alongX ? Math.abs(dz) : Math.abs(dx);
+            const alongDistance = door.alongX ? Math.abs(dx) : Math.abs(dz);
+            const feet = person.feet ?? 0;
+            const withinReach = planeDistance < 3 && alongDistance < door.width / 2 + 1.25
+              && feet < door.y0 + door.height + 0.35 && feet + 1.9 > door.y0;
+            return { person, dx, dz, withinReach, distance: planeDistance * planeDistance + alongDistance * alongDistance };
+          }).filter(item => item.withinReach).sort((a, b) => a.distance - b.distance)[0];
+          if (actor) {
+            door.openUntil = t + 1.2;
+            const signedSide = door.alongX ? actor.dz : actor.dx;
+            const side = Math.sign(signedSide) || door.out;
+            door.pushSign = side * door.out * (door.alongX ? 1 : -1);
+          }
+          if (actor || t < door.openUntil) target = door.pushSign * 1.36;
+          door.angle += THREE.MathUtils.clamp(target - door.angle, -dt * 5.2, dt * 5.2);
+          const yaw = door.baseYaw + door.angle;
+          door.pivot.rotation.y = yaw;
+          for (let i = 0; i < door.colliders.length; i++) {
+            const collider = door.colliders[i], distance = (i + 0.5) * door.segmentLength;
+            collider.position.set(door.hingeX + Math.cos(yaw) * distance, door.y0 + door.height / 2, door.hingeZ - Math.sin(yaw) * distance);
+            collider.rotation.y = yaw;
+            collider.updateMatrixWorld(true);
+            collider.userData.wallBox.setFromObject(collider);
+          }
+        }
+      });
+
       // Apply the merged dressing batches.
+      { const gm = glassPanes.mesh(windowGlass); if (gm) { gm.renderOrder = 4; kit.deco(gm); } }
       kit.deco(trim.mesh(plankWhite, { shadow: true })); kit.deco(shutters.mesh(shutterMat, { shadow: true })); kit.deco(steps.mesh(stone, { shadow: true }));
-      kit.deco(roofTrim.mesh(woodDark, { shadow: true })); kit.deco(braces.mesh(woodDark, { shadow: true })); kit.deco(doorLeaves.mesh(woodDark, { shadow: true }));
+      kit.deco(roofTrim.mesh(woodDark, { shadow: true })); kit.deco(braces.mesh(woodDark, { shadow: true }));
 
       // ── The plaza: well, water tower, windmill, wagons ───────────────────────────────
       const lathe = (pts, material, x, y, z, seg = 18) => {
@@ -417,7 +481,7 @@ export function town(core) {
           kit.deco((() => { const m = new THREE.Mesh(new THREE.BoxGeometry(a ? 2.6 : 0.12, 0.12, a ? 0.12 : 2.6), woodDark); m.position.set(x + (a ? 3.2 : 0), 0.5, z + (a ? 0 : 3.2)); m.castShadow = true; m.raycast = () => {}; return m; })());
         };
         void wheelsB;
-        wagon(-16, 2.6, 0); wagon(14, -2.4, 0); wagon(-2, 12, Math.PI / 2);
+        wagon(-16, 2.6, 0); wagon(14, -2.4, 0); wagon(-29, -1.4, Math.PI / 2);   // the third used to stand inside the church, through its pews
         // Barrels: a bulged profile with iron hoops.
         const barrelProfile = [[0.001, 0], [0.38, 0], [0.46, 0.2], [0.52, 0.55], [0.46, 0.9], [0.38, 1.1], [0.001, 1.1]];
         const hoopB = kit.batch(1);

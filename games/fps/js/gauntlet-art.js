@@ -363,24 +363,30 @@ export function createGauntletArt(THREE, { decorate, solid, scroll, spin, tick, 
       g.fillRect(8, y - 12, 48, 24);
     }
   });
-  /** Charred steel plate with a network of glowing cracks: albedo plus an emissive map. */
+  /** A tileless basalt-and-molten-rock surface: dark crust islands around flowing orange seams. */
   function hotPlate() {
     const hit = cache.get("t:hotplate");
     if (hit) return hit;
-    const size = 256, a = fbm(size, 41, 5, 4), b = fbm(size, 77, 3, 6);
+    const size = 512, a = fbm(size, 41, 5, 4), warpX = fbm(size, 53, 3, 5);
+    const warpY = fbm(size, 67, 3, 6), detail = fbm(size, 89, 4, 10);
     const make = () => { const c = document.createElement("canvas"); c.width = c.height = size; return c; };
     const color = make(), emit = make(), cc = color.getContext("2d"), ec = emit.getContext("2d");
     const ci = cc.createImageData(size, size), ei = ec.createImageData(size, size);
     for (let i = 0; i < a.length; i++) {
-      const ridge = 1 - Math.abs(a[i] * 2 - 1);
-      const crack = Math.pow(Math.max(0, ridge - .88) / .12, 1.3);
-      const heat = Math.min(1, crack * (.55 + b[i] * .9));
-      const x = i % size, y = (i / size) | 0;
-      const seam = (x < 3 || y < 3 || (x > 126 && x < 130) || (y > 126 && y < 130)) ? .3 : 1;
-      const crust = (28 + a[i] * 34) * seam;
-      ci.data[i * 4] = crust * 1.1 + heat * 50; ci.data[i * 4 + 1] = crust * .9; ci.data[i * 4 + 2] = crust * .8; ci.data[i * 4 + 3] = 255;
-      ei.data[i * 4] = 255 * Math.pow(heat, .6); ei.data[i * 4 + 1] = 120 * Math.pow(heat, 1.1) + 110 * Math.pow(heat, 3);
-      ei.data[i * 4 + 2] = 30 * Math.pow(heat, 2) + 110 * Math.pow(heat, 5); ei.data[i * 4 + 3] = 255;
+      const warped = Math.min(1, Math.max(0, a[i] + (warpX[i] - .5) * .22 + (warpY[i] - .5) * .16));
+      const ridge = 1 - Math.abs(warped * 2 - 1);
+      const heat = Math.min(1, Math.max(0, (ridge - .79) / .17)) ** 1.2 * (.68 + detail[i] * .55);
+      const core = Math.min(1, Math.max(0, (ridge - .94) / .06)) * heat;
+      const rock = .72 + detail[i] * .55 + a[i] * .22;
+      const k = i * 4;
+      ci.data[k] = 18 * rock + heat * (148 + core * 70);
+      ci.data[k + 1] = 13 * rock + heat * (34 + core * 105);
+      ci.data[k + 2] = 11 * rock + heat * (8 + core * 16);
+      ci.data[k + 3] = 255;
+      ei.data[k] = 255 * heat;
+      ei.data[k + 1] = heat * (52 + core * 145);
+      ei.data[k + 2] = heat * (5 + core * 22);
+      ei.data[k + 3] = 255;
     }
     cc.putImageData(ci, 0, 0);
     ec.putImageData(ei, 0, 0);
@@ -670,28 +676,51 @@ export function createGauntletArt(THREE, { decorate, solid, scroll, spin, tick, 
     }
   }
 
-  /** Red-hot floor plates: charred crust over glowing cracks, a breathing glow, haze and rising embers. */
+  /** Exposed lava in a broken basalt basin, with moving molten veins, heat haze and embers. */
   function heater(piece, x, y, z) {
     const { w, d } = piece;
     const set = hotPlate();
-    const maps = { map: copy(set.map, Math.max(1, w / 2.6), Math.max(1, d / 2.6)), emissiveMap: copy(set.emissiveMap, Math.max(1, w / 2.6), Math.max(1, d / 2.6)) };
-    const material = new THREE.MeshStandardMaterial({ map: maps.map, emissiveMap: maps.emissiveMap, emissive: 0xffffff, emissiveIntensity: 1.6, roughness: .85, metalness: .3 });
-    floorPlane(w, d, material, x, y + .04, z);
-    for (const side of [-1, 1]) {
-      const rail = new THREE.Mesh(new THREE.BoxGeometry(.2, .16, d), darkMetal());
-      rail.position.set(x + side * (w / 2 - .1), y + .08, z);
-      add(rail);
-    }
-    const spill = floorPlane(w + 3, d + 3, new THREE.MeshBasicMaterial({
-      color: 0xff5a1c, map: radialMap(), transparent: true, opacity: .5, depthWrite: false, blending: THREE.AdditiveBlending,
-    }), x, y + .07, z);
+    const maps = { map: copy(set.map), emissiveMap: copy(set.emissiveMap) };
+    const material = new THREE.MeshStandardMaterial({ map: maps.map, emissiveMap: maps.emissiveMap, emissive: 0xffffff, emissiveIntensity: 1.15, roughness: .62, metalness: .04 });
+    const makeBasin = (width, depth, seed) => {
+      const geometry = new THREE.PlaneGeometry(width, depth, 40, 56);
+      const position = geometry.attributes.position;
+      const smooth = value => { const t = Math.max(0, Math.min(1, value)); return t * t * (3 - 2 * t); };
+      for (let i = 0; i < position.count; i++) {
+        const px = position.getX(i), pz = position.getY(i);
+        const nx = px / (width / 2), nz = pz / (depth / 2);
+        const edge = Math.max(Math.abs(nx), Math.abs(nz));
+        if (edge > .62) {
+          const a = Math.atan2(nz, nx);
+          const ragged = Math.sin(a * 7 + seed) * .035 + Math.sin(a * 13 - seed * 1.7) * .022 + Math.sin(a * 23 + seed * .6) * .012;
+          const scale = 1 + ragged * smooth((edge - .62) / .38);
+          position.setXY(i, px * scale, pz * scale);
+        }
+        position.setZ(i, Math.sin(nx * 7 + seed) * Math.sin(nz * 5 - seed) * .012);
+      }
+      position.needsUpdate = true;
+      geometry.computeVertexNormals();
+      return geometry;
+    };
+    const basalt = new THREE.Mesh(makeBasin(w + .5, d + .5, x * .17 + z * .11), new THREE.MeshStandardMaterial({ color: 0x211916, roughness: .98, metalness: 0 }));
+    basalt.rotation.x = -Math.PI / 2;
+    basalt.position.set(x, y + .018, z);
+    basalt.receiveShadow = true;
+    add(basalt);
+    const lava = new THREE.Mesh(makeBasin(w, d, x * .17 + z * .11 + 1.9), material);
+    lava.rotation.x = -Math.PI / 2;
+    lava.position.set(x, y + .042, z);
+    lava.receiveShadow = true;
+    add(lava);
     airStreaks({ origin: new THREE.Vector3(x, y + .2, z), dir: [0, 1, 0], length: 3.6, spread: [w * .45, d * .45], speed: 1.7, count: 40, color: 0xffb070, opacity: .2 });
     motes({ x, y: y + 1.4, z, w, h: 2.8, d, vy: 1, count: 46, color: 0xffa040, size: .07, opacity: .9, sway: .5 });
     let t = Math.random() * 6;
     tick(dt => {
       t += dt;
-      material.emissiveIntensity = 1.35 + Math.sin(t * 2.1) * .3 + Math.sin(t * 7.3) * .12;
-      spill.material.opacity = .42 + Math.sin(t * 2.1) * .1;
+      const flow = (t * .008) % 1;
+      maps.map.offset.set(0, flow);
+      maps.emissiveMap.offset.set(0, flow);
+      material.emissiveIntensity = 1.05 + Math.sin(t * 1.8) * .13 + Math.sin(t * 4.7) * .05;
     });
   }
 
@@ -840,9 +869,10 @@ export function createGauntletArt(THREE, { decorate, solid, scroll, spin, tick, 
     });
   }
   /** One end of a portal: frame, bracing, plinth and the live opening. */
-  function portalGate(tone, x, y, z, partner) {
+  function portalGate(tone, x, y, z, partner, facing = 0) {
     const group = new THREE.Group();
     group.position.set(x, y, z);
+    group.rotation.y = facing;
     const frame = new THREE.Mesh(new THREE.TorusGeometry(PORTAL_RADIUS, .13, 14, 48), new THREE.MeshStandardMaterial({
       color: 0x59626b, emissive: tone, emissiveIntensity: .35, roughness: .35, metalness: .85,
     }));
@@ -853,17 +883,21 @@ export function createGauntletArt(THREE, { decorate, solid, scroll, spin, tick, 
     lip.position.y = PORTAL_LIFT;
     lip.scale.y = PORTAL_STRETCH;
     group.add(lip);
+    const bulletBlockers = [frame, lip];
     for (const side of [-1, 1]) {
       const leg = new THREE.Mesh(new THREE.BoxGeometry(.22, PORTAL_LIFT + .2, .32), darkMetal());
       leg.position.set(side * (PORTAL_RADIUS + .12), (PORTAL_LIFT + .2) / 2 - .05, 0);
       group.add(leg);
+      bulletBlockers.push(leg);
       const clamp = new THREE.Mesh(new THREE.BoxGeometry(.42, .36, .44), lightMetal());
       clamp.position.set(side * PORTAL_RADIUS * .98, PORTAL_LIFT, 0);
       group.add(clamp);
+      bulletBlockers.push(clamp);
     }
     const plinth = new THREE.Mesh(new THREE.BoxGeometry(PORTAL_RADIUS * 2 + 1.2, .22, 1.1), darkMetal());
     plinth.position.y = .11;
     group.add(plinth);
+    bulletBlockers.push(plinth);
     const material = portalMaterial(tone);
     const disc = new THREE.Mesh(new THREE.CircleGeometry(PORTAL_RADIUS - .1, 64), material);
     disc.position.y = PORTAL_LIFT;
@@ -871,7 +905,7 @@ export function createGauntletArt(THREE, { decorate, solid, scroll, spin, tick, 
     group.add(disc);
     add(group);
     portals.push({
-      group, disc, uniforms: material.uniforms, rt: null,
+      group, disc, bulletBlockers, uniforms: material.uniforms, rt: null,
       center: new THREE.Vector3(x, y + PORTAL_LIFT, z),
       partner: new THREE.Vector3(partner.x, partner.y + PORTAL_LIFT, partner.z),
     });
@@ -908,12 +942,16 @@ export function createGauntletArt(THREE, { decorate, solid, scroll, spin, tick, 
       return { mesh: body, lamp };
     }
     if (kind === "portal" && toWorld) {
-      const entry = portalGate(tone, x, y, z, toWorld);
-      const exit = portalGate(tone, toWorld.x, toWorld.y, toWorld.z, { x, y, z });
+      const entry = portalGate(tone, x, y, z, toWorld, 0);
+      // The exit faces back along the course. A half turn in its frame makes the
+      // incoming direction continue through the destination instead of reversing.
+      const exit = portalGate(tone, toWorld.x, toWorld.y, toWorld.z, { x, y, z }, Math.PI);
       const entryPortal = portals[portals.length - 2], exitPortal = portals[portals.length - 1];
       entryPortal.partnerGate = exit.parent;
       exitPortal.partnerGate = entry.parent;
-      return { mesh: entry };
+      entryPortal.partnerPortal = exitPortal;
+      exitPortal.partnerPortal = entryPortal;
+      return { mesh: entry, portal: entryPortal };
     }
     if (["portal", "airKick", "fuel"].includes(kind)) {
       const radius = (kind === "airKick" ? 1.65 : kind === "portal" ? 1.2 : .72) / 2;
@@ -923,6 +961,16 @@ export function createGauntletArt(THREE, { decorate, solid, scroll, spin, tick, 
       const pad = new THREE.Mesh(new THREE.CylinderGeometry(radius * .8, radius * .9, .06, 20), metal(0x30373e));
       pad.position.set(x, y + .04, z);
       add(pad);
+      // A hoop with nothing under it reads as floating. A post stands it on the pad, just behind the hoop's plane,
+      // and a short arm joins the post to the hoop's centre.
+      if (kind !== "portal") {
+        const post = new THREE.Mesh(new THREE.CylinderGeometry(.035, .045, lift, 12), metal(0x59616a));
+        post.position.set(x, y + lift / 2, z - .07);
+        add(post);
+        const arm = new THREE.Mesh(new THREE.BoxGeometry(.1, .05, .07), metal(0x59616a));
+        arm.position.set(x, y + lift, z - .035);
+        add(arm);
+      }
       return { mesh: hoop };
     }
     if (kind === "mine") {

@@ -488,26 +488,41 @@ export function createNature(THREE) {
       }
     });
   }
-  /** A saguaro: a ribbed trunk with arms that rise from an elbow. Mesher geometry, vertex-tinted green. */
+  /** A saguaro: a ribbed trunk with arms that leave it horizontally, bend through an elbow and rise. Each limb is one smooth sweep, closed with a round tip. */
   function cactus(mesh, rnd, x, z, h) {
-    const r = 0.3 + h * 0.03, tint = [0.9 + rnd() * 0.15, 1, 0.85 + rnd() * 0.15], segs = 6;
-    const path = (x0, y0, z0, dx, dz, hh, rad, arm) => {
-      let px = x0, py = y0, pz = z0;
-      for (let i = 1; i <= segs; i++) {
-        const t = i / segs, bend = arm ? 0 : (rnd() - 0.5) * 0.05;
-        const nx = x0 + dx * (arm ? Math.min(1, t * 2) * 0.9 : 0) + bend * hh * t, nz = z0 + dz * (arm ? Math.min(1, t * 2) * 0.9 : 0), ny = y0 + (arm ? (t < 0.35 ? t * hh * 0.2 : hh * (0.07 + (t - 0.35) * 1.45)) : hh * t);
-        const r0 = rad * (i === 1 ? 1 : 1 - (i - 1) / segs * 0.12), r1 = rad * (i === segs ? 0.55 : 1 - i / segs * 0.12);
-        mesh.tube([px, py, pz], [nx, ny, nz], r0, r1, 10, 3, tint);
-        px = nx; py = ny; pz = nz;
+    const r = 0.3 + h * 0.03, tint = [0.9 + rnd() * 0.15, 1, 0.85 + rnd() * 0.15];
+    /** Points and radii of a limb along `pts`, closed by a hemispherical tip pointing along `dir`. */
+    const limb = (pts, radii, dir) => {
+      const rad = radii[radii.length - 1], end = pts[pts.length - 1];
+      for (let k = 1; k <= 5; k++) {
+        const a = k / 5 * Math.PI / 2, off = rad * Math.sin(a);
+        pts.push([end[0] + dir[0] * off, end[1] + dir[1] * off, end[2] + dir[2] * off]);
+        radii.push(Math.max(0.004, rad * Math.cos(a)));
       }
-      // Rounded tip.
-      mesh.tube([px, py, pz], [px, py + rad * 0.5, pz], rad * 0.55, rad * 0.2, 10, 3, tint);
+      mesh.sweep(pts, radii, 12, 3, tint);
     };
-    path(x, 0, z, 0, 0, h, r, false);
-    const arms = 1 + ((rnd() * 3) | 0);
+    // Trunk: straight, flared at the foot, closed by a dome.
+    const top = h - r, tp = [], tr = [];
+    for (let i = 0; i <= 12; i++) {
+      const y = top * i / 12;
+      tp.push([x, y - (i === 0 ? 0.1 : 0), z]);
+      tr.push(r * (1 + 0.3 * Math.pow(Math.max(0, 1 - y / 0.55), 2)));
+    }
+    limb(tp, tr, [0, 1, 0]);
+    const arms = 1 + ((rnd() * 3) | 0), taken = [];
     for (let a = 0; a < arms; a++) {
-      const ang = rnd() * TAU, base = h * (0.35 + rnd() * 0.25);
-      path(x + Math.cos(ang) * r * 0.5, base, z + Math.sin(ang) * r * 0.5, Math.cos(ang) * (0.9 + rnd() * 0.5), Math.sin(ang) * (0.9 + rnd() * 0.5), h * (0.3 + rnd() * 0.22), r * 0.72, true);
+      let ang = rnd() * TAU;
+      for (let tries = 0; tries < 6 && taken.some((o) => Math.abs(Math.atan2(Math.sin(ang - o), Math.cos(ang - o))) < 1.2); tries++) ang = rnd() * TAU;
+      taken.push(ang);
+      const dx = Math.cos(ang), dz = Math.sin(ang);
+      const ra = r * (0.62 + rnd() * 0.12), y0 = h * (0.3 + rnd() * 0.25), reach = r + ra + 0.15 + rnd() * 0.5, bend = 0.4 + rnd() * 0.25;
+      const rise = Math.min(h * (0.28 + rnd() * 0.22), h - y0 - ra - 0.35);
+      const ap = [], ar = [];
+      // Out of the trunk (the first points are inside it), then a quarter-circle elbow, then straight up.
+      for (let k = 0; k <= 4; k++) { const d = reach * k / 4; ap.push([x + dx * d, y0, z + dz * d]); ar.push(ra); }
+      for (let k = 1; k <= 6; k++) { const f = k / 6 * Math.PI / 2; ap.push([x + dx * (reach + bend * Math.sin(f)), y0 + bend * (1 - Math.cos(f)), z + dz * (reach + bend * Math.sin(f))]); ar.push(ra); }
+      for (let k = 1; k <= 6; k++) { ap.push([x + dx * (reach + bend), y0 + bend + rise * k / 6, z + dz * (reach + bend)]); ar.push(ra); }
+      limb(ap, ar, [0, 1, 0]);
     }
     return r;
   }

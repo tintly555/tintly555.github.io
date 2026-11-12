@@ -553,12 +553,13 @@
       --hud-mid: #f2c14e;
       --hud-low: #ff5a4a;
       --hud-blue: #7cc8ff;
+      --hud-cluster-bottom: 22px;
     }
     /* Retired widgets: superseded by the clusters below. */
     #healthBarWrap, #needleHud, #castBarWrap, #dashStaminaHud, #bossShakeBar { display: none !important; }
     .hud-cluster {
       position: fixed;
-      bottom: 22px;
+      bottom: var(--hud-cluster-bottom);
       z-index: 43;
       pointer-events: none;
       user-select: none;
@@ -703,7 +704,7 @@
 
     /* Below this width the hotbar would sit under the side clusters: lift them clear. */
     @media (max-width: 1180px) {
-      .hud-cluster { bottom: 92px; }
+      :root { --hud-cluster-bottom: 92px; }
     }
 
     /* ── Contextual tutorial prompt ─────────────────────────────────────────── */
@@ -1401,7 +1402,8 @@
     /* ── Server config section ── */
     .server-mode-select {
       width: 100%;
-      max-width: 360px;
+      max-width: 480px;
+      box-sizing: border-box;
       padding: 9px 12px;
       border-radius: 6px;
       border: 1px solid rgba(255,255,255,0.18);
@@ -1417,6 +1419,8 @@
       border-color: rgba(79, 209, 255, 0.7);
     }
     .server-subpanel {
+      box-sizing: border-box;
+      max-width: 480px;
       padding: 12px 14px;
       margin-bottom: 14px;
       border-radius: 8px;
@@ -1493,9 +1497,40 @@
       font-family: var(--game-font-ui);
     }
     .server-current {
-      padding-top: 4px;
-      border-top: 1px solid rgba(255,255,255,0.06);
+      box-sizing: border-box;
+      width: 100%;
+      max-width: 480px;
+      margin-top: 4px;
+      padding: 12px 14px 14px;
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(0,0,0,0.30);
     }
+    .server-current-label {
+      display: block;
+      font-family: var(--game-font-ui);
+      font-size: 10px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      opacity: 0.6;
+    }
+    .server-current-value {
+      margin: 6px 0 12px;
+      padding: 8px 10px;
+      border-radius: 6px;
+      background: rgba(0,0,0,0.35);
+      font-family: ui-monospace, "SF Mono", Consolas, monospace;
+      font-size: 12px;
+      color: #4fd1ff;
+      word-break: break-all;
+    }
+    .server-current-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .server-current-actions .settings-action-btn { width: auto; max-width: none; flex: 0 0 auto; }
+    .server-apply-hint { font-size: 11px; color: #88dd88; }
 
     .ach-item {
       font-family: var(--game-font-ui);
@@ -2540,7 +2575,7 @@
     <button type="button" class="overlay-btn" id="btnPauseQuit" data-i18n="btnQuit">QUIT</button>
     </div>
   </div>
-  <div id="chatBox" style="position:fixed;bottom:10px;left:10px;z-index:40;pointer-events:none;font-family:'Audiowide',sans-serif;display:flex;flex-direction:column;justify-content:flex-end;">
+  <div id="chatBox" style="position:fixed;bottom:calc(var(--hud-cluster-bottom, 22px) + 112px);left:26px;z-index:46;pointer-events:none;font-family:'Audiowide',sans-serif;display:flex;flex-direction:column;justify-content:flex-end;">
     <div id="chatMessages" style="display:flex;flex-direction:column;gap:2px;margin-bottom:6px;overflow:hidden;"></div>
     <div id="chatInputWrap" style="display:none;pointer-events:auto;">
       <input id="chatInput" type="text" maxlength="200" placeholder="Type a message..." style="font-family:'Audiowide',sans-serif;width:280px;padding:6px 10px;font-size:13px;border:1px solid rgba(79,209,255,0.5);border-radius:6px;background:rgba(13,17,27,0.8);color:#fff;outline:none;">
@@ -2614,9 +2649,9 @@
               </p>
             </div>
             <div class="settings-row" id="keyBindingsRow" style="flex-direction:column;align-items:stretch;gap:8px;">
-              <label id="keyBindingsLabel">Key bindings</label>
+              <label id="keyBindingsLabel">Key &amp; mouse bindings</label>
               <p id="keyBindingsHint" style="font-size:11px;opacity:0.65;margin:0 0 6px 0;max-width:480px;line-height:1.45;">
-                Click a key, then press the new key to bind it. Press Esc to cancel. Saved between sessions.
+                Click KEY or MOUSE, then press a key or mouse button to bind it. Press Esc to cancel; press Delete while capturing a mouse binding to clear it. Saved between sessions.
               </p>
               <div id="keyBindingsList" style="display:flex;flex-direction:column;gap:6px;"></div>
               <button type="button" class="settings-action-btn" id="btnResetKeyBindings" style="margin-top:8px;align-self:flex-start;">Reset to default</button>
@@ -2734,12 +2769,12 @@
             </div>
             <!-- Current server + save button -->
             <div class="server-current">
-              <p style="font-size:11px;opacity:0.65;margin:18px 0 8px 0;">Currently using:</p>
-              <p id="serverCurrentValue" style="font-family:var(--game-font-ui);font-size:12px;color:#4fd1ff;margin:0 0 14px 0;word-break:break-all;"></p>
-              <button type="button" class="settings-action-btn" id="btnServerApply">Save &amp; reload</button>
-              <p id="serverApplyHint" style="font-size:11px;color:#88dd88;margin:8px 0 0 0;display:none;">
-                Saved. Reloading…
-              </p>
+              <span class="server-current-label">Currently using</span>
+              <p id="serverCurrentValue" class="server-current-value"></p>
+              <div class="server-current-actions">
+                <button type="button" class="settings-action-btn" id="btnServerApply">Save &amp; reload</button>
+                <span id="serverApplyHint" class="server-apply-hint" style="display:none;">Saved. Reloading…</span>
+              </div>
             </div>
           </section>
           <section class="settings-section" id="settingsSectionHotbar">
@@ -3770,7 +3805,7 @@ if (typeof window !== "undefined") {
     {"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.182.0/build/three.module.js"}}
   </script>
   <script type="module" src="js/game-cursor.js?v=1"></script>
-  <script type="module" src="js/main.js?v=20261111-dev-weapon-pvp-glass-quality-light-budget-v3"></script>
+  <script type="module" src="js/main.js?v=20261111-crossfire-hack-chat-lava-dustfall-v2-door2"></script>
   <footer id="pageFooter" style="position:fixed;left:0;right:0;bottom:0;display:flex;justify-content:center;align-items:center;gap:16px;padding:10px 14px;background:transparent;backdrop-filter:none;z-index:101;pointer-events:auto;">
     <img src="images/tintly555.png" alt="Tintly555" style="height:28px;width:auto;display:block;opacity:0.75;" />
     <img src="images/jimmyqrg.png" alt="JimmyQrg" style="height:32px;width:auto;display:block;margin-bottom:2px;opacity:0.75;" />

@@ -3,15 +3,15 @@
     import { RoundedBoxGeometry } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/geometries/RoundedBoxGeometry.js";
     import { mergeGeometries, toCreasedNormals } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/utils/BufferGeometryUtils.js";
     import { clone as cloneSkinnedModel } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/utils/SkeletonUtils.js";
-    import { createPvpMaps } from "./pvp-maps.js?v=36";
-    import { createPvpWorld } from "./pvp-world.js?v=3";
+    import { createPvpMaps } from "./pvp-maps.js?v=40";
+    import { createPvpWorld } from "./pvp-world.js?v=4";
     import { createBossNavigation } from "./boss-navigation.js?v=2";
     import { BOSS_ATTACK_BY_ID, chooseBossAttack } from "./boss-attacks.js?v=2";
     import { BOSS_ARENA_HALF, createCombatEnvironment } from "./combat-environments.js?v=6";
     import { createBossCreature, BOSS_RADIUS, CLAW_STRIKE_S, QUAKE_SLAM_S, LOB_RELEASE_S, DURATIONS as BOSS_DURATIONS } from "./boss-creature.js?v=11";
     import { buildOperatorShell } from "./operator-model.js?v=1";
     import { extendGauntletCourses, GAUNTLET_CHAPTERS, GAUNTLET_CHAPTER_SIZE } from "./gauntlet-courses.js?v=5";
-    import { createGauntletRuntime } from "./gauntlet-runtime.js?v=17";
+    import { createGauntletRuntime } from "./gauntlet-runtime.js?v=20";
     import { createWorldAudio } from "./world-audio.js?v=4";
     import { createGauntletThemes } from "./gauntlet-themes.js?v=9";
     import { createPostFx, applyDisplayTone } from "./post-fx.js?v=4";
@@ -327,38 +327,43 @@
       { label: "VERY FAR", scale: 1.48 },
     ];
 
-    // ── Rebindable key actions ────────────────────────────────────────
-    // Each gameplay action maps to a KeyboardEvent.code (layout-independent).
-    // Defaults reproduce the original hard-coded keys — except DASH, which now
-    // defaults to E (was C). Players can remap any of these in Settings → Controls.
+    // ── Rebindable keyboard and mouse actions ─────────────────────────
+    // Keyboard bindings use KeyboardEvent.code; mouse bindings are independent
+    // alternatives so the original keyboard and mouse controls both keep working.
     const REBINDABLE_ACTIONS = [
-      { id: "moveForward", label: "Move forward",      def: "KeyW" },
-      { id: "moveBack",    label: "Move backward",     def: "KeyS" },
-      { id: "moveLeft",    label: "Move left",         def: "KeyA" },
-      { id: "moveRight",   label: "Move right",        def: "KeyD" },
-      { id: "jump",        label: "Jump",              def: "Space" },
-      { id: "aim",         label: "Aim / ADS",         def: "ShiftLeft" },
-      { id: "crouch",      label: "Crouch",            def: "ControlLeft" },
-      { id: "dash",        label: "Dash",              def: "KeyC" },
-      { id: "reload",      label: "Reload",            def: "KeyR" },
-      { id: "heal",        label: "Heal / Med-kit",    def: "KeyF" },
-      { id: "fire",        label: "Fire (keyboard)",   def: "KeyV" },
-      { id: "speedNeedle", label: "Speed needle",      def: "KeyQ" },
-      { id: "jetHarness",  label: "Jet harness",       def: "KeyP" },
-      { id: "questHud",    label: "Toggle quest HUD",  def: "KeyM" },
-      { id: "hudHelp",     label: "Toggle controls help", def: "KeyH" },
-      { id: "flashlight",  label: "Flashlight",        def: "KeyL" },
-      { id: "chat",        label: "Chat",              def: "KeyT" },
+      { id: "moveForward", label: "Move forward",         def: "KeyW",      mouseDef: null },
+      { id: "moveBack",    label: "Move backward",        def: "KeyS",      mouseDef: null },
+      { id: "moveLeft",    label: "Move left",            def: "KeyA",      mouseDef: null },
+      { id: "moveRight",   label: "Move right",           def: "KeyD",      mouseDef: null },
+      { id: "jump",        label: "Jump",                 def: "Space",    mouseDef: null },
+      { id: "aim",         label: "Aim / ADS",            def: "ShiftLeft", mouseDef: "Mouse2" },
+      { id: "crouch",      label: "Crouch",               def: "ControlLeft", mouseDef: null },
+      { id: "dash",        label: "Dash",                 def: "KeyC",     mouseDef: null },
+      { id: "reload",      label: "Reload",               def: "KeyR",     mouseDef: null },
+      { id: "heal",        label: "Heal / Med-kit",       def: "KeyF",     mouseDef: null },
+      { id: "fire",        label: "Fire",                 def: "KeyV",     mouseDef: "Mouse0" },
+      { id: "speedNeedle", label: "Speed needle",         def: "KeyQ",     mouseDef: null },
+      { id: "jetHarness",  label: "Jet harness",          def: "KeyP",     mouseDef: null },
+      { id: "questHud",    label: "Toggle quest HUD",     def: "KeyM",     mouseDef: null },
+      { id: "hudHelp",     label: "Toggle controls help", def: "KeyH",     mouseDef: null },
+      { id: "flashlight",  label: "Flashlight",           def: "KeyL",     mouseDef: null },
+      { id: "chat",        label: "Chat",                 def: "KeyT",     mouseDef: null },
     ];
     function defaultKeyBindings() {
       const o = {};
       for (const a of REBINDABLE_ACTIONS) o[a.id] = a.def;
       return o;
     }
+    function defaultMouseBindings() {
+      const o = {};
+      for (const a of REBINDABLE_ACTIONS) o[a.id] = a.mouseDef;
+      return o;
+    }
 
     let gameSettings = {
       weaponSlotOrder: [0, 2, 3, 1, 5, 6, 4, 7, 9], // last entry (AS Val) is key 8; ～～～ stays on /
       keyBindings: defaultKeyBindings(),
+      mouseBindings: defaultMouseBindings(),
       masterVolume: 1,
       musicVolume: 1,
       soundVolume: 1,
@@ -433,6 +438,13 @@
             if (typeof v === "string" && v) gameSettings.keyBindings[a.id] = v;
           }
         }
+        if (o.mouseBindings && typeof o.mouseBindings === "object") {
+          for (const a of REBINDABLE_ACTIONS) {
+            if (!Object.prototype.hasOwnProperty.call(o.mouseBindings, a.id)) continue;
+            const v = o.mouseBindings[a.id];
+            if (v == null || /^Mouse[0-2]$/.test(v)) gameSettings.mouseBindings[a.id] = v;
+          }
+        }
         // Dash was shipped with an accidental default of KeyE (the intended key is C);
         // migrate any untouched save so C works out of the box.
         if (gameSettings.keyBindings.dash === "KeyE") {
@@ -490,7 +502,18 @@
       return (gameSettings.keyBindings && gameSettings.keyBindings[action]) || null;
     }
     function isAction(e, action) {
-      return eventMatchesCode(e, kbCode(action));
+      return e.__gameAction === action || eventMatchesCode(e, kbCode(action));
+    }
+    function mouseCodeToLabel(code) {
+      return ({ Mouse0: "Left", Mouse1: "Middle", Mouse2: "Right" })[code] || "—";
+    }
+    function isMouseAction(e, action) {
+      return gameSettings.mouseBindings?.[action] === `Mouse${e.button}`;
+    }
+    function dispatchMouseBoundAction(action, type) {
+      const event = new KeyboardEvent(type, { bubbles: true, cancelable: true });
+      Object.defineProperty(event, "__gameAction", { value: action });
+      document.dispatchEvent(event);
     }
     // Human-readable label for a key code (for the settings UI).
     function codeToLabel(code) {
@@ -564,6 +587,7 @@
     const WEAPON_NAMES_INV_ZH  = ["手枪","突击步枪","霰弹枪","冲锋枪","医疗包","反器材","麻痹镖","匕首","???","AS Val"];
     const WEAPON_I18N_KEYS     = ["weaponPistol","weaponAR","weaponShotgun","weaponSMG","weaponMedKit","weaponAMR","weaponDart","weaponKnife","weaponDev","weaponAsVal"];
     function weaponDisplayName(widx) {
+      if (widx === 8) return "HACK";
       const k = WEAPON_I18N_KEYS[widx];
       const fallback = WEAPON_NAMES_INV[widx] || "";
       return k ? tr(k, fallback) : fallback;
@@ -986,7 +1010,10 @@
       _fpsFrames++;
       _fpsTimeAccum += dt;
       if (_fpsTimeAccum >= 0.5 && fpsValueEl) {
-        fpsValueEl.textContent = `${Math.round(_fpsFrames / _fpsTimeAccum)} FPS`;
+        const fps = Math.round(_fpsFrames / _fpsTimeAccum);
+        const baseDpr = Math.min(window.devicePixelRatio || 1, 1);
+        const renderPct = Math.round((renderer.getPixelRatio() / Math.max(0.01, baseDpr)) * 100);
+        fpsValueEl.textContent = `${fps} FPS · 3D ${renderPct}%`;
         _fpsFrames = 0;
         _fpsTimeAccum = 0;
       }
@@ -1190,10 +1217,27 @@
       return { roomKey, roomCode: roomCode || roomKey, map: inner.map, options: inner.options };
     }
 
-    function getMultiplayerOrigin() {
+    function isLoopbackServerHost(hostname) {
+      const host = String(hostname || "").toLowerCase();
+      return host === "localhost" || host.endsWith(".localhost") || host === "::1" || host === "[::1]"
+        || /^127(?:\.\d{1,3}){3}$/.test(host);
+    }
+
+    function isInsecureRemoteServerUrl(raw) {
+      try {
+        const url = new URL(raw, window.location.href);
+        return window.location.protocol === "https:" && url.protocol === "http:"
+          && !isLoopbackServerHost(url.hostname);
+      } catch (_) {
+        return false;
+      }
+    }
+
+    function resolveMultiplayerOrigin() {
       // Precedence: manual URL > local-discovered URL > meta tag (default) > page origin.
-      // All three are absolute URLs (http:// or https://) with optional paths; trailing
-      // slash is normalized away.
+      // HTTPS pages cannot open a remote ws:// socket. If a saved self-hosted URL is
+      // HTTP-only, use the configured HTTPS relay so multiplayer still works, and
+      // surface the mismatch in Server settings instead of letting the browser block it.
       try {
         const fromSettings = (() => {
           if (typeof gameSettings === "undefined" || !gameSettings) return "";
@@ -1205,16 +1249,37 @@
           }
           return "";
         })();
-        if (fromSettings) return fromSettings.replace(/\/+$/, "");
         const m = document.querySelector('meta[name="game-multiplayer-origin"]');
-        const raw = m && m.content != null ? String(m.content).trim() : "";
-        return (raw || window.location.origin).replace(/\/$/, "");
+        const metaOrigin = m && m.content != null ? String(m.content).trim() : "";
+        const selected = fromSettings || metaOrigin || window.location.origin;
+        const selectedUrl = new URL(selected, window.location.href);
+        if (isInsecureRemoteServerUrl(selectedUrl.href)) {
+          const secureDefault = metaOrigin ? new URL(metaOrigin, window.location.href) : null;
+          if (secureDefault?.protocol === "https:") {
+            return {
+              origin: secureDefault.href.replace(/\/+$/, ""),
+              blockedUrl: selectedUrl.href.replace(/\/+$/, ""),
+            };
+          }
+          return { origin: "", blockedUrl: selectedUrl.href.replace(/\/+$/, "") };
+        }
+        return { origin: selectedUrl.href.replace(/\/+$/, ""), blockedUrl: "" };
       } catch (_) {
-        return window.location.origin.replace(/\/$/, "");
+        return { origin: window.location.origin.replace(/\/$/, ""), blockedUrl: "" };
       }
     }
 
-    const multiplayerOrigin = getMultiplayerOrigin();
+    function getMultiplayerOrigin() {
+      return resolveMultiplayerOrigin().origin;
+    }
+
+    const multiplayerResolution = resolveMultiplayerOrigin();
+    const multiplayerOrigin = multiplayerResolution.origin;
+    if (multiplayerResolution.blockedUrl) {
+      console.warn(
+        `[multiplayer] Ignoring HTTP-only server ${multiplayerResolution.blockedUrl} on this HTTPS page; using ${multiplayerOrigin || "no secure relay"}. Expose the server over HTTPS/WSS to use it here.`
+      );
+    }
 
     const _ioFactory = typeof globalThis.io === "function" ? globalThis.io : null;
     if (!_ioFactory) {
@@ -1243,10 +1308,12 @@
         persistUnlocks();
         updateQuestHud();
       }
+      syncActiveCrossfireDevWeapon();
       sanitizeLoadoutSelection();
       syncLoadoutPanel();
       _buildInvBar();
       if (MULTIPLAYER && !SERVER_VERIFIED_DEV && state.weaponIndex === LOADOUT_HIDDEN) setWeapon(0);
+      if (activeLoadout) ensureWeaponAllowed();
       updateHud();
     });
 
@@ -2848,13 +2915,13 @@
     let appliedRendererWidth = Math.floor(_vpInit.w);
     let appliedRendererHeight = Math.floor(_vpInit.h);
     let appliedRendererDpr = _initialRendererDpr;
-    let resolutionScale = 1;
+    let resolutionScale = 0.76;
     const ADAPTIVE_RENDER_SCALE_MIN = 0.65;
     const ADAPTIVE_AA_SCALES = Object.freeze([1, 1.06, 1.12, 1.18, 1.24]);
-    const RENDER_SAMPLE_WINDOW_S = 1.5;
-    const RENDER_LOW_HOLD_S = 5.5;
-    const RENDER_HIGH_HOLD_S = 8;
-    const RENDER_CHANGE_COOLDOWN_MS = 16000;
+    const RENDER_SAMPLE_WINDOW_S = 1.0;
+    const RENDER_LOW_HOLD_S = 2.0;
+    const RENDER_HIGH_HOLD_S = 2.5;
+    const RENDER_CHANGE_COOLDOWN_MS = 6000;
     let adaptiveAaLevel = 0;
     let renderFrameSamples = [];
     let renderSampleSeconds = 0;
@@ -2911,12 +2978,6 @@
       return Math.min(getQualityPreset().dpr, dpr);
     }
 
-    function getPostFxRenderScale() {
-      if (!gameWorldReady || !postFxWanted()) return 1;
-      // Keep the scene deliberately soft and reduce the pixel cost of the full-frame FX stack.
-      return ({ regular: 0.62, high: 0.72, extreme: 0.82 })[getQualityId()] ?? 0.72;
-    }
-
     function getAdaptiveAAScale() {
       return resolutionScale >= 0.999 ? ADAPTIVE_AA_SCALES[adaptiveAaLevel] || 1 : 1;
     }
@@ -2932,7 +2993,7 @@
         adaptiveAaLevel--;
         return true;
       }
-      const effectiveScale = getPixelRatioForQuality() * getPostFxRenderScale() * getAdaptiveAAScale();
+      const effectiveScale = getPixelRatioForQuality() * resolutionScale * getAdaptiveAAScale();
       if (resolutionScale > ADAPTIVE_RENDER_SCALE_MIN && effectiveScale > ADAPTIVE_RENDER_SCALE_MIN + 0.001) {
         resolutionScale = Math.max(ADAPTIVE_RENDER_SCALE_MIN, resolutionScale - 0.05);
         return true;
@@ -2942,7 +3003,7 @@
 
     function resetAdaptiveRenderControl(resetLevels = false) {
       if (resetLevels) {
-        resolutionScale = 1;
+        resolutionScale = 0.76;
         adaptiveAaLevel = 0;
       }
       clearAdaptiveRenderWindow();
@@ -3316,7 +3377,7 @@
         // blur pass or its extra GPU cost.
         // Only the 3D canvas backing store is scaled; all HUD/menu elements remain DOM-sized.
         const desiredDpr = Math.max(ADAPTIVE_RENDER_SCALE_MIN,
-          getPixelRatioForQuality() * resolutionScale * getPostFxRenderScale() * getAdaptiveAAScale());
+          getPixelRatioForQuality() * resolutionScale * getAdaptiveAAScale());
         const sizeChanged = w !== appliedRendererWidth || h !== appliedRendererHeight;
         const dprChanged = Math.abs(desiredDpr - appliedRendererDpr) > 0.001;
         if (Math.abs(aspect - appliedCameraAspect) > 0.000001) {
@@ -5436,6 +5497,14 @@
       pvpWorld = createPvpWorld(THREE, {
         time: () => Date.now() / 1000,
         player: () => (player.health > 0 ? { x: player.position.x, z: player.position.z, feet: player.position.y - 1.65, onGround: player.onGround } : null),
+        players: () => {
+          const all = [];
+          if (player.health > 0) all.push({ x: player.position.x, z: player.position.z, feet: player.position.y - 1.65, onGround: player.onGround });
+          if (MULTIPLAYER) for (const rp of remotePlayers.values()) {
+            if (rp.group.visible && !rp.isDown) all.push({ x: rp.x, z: rp.z, feet: (rp.y ?? 1.65) - 1.65, onGround: rp.grounded !== false });
+          }
+          return all;
+        },
         damage: (amount) => damagePlayer(amount, null, "body", -1, true),
         launch(vertical, x, z) {
           player.velocityY = vertical;
@@ -6293,49 +6362,51 @@
       camera.position.copy(player.position);
     }
 
-    /**
-     * Portal openings: render the view from the far end into each portal's render target. The
-     * virtual camera is the player's camera shifted by the portal offset (same orientation and
-     * projection), so the opening lines up with the world around it.
-     */
+    /** Render each opening from the camera pose mapped through its paired portal frames. */
     const portalCamera = new THREE.PerspectiveCamera();
     const _portalBuffer = new THREE.Vector2();
-    const _portalOffset = new THREE.Vector3();
+    const _portalMapping = new THREE.Matrix4();
+    const _portalVirtualWorld = new THREE.Matrix4();
+    const _portalVirtualScale = new THREE.Vector3();
+    const _portalViewToOpening = new THREE.Vector3();
     const _portalForward = new THREE.Vector3();
     function renderPortalViews() {
       if (!gauntletRuntime || !gauntletRuntime.portals || !gauntletRuntime.portals.length) return;
       renderer.getDrawingBufferSize(_portalBuffer);
-      const w = Math.max(64, Math.floor(_portalBuffer.x * 0.5)), h = Math.max(64, Math.floor(_portalBuffer.y * 0.5));
+      const viewScale = resolutionScale < 0.82 ? 0.5 : 0.62;
+      const w = Math.max(64, Math.floor(_portalBuffer.x * viewScale)), h = Math.max(64, Math.floor(_portalBuffer.y * viewScale));
       portalCamera.fov = camera.fov;
       portalCamera.aspect = camera.aspect;
       portalCamera.near = camera.near;
       portalCamera.far = camera.far;
       portalCamera.projectionMatrix.copy(camera.projectionMatrix);
       portalCamera.projectionMatrixInverse.copy(camera.projectionMatrixInverse);
-      portalCamera.quaternion.copy(camera.quaternion);
+      camera.updateMatrixWorld(true);
       camera.getWorldDirection(_portalForward);
       const autoUpdate = renderer.shadowMap.autoUpdate;
       for (const portal of gauntletRuntime.portals) {
         portal.uniforms.uRes.value.copy(_portalBuffer);
         portal.uniforms.uTime.value = performance.now() / 1000;
-        _portalOffset.copy(portal.center).sub(camera.position);
-        const dist = _portalOffset.length();
-        if (dist > 48 || _portalForward.dot(_portalOffset) < -2) continue;
+        const dist = portal.center.distanceTo(camera.position);
+        if (dist > 48) continue;
+        _portalViewToOpening.copy(portal.center).sub(camera.position);
+        if (_portalForward.dot(_portalViewToOpening) < -2) continue;
         if (!portal.rt || portal.rt.width !== w || portal.rt.height !== h) {
           if (portal.rt) portal.rt.dispose();
           portal.rt = new THREE.WebGLRenderTarget(w, h, { depthBuffer: true });
           portal.uniforms.tView.value = portal.rt.texture;
         }
-        portalCamera.position.copy(camera.position).add(_portalOffset.copy(portal.partner).sub(portal.center));
+        gauntletRuntime.portalTransform(portal, _portalMapping);
+        _portalVirtualWorld.multiplyMatrices(_portalMapping, camera.matrixWorld);
+        _portalVirtualWorld.decompose(portalCamera.position, portalCamera.quaternion, _portalVirtualScale);
+        portalCamera.scale.set(1, 1, 1);
         portalCamera.updateMatrixWorld(true);
         const previousTarget = renderer.getRenderTarget();
         const sourceVisible = portal.disc.visible;
         const exitGate = portal.partnerGate;
         const exitVisible = exitGate?.visible;
         try {
-          // Hide the exit assembly in its own view. The virtual camera is already just
-          // before the exit plane, so its opening reveals the actual scene beyond it.
-          // This prevents a stale, recursively sampled portal image from replacing that view.
+          // Render one level deep; the paired gate's previous-frame image must not recurse.
           portal.disc.visible = false;
           if (exitGate) exitGate.visible = false;
           renderer.shadowMap.autoUpdate = false;
@@ -6411,7 +6482,7 @@
         if (door.open && door.amount < 1) {
           door.amount = Math.min(1, door.amount + dt / 2.2);
           const e = door.amount * door.amount * (3 - 2 * door.amount);
-          door.mesh.position.y = door.baseY + e * 9.8;
+          door.mesh.position.y = door.baseY + e * 11;
           door.box.setFromObject(door.mesh);
           door.barrier.min.y = door.barrierBase.min.y + e * 200;
           door.barrier.max.y = door.barrierBase.max.y + e * 200;
@@ -6960,13 +7031,28 @@
             if (flags.air) state.airUntil = now + 140;
           },
           explode(x, y, z) { spawnExplosionFx(x, y, z); },
-          shift(dx, dy, dz) {
-            // Apply the same translation used by the live portal view, preserving the player's
-            // view direction and velocity so crossing stays smooth instead of snapping.
-            player.position.x += dx;
-            player.position.y += dy;
-            player.position.z += dz;
-            player.fallApexY = null;
+          traversePortal(transform) {
+            // Use the same source-to-exit frame transform as the portal camera. The pose,
+            // heading and momentum therefore continue through the opening without a facing snap.
+            const rotation = new THREE.Quaternion().setFromRotationMatrix(transform);
+            player.position.applyMatrix4(transform);
+            const facing = new THREE.Quaternion().setFromEuler(new THREE.Euler(player.pitch, player.yaw, 0, "YXZ"));
+            facing.premultiply(rotation);
+            const facingEuler = new THREE.Euler().setFromQuaternion(facing, "YXZ");
+            player.yaw = facingEuler.y;
+            player.pitch = THREE.MathUtils.clamp(facingEuler.x, -Math.PI / 2 + 0.01, Math.PI / 2 - 0.01);
+            const velocity = new THREE.Vector3(state.velX, player.velocityY, state.velZ).applyQuaternion(rotation);
+            state.velX = velocity.x;
+            player.velocityY = velocity.y;
+            state.velZ = velocity.z;
+            const dash = new THREE.Vector3(state.dashDirX, state.dashDirY || 0, state.dashDirZ).applyQuaternion(rotation);
+            state.dashDirX = dash.x;
+            state.dashDirY = dash.y;
+            state.dashDirZ = dash.z;
+            const move = new THREE.Vector3(state.lastMoveX || 0, 0, state.lastMoveZ || 0).applyQuaternion(rotation);
+            state.lastMoveX = move.x;
+            state.lastMoveZ = move.z;
+            player.fallApexY = player.position.y;
             state.camBaseY = undefined;
           },
           damage: amount => damagePlayer(amount, null, "body", -1, true),
@@ -7101,7 +7187,8 @@
           gate(1.2, 15, 3.6, side * (half - 1.7), topY + 5.5, doorZ, beam);                         // inner jamb
         }
         gate(half * 2 + 3, 2.2, 3.4, 0, topY + 11.1, doorZ, beam);        // lintel
-        gate(half * 2 + 0.4, 9, 2.6, 0, topY + 15.1, doorZ, wall);        // shutter housing
+        // The housing is tall enough to take the whole shutter when it is up, so nothing hangs in the opening.
+        gate(half * 2 + 0.4, 10.4, 2.6, 0, topY + 15.9, doorZ, wall);    // shutter housing
         const shutter = gate(half * 2 - 2.8, 9.6, 0.5, 0, topY + 4.8, doorZ, style.door, true);
         const band = new THREE.Mesh(new THREE.PlaneGeometry(half * 2 - 2.8, 1.4), getGauntletEdgeMaterials().hazard(roomW));
         band.position.set(0, -3.4, 0.26);
@@ -7177,14 +7264,7 @@
       const fixedArc = () => pen.arc + (pen.z - cz);
       const mark = () => {
         const cp = { x: ox, y: y + 1.65, z: cz + 2.5, width: 4.2, arc: fixedArc() - 2.5 };
-        if (spec.checkpoints && checkpoints.length) {
-          const light = new THREE.Mesh(new THREE.BoxGeometry(cp.width * 2, .035, .18), new THREE.MeshBasicMaterial({ color: 0xf1be78 }));
-          light.position.set(cp.x, y + .035, cp.z);
-          light.raycast = () => {};
-          scene.add(light);
-          gauntletProps.push(light);
-          cp.indicator = light;
-        }
+        // Checkpoints are invisible: the course has no marker, the progress is kept in `cp` alone.
         checkpoints.push(cp);
       };
       const beginFixed = () => { cz = pen.z; y = pen.y; ox = pen.x; fixedY0 = y; };
@@ -7202,9 +7282,7 @@
         const end = samples[samples.length - 1];
         const s = sampleAt(samples, Math.max(samples[0].arc, end.arc - 2.5));
         const cp = { x: s.x, y: s.y + 1.65, z: s.z, width: 4.2, arc: s.arc };
-        if (spec.checkpoints && checkpoints.length) {
-          cp.indicator = crossBar(s, cp.width * 2, .18, .035, new THREE.MeshBasicMaterial({ color: 0xf1be78 }), .002);
-        }
+        // Invisible checkpoint (see mark()).
         checkpoints.push(cp);
       };
       const paintEnd = (sample, w) => crossBar(sample, w, .26, .05, hazardMat(w));
@@ -8281,6 +8359,7 @@
     const LOADOUT_STORAGE_KEY = "fps_loadout_v1";
     let loadoutGuns = [0, 2];
     let activeLoadout = null;
+    let activeLoadoutMap = null;
 
     function hasDevWeaponAccess() {
       return CREATOR_UNLOCKED && DEV_GUN_UNLOCKED && (!MULTIPLAYER || SERVER_VERIFIED_DEV);
@@ -8306,6 +8385,15 @@
       try { localStorage.setItem(LOADOUT_STORAGE_KEY, JSON.stringify(loadoutGuns)); } catch (_) {}
     }
 
+    function syncActiveCrossfireDevWeapon() {
+      if (!activeLoadout || !isPvpCrossfireMap(activeLoadoutMap)) return;
+      const hasHack = activeLoadout.includes(LOADOUT_HIDDEN);
+      if (hasDevWeaponAccess() && !hasHack) activeLoadout.push(LOADOUT_HIDDEN);
+      else if (!hasDevWeaponAccess() && hasHack) {
+        activeLoadout = activeLoadout.filter((w) => w !== LOADOUT_HIDDEN);
+      }
+    }
+
     function loadLoadout() {
       try {
         const raw = JSON.parse(localStorage.getItem(LOADOUT_STORAGE_KEY) || "null");
@@ -8316,11 +8404,13 @@
 
     /** Freeze the pick for the match about to start. Training range stays unrestricted. */
     function lockLoadoutForMap(mapName) {
+      activeLoadoutMap = mapName;
       if (isTrainingMap(mapName)) { activeLoadout = null; return; }
       sanitizeLoadoutSelection();
       activeLoadout = loadoutGuns.slice();
+      syncActiveCrossfireDevWeapon();
     }
-    function clearActiveLoadout() { activeLoadout = null; }
+    function clearActiveLoadout() { activeLoadout = null; activeLoadoutMap = null; }
 
     function weaponInLoadout(idx) {
       if (!activeLoadout) return true;
@@ -13533,9 +13623,13 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         applyHint.style.display = "block";
       }
       function refreshCurrentLine() {
-        // Use getMultiplayerOrigin() so the live value (which may differ from
-        // gameSettings on the first paint if the meta tag has a value) is shown.
-        current.textContent = getMultiplayerOrigin() || "(none)";
+        const resolution = resolveMultiplayerOrigin();
+        current.textContent = resolution.origin || "(none)";
+        current.title = "";
+        if (resolution.blockedUrl) {
+          current.textContent += " — secure fallback; selected server is HTTP-only";
+          current.title = `${resolution.blockedUrl} is blocked on an HTTPS page. Expose it over HTTPS/WSS, or open the game from a local HTTP origin.`;
+        }
       }
       function applyMode() {
         manualW.style.display = sel.value === "manual" ? "block" : "none";
@@ -13557,11 +13651,20 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         }
         if (!isValidUrl(v)) {
           urlErr.textContent = "Invalid URL — must start with http:// or https://";
+          urlErr.style.color = "#ff6e6e";
           urlErr.style.display = "block";
           urlIn.classList.add("invalid");
           return false;
         }
+        if (isInsecureRemoteServerUrl(v)) {
+          urlErr.textContent = "This HTTP server is blocked from the HTTPS game page. Use its HTTPS/WSS URL, or open the game from a local HTTP origin; the secure default relay will be used meanwhile.";
+          urlErr.style.color = "#ffc06b";
+          urlErr.style.display = "block";
+          urlIn.classList.remove("invalid");
+          return true;
+        }
         urlErr.style.display = "none";
+        urlErr.style.color = "#ff6e6e";
         urlIn.classList.remove("invalid");
         return true;
       }
@@ -14581,6 +14684,119 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         weaponIndex: state.weaponIndex,
         ...extras,
       });
+    }
+
+    function findGauntletPortalRayCrossing(ray) {
+      if (!isGauntletMap(CURRENT_MAP) || !gauntletRuntime?.portals?.length) return null;
+      let closest = null;
+      const one = new THREE.Vector3(1, 1, 1);
+      const inverseFrame = new THREE.Matrix4();
+      const frame = new THREE.Matrix4();
+      const mapping = new THREE.Matrix4();
+      const rotation = new THREE.Quaternion();
+      for (const portal of gauntletRuntime.portals) {
+        if (!portal.partnerPortal) continue;
+        portal.group.getWorldQuaternion(rotation);
+        frame.compose(portal.center, rotation, one);
+        inverseFrame.copy(frame).invert();
+        const localOrigin = ray.ray.origin.clone().applyMatrix4(inverseFrame);
+        const localDirection = ray.ray.direction.clone().applyQuaternion(rotation.clone().invert());
+        if (localDirection.z >= -1e-5 || localOrigin.z <= 0) continue;
+        const t = -localOrigin.z / localDirection.z;
+        if (t <= Math.max(0, ray.near) || t >= ray.far || (closest && t >= closest.distance)) continue;
+        const entryPoint = ray.ray.at(t, new THREE.Vector3());
+        const crossingLocal = entryPoint.clone().applyMatrix4(inverseFrame);
+        const dx = crossingLocal.x / 1.05;
+        const dy = crossingLocal.y / 1.47;
+        if (dx * dx + dy * dy > 1) continue;
+        gauntletRuntime.portalTransform(portal, mapping);
+        const exitPoint = entryPoint.clone().applyMatrix4(mapping);
+        const mappedRotation = new THREE.Quaternion().setFromRotationMatrix(mapping);
+        const exitDirection = ray.ray.direction.clone().applyQuaternion(mappedRotation).normalize();
+        const exitRayOrigin = exitPoint.clone().addScaledVector(exitDirection, 0.035);
+        closest = { portal, distance: t, entryPoint, exitPoint, exitRayOrigin, exitDirection, mapping };
+      }
+      return closest;
+    }
+
+    function getGauntletPortalFrameShotHit(ray) {
+      if (!isGauntletMap(CURRENT_MAP) || !gauntletRuntime?.portals?.length) return null;
+      let closest = null;
+      for (const portal of gauntletRuntime.portals) {
+        portal.group.updateMatrixWorld(true);
+        const hit = ray.intersectObjects(portal.bulletBlockers || [], false)[0] || null;
+        if (hit && (!closest || hit.distance < closest.distance)) closest = hit;
+      }
+      return closest;
+    }
+
+    function portalRayHasEarlierHit(ray, portalDistance) {
+      for (const enemy of state.enemies) {
+        if (!enemyBlockingHits(enemy)) continue;
+        enemy.group.updateMatrixWorld(true);
+        const hit = enemy.trainingDummy && !enemy.isBoss
+          ? humanoidHitAlongRay(ray, enemy.group)
+          : enemyHitAlongRay(ray, enemy);
+        if (hit && hit.t < portalDistance) return true;
+      }
+      if (MULTIPLAYER && !ARENA_COOP && !isTrainingMap(CURRENT_MAP)) {
+        for (const [, rp] of remotePlayers) {
+          if (rp.isDown || !rp.group.visible) continue;
+          rp.group.updateMatrixWorld(true);
+          const hit = humanoidHitAlongRay(ray, rp.group);
+          if (hit && hit.t < portalDistance) return true;
+        }
+      }
+      if (isTrainingMap(CURRENT_MAP)) {
+        const showcaseHit = hitAnimationShowcase(ray);
+        if (showcaseHit && showcaseHit.distance < portalDistance) return true;
+      }
+      for (const proj of bossProjectiles) {
+        const toP = new THREE.Vector3().subVectors(proj.mesh.position, ray.ray.origin);
+        const along = toP.dot(ray.ray.direction);
+        if (along <= 0.02 || along >= portalDistance) continue;
+        const closest = ray.ray.at(along, new THREE.Vector3());
+        if (closest.distanceToSquared(proj.mesh.position) < 0.65 * 0.65) return true;
+      }
+      return false;
+    }
+
+    function routeShotRayThroughPortal(ray, maxRange) {
+      const crossing = findGauntletPortalRayCrossing(ray);
+      if (!crossing) return { ray, path: null };
+      const prePortalRay = new THREE.Raycaster(
+        ray.ray.origin,
+        ray.ray.direction,
+        Math.max(0, ray.near),
+        Math.max(Math.max(0, ray.near) + 1e-4, crossing.distance - 1e-4)
+      );
+      const wallHit = prePortalRay.intersectObjects(wallMeshes, false)[0] || null;
+      const glassHit = getGlassShotHit(prePortalRay);
+      const portalFrameHit = getGauntletPortalFrameShotHit(prePortalRay);
+      if (wallHit || glassHit || portalFrameHit || portalRayHasEarlierHit(ray, crossing.distance)) return { ray, path: null };
+
+      const remaining = Math.max(0.021, maxRange - crossing.distance - 0.035);
+      const routedRay = new THREE.Raycaster(crossing.exitRayOrigin, crossing.exitDirection, 0.02, remaining);
+      routedRay.camera = ray.camera;
+      return { ray: routedRay, path: crossing };
+    }
+
+    function createPortalAwareShotTrail(muzzle, end, color, portalPath = null) {
+      if (!portalPath) {
+        createBulletTrail(muzzle, end, color);
+        return;
+      }
+      createBulletTrail(muzzle, portalPath.entryPoint, color);
+      createBulletTrail(portalPath.exitRayOrigin, end, color);
+    }
+
+    function emitPortalAwareShot(muzzle, end, color, hitType, extras = {}, portalPath = null) {
+      if (!portalPath) {
+        emitShootNetwork(muzzle, end, color, hitType, extras);
+        return;
+      }
+      emitShootNetwork(muzzle, portalPath.entryPoint, color, "miss");
+      emitShootNetwork(portalPath.exitRayOrigin, end, color, hitType, extras);
     }
 
     camera.position.copy(player.position);
@@ -17615,42 +17831,38 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       if (!state.locked) {
         if (paused || player.health <= 0) return;
         if (gameSettings.skipClickToPlay && gameWorldReady && e.button === 0) {
-          state.mouseDown = true;
-          if (state.weaponIndex !== 4) tryShoot();
           tryAutoCapturePointer();
           return;
         }
         renderer.domElement.requestPointerLock();
         return;
       }
-      if (player.health <= 0 || paused) return;
-      if (e.button === 0) {
-        state.mouseDown = true;
-        if (state.weaponIndex !== 4) tryShoot();
-      }
     });
 
     renderer.domElement.addEventListener("contextmenu", (e) => e.preventDefault());
 
+    // Mouse bindings feed the same gameplay action handlers as keyboard bindings.
+    // Capture phase keeps the action responsive while preventing browser defaults
+    // such as middle-click navigation from stealing the input.
+    document.addEventListener("mousedown", (e) => {
+      if (!controlsInputReady()) return;
+      const actions = REBINDABLE_ACTIONS.filter((a) => isMouseAction(e, a.id));
+      if (!actions.length) return;
+      e.preventDefault();
+      if (actions.some((a) => a.id === "fire")) state.mouseDown = true;
+      for (const a of actions) dispatchMouseBoundAction(a.id, "keydown");
+    }, true);
+
     document.addEventListener("mouseup", (e) => {
-      if (e.button === 0) {
+      const actions = REBINDABLE_ACTIONS.filter((a) => isMouseAction(e, a.id));
+      if (!actions.length) return;
+      e.preventDefault();
+      if (actions.some((a) => a.id === "fire")) {
         state.mouseDown = false;
         if (state.weaponIndex === 4) state.medKitNeedsRelease = false;
       }
-    });
-
-    document.addEventListener("mousedown", (e) => {
-      if (!gameWorldReady || !controlsInputReady() || player.health <= 0) return;
-      if (e.button === 2) {
-        if (state.weaponIndex !== 4 && !state.reloading) state.ads = true;
-      }
-    });
-
-    document.addEventListener("mouseup", (e) => {
-      if (e.button === 2) {
-        state.ads = false;
-      }
-    });
+      for (const a of actions) dispatchMouseBoundAction(a.id, "keyup");
+    }, true);
 
     renderer.domElement.addEventListener("click", () => {
       if (!gameWorldReady) return;
@@ -18070,7 +18282,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       return hits.length ? hits[0] : null;
     }
 
-    function performDevGunPierce(ray, muzzleStart, w) {
+    function performDevGunPierce(ray, muzzleStart, w, portalPath = null) {
       const glassHit = getGlassShotHit(ray);
       const glassDist = glassHit ? glassHit.distance : Infinity;
       const demoHit = hitAnimationShowcase(ray);
@@ -18156,8 +18368,8 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       }
       if (!trailEnd) trailEnd = _ehHitWorld.copy(ray.ray.origin).addScaledVector(ray.ray.direction, 80);
       if (trailEnd) {
-        createBulletTrail(muzzleStart, trailEnd, w.color);
-        emitShootNetwork(muzzleStart, trailEnd, w.color, glassHit && trailEnd === glassHit.point ? "spark" : (pierceHits.length || bestRpId != null ? "blood" : "miss"), { weaponIndex: LOADOUT_HIDDEN });
+        createPortalAwareShotTrail(muzzleStart, trailEnd, w.color, portalPath);
+        emitPortalAwareShot(muzzleStart, trailEnd, w.color, glassHit && trailEnd === glassHit.point ? "spark" : (pierceHits.length || bestRpId != null ? "blood" : "miss"), { weaponIndex: LOADOUT_HIDDEN }, portalPath);
       }
     }
 
@@ -19037,7 +19249,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
      * cyan on the victim's side. The server preserves enough of the shoot payload (color, type)
      * for the proximity-based fallback in `tryApplyDartSlowFromShootProximity` to fire too.
      */
-    function emitDartSlowNetwork(targetId, durationSec, hitPoint, muzzleOpt) {
+    function emitDartSlowNetwork(targetId, durationSec, hitPoint, muzzleOpt, portalPath = null) {
       if (!MULTIPLAYER || !socket || targetId == null) return;
       const dur = Math.max(0.5, durationSec || 5.0);
       const hx = hitPoint && hitPoint.x != null ? hitPoint.x : player.position.x;
@@ -19061,12 +19273,12 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       const end = hitPoint && hitPoint.isVector3
         ? hitPoint
         : new THREE.Vector3(hx, hy, hz);
-      emitShootNetwork(muzzle, end, 0x6bd4ff, "dartSlow", {
+      emitPortalAwareShot(muzzle, end, 0x6bd4ff, "dartSlow", {
         target: targetId,
         slowTarget: targetId,
         slowDuration: dur,
         hitKind: "dartSlow",
-      });
+      }, portalPath);
     }
 
     function spawnParalysisDartProjectile(origin, direction, weaponCfg) {
@@ -19095,6 +19307,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         vel: dir.clone().multiplyScalar(speed),
         gravity: (weaponCfg && weaponCfg.projectileGravity) || 9.8,
         slowDuration: (weaponCfg && weaponCfg.slowDuration) || 5,
+        portalPath: null,
         mesh: dart,
         age: 0,
         maxAge: 6,
@@ -19131,7 +19344,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       return humanoidHitAlongRay(raycaster, rootGroup, isBossEnemy, pad);
     }
 
-    function probeParalysisDartProximityHit(worldPos, hitPad, slowDuration, muzzleOpt) {
+    function probeParalysisDartProximityHit(worldPos, hitPad, slowDuration, muzzleOpt, portalPath = null) {
       if (MULTIPLAYER && !ARENA_COOP && !isTrainingMap(CURRENT_MAP)) {
         for (const [rpId, rp] of remotePlayers) {
           if (rp.isDown || !rp.group.visible) continue;
@@ -19141,7 +19354,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           const dz = worldPos.z - _projWorkVecA.z;
           const r = 0.58 * hitPad;
           if (dx * dx + dy * dy + dz * dz <= r * r) {
-            emitDartSlowNetwork(rpId, slowDuration, worldPos, muzzleOpt);
+            emitDartSlowNetwork(rpId, slowDuration, worldPos, muzzleOpt, portalPath);
             return true;
           }
         }
@@ -19187,6 +19400,28 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
               p.mesh.quaternion.setFromUnitVectors(_projWorkVecB.set(0, 0, -1), fwd);
             }
           }
+          if (p.fromShooter && !p.portalPath && isGauntletMap(CURRENT_MAP)) {
+            const approach = _projWorkVecC.subVectors(p.pos, p.prev);
+            const approachLen = approach.length();
+            if (approachLen > 1e-5) {
+              const approachDir = approach.multiplyScalar(1 / approachLen);
+              const approachRay = new THREE.Raycaster(p.prev, approachDir, 0, approachLen);
+              const crossing = findGauntletPortalRayCrossing(approachRay);
+              if (crossing) {
+                const clearLen = Math.max(0.001, crossing.distance - 1e-4);
+                const clearRay = new THREE.Raycaster(p.prev, approachDir, 0, clearLen);
+                const preWall = clearRay.intersectObjects(wallMeshes, false)[0] || null;
+                const preGlass = getGlassShotHit(clearRay);
+                const prePortalFrame = getGauntletPortalFrameShotHit(clearRay);
+                if (!preWall && !preGlass && !prePortalFrame && !portalRayHasEarlierHit(clearRay, crossing.distance)) {
+                  p.portalPath = crossing;
+                  p.pos.add(crossing.offset);
+                  p.prev.copy(crossing.exitRayOrigin);
+                  if (p.mesh) p.mesh.position.copy(p.pos);
+                }
+              }
+            }
+          }
           const segDir = _projWorkVecC.copy(p.pos).sub(p.prev);
           const segLen = segDir.length();
           if (segLen <= 1e-6) continue;
@@ -19196,9 +19431,10 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           const segmentWallHits = segRay.intersectObjects(wallMeshes, false);
           const segmentGlassHit = getGlassShotHit(segRay);
           const segmentWallHit = segmentWallHits[0] || null;
-          const segmentBlocker = segmentGlassHit && (!segmentWallHit || segmentGlassHit.distance < segmentWallHit.distance)
-            ? segmentGlassHit
-            : segmentWallHit;
+          const segmentPortalFrameHit = getGauntletPortalFrameShotHit(segRay);
+          const segmentBlocker = [segmentGlassHit, segmentWallHit, segmentPortalFrameHit]
+            .filter(Boolean)
+            .sort((a, b) => a.distance - b.distance)[0] || null;
           const segmentBlockerT = segmentBlocker ? segmentBlocker.distance : Infinity;
 
           const localImmune = p.age < 0.06;
@@ -19211,7 +19447,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
               if (rh && rh.t < segmentBlockerT) {
                 if (!p.netHitSent) {
                   p.netHitSent = true;
-                  emitDartSlowNetwork(rpId, p.slowDuration, rh.point || p.pos, p._dartMuzzle);
+                  emitDartSlowNetwork(rpId, p.slowDuration, rh.point || p.pos, p._dartMuzzle, p.portalPath);
                 }
                 createSparks(rh.point || p.pos.clone(), 0x6bd4ff);
                 consumed = true;
@@ -19219,7 +19455,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
               }
             }
             if (!consumed && !p.netHitSent && !segmentBlocker) {
-              consumed = probeParalysisDartProximityHit(p.pos, hitPad, p.slowDuration, p._dartMuzzle);
+              consumed = probeParalysisDartProximityHit(p.pos, hitPad, p.slowDuration, p._dartMuzzle, p.portalPath);
               if (consumed) {
                 p.netHitSent = true;
                 createSparks(p.pos.clone(), 0x6bd4ff);
@@ -19264,7 +19500,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
               }
             }
             if (!consumed && !p.netHitSent && !segmentBlocker) {
-              consumed = probeParalysisDartProximityHit(p.pos, hitPad, p.slowDuration, p._dartMuzzle);
+              consumed = probeParalysisDartProximityHit(p.pos, hitPad, p.slowDuration, p._dartMuzzle, p.portalPath);
               if (consumed) {
                 p.netHitSent = true;
                 createSparks(p.pos.clone(), 0x6bd4ff);
@@ -19553,14 +19789,16 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         getActiveMuzzleWorld(muzzle);
         const proj = spawnParalysisDartProjectile(muzzle, dir, w);
         if (MULTIPLAYER && !ARENA_COOP && !isTrainingMap(CURRENT_MAP)) {
-          const dartRay = new THREE.Raycaster(muzzle, dir, 0.02, 120);
-          dartRay.camera = camera;
+          const directDartRay = new THREE.Raycaster(muzzle, dir, 0.02, 120);
+          directDartRay.camera = camera;
+          const { ray: dartRay, path: dartPortalPath } = routeShotRayThroughPortal(directDartRay, 120);
           const dartWallHits = dartRay.intersectObjects(wallMeshes, false);
           const dartGlassHit = getGlassShotHit(dartRay);
           const dartWallHit = dartWallHits[0] || null;
-          const dartBlocker = dartGlassHit && (!dartWallHit || dartGlassHit.distance < dartWallHit.distance)
-            ? dartGlassHit
-            : dartWallHit;
+          const dartPortalFrameHit = getGauntletPortalFrameShotHit(dartRay);
+          const dartBlocker = [dartGlassHit, dartWallHit, dartPortalFrameHit]
+            .filter(Boolean)
+            .sort((a, b) => a.distance - b.distance)[0] || null;
           const dartBlockerT = dartBlocker ? dartBlocker.distance : Infinity;
           let bestRpId = null;
           let bestRpT = Infinity;
@@ -19580,7 +19818,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
               bestRpPoint ||
               _ehHitWorld.copy(dartRay.ray.origin).addScaledVector(dartRay.ray.direction, bestRpT);
             if (proj) proj.netHitSent = true;
-            emitDartSlowNetwork(bestRpId, w.slowDuration || 5, bp, muzzle);
+            emitDartSlowNetwork(bestRpId, w.slowDuration || 5, bp, muzzle, dartPortalPath);
             createSparks(bp.clone ? bp.clone() : bp, 0x6bd4ff);
           }
         }
@@ -19674,18 +19912,22 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         if (w.pellets === 1) totalSpread = Math.min(totalSpread, state.weaponIndex === 5 ? 0.028 : 0.065);
         const dir = getWeaponDirection(totalSpread);
         const rayOrigin = camera.position;
-        const ray = new THREE.Raycaster(rayOrigin, dir, 0.02, 160);
-        ray.camera = camera;
+        const directRay = new THREE.Raycaster(rayOrigin, dir, 0.02, 160);
+        directRay.camera = camera;
+        const { ray, path: portalPath } = routeShotRayThroughPortal(directRay, 160);
 
         if (state.weaponIndex === 8) {
-          performDevGunPierce(ray, muzzleStart, w);
+          performDevGunPierce(ray, muzzleStart, w, portalPath);
           continue;
         }
 
         const wallHits = ray.intersectObjects(wallMeshes, false);
         const wallHit = wallHits.length > 0 ? wallHits[0] : null;
         const glassHit = getGlassShotHit(ray);
-        const obstacleHit = glassHit && (!wallHit || glassHit.distance < wallHit.distance) ? glassHit : wallHit;
+        const portalFrameHit = getGauntletPortalFrameShotHit(ray);
+        const obstacleHit = [glassHit, wallHit, portalFrameHit]
+          .filter(Boolean)
+          .sort((a, b) => a.distance - b.distance)[0] || null;
         const wallDist = obstacleHit ? obstacleHit.distance : Infinity;
 
         let bestEnemy = null;
@@ -19746,8 +19988,8 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         const closestDist = Math.min(enemyDist, rpDist, wallDist, projDist, showcaseHit?.distance ?? Infinity);
         if (showcaseHit && closestDist === showcaseHit.distance) {
           showAnimationShowcaseHit(showcaseHit);
-          createBulletTrail(muzzleStart, showcaseHit.point, w.color);
-          emitShootNetwork(muzzleStart, showcaseHit.point, w.color, "spark");
+          createPortalAwareShotTrail(muzzleStart, showcaseHit.point, w.color, portalPath);
+          emitPortalAwareShot(muzzleStart, showcaseHit.point, w.color, "spark", {}, portalPath);
           continue;
         }
 
@@ -19760,7 +20002,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           proj.hp -= w.damageBody;
           const hitPt = new THREE.Vector3().copy(ray.ray.origin).addScaledVector(ray.ray.direction, bestProjT);
           createSparks(hitPt, 0xff6622);
-          createBulletTrail(muzzleStart, hitPt, w.color);
+          createPortalAwareShotTrail(muzzleStart, hitPt, w.color, portalPath);
           if (proj.hp <= 0) {
             destroyBossProjectile(bestProjIdx, true);
           }
@@ -19771,8 +20013,8 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           bestEnemy.playerHit = true;
           const bp = _ehHitWorld.copy(ray.ray.origin).addScaledVector(ray.ray.direction, bestEnemyHitT);
           createBlood(bp);
-          createBulletTrail(muzzleStart, bp, w.color);
-          emitShootNetwork(muzzleStart, bp, w.color, "blood");
+          createPortalAwareShotTrail(muzzleStart, bp, w.color, portalPath);
+          emitPortalAwareShot(muzzleStart, bp, w.color, "blood", {}, portalPath);
           triggerHitFeedback(false, bestEnemyZone === "head");
 
           if (bestEnemy.trainingDummy) {
@@ -19831,8 +20073,8 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         } else if (closestDist === rpDist && bestRpId != null && bestRpHitT < Infinity) {
           const bp = _ehHitWorld.copy(ray.ray.origin).addScaledVector(ray.ray.direction, bestRpHitT);
           createBlood(bp);
-          createBulletTrail(muzzleStart, bp, w.color);
-          emitShootNetwork(muzzleStart, bp, w.color, "blood");
+          createPortalAwareShotTrail(muzzleStart, bp, w.color, portalPath);
+          emitPortalAwareShot(muzzleStart, bp, w.color, "blood", {}, portalPath);
           let dmg = w.damageBody;
           if (bestRpZone === "head") dmg = w.damageHead;
           else if (bestRpZone === "leg") dmg = w.damageLegs;
@@ -19869,18 +20111,18 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           obstacleHit.object.userData.gauntletTarget?.();
           const wp = obstacleHit.point.clone();
           const normal = obstacleHit.face.normal.clone().transformDirection(obstacleHit.object.matrixWorld);
-          createBulletTrail(muzzleStart, wp, w.color);
+          createPortalAwareShotTrail(muzzleStart, wp, w.color, portalPath);
           createSparks(wp.clone(), w.color);
           createBulletMark(wp.clone(), normal, obstacleHit.object);
-          emitShootNetwork(muzzleStart, wp, w.color, "spark", {
+          emitPortalAwareShot(muzzleStart, wp, w.color, "spark", {
             nx: normal.x,
             ny: normal.y,
             nz: normal.z,
-          });
+          }, portalPath);
         } else {
-          const missEnd = _crosshairHit.copy(rayOrigin).addScaledVector(dir, 160);
-          createBulletTrail(muzzleStart, missEnd, w.color);
-          emitShootNetwork(muzzleStart, missEnd, w.color, "miss");
+          const missEnd = _crosshairHit.copy(ray.ray.origin).addScaledVector(dir, ray.far);
+          createPortalAwareShotTrail(muzzleStart, missEnd, w.color, portalPath);
+          emitPortalAwareShot(muzzleStart, missEnd, w.color, "miss", {}, portalPath);
         }
       }
 
@@ -20777,9 +21019,10 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       setActiveSettingsTab(chosen);
     }
 
-    // ── Key-binding settings UI ───────────────────────────────────────
-    // While capturing, this holds the action id awaiting a new key; null otherwise.
+    // ── Input-binding settings UI ─────────────────────────────────────
+    // Capture state identifies the action and whether the next input is a key or mouse button.
     let _keyBindingCapture = null;
+    let _suppressNextBindingClick = false;
 
     function renderKeyBindingsUI() {
       const list = document.getElementById("keyBindingsList");
@@ -20787,47 +21030,92 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       list.innerHTML = "";
       for (const a of REBINDABLE_ACTIONS) {
         const row = document.createElement("div");
-        row.style.cssText = "display:flex;align-items:center;justify-content:space-between;gap:12px;";
+        row.style.cssText = "display:grid;grid-template-columns:minmax(105px,1fr) minmax(82px,auto) minmax(82px,auto);align-items:center;gap:6px;";
         const name = document.createElement("span");
         name.textContent = a.label;
-        name.style.cssText = "font-size:13px;opacity:0.9;";
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.className = "settings-action-btn";
-        btn.style.cssText = "min-width:104px;padding:6px 12px;text-align:center;";
-        if (_keyBindingCapture === a.id) {
-          btn.textContent = "PRESS…";
-          btn.style.opacity = "0.7";
-        } else {
-          btn.textContent = codeToLabel(kbCode(a.id));
-        }
-        btn.addEventListener("click", () => {
-          _keyBindingCapture = (_keyBindingCapture === a.id) ? null : a.id;
-          renderKeyBindingsUI();
-        });
+        name.style.cssText = "font-size:12px;opacity:0.9;min-width:0;";
+        const makeButton = (kind, label) => {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "settings-action-btn";
+          btn.style.cssText = "min-width:0;width:100%;padding:6px 5px;text-align:center;font-size:11px;white-space:nowrap;";
+          const capturing = _keyBindingCapture?.action === a.id && _keyBindingCapture?.kind === kind;
+          btn.textContent = capturing ? "PRESS…" : `${kind === "key" ? "KEY" : "MOUSE"} · ${label}`;
+          if (capturing) btn.style.opacity = "0.7";
+          btn.title = kind === "key" ? `Bind a key for ${a.label}` : `Bind a mouse button for ${a.label}`;
+          btn.addEventListener("click", () => {
+            const sameTarget = _keyBindingCapture?.action === a.id && _keyBindingCapture?.kind === kind;
+            _keyBindingCapture = sameTarget ? null : { action: a.id, kind };
+            renderKeyBindingsUI();
+          });
+          return btn;
+        };
+        const keyButton = makeButton("key", codeToLabel(kbCode(a.id)));
+        const mouseButton = makeButton("mouse", mouseCodeToLabel(gameSettings.mouseBindings?.[a.id]));
         row.appendChild(name);
-        row.appendChild(btn);
+        row.appendChild(keyButton);
+        row.appendChild(mouseButton);
         list.appendChild(row);
       }
     }
 
-    // Capture the next key while rebinding. Capture phase → runs before the game's
-    // own keydown handler, and stopImmediatePropagation prevents the pressed key
-    // from also firing as a game action (or closing the modal on Esc).
+    // Capture the next key before gameplay sees it. Escape cancels either capture mode.
     document.addEventListener("keydown", (e) => {
       if (!_keyBindingCapture) return;
       e.preventDefault();
       e.stopImmediatePropagation();
-      const action = _keyBindingCapture;
-      _keyBindingCapture = null;
-      if (e.key !== "Escape") {
-        const code = e.code || null;
-        if (code) {
-          gameSettings.keyBindings[action] = code;
+      if (e.key === "Escape") {
+        _keyBindingCapture = null;
+        renderKeyBindingsUI();
+        return;
+      }
+      if (_keyBindingCapture.kind === "mouse") {
+        if (e.key === "Delete" || e.key === "Backspace") {
+          gameSettings.mouseBindings[_keyBindingCapture.action] = null;
+          _keyBindingCapture = null;
           saveGameSettings();
+          renderKeyBindingsUI();
         }
+        return;
+      }
+      if (_keyBindingCapture.kind !== "key") return;
+      const action = _keyBindingCapture.action;
+      _keyBindingCapture = null;
+      const code = e.code || null;
+      if (code) {
+        gameSettings.keyBindings[action] = code;
+        saveGameSettings();
       }
       renderKeyBindingsUI();
+    }, true);
+
+    document.addEventListener("mousedown", (e) => {
+      if (!_keyBindingCapture || _keyBindingCapture.kind !== "mouse") return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      _suppressNextBindingClick = true;
+      if (e.button < 0 || e.button > 2) return;
+      const { action } = _keyBindingCapture;
+      _keyBindingCapture = null;
+      for (const a of REBINDABLE_ACTIONS) {
+        if (a.id !== action && gameSettings.mouseBindings[a.id] === `Mouse${e.button}`) {
+          gameSettings.mouseBindings[a.id] = null;
+        }
+      }
+      gameSettings.mouseBindings[action] = `Mouse${e.button}`;
+      saveGameSettings();
+      renderKeyBindingsUI();
+    }, true);
+
+    document.addEventListener("mouseup", () => {
+      if (_suppressNextBindingClick) setTimeout(() => { _suppressNextBindingClick = false; }, 0);
+    }, true);
+
+    document.addEventListener("click", (e) => {
+      if (!_suppressNextBindingClick) return;
+      _suppressNextBindingClick = false;
+      e.preventDefault();
+      e.stopImmediatePropagation();
     }, true);
 
     {
@@ -20835,6 +21123,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       if (btnResetKB) {
         btnResetKB.addEventListener("click", () => {
           gameSettings.keyBindings = defaultKeyBindings();
+          gameSettings.mouseBindings = defaultMouseBindings();
           _keyBindingCapture = null;
           saveGameSettings();
           renderKeyBindingsUI();
@@ -24973,7 +25262,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         const stats = document.createElement("small");
         const w = weapons[widx];
         stats.textContent = widx === LOADOUT_HIDDEN
-          ? "∞ ammo · 0.08s fire · wall piercing"
+          ? "Verified developer · bonus Crossfire slot · wall piercing"
           : `${w.magSize} ${tr("loadoutRounds", "rounds")} · ${(w.reloadTime / 1000).toFixed(2)}s ${tr("loadoutReload", "reload")}`;
         card.append(cnv, nm, stats);
         card.addEventListener("click", () => toggleLoadoutGun(widx));
@@ -25161,7 +25450,8 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           "Pick <b>{n}</b> guns. Locked once a match starts — back out to the menu to change it. "
           + "The training range ignores the backpack and gives you everything.")
           .replace("{n}", String(LOADOUT_MAX_GUNS))
-          + `<br><span style="color:#4fd1ff;">${loadoutGuns.filter((gun) => gun !== LOADOUT_HIDDEN).length} / ${LOADOUT_MAX_GUNS}</span>`;
+          + `<br><span style="color:#4fd1ff;">${loadoutGuns.filter((gun) => gun !== LOADOUT_HIDDEN).length} / ${LOADOUT_MAX_GUNS}</span>`
+          + (hasDevWeaponAccess() ? `<br><span style="color:#ffbd72;">HACK is automatically included in Crossfire as a bonus slot.</span>` : "");
       }
       const f = document.getElementById("loadoutFixed");
       if (f) {
@@ -25853,6 +26143,13 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           syncGameRendererSize();
         },
         unpause() { hidePause(); },
+        /** Starts a map by id, quality tier (0 potato .. 3 extreme) and gauntlet level without the menus (look-testing across tiers). */
+        start(map, tier, level) {
+          if (tier != null) { gameSettings.qualityIndex = tier; applyGraphicsQuality(); }
+          if (level != null) gauntletLevel = THREE.MathUtils.clamp(level | 0, 1, GAUNTLET_LEVEL_COUNT);
+          startGame(map, false, false, false);
+        },
+        get quality() { return getQualityId(); },
         goto(arc, height = 0, lookAhead = 6) {
           const route = gauntletCourse.path;
           const i = gauntletIndexAtArc(Math.max(0, arc)), c = route[i], n = route[Math.min(route.length - 1, i + lookAhead)];

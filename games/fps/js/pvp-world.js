@@ -46,6 +46,11 @@ export function createPvpWorld(THREE, hooks) {
     },
     zone(z) { zones.push({ kind: "damage", w: 2, d: 2, rate: 0.5, last: -1e9, inside: false, ...z }); return z; },
     tick(fn) { ticks.push(fn); },
+    /** All visible players, for map interactions that should react identically on every client. */
+    players() {
+      const all = hooks.players ? hooks.players() : [hooks.player ? hooks.player() : null];
+      return Array.isArray(all) ? all.filter(Boolean) : [];
+    },
     /** Call every frame. */
     update(dt) {
       const t = hooks.time();
