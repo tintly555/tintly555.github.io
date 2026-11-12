@@ -963,8 +963,8 @@
     }
     .menu-float-icon:focus-visible { outline: 1px solid rgba(143, 216, 255, 0.75); outline-offset: 2px; }
     /* Boss count: segmented control instead of three full-width menu buttons. */
-    #bossCountRow { flex-direction: column; gap: 6px !important; }
-    #bossCountRow > span { opacity: 0.7; letter-spacing: 3px !important; font-size: 11px !important; }
+    #bossCountRow { flex-direction: row; gap: 10px !important; }
+    #bossCountRow > span { opacity: 0.7; letter-spacing: 2px !important; font-size: 11px !important; }
     #bossCountRow .seg { display: flex; gap: 0; }
     .menu #bossCountRow button.boss-count-btn {
       width: 72px;
@@ -974,6 +974,33 @@
     }
     .menu #bossCountRow button.boss-count-btn:first-of-type { border-radius: 8px 0 0 8px; }
     .menu #bossCountRow button.boss-count-btn:last-of-type { border-radius: 0 8px 8px 0; }
+    .menu #bossCountRow button#btnBossHell {
+      box-sizing: border-box;
+      width: 48px;
+      height: 48px;
+      min-width: 48px;
+      padding: 8px;
+      display: grid;
+      place-items: center;
+      border: 1px solid rgba(224, 231, 239, 0.36);
+      border-radius: 7px;
+      color: #d6dce4;
+      background-image: var(--game-ui-btn-texture) !important;
+      box-shadow: 0 3px 10px rgba(0, 0, 0, 0.42), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+      transition: color .16s, border-color .16s, box-shadow .16s, filter .16s;
+    }
+    .menu #bossCountRow button#btnBossHell:hover,
+    .menu #bossCountRow button#btnBossHell:focus-visible {
+      border-color: rgba(255, 99, 78, 0.8);
+      color: #ff8b78;
+      box-shadow: 0 0 12px rgba(255, 53, 37, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.14);
+    }
+    .menu #bossCountRow button#btnBossHell[aria-pressed="true"] {
+      color: #ff6456;
+      border-color: #ff5547;
+      box-shadow: 0 0 16px rgba(255, 47, 34, 0.46), inset 0 0 12px rgba(255, 47, 34, 0.16);
+    }
+    #btnBossHell svg { width: 27px; height: 27px; shape-rendering: crispEdges; display: block; }
 
     /* Explicit texture class for buttons outside .menu or with conflicting inline styles */
     .btn-texture {
@@ -2315,12 +2342,26 @@
       <div id="bossCountRow" style="display:flex;gap:8px;align-items:center;margin-bottom:4px;transition:opacity 0.15s;">
         <span data-i18n="bossesLabel" style="font-family:var(--game-font-ui);font-size:13px;letter-spacing:1px;">BOSSES:</span>
         <div class="seg">
-        <button type="button" class="bossDiffBtn btn-texture boss-count-btn" data-boss-count="1">1</button>
-        <button type="button" class="bossDiffBtn btn-texture boss-count-btn" data-boss-count="2">2</button>
-        <button type="button" class="bossDiffBtn btn-texture boss-count-btn" data-boss-count="3">3</button>
+          <button type="button" class="bossDiffBtn btn-texture boss-count-btn" data-boss-count="1">1</button>
+          <button type="button" class="bossDiffBtn btn-texture boss-count-btn" data-boss-count="2">2</button>
+          <button type="button" class="bossDiffBtn btn-texture boss-count-btn" data-boss-count="3">3</button>
         </div>
+        <button type="button" id="btnBossHell" class="btn-texture boss-hell-skull" data-i18n-aria-label="hellMode" aria-label="Hell mode" title="Hell mode" aria-pressed="false">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" aria-hidden="true">
+            <g fill="currentColor">
+              <rect x="5" y="1" width="6" height="1"/><rect x="3" y="2" width="10" height="1"/>
+              <rect x="2" y="3" width="12" height="5"/><rect x="3" y="8" width="10" height="2"/>
+              <rect x="4" y="10" width="8" height="1"/><rect x="4" y="11" width="2" height="3"/>
+              <rect x="7" y="11" width="2" height="3"/><rect x="10" y="11" width="2" height="3"/>
+            </g>
+            <g fill="#18202a">
+              <rect x="4" y="4" width="3" height="3"/><rect x="9" y="4" width="3" height="3"/>
+              <rect x="7" y="8" width="2" height="2"/><rect x="6" y="11" width="1" height="2"/>
+              <rect x="9" y="11" width="1" height="2"/>
+            </g>
+          </svg>
+        </button>
       </div>
-      <button type="button" id="btnBossHell" class="btn-texture" data-i18n="hellMode" style="font-family:var(--game-font-ui);padding:8px 22px;border:2px solid #ff2244;border-radius:6px;color:#ff4466;cursor:pointer;font-size:14px;letter-spacing:1px;">HELL MODE</button>
       <button type="button" id="btnBossStartDiff" class="btn-texture btn-primary" data-i18n="btnStart">START</button>
       <button type="button" id="btnBossDiffBack" class="menu-float-icon menu-back-btn"><svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
     </div>
@@ -3729,7 +3770,7 @@ if (typeof window !== "undefined") {
     {"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.182.0/build/three.module.js"}}
   </script>
   <script type="module" src="js/game-cursor.js?v=1"></script>
-  <script type="module" src="js/main.js?v=20261111-parkour-blur-v1-notext2-hit-feedback-v1-boss-emergence-fx-wxue-boss-polish"></script>
+  <script type="module" src="js/main.js?v=20261111-parkour-blur-v1-notext2-hit-feedback-v1-boss-emergence-fx-wxue-boss-polish-boss-attacks-v1-hell-tempo-skull-v2"></script>
   <footer id="pageFooter" style="position:fixed;left:0;right:0;bottom:0;display:flex;justify-content:center;align-items:center;gap:16px;padding:10px 14px;background:transparent;backdrop-filter:none;z-index:101;pointer-events:auto;">
     <img src="images/tintly555.png" alt="Tintly555" style="height:28px;width:auto;display:block;opacity:0.75;" />
     <img src="images/jimmyqrg.png" alt="JimmyQrg" style="height:32px;width:auto;display:block;margin-bottom:2px;opacity:0.75;" />

@@ -231,7 +231,7 @@ export function createBossCreature(THREE, { hell = false } = {}) {
   }
 
   /** What the body should be doing for the current animation. Values are targets; update() eases to them. */
-  function evaluate(anim, t, moving, hellMode) {
+  function evaluate(anim, t, moving, hellMode, move = "", moveStyle = "", moveDuration = 0) {
     const P = target;
     P.bodyPitch = 0; P.bodyRoll = 0; P.bodyY = 0; P.bodyZ = 0; P.rear = 0; P.splay = 1;
     P.sy = 0.34; P.sp = 0.12; P.ey = 0.85; P.ep = 0.1; P.pin = 0.25 + Math.sin(clock * 1.7) * 0.1;
@@ -289,6 +289,59 @@ export function createBossCreature(THREE, { hell = false } = {}) {
         P.sp = phase(P.sp, 0.4, 0.1, coil, snap, rec);
         P.pin = phase(P.pin, 0.7, 0.3, coil, snap, rec);
         P.mand = lerp(P.mand, 0.9, coil * (1 - rec));
+        break;
+      }
+      case "patternAttack": {
+        const duration = Math.max(0.8, moveDuration || 2);
+        const wind = smooth(0.05, 0.52, t);
+        const strike = smooth(0.5, 0.82, t);
+        const recover = smooth(duration * 0.72, duration, t);
+        const active = wind * (1 - recover);
+        const style = moveStyle || move;
+        const clawMove = style.includes("claw");
+        const tailMove = style.includes("tail") || /stinger|venom|volley|spit/.test(move);
+        const quakeMove = style.includes("quake") || /ground|aftershock|stomp|wave/.test(move);
+        const dashMove = style.includes("dash") || /rush|sidewinder|retreat/.test(move);
+        const side = /right/.test(move) ? 1 : /left/.test(move) ? -1 : 0;
+        if (clawMove) {
+          P.sy = lerp(P.sy, side ? 0.32 : 0.95, active);
+          P.sp = lerp(P.sp, 0.8 + strike * 0.24, active);
+          P.ey = lerp(P.ey, 0.22, active);
+          P.ep = lerp(P.ep, 0.44, active);
+          P.pin = lerp(P.pin, 0.9 - strike * 0.5, active);
+          P.bodyPitch = -0.14 * active;
+          P.bodyRoll = side * -0.12 * active;
+          P.bodyZ = -0.18 * wind + 0.34 * strike;
+          P.mand = lerp(P.mand, 0.95, active);
+        }
+        if (tailMove) {
+          const coil = 1 - strike;
+          P.tailCurl = lerp(P.tailCurl, 0.2 + strike * 1.0, active);
+          P.tailYaw = lerp(P.tailYaw, side * 0.5 + (move.includes("rear") ? 0.7 : 0), active);
+          P.tailGlow = lerp(P.tailGlow, 0.45 + coil * 0.7, active);
+          P.bodyPitch -= 0.08 * active;
+          P.ey = lerp(P.ey, 0.55, active);
+          P.pin = lerp(P.pin, 0.48, active);
+        }
+        if (quakeMove) {
+          P.rear = lerp(P.rear, 0.76 * (1 - strike * 0.75), active);
+          P.bodyPitch += 0.42 * wind - 0.52 * strike;
+          P.bodyY += 0.34 * wind - 0.22 * strike;
+          P.stomp = active * strike;
+          P.tailCurl = lerp(P.tailCurl, 0.8, active);
+          P.mand = lerp(P.mand, 0.75, active);
+        }
+        if (dashMove) {
+          P.bodyY -= 0.3 * wind * (1 - recover);
+          P.bodyPitch -= 0.2 * active;
+          P.bodyRoll += (side || 1) * 0.13 * wind * (1 - recover);
+          P.sy = lerp(P.sy, 0.2, active * 0.65);
+          P.sp = lerp(P.sp, -0.06, active * 0.65);
+          P.tailYaw = lerp(P.tailYaw, -(side || 1) * 0.36, active);
+          P.tailCurl = lerp(P.tailCurl, 0.92, active);
+          P.eyeGlow = 1.12;
+        }
+        P.coreGlow = Math.max(P.coreGlow, 0.8 + active * 0.28);
         break;
       }
       case "summoning": {
@@ -472,7 +525,7 @@ export function createBossCreature(THREE, { hell = false } = {}) {
     gaitPhase += speedS * dt / 1.7 * TAU * 0.5;
     if (teleported) for (const leg of legs) leg.ready = false;
 
-    evaluate(anim, t, moving, hell);
+    evaluate(anim, t, moving, hell, input.move || "", input.moveStyle || "", input.moveDuration || 0);
     const attackish = anim !== "idle";
     const rate = attackish ? 22 : 9;
     for (const k of Object.keys(pose)) pose[k] = damp(pose[k], target[k], k === "bodyY" && anim === "quaking" ? 40 : rate, dt);

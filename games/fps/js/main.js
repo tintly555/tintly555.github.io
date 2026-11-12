@@ -6,8 +6,9 @@
     import { createPvpMaps } from "./pvp-maps.js?v=34";
     import { createPvpWorld } from "./pvp-world.js?v=3";
     import { createBossNavigation } from "./boss-navigation.js?v=2";
+    import { BOSS_ATTACK_BY_ID, chooseBossAttack } from "./boss-attacks.js?v=2";
     import { BOSS_ARENA_HALF, createCombatEnvironment } from "./combat-environments.js?v=6";
-    import { createBossCreature, BOSS_RADIUS, CLAW_STRIKE_S, QUAKE_SLAM_S, LOB_RELEASE_S, DURATIONS as BOSS_DURATIONS } from "./boss-creature.js?v=10";
+    import { createBossCreature, BOSS_RADIUS, CLAW_STRIKE_S, QUAKE_SLAM_S, LOB_RELEASE_S, DURATIONS as BOSS_DURATIONS } from "./boss-creature.js?v=11";
     import { buildOperatorShell } from "./operator-model.js?v=1";
     import { extendGauntletCourses, GAUNTLET_CHAPTERS, GAUNTLET_CHAPTER_SIZE } from "./gauntlet-courses.js?v=5";
     import { createGauntletRuntime } from "./gauntlet-runtime.js?v=17";
@@ -10540,6 +10541,9 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       enemy.creature.update(dt, {
         anim: enemy.alive ? (enemy.bossAnimState || "idle") : "idle",
         t: enemy.bossAnimTimer || 0,
+        move: enemy.bossAttackId || "",
+        moveStyle: BOSS_ATTACK_BY_ID[enemy.bossAttackId]?.style || "",
+        moveDuration: BOSS_ATTACK_BY_ID[enemy.bossAttackId]?.duration || 0,
         moving: enemy.alive && !enemy.spawnEmergence,
         flinch: left > 0 ? Math.min(1, left / Math.max(1, enemy._flinchMs)) : 0,
       });
@@ -11275,6 +11279,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         baseTankHp: hp, baseSpeedHp: hp, baseGunnerHp: hp,
         summonCooldown: 999, summonCount: 0, summonTriggered: false,
         bossAnimState: "idle", bossAnimTimer: 0, bossQuakeCooldownTimer: tune.cdQuake, _quakeShook: false,
+        bossAttackId: null, cdPattern: 2.8,
         cdClaw: 1.2, cdCharge: tune.cdCharge * 0.6, cdLob: 2.5, cdQuake: tune.cdQuake * 0.7,
       };
       root.rotation.y = 0;
@@ -21140,6 +21145,11 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         if (boss) {
           e.bossMode = z.bm;
           e.ranged = z.bm === "gunner";
+          if (z.baid !== undefined) e.bossAttackId = z.baid || null;
+          if (Number.isFinite(z.bax) && Number.isFinite(z.baz)) {
+            e._bossAttackAim = { x: z.bax, y: Number.isFinite(z.bay) ? z.bay : 1.2, z: z.baz };
+          }
+          if (Number.isFinite(z.bayaw)) e._bossAttackYaw = z.bayaw;
           if (Number.isFinite(z.modeIn)) e.bossModeSwitchTimer = z.modeIn;
           if (Number.isFinite(z.quakeIn)) e.bossQuakeCooldownTimer = z.quakeIn;
           if (Number.isFinite(z.summon)) e._hellSummonStage = z.summon;
@@ -21153,6 +21163,10 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
             if (z.ba === "chargeWind") {
               e._lane = spawnBossLane(e, 0xff7a2a);
               e._laneUntil = performance.now() + 1100;
+            }
+            if (z.ba === "patternAttack") {
+              const move = BOSS_ATTACK_BY_ID[e.bossAttackId];
+              if (move) spawnBossPatternTelegraphs(e, move, z.bt ?? 0);
             }
           }
           if (z.roar !== undefined && e.lastRemoteRoar !== undefined && z.roar !== e.lastRemoteRoar && !hydrate) {
@@ -21269,6 +21283,9 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
             summon: e._hellSummonStage, summonDone: e.summonTriggered, hellSummonDone: e._hellBossSummoned,
             roar: e.roarSerial || 0, pending: e._pendingBossProjectile, released: e._rangedBallReleased,
             meleePending: e._meleeDamagePending, quakeDone: e._quakeShook, smashDone: e._smashShook,
+            baid: e.bossAttackId || null,
+            bax: e._bossAttackAim?.x, bay: e._bossAttackAim?.y, baz: e._bossAttackAim?.z,
+            bayaw: e._bossAttackYaw,
           });
           return [row];
         }),
@@ -21804,7 +21821,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     const bossTelegraphs = [];
     const _tgDiscGeo = new THREE.CircleGeometry(1, 56);
     const _tgRimGeo = new THREE.RingGeometry(0.965, 1, 72);
-    function spawnBossTelegraph(enemy, radius, windupS, color) {
+    function spawnBossTelegraph(enemy, radius, windupS, color, center = null) {
       const mk = (geo, opacity) => {
         const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({
           color, transparent: true, opacity, depthWrite: false,
@@ -21819,10 +21836,48 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       const disc = mk(_tgDiscGeo, 0);
       const rim = mk(_tgRimGeo, 0);
       grp.add(disc, rim);
-      grp.position.set(enemy.group.position.x, (enemy.baseY || 0) + 0.035, enemy.group.position.z);
+      grp.position.set(center?.x ?? enemy.group.position.x, (enemy.baseY || 0) + 0.035, center?.z ?? enemy.group.position.z);
       scene.add(grp);
-      bossTelegraphs.push({ grp, disc, rim, enemy, radius, startMs: performance.now(), windupMs: windupS * 1000 });
+      bossTelegraphs.push({ grp, disc, rim, enemy, radius, startMs: performance.now(), windupMs: Math.max(0.05, windupS) * 1000, followEnemy: !center });
     }
+
+    function spawnBossSectorTelegraph(enemy, radius, halfAngle, windupS, color, yaw, center = null) {
+      const segments = 32;
+      const positions = [0, 0, 0];
+      for (let i = 0; i <= segments; i++) {
+        const a = -halfAngle + (2 * halfAngle * i) / segments;
+        positions.push(Math.sin(a), 0, Math.cos(a));
+      }
+      const indices = [];
+      for (let i = 0; i < segments; i++) indices.push(0, i + 1, i + 2);
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+      geometry.setIndex(indices);
+      geometry.computeVertexNormals();
+      const material = new THREE.MeshBasicMaterial({
+        color, transparent: true, opacity: 0, depthWrite: false,
+        blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false,
+      });
+      const grp = new THREE.Group();
+      const disc = new THREE.Mesh(geometry, material);
+      disc.scale.set(radius, 1, radius);
+      disc.raycast = () => {};
+      disc.renderOrder = 3;
+      grp.add(disc);
+      grp.position.set(center?.x ?? enemy.group.position.x, (enemy.baseY || 0) + 0.045, center?.z ?? enemy.group.position.z);
+      grp.rotation.y = yaw;
+      scene.add(grp);
+      bossTelegraphs.push({ grp, disc, rim: null, enemy, radius, startMs: performance.now(),
+        windupMs: Math.max(0.05, windupS) * 1000, followEnemy: !center, shape: "sector", disposeGeo: true });
+    }
+
+    function disposeBossTelegraph(tg) {
+      scene.remove(tg.grp);
+      tg.disc.material.dispose();
+      tg.rim?.material.dispose();
+      if (tg.disposeGeo) tg.disc.geometry.dispose();
+    }
+
     function updateBossTelegraphs() {
       updateBossLanes();
       const now = performance.now();
@@ -21830,10 +21885,14 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         const tg = bossTelegraphs[i];
         const t = (now - tg.startMs) / tg.windupMs;
         if (t < 1) {
-          if (tg.enemy && tg.enemy.alive) {
+          if (tg.followEnemy && tg.enemy && tg.enemy.alive) {
             tg.grp.position.set(tg.enemy.group.position.x, (tg.enemy.baseY || 0) + 0.035, tg.enemy.group.position.z);
           }
           const e = t * t;
+          if (tg.shape === "sector") {
+            tg.disc.material.opacity = 0.11 + 0.19 * e + 0.035 * Math.sin(now * 0.025);
+            continue;
+          }
           tg.rim.scale.setScalar(tg.radius);
           tg.rim.material.opacity = 0.35 + 0.4 * e + 0.15 * Math.sin(now * 0.025);
           tg.disc.scale.setScalar(Math.max(0.01, tg.radius * e));
@@ -21842,13 +21901,16 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         }
         const f = (now - tg.startMs - tg.windupMs) / 420;
         if (f >= 1) {
-          scene.remove(tg.grp);
-          tg.disc.material.dispose();
-          tg.rim.material.dispose();
+          disposeBossTelegraph(tg);
           bossTelegraphs.splice(i, 1);
           continue;
         }
         const ease = 1 - (1 - f) * (1 - f);
+        if (tg.shape === "sector") {
+          tg.disc.scale.set(tg.radius * (1 + 0.2 * ease), 1, tg.radius * (1 + 0.2 * ease));
+          tg.disc.material.opacity = 0.34 * (1 - f);
+          continue;
+        }
         tg.rim.scale.setScalar(tg.radius * (1 + 0.35 * ease));
         tg.rim.material.opacity = 0.9 * (1 - f);
         tg.disc.scale.setScalar(tg.radius);
@@ -21856,11 +21918,35 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       }
     }
 
+    function spawnBossPatternTelegraphs(enemy, move, elapsed = 0) {
+      if (!move) return;
+      const color = enemy.isHellBoss ? 0xff321f : 0xff8b38;
+      const yaw = enemy._bossAttackYaw ?? enemy.visYaw;
+      for (const event of move.events) {
+        const lead = event.at - elapsed;
+        if (lead <= 0.08) continue;
+        if (event.type === "strike" && event.shape === "sector") {
+          const center = event.anchor === "aim" ? enemy._bossAttackAim : null;
+          spawnBossSectorTelegraph(enemy, event.radius, event.halfAngle, lead, color,
+            yaw + (event.offset || 0), center);
+        } else if (event.type === "strike" && event.shape === "circle") {
+          const center = event.anchor === "aim" ? enemy._bossAttackAim : null;
+          spawnBossTelegraph(enemy, event.radius, lead, color, center);
+        } else if (event.type === "dash") {
+          const offset = event.direction === "right" ? Math.PI / 2
+            : event.direction === "left" ? -Math.PI / 2
+              : event.direction === "away" ? Math.PI : 0;
+          spawnBossLane(enemy, color, {
+            locked: true, yaw: yaw + offset, width: event.width || 3,
+            length: event.length || 10, impactIn: lead,
+          });
+        }
+      }
+    }
+
     function clearBossProjectileEffects() {
       for (const tg of bossTelegraphs) {
-        scene.remove(tg.grp);
-        tg.disc.material.dispose();
-        tg.rim.material.dispose();
+        disposeBossTelegraph(tg);
       }
       bossTelegraphs.length = 0;
       for (const lane of bossLanes) { scene.remove(lane.mesh); lane.mat.dispose(); }
@@ -22012,7 +22098,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     const _laneGeo = (() => { const g = new THREE.PlaneGeometry(1, 1); g.rotateX(-Math.PI / 2); g.translate(0, 0, 0.5); return g; })();
 
     /** A ground strip showing the line of a charge. It follows the creature until the charge is locked. */
-    function spawnBossLane(enemy, color) {
+    function spawnBossLane(enemy, color, options = {}) {
       const mat = new THREE.MeshBasicMaterial({
         color, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending,
         side: THREE.DoubleSide, fog: false,
@@ -22020,10 +22106,13 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       const mesh = new THREE.Mesh(_laneGeo, mat);
       mesh.raycast = () => {};
       mesh.renderOrder = 3;
-      mesh.position.set(enemy.group.position.x, (enemy.baseY || 0) + 0.04, enemy.group.position.z);
-      mesh.scale.set(BOSS_RADIUS * enemy.creature.scale * 1.8 + 0.8, 1, 46);
+      mesh.position.set(options.x ?? enemy.group.position.x, (enemy.baseY || 0) + 0.04, options.z ?? enemy.group.position.z);
+      mesh.rotation.y = Number.isFinite(options.yaw) ? options.yaw : enemy.visYaw;
+      mesh.scale.set(options.width ?? (BOSS_RADIUS * enemy.creature.scale * 1.8 + 0.8), 1, options.length ?? 46);
       scene.add(mesh);
-      const lane = { mesh, mat, born: performance.now(), fadeAt: 0 };
+      const now = performance.now();
+      const lane = { mesh, mat, born: now, fadeAt: 0, locked: !!options.locked,
+        impactAt: Number.isFinite(options.impactIn) ? now + options.impactIn * 1000 : 0 };
       bossLanes.push(lane);
       return lane;
     }
@@ -22032,6 +22121,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       const now = performance.now();
       for (let i = bossLanes.length - 1; i >= 0; i--) {
         const lane = bossLanes[i];
+        if (!lane.fadeAt && lane.impactAt && now >= lane.impactAt) lane.fadeAt = now;
         if (lane.fadeAt) {
           const f = (now - lane.fadeAt) / 450;
           if (f >= 1) { scene.remove(lane.mesh); lane.mat.dispose(); bossLanes.splice(i, 1); continue; }
@@ -22127,12 +22217,12 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     }
 
     /** Launch velocities for a lobbed ball from `from` to `aim`; hell throws a three-ball fan. */
-    function bossLobFan(from, aim, hell) {
+    function bossLobFan(from, aim, hell, angles = null) {
       const flight = Math.hypot(aim.x - from.x, aim.y - from.y, aim.z - from.z);
       const T = Math.max(0.05, flight / BOSS_BALL_SPEED);
       const vx = (aim.x - from.x) / T, vz = (aim.z - from.z) / T;
       const vy = (aim.y - from.y) / T + 0.5 * BOSS_BALL_GRAVITY * T;
-      return (hell ? [-0.16, 0, 0.16] : [0]).map((a) => {
+      return (angles || (hell ? [-0.16, 0, 0.16] : [0])).map((a) => {
         const c = Math.cos(a), s = Math.sin(a);
         return { dx: vx * c + vz * s, dy: vy, dz: -vx * s + vz * c };
       });
@@ -22143,8 +22233,141 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       return enemy.isCreatureBoss && enemy.bossAnimState === "stunned" ? 2.2 : 1;
     }
 
+    function wrapBossAngle(angle) { return Math.atan2(Math.sin(angle), Math.cos(angle)); }
+
+    function bossPatternHit(enemy, event, target, isLocal = false) {
+      const origin = enemy.group.position;
+      const floorY = enemy.baseY || 0;
+      if (event.grounded) {
+        const airborne = isLocal ? !player.onGround : target.y > floorY + 2.55;
+        if (airborne) return false;
+      }
+      if (Math.abs((target.y ?? floorY + 1.65) - (floorY + 1.65)) > 2.6) return false;
+      if (soundBlocked(origin, target)) return false;
+      if (event.shape === "sector") {
+        const dx = target.x - origin.x, dz = target.z - origin.z;
+        const distance = Math.hypot(dx, dz);
+        const angle = Math.atan2(dx, dz) - (enemy._bossAttackYaw ?? enemy.visYaw) - (event.offset || 0);
+        return distance <= event.radius && Math.abs(wrapBossAngle(angle)) <= event.halfAngle;
+      }
+      const center = event.anchor === "aim" ? enemy._bossAttackAim : origin;
+      return !!center && Math.hypot(target.x - center.x, target.z - center.z) <= event.radius;
+    }
+
+    function bossPatternVictims(enemy, event) {
+      const victims = [];
+      if (player.health > 0 && controlsInputReady()) {
+        const local = { x: player.position.x, y: player.position.y, z: player.position.z };
+        if (bossPatternHit(enemy, event, local, true)) victims.push({ id: null, local: true, target: local });
+      }
+      if (MULTIPLAYER && ARENA_COOP) {
+        for (const [id, remote] of remotePlayers) {
+          if (!remote.group.visible || remote.isDown) continue;
+          const target = { x: remote.x, y: remote.y ?? 1.65, z: remote.z };
+          if (bossPatternHit(enemy, event, target, false)) victims.push({ id, local: false, target });
+        }
+      }
+      return victims;
+    }
+
+    function damageBossPatternVictims(enemy, victims, damage) {
+      const previousTarget = enemy.targetId;
+      enemy.attackDamage = damage;
+      for (const victim of victims) {
+        enemy.targetId = victim.id;
+        applyCoopZombieDamageToTarget(enemy);
+      }
+      enemy.targetId = previousTarget;
+    }
+
+    function launchBossPatternVolley(enemy, event) {
+      const aim = enemy._bossAttackAim || getEnemyTarget(enemy);
+      enemy.creature.tipWorld(_bossTip);
+      releaseBossBalls({
+        ox: _bossTip.x, oy: _bossTip.y, oz: _bossTip.z,
+        fan: bossLobFan(_bossTip, aim, false, event.shots),
+        damage: event.damage * (enemy.isHellBoss ? 1.18 : 1),
+        hell: enemy.isHellBoss, floorY: enemy.baseY || 0,
+        target: enemy.targetId || (MULTIPLAYER ? socket.id : null),
+      });
+      state.camShake = Math.max(state.camShake || 0, 0.12);
+    }
+
+    function beginBossPatternDash(enemy, event) {
+      const yaw = enemy._bossAttackYaw ?? enemy.visYaw;
+      const offset = event.direction === "right" ? Math.PI / 2
+        : event.direction === "left" ? -Math.PI / 2
+          : event.direction === "away" ? Math.PI : 0;
+      const angle = yaw + offset;
+      enemy._bossPatternDash = {
+        at: event.at, duration: event.duration, speed: event.speed,
+        dirX: Math.sin(angle), dirZ: Math.cos(angle), hit: false,
+        damage: event.damage || 0,
+      };
+    }
+
+    function resolveBossPatternEvent(enemy, event) {
+      if (event.type === "volley") {
+        launchBossPatternVolley(enemy, event);
+        return;
+      }
+      if (event.type === "dash") {
+        beginBossPatternDash(enemy, event);
+        return;
+      }
+      if (event.type !== "strike") return;
+      if (event.shape === "circle" && event.grounded) playBossQuakeSfx();
+      const victims = bossPatternVictims(enemy, event);
+      if (!victims.length) return;
+      damageBossPatternVictims(enemy, victims, event.damage * (enemy.isHellBoss ? 1.2 : 1));
+      if (event.shape === "circle" && event.knockback && event.anchor !== "aim"
+          && victims.some(victim => victim.local)) {
+        applyBossImpact(enemy, event.radius + 1, event.knockback, 0.65);
+      }
+      for (const victim of victims) {
+        createSparks(new THREE.Vector3(victim.target.x, victim.target.y ?? 1.1, victim.target.z), enemy.isHellBoss ? 0xff4428 : 0xff9a42);
+      }
+    }
+
+    function updateBossPatternAttack(enemy, move, t, dt, tune) {
+      const fired = enemy._bossPatternFired || (enemy._bossPatternFired = new Set());
+      for (let i = 0; i < move.events.length; i++) {
+        const event = move.events[i];
+        if (!fired.has(i) && t >= event.at) {
+          fired.add(i);
+          resolveBossPatternEvent(enemy, event);
+        }
+      }
+      const dash = enemy._bossPatternDash;
+      if (!dash || dash.stopped || t < dash.at) return false;
+      const before = Math.max(0, t - dt - dash.at);
+      const after = Math.min(dash.duration, t - dash.at);
+      const step = Math.max(0, after - Math.min(dash.duration, before));
+      let blocked = false;
+      if (step > 0) {
+        blocked = moveBossBody(enemy, dash.dirX, dash.dirZ, dash.speed, step, false);
+        if (blocked) dash.stopped = true;
+      }
+      if (!dash.hit) {
+        const victims = bossPatternVictims(enemy, { shape: "circle", radius: bossCollisionRadius(enemy) + 1.05 });
+        if (victims.length) {
+          dash.hit = true;
+          damageBossPatternVictims(enemy, victims, (dash.damage || tune.charge * 0.72) * (enemy.isHellBoss ? 1.2 : 1));
+          if (victims.some(victim => victim.local)) applyBossImpact(enemy, bossCollisionRadius(enemy) + 2.5, 2.8, 0.9);
+          for (const victim of victims) {
+            createSparks(new THREE.Vector3(victim.target.x, victim.target.y ?? 1.1, victim.target.z), enemy.isHellBoss ? 0xff4428 : 0xff9a42);
+          }
+        }
+      }
+      if (after >= dash.duration) dash.stopped = true;
+      return step > 0 && !blocked;
+    }
+
     function updateCreatureBoss(enemy, dt, gauntlet) {
       const tune = enemy.isHellBoss ? BOSS_TUNING.hell : BOSS_TUNING.normal;
+      // Hell advances the boss's whole attack clock together: windups, chained hits,
+      // recovery and every move cooldown are 16% quicker without changing player time.
+      const attackDt = dt * (enemy.isHellBoss ? 1.16 : 1);
       const creature = enemy.creature, scale = creature.scale;
       const pos = enemy.group.position, floorY = enemy.baseY || 0;
       const cr = bossCollisionRadius(enemy);
@@ -22160,8 +22383,9 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       const reach = tune.clawReach * scale;
       const lineColor = enemy.isHellBoss ? 0xff2a1a : 0xff5a2a;
       enemy.aware = true;
-      enemy.bossAnimTimer += dt;
-      enemy.cdClaw -= dt; enemy.cdCharge -= dt; enemy.cdLob -= dt; enemy.cdQuake -= dt;
+      enemy.bossAnimTimer += attackDt;
+      enemy.cdClaw -= attackDt; enemy.cdCharge -= attackDt; enemy.cdLob -= attackDt; enemy.cdQuake -= attackDt;
+      enemy.cdPattern = Math.max(0, (enemy.cdPattern ?? 0) - attackDt);
       const begin = (s) => { enemy.bossAnimState = s; enemy.bossAnimTimer = 0; };
       const finish = () => {
         enemy._smashShook = false; enemy._quakeShook = false; enemy._meleeDamagePending = false;
@@ -22178,7 +22402,20 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       switch (anim) {
         case "idle": {
           const los = clearLosToTarget(pos.x, pos.z, tx, tz, ty, eyeY);
-          if (dist <= reach && enemy.cdClaw <= 0) {
+          const pattern = los && enemy.cdPattern <= 0
+            ? chooseBossAttack(dist, { enraged, hellMode: enemy.isHellBoss, recent: enemy._bossRecentMoves || [] }) : null;
+          if (pattern) {
+            enemy.bossAttackId = pattern.id;
+            enemy._bossAttackAim = { x: tx, y: ty - 0.45, z: tz };
+            enemy._bossAttackYaw = Math.atan2(dx, dz);
+            enemy._bossPatternFired = new Set();
+            enemy._bossPatternDash = null;
+            enemy._bossRecentMoves = [...(enemy._bossRecentMoves || []), pattern.id].slice(-3);
+            enemy.cdPattern = Math.max(4.2, pattern.cooldown * (enemy.isHellBoss ? 0.86 : 1) * cdMul);
+            begin("patternAttack");
+            spawnBossPatternTelegraphs(enemy, pattern, 0);
+            if (pattern.events.some(event => event.type === "dash")) playBossRoarSfx(enemy);
+          } else if (dist <= reach && enemy.cdClaw <= 0) {
             begin("attacking");
             enemy._smashShook = false;
             enemy.cdClaw = tune.cdClaw * cdMul + BOSS_DURATIONS.attacking;
@@ -22251,6 +22488,20 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
             }
           }
           if (!moved) enemy._speedNow = THREE.MathUtils.damp(enemy._speedNow || 0, 0, 6, dt);
+          break;
+        }
+        case "patternAttack": {
+          const pattern = BOSS_ATTACK_BY_ID[enemy.bossAttackId];
+          if (!pattern) { enemy.bossAttackId = null; finish(); break; }
+          wantYaw = enemy._bossAttackYaw ?? wantYaw;
+          turnRate = t < 0.42 ? 5 : 0;
+          moved = updateBossPatternAttack(enemy, pattern, t, attackDt, tune);
+          if (t >= pattern.duration) {
+            enemy.bossAttackId = null;
+            enemy._bossPatternFired = null;
+            enemy._bossPatternDash = null;
+            finish();
+          }
           break;
         }
         case "attacking": {
@@ -24892,8 +25143,9 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     function setBossCountRowEnabled(enabled) {
       const row = document.getElementById("bossCountRow");
       if (!row) return;
-      row.style.opacity = enabled ? "1" : "0.35";
-      for (const button of row.querySelectorAll("button")) button.disabled = !enabled;
+      const countSelector = row.querySelector(".seg");
+      if (countSelector) countSelector.style.opacity = enabled ? "1" : "0.35";
+      for (const button of row.querySelectorAll(".boss-count-btn")) button.disabled = !enabled;
     }
 
     document.getElementById("btnBossHell").addEventListener("click", () => {
