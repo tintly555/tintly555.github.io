@@ -3,7 +3,7 @@
     import { RoundedBoxGeometry } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/geometries/RoundedBoxGeometry.js";
     import { mergeGeometries, toCreasedNormals } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/utils/BufferGeometryUtils.js";
     import { clone as cloneSkinnedModel } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/utils/SkeletonUtils.js";
-    import { createPvpMaps } from "./pvp-maps.js?v=lighting-v9-dustfall-area-doors";
+    import { createPvpMaps } from "./pvp-maps.js?v=simplify-1";
     import { createPvpWorld } from "./pvp-world.js?v=4";
     import { createBossNavigation } from "./boss-navigation.js?v=2";
     import { BOSS_ATTACK_BY_ID, chooseBossAttack } from "./boss-attacks.js?v=2";
@@ -17,7 +17,11 @@
     import { createWorldAudio } from "./world-audio.js?v=4";
     import { createGauntletThemes } from "./gauntlet-themes.js?v=10";
     import { createPostFx, applyDisplayTone } from "./post-fx.js?v=12-manual-aa";
-    import { DEFAULT_FX, loadFxSettings, mountFxSettings } from "./post-fx-settings.js?v=4";
+    import { DEFAULT_FX, loadFxSettings, mountFxSettings } from "./post-fx-settings.js?v=6";
+    // Built once: the "post effects off" settings used by renderWorld, and the weapon-to-water-splash table.
+    const NEUTRAL_FX = { ...DEFAULT_FX, bloom: 0, ao: "off", aoStrength: 0, ssr: 0, shafts: 0, flare: 0, adapt: 0,
+      blood: 0, weakness: 0, dof: 0, motion: 0, fringe: 0, distortion: 0, cameraLens: 0, vignette: 0 };
+    const WATER_SPLASH_BY_WEAPON = { Pistol: .5, SMG: .5, "Assault Rifle": .7, Shotgun: 1.2, "Anti-Materiel Rifle": 1.5, "Paralysis Dart": .25 };
     import { createImpactFx } from "./impact-fx.js?v=4";
     import { poseZombieVariant } from "./zombie-variants.js?v=5";
     import { BOSS_IMPACT, ZOMBIE_MELEE, zombieStrikeClipPhase, zombieGait } from "./zombie-motion.js";
@@ -2965,7 +2969,6 @@
     let resolutionScale = gameSettings.autoAdaptPerformance
       ? RENDER_SCALE_DEFAULT
       : THREE.MathUtils.clamp(gameSettings.manualRenderScale, RENDER_SCALE_MIN, 1);
-    const ADAPTIVE_RENDER_SCALE_MIN = RENDER_SCALE_MIN;
     const ADAPTIVE_AA_LEVELS = 5;
     const RENDER_SAMPLE_WINDOW_S = 1.0;
     const RENDER_LOW_HOLD_S = 1.5;
@@ -3036,8 +3039,8 @@
       // On sustained low FPS, lower the actual 3D pixel count first. Spending
       // several cooldowns stepping AA down while the scale stays at 76% made
       // severely GPU-limited machines appear stuck above their 65% floor.
-      if (resolutionScale > ADAPTIVE_RENDER_SCALE_MIN) {
-        resolutionScale = Math.max(ADAPTIVE_RENDER_SCALE_MIN, resolutionScale - 0.05);
+      if (resolutionScale > RENDER_SCALE_MIN) {
+        resolutionScale = Math.max(RENDER_SCALE_MIN, resolutionScale - 0.05);
         syncRenderControlsUI();
         return true;
       }
@@ -3344,13 +3347,7 @@
         const key = CURRENT_MAP + (isGauntletMap(CURRENT_MAP) ? currentGauntletTheme().id : "");
         const environment = pvpDef(CURRENT_MAP)?.env || (isBossArenaMap(CURRENT_MAP) ? bossOptics : null);
         const quality = getQualityId();
-        const neutralFx = {
-          ...DEFAULT_FX,
-          bloom: 0, ao: "off", aoStrength: 0, ssr: 0, shafts: 0, flare: 0, adapt: 0,
-          blood: 0, weakness: 0, dof: 0, motion: 0, fringe: 0, distortion: 0,
-          cameraLens: 0, vignette: 0,
-        };
-        const renderCfg = !postEffectsEnabled ? neutralFx : quality === "potato" ? {
+        const renderCfg = !postEffectsEnabled ? NEUTRAL_FX : quality === "potato" ? {
           ...cfg,
           bloom: 0, ao: "off", aoStrength: 0, ssr: 0,
           shafts: 0, flare: 0, adapt: 0, dof: 0,
@@ -3466,7 +3463,7 @@
         // while those passes are active; FXAA softens the final upscale without another
         // blur pass or its extra GPU cost.
         // Only the 3D canvas backing store is scaled; all HUD/menu elements remain DOM-sized.
-        const desiredDpr = getNativePixelRatio() * Math.min(1, Math.max(ADAPTIVE_RENDER_SCALE_MIN, resolutionScale));
+        const desiredDpr = getNativePixelRatio() * Math.min(1, Math.max(RENDER_SCALE_MIN, resolutionScale));
         const sizeChanged = w !== appliedRendererWidth || h !== appliedRendererHeight;
         const dprChanged = Math.abs(desiredDpr - appliedRendererDpr) > 0.001;
         if (Math.abs(aspect - appliedCameraAspect) > 0.000001) {
@@ -9661,31 +9658,14 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     const GAUNTLET_CELL = 12;
     let _gridStamp = 0;
     const gridKey = (cx, cz) => (cx + 8192) * 16384 + (cz + 8192);
-    function indexGauntletBoxes() {
+    /** Buckets the wall boxes into GAUNTLET_CELL-sized cells; huge or moving boxes are checked every time. */
+    function buildWallBoxGrid() {
       const cells = new Map(), always = [];
       for (const box of wallBoxes) {
         if (box.dyn) { always.push(box); continue; }
         const x0 = Math.floor(box.min.x / GAUNTLET_CELL), x1 = Math.floor(box.max.x / GAUNTLET_CELL);
         const z0 = Math.floor(box.min.z / GAUNTLET_CELL), z1 = Math.floor(box.max.z / GAUNTLET_CELL);
-        if ((x1 - x0 + 1) * (z1 - z0 + 1) > 400) { always.push(box); continue; }
-        for (let cx = x0; cx <= x1; cx++) for (let cz = z0; cz <= z1; cz++) {
-          const k = gridKey(cx, cz);
-          let list = cells.get(k);
-          if (!list) cells.set(k, list = []);
-          list.push(box);
-        }
-      }
-      gauntletGrid = { cells, always };
-    }
-    function indexPvpWallBoxes() {
-      const cells = new Map(), always = [];
-      for (const box of wallBoxes) {
-        if (box.dyn) { always.push(box); continue; }
-        const x0 = Math.floor(box.min.x / GAUNTLET_CELL), x1 = Math.floor(box.max.x / GAUNTLET_CELL);
-        const z0 = Math.floor(box.min.z / GAUNTLET_CELL), z1 = Math.floor(box.max.z / GAUNTLET_CELL);
-        if (!Number.isFinite(x0 + x1 + z0 + z1) || (x1 - x0 + 1) * (z1 - z0 + 1) > 400) {
-          always.push(box); continue;
-        }
+        if (!Number.isFinite(x0 + x1 + z0 + z1) || (x1 - x0 + 1) * (z1 - z0 + 1) > 400) { always.push(box); continue; }
         for (let cx = x0; cx <= x1; cx++) for (let cz = z0; cz <= z1; cz++) {
           const key = gridKey(cx, cz);
           let list = cells.get(key);
@@ -9693,42 +9673,32 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           list.push(box);
         }
       }
-      pvpWallBoxGrid = { cells, always };
+      return { cells, always };
+    }
+    function indexGauntletBoxes() { gauntletGrid = buildWallBoxGrid(); }
+    function indexPvpWallBoxes() { pvpWallBoxGrid = buildWallBoxGrid(); }
+    /** Calls cb once for each box near (x, z) in the 3x3 block of cells around it, plus the always-checked boxes. */
+    function walkWallBoxGrid(grid, x, z, cb) {
+      const stamp = ++_gridStamp;
+      const ccx = Math.floor(x / GAUNTLET_CELL), ccz = Math.floor(z / GAUNTLET_CELL);
+      for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) {
+        const list = grid.cells.get(gridKey(ccx + dx, ccz + dz));
+        if (!list) continue;
+        for (let i = 0; i < list.length; i++) {
+          const box = list[i];
+          if (box._seen === stamp) continue;
+          box._seen = stamp;
+          cb(box);
+        }
+      }
+      const always = grid.always;
+      for (let i = 0; i < always.length; i++) cb(always[i]);
     }
     function forEachNearbyWallBox(x, z, cb, all = false) {
-      if (gauntletGrid && CURRENT_MAP === "gauntlet") {
-        const stamp = ++_gridStamp;
-        const ccx = Math.floor(x / GAUNTLET_CELL), ccz = Math.floor(z / GAUNTLET_CELL);
-        for (let dx = -1; dx <= 1; dx++) {
-          for (let dz = -1; dz <= 1; dz++) {
-            const list = gauntletGrid.cells.get(gridKey(ccx + dx, ccz + dz));
-            if (!list) continue;
-            for (let i = 0; i < list.length; i++) {
-              const box = list[i];
-              if (box._seen === stamp) continue;
-              box._seen = stamp;
-              cb(box);
-            }
-          }
-        }
-        const always = gauntletGrid.always;
-        for (let i = 0; i < always.length; i++) cb(always[i]);
-        return;
-      }
+      if (gauntletGrid && CURRENT_MAP === "gauntlet") { walkWallBoxGrid(gauntletGrid, x, z, cb); return; }
       if (pvpMaps.MAPS[CURRENT_MAP] && pvpWallBoxGrid) {
         if (all) { for (const box of wallBoxes) cb(box); return; }
-        const stamp = ++_gridStamp;
-        const ccx = Math.floor(x / GAUNTLET_CELL), ccz = Math.floor(z / GAUNTLET_CELL);
-        for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) {
-          const list = pvpWallBoxGrid.cells.get(gridKey(ccx + dx, ccz + dz));
-          if (!list) continue;
-          for (const box of list) {
-            if (box._seen === stamp) continue;
-            box._seen = stamp;
-            cb(box);
-          }
-        }
-        for (const box of pvpWallBoxGrid.always) cb(box);
+        walkWallBoxGrid(pvpWallBoxGrid, x, z, cb);
         return;
       }
       if (CURRENT_MAP !== "arena" || !mazeWallBoxBuckets.size) {
@@ -20276,7 +20246,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           .sort((a, b) => a.distance - b.distance)[0] || null;
         const wallDist = obstacleHit ? obstacleHit.distance : Infinity;
         // Bullet splash size by weapon: a heavier round throws more water.
-        const waterSplash = ({ Pistol: .5, SMG: .5, "Assault Rifle": .7, Shotgun: 1.2, "Anti-Materiel Rifle": 1.5, "Paralysis Dart": .25 })[w?.name] ?? .6;
+        const waterSplash = WATER_SPLASH_BY_WEAPON[w?.name] ?? .6;
         for (const mirror of pvpWaterMirrors) mirror.shot(ray.ray.origin, ray.ray.direction, wallDist, Date.now() / 1000, waterSplash);
 
         let bestEnemy = null;

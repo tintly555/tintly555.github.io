@@ -390,7 +390,7 @@ export function town(core) {
         const listedPeople = world.players?.();
         const people = listedPeople?.length ? listedPeople : (p ? [p] : []);
         for (const door of swingDoors) {
-          let approached = false, occupied = false, withinHoldArea = false;
+          let approached = false, withinHoldArea = false;
           let positiveVotes = 0, negativeVotes = 0;
           for (const person of people) {
             if (!Number.isFinite(person?.x) || !Number.isFinite(person?.z)) continue;
@@ -405,8 +405,6 @@ export function town(core) {
             const planeDistance = door.alongX ? Math.abs(dz) : Math.abs(dx);
             const alongDistance = door.alongX ? Math.abs(dx) : Math.abs(dz);
             const clearance = 0.45;
-            if (planeDistance <= 0.45 + radius + clearance
-                && alongDistance <= door.width / 2 + radius + clearance) occupied = true;
             if (planeDistance <= 3 + radius
                 && alongDistance <= door.width / 2 + 1.25 + radius) withinHoldArea = true;
             if (planeDistance <= 2.5 + radius
@@ -421,7 +419,8 @@ export function town(core) {
             }
           }
 
-          const shouldOpen = approached || (door.open && (occupied || withinHoldArea));
+          // The hold area already contains the doorway, so it is the only test needed to keep the leaf open.
+          const shouldOpen = approached || (door.open && withinHoldArea);
           if (shouldOpen && !door.open) {
             if (positiveVotes > negativeVotes) door.pushSign = 1;
             else if (negativeVotes > positiveVotes) door.pushSign = -1;

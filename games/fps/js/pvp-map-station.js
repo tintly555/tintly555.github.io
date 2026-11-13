@@ -42,10 +42,8 @@ export function station(core) {
       const cyan = glowing("hr-cyan", 0x59d8ff, 2.2);
       const white = glowing("hr-white", 0xf2f8ff, 2.0);
       const rnd = rngFor(33);
-      // Prefer the shared collision-only API when available. The proxy fallback keeps
-      // these map-local hitboxes working with hosts that only expose solid meshes.
-      const hitbox = (w, h, d, x, cy, z) =>
-        kit.collider(w, h, d, x, cy, z) || kit.proxy(w, h, d, x, cy - h / 2, z);
+      // Collision-only box (no mesh): the pvp host always provides collider, so no fallback is needed.
+      const hitbox = (w, h, d, x, cy, z) => kit.collider(w, h, d, x, cy, z);
 
       // One pane of glass for every window: clear face-on, a mirror of the stars at a slant.
       const glass = N.glass({ tint: 0xcfe9ff });

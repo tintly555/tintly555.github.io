@@ -22,9 +22,9 @@ import { mergeGeometries } from "https://cdn.jsdelivr.net/npm/three@0.182.0/exam
 import { createSurfaces, rngFor, fbm } from "./gauntlet-surfaces.js?v=3";
 import { createNature } from "./pvp-nature.js?v=53";
 import { foundry } from "./pvp-map-foundry.js?v=17";
-import { station } from "./pvp-map-station.js?v=11";
+import { station } from "./pvp-map-station.js?v=12";
 import { ruins } from "./pvp-map-ruins.js?v=20-collision";
-import { town } from "./pvp-map-town.js?v=14-area-door-occupancy";
+import { town } from "./pvp-map-town.js?v=15-door-hold-only";
 
 const TAU = Math.PI * 2;
 
