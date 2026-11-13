@@ -170,7 +170,7 @@ export const ADAPT = `
   uniform float uDelta,uReset;
   void main(){
     float logAverage=textureLod(tMeter,vec2(.5),5.).r*12.-8.;
-    float target=clamp(1.+(-2.8-logAverage)*1.,.5,3.5);
+    float target=clamp(1.+(-2.8-logAverage)*1.,.42,3.5);
     float prev=texture2D(tPrevious,vec2(.5)).r;
     float rate=target<prev?8.:5.;
     float e=mix(prev,target,max(uReset,1.-exp(-uDelta*rate)));

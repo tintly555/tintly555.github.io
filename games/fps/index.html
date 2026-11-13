@@ -2622,6 +2622,11 @@
           <section class="settings-section" id="settingsSectionGraphics">
             <h2 id="settingsHeadingGraphics" data-i18n="settingsGraphicsH">GRAPHICS</h2>
             <div class="settings-row">
+              <label for="rngFov">Field of view <span class="value-pill" id="lblFov">75°</span></label>
+              <input type="range" id="rngFov" min="60" max="110" step="1" value="75" />
+              <p style="font-size:11px;opacity:0.65;margin-top:10px;max-width:480px;line-height:1.45;">Adjusts the first-person camera view. Aim zoom and helmet effects still apply.</p>
+            </div>
+            <div class="settings-row">
               <label><span data-i18n="gfxQualityLabel">Quality</span> <span class="value-pill value-note" data-i18n="gfxQualityPill">performance / fidelity</span></label>
               <div class="settings-cycle">
                 <button type="button" class="cycle-arrow" id="btnQualityPrev" aria-label="Lower quality">◀</button>

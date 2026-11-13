@@ -8,7 +8,7 @@ import { Pass, FullScreenQuad } from "https://cdn.jsdelivr.net/npm/three@0.182.0
 import { ShaderPass } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/postprocessing/ShaderPass.js";
 import { OutputPass } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/postprocessing/OutputPass.js";
 import { FXAAShader } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/shaders/FXAAShader.js";
-import { VERTEX, LIGHTING, REFLECTION, METER, ADAPT, COMPOSITE, GRADE } from "./post-fx-shaders.js?v=11-no-edge-outline";
+import { VERTEX, LIGHTING, REFLECTION, METER, ADAPT, COMPOSITE, GRADE } from "./post-fx-shaders.js?v=12-darker-floor";
 import { DEFAULT_FX } from "./post-fx-settings.js?v=7-no-edge-outline";
 
 const wrap = values => Object.fromEntries(Object.entries(values).map(([key, value]) => [key, { value }]));

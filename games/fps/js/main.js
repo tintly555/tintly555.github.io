@@ -16,7 +16,7 @@
     import { createGauntletRuntime } from "./gauntlet-runtime.js?v=22";
     import { createWorldAudio } from "./world-audio.js?v=4";
     import { createGauntletThemes } from "./gauntlet-themes.js?v=10";
-    import { createPostFx, applyDisplayTone } from "./post-fx.js?v=12-manual-aa";
+    import { createPostFx, applyDisplayTone } from "./post-fx.js?v=13-darker-floor";
     import { DEFAULT_FX, loadFxSettings, mountFxSettings } from "./post-fx-settings.js?v=6";
     // Built once: the "post effects off" settings used by renderWorld, and the weapon-to-water-splash table.
     const NEUTRAL_FX = { ...DEFAULT_FX, bloom: 0, ao: "off", aoStrength: 0, ssr: 0, shafts: 0, flare: 0, adapt: 0,
@@ -168,6 +168,8 @@
     const lblRenderScale = document.getElementById("lblRenderScale");
     const rngAntialias = document.getElementById("rngAntialias");
     const lblAntialias = document.getElementById("lblAntialias");
+    const rngFov = document.getElementById("rngFov");
+    const lblFov = document.getElementById("lblFov");
     const qualityLabel = document.getElementById("qualityLabel");
     const btnTexturePrev = document.getElementById("btnTexturePrev");
     const btnTextureNext = document.getElementById("btnTextureNext");
@@ -395,6 +397,7 @@
       renderDistanceIndex: 2,
       mouseDpi: MOUSE_DPI_DEFAULT,
       sensitivity: SENS_DEFAULT,
+      fieldOfView: 75,
       adsSensMultiplier: ADS_SENS_MUL_DEFAULT,
       skipClickToPlay: false,
       language: "en",
@@ -417,6 +420,7 @@
         if (typeof o.musicVolume === "number") gameSettings.musicVolume = THREE.MathUtils.clamp(o.musicVolume, 0, 1);
         if (typeof o.soundVolume === "number") gameSettings.soundVolume = THREE.MathUtils.clamp(o.soundVolume, 0, 1);
         if (typeof o.postFx === "boolean") gameSettings.postFx = o.postFx;
+        if (typeof o.fieldOfView === "number") gameSettings.fieldOfView = THREE.MathUtils.clamp(o.fieldOfView, 60, 110);
         if (typeof o.autoAdaptPerformance === "boolean") gameSettings.autoAdaptPerformance = o.autoAdaptPerformance;
         if (typeof o.manualRenderScale === "number") {
           gameSettings.manualRenderScale = THREE.MathUtils.clamp(o.manualRenderScale, RENDER_SCALE_MIN, 1);
@@ -20677,7 +20681,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
 
       const adsFov = Math.min(88, Math.max(28, weapon().adsFov ?? 55));
       // Helmets narrow the field of view — the higher the tier, the more you give up.
-      const targetFov = (usingAds ? adsFov : 75) * myHelmet().fovMul + (state.camFovKick || 0);
+      const targetFov = (usingAds ? adsFov : gameSettings.fieldOfView) * myHelmet().fovMul + (state.camFovKick || 0);
       if (camera.fov !== targetFov) {
         camera.fov += (targetFov - camera.fov) * Math.min(1, dt * 10);
         camera.updateProjectionMatrix();
@@ -21481,6 +21485,8 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       }
       syncSensReadout();
       syncRenderControlsUI();
+      if (rngFov) rngFov.value = String(gameSettings.fieldOfView);
+      if (lblFov) lblFov.textContent = `${gameSettings.fieldOfView}°`;
       qualityLabel.textContent = QUALITY_LABELS[gameSettings.qualityIndex] || "REGULAR";
       textureLabel.textContent = gameSettings.texturesOn ? "ON" : "OFF";
       const postLabelEl = document.getElementById("postLabel");
@@ -26423,6 +26429,12 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     }
     btnQualityPrev.addEventListener("click", () => cycleQuality(-1));
     btnQualityNext.addEventListener("click", () => cycleQuality(1));
+
+    rngFov?.addEventListener("input", () => {
+      gameSettings.fieldOfView = THREE.MathUtils.clamp(+rngFov.value || 75, 60, 110);
+      if (lblFov) lblFov.textContent = `${gameSettings.fieldOfView}°`;
+      saveGameSettings();
+    });
 
     function setAutoAdaptPerformance(enabled) {
       enabled = !!enabled;
