@@ -89,7 +89,7 @@ body.game-active #menuBg { display: none; }
   height: 16px;
   border-left: 3px solid var(--console-accent);
   border-right: 3px solid var(--console-accent);
-  transform: skewX(-16deg);
+  transform: none;
 }
 
 #menu .menu-panels-wrap {

@@ -16,7 +16,7 @@
     import { createGauntletRuntime } from "./gauntlet-runtime.js?v=22";
     import { createWorldAudio } from "./world-audio.js?v=4";
     import { createGauntletThemes } from "./gauntlet-themes.js?v=10";
-    import { createPostFx, applyDisplayTone } from "./post-fx.js?v=13-darker-floor";
+    import { createPostFx, applyDisplayTone } from "./post-fx.js?v=15-luminance-directed-adaptation";
     import { DEFAULT_FX, loadFxSettings, mountFxSettings } from "./post-fx-settings.js?v=6";
     // Built once: the "post effects off" settings used by renderWorld, and the weapon-to-water-splash table.
     const NEUTRAL_FX = { ...DEFAULT_FX, bloom: 0, ao: "off", aoStrength: 0, ssr: 0, shafts: 0, flare: 0, adapt: 0,
