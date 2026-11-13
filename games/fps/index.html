@@ -23,14 +23,14 @@
       try {
         window.__FPS_UI_LAYER_PATHS__ = [
           {
-            menuBg: "images/background.png",
-            btnTex: "images/button.png",
-            settingsBg: "images/modal-bg.png",
+            menuBg: "images/background.png?v=4x-20261112",
+            btnTex: "images/button.png?v=4x-20261112",
+            settingsBg: "images/modal-bg.png?v=4x-20261112",
           },
           {
             menuBg: "game-ui/game-ui-menu-background.png",
-            btnTex: "images/button.png",
-            settingsBg: "images/modal-bg.png",
+            btnTex: "images/button.png?v=4x-20261112",
+            settingsBg: "images/modal-bg.png?v=4x-20261112",
           },
         ];
       } catch (e) {}
@@ -181,9 +181,9 @@
           null;
         if (!L0) {
           L0 = {
-            menuBg: "images/background.png",
-            btnTex: "images/button.png",
-            settingsBg: "images/modal-bg.png",
+            menuBg: "images/background.png?v=4x-20261112",
+            btnTex: "images/button.png?v=4x-20261112",
+            settingsBg: "images/modal-bg.png?v=4x-20261112",
           };
         }
         // Probe each PNG with an Image() before overwriting the CSS var; if 404, keep the inline
@@ -2156,7 +2156,7 @@
     #needleHud.nh-inject .nh-label { color: #88ccff; text-shadow: 0 0 6px #88ccff88; }
     #needleHud.nh-inject .nh-bar-fill { background: #88ccff; }
 </style>
-  <link rel="stylesheet" href="interface.css?v=23-remove-edge-lines">
+  <link rel="stylesheet" href="interface.css?v=24-texture-upscale-i18n">
   <script>
     (function () {
       function normBase(b) {
@@ -2230,9 +2230,9 @@
             ? window.__FPS_UI_LAYER_PATHS__
             : [
                 {
-                  menuBg: "images/background.png",
-                  btnTex: "images/button.png",
-                  settingsBg: "images/modal-bg.png",
+                  menuBg: "images/background.png?v=4x-20261112",
+                  btnTex: "images/button.png?v=4x-20261112",
+                  settingsBg: "images/modal-bg.png?v=4x-20261112",
                 },
               ];
         var root = document.documentElement;
@@ -2289,7 +2289,7 @@
 <body>
   <div id="menuStartupGate" aria-hidden="true"></div>
   <canvas id="menuWallBackdrop" aria-hidden="true"></canvas>
-  <img id="menuBg" alt="" aria-hidden="true" src="images/bulkhead-key-art.jpg" fetchpriority="high" />
+  <img id="menuBg" alt="" aria-hidden="true" src="images/bulkhead-key-art.jpg?v=4x-20261112" fetchpriority="high" />
   <div id="menu" class="menu">
     <header class="menu-top">
       <button type="button" id="btnMenuHome" class="menu-brand" data-i18n="gameTitle">Zone No Light</button>
@@ -2369,22 +2369,22 @@
       <h2 data-i18n="selectMap" class="menu-subtitle" style="margin:0 0 4px 0">SELECT MAP</h2>
       <div style="display:flex;gap:16px;justify-content:center;flex-wrap:wrap;">
         <button type="button" id="btnPvpMapClassic" class="btn-texture pvp-map-card">
-          <img class="pvp-map-cover" src="images/maps/crossfire.jpg" alt="" width="440" height="260" decoding="async" draggable="false" style="border-radius:6px;background:#1a2233;" />
+          <img class="pvp-map-cover" src="images/maps/crossfire.jpg?v=4x-20261112" alt="" width="440" height="260" decoding="async" draggable="false" style="border-radius:6px;background:#1a2233;" />
           <span style="font-family:var(--game-font-ui);font-size:13px;letter-spacing:1px;color:#e8ecf2;" data-i18n="pvpMapFoundry">CINDERWORKS</span>
           <small class="pvp-map-tag" data-i18n="pvpTagFoundry">Foundry · lava, lifts, steam</small>
         </button>
         <button type="button" id="btnPvpMapGrid" class="btn-texture pvp-map-card">
-          <img class="pvp-map-cover" src="images/maps/crossfire_grid.jpg" alt="" width="440" height="260" decoding="async" draggable="false" style="border-radius:6px;background:#1a2233;" />
+          <img class="pvp-map-cover" src="images/maps/crossfire_grid.jpg?v=4x-20261112" alt="" width="440" height="260" decoding="async" draggable="false" style="border-radius:6px;background:#1a2233;" />
           <span style="font-family:var(--game-font-ui);font-size:13px;letter-spacing:1px;color:#e8ecf2;" data-i18n="pvpMapStation">HALCYON RING</span>
           <small class="pvp-map-tag" data-i18n="pvpTagStation">Orbital station · airlocks, low gravity</small>
         </button>
         <button type="button" id="btnPvpMapRuins" class="btn-texture pvp-map-card">
-          <img class="pvp-map-cover" src="images/maps/pvp_ruins.jpg" alt="" width="440" height="260" decoding="async" draggable="false" style="border-radius:6px;background:#1a2233;" />
+          <img class="pvp-map-cover" src="images/maps/pvp_ruins.jpg?v=4x-20261112" alt="" width="440" height="260" decoding="async" draggable="false" style="border-radius:6px;background:#1a2233;" />
           <span style="font-family:var(--game-font-ui);font-size:13px;letter-spacing:1px;color:#e8ecf2;" data-i18n="pvpMapRuins">SUNKEN TEMPLE</span>
           <small class="pvp-map-tag" data-i18n="pvpTagRuins">Jungle ruins · stream, rolling boulder</small>
         </button>
         <button type="button" id="btnPvpMapTown" class="btn-texture pvp-map-card">
-          <img class="pvp-map-cover" src="images/maps/pvp_town.jpg" alt="" width="440" height="260" decoding="async" draggable="false" style="border-radius:6px;background:#1a2233;" />
+          <img class="pvp-map-cover" src="images/maps/pvp_town.jpg?v=4x-20261112" alt="" width="440" height="260" decoding="async" draggable="false" style="border-radius:6px;background:#1a2233;" />
           <span style="font-family:var(--game-font-ui);font-size:13px;letter-spacing:1px;color:#e8ecf2;" data-i18n="pvpMapTown">DUSTFALL</span>
           <small class="pvp-map-tag" data-i18n="pvpTagTown">Frontier town · the 12:40 train</small>
         </button>
@@ -2446,26 +2446,8 @@
   </div>
   <div id="cameraRecordOSD" aria-hidden="true">
     <span class="camera-record-state"><i></i>REC</span>
-    <time id="cameraRecordTimecode">00:00:00:00</time>
     <span class="camera-record-mode">HD&nbsp;·&nbsp;60</span>
   </div>
-  <script>
-    (() => {
-      const readout = document.getElementById("cameraRecordTimecode");
-      let startedAt = 0;
-      window.setInterval(() => {
-        if (!document.body.classList.contains("game-active")) { startedAt = 0; return; }
-        const now = performance.now();
-        if (!startedAt) startedAt = now;
-        const elapsed = (now - startedAt) / 1000;
-        const hours = Math.floor(elapsed / 3600).toString().padStart(2, "0");
-        const minutes = Math.floor(elapsed / 60 % 60).toString().padStart(2, "0");
-        const seconds = Math.floor(elapsed % 60).toString().padStart(2, "0");
-        const frames = Math.floor(elapsed % 1 * 30).toString().padStart(2, "0");
-        readout.textContent = `${hours}:${minutes}:${seconds}:${frames}`;
-      }, 100);
-    })();
-  </script>
   <div class="hint" id="hint" data-i18n="hintClick">Click anywhere</div>
   <div id="impactFx" aria-hidden="true" hidden><div class="impact-vignette"></div><canvas></canvas></div>
   <div class="blind-text" id="blindText" data-i18n="hudSlowed" aria-hidden="true">IMMOBILIZED</div>
@@ -2651,26 +2633,26 @@
               </p>
             </div>
             <div class="settings-row" id="autoAdaptRow">
-              <label for="autoAdaptValue">Automatic performance adjustment</label>
+              <label for="autoAdaptValue" data-i18n="autoPerformanceLabel">Automatic performance adjustment</label>
               <div class="settings-cycle">
-                <button type="button" class="cycle-arrow" id="btnAutoAdaptOff" aria-label="Disable automatic performance adjustment">◀</button>
+                <button type="button" class="cycle-arrow" id="btnAutoAdaptOff" aria-label="Disable automatic performance adjustment" data-i18n-aria-label="disableAutoPerformance">◀</button>
                 <div class="cycle-value" id="autoAdaptValue">ON</div>
-                <button type="button" class="cycle-arrow" id="btnAutoAdaptOn" aria-label="Enable automatic performance adjustment">▶</button>
+                <button type="button" class="cycle-arrow" id="btnAutoAdaptOn" aria-label="Enable automatic performance adjustment" data-i18n-aria-label="enableAutoPerformance">▶</button>
               </div>
-              <p style="font-size:11px;opacity:0.65;margin-top:10px;max-width:480px;line-height:1.45;">
+              <p data-i18n="autoPerformanceHint" style="font-size:11px;opacity:0.65;margin-top:10px;max-width:480px;line-height:1.45;">
                 Automatically tunes 3D render scale and anti-aliasing to steady frame rate. Turn it off to set both below.
               </p>
             </div>
             <div id="manualRenderControls" aria-disabled="true">
               <div class="settings-row">
-                <label for="rngRenderScale">3D render scale <span class="value-pill" id="lblRenderScale">76%</span></label>
+                <label for="rngRenderScale"><span data-i18n="renderScale">3D render scale</span> <span class="value-pill" id="lblRenderScale">76%</span></label>
                 <input type="range" id="rngRenderScale" min="70" max="100" step="1" value="76" disabled />
-                <p style="font-size:11px;opacity:0.65;margin-top:10px;max-width:480px;line-height:1.45;">Affects the 3D scene only; menus and HUD stay at full resolution.</p>
+                <p data-i18n="renderScaleHint" style="font-size:11px;opacity:0.65;margin-top:10px;max-width:480px;line-height:1.45;">Affects the 3D scene only; menus and HUD stay at full resolution.</p>
               </div>
               <div class="settings-row">
-                <label for="rngAntialias">Anti-aliasing <span class="value-pill" id="lblAntialias">OFF</span></label>
+                <label for="rngAntialias"><span data-i18n="antialias">Anti-aliasing</span> <span class="value-pill" id="lblAntialias">OFF</span></label>
                 <input type="range" id="rngAntialias" min="0" max="4" step="1" value="0" disabled />
-                <p style="font-size:11px;opacity:0.65;margin-top:10px;max-width:480px;line-height:1.45;">Choose Off, Low, Medium, High, or Ultra. Higher levels smooth more edges and cost more GPU time.</p>
+                <p data-i18n="antialiasHint" style="font-size:11px;opacity:0.65;margin-top:10px;max-width:480px;line-height:1.45;">Choose Off, Low, Medium, High, or Ultra. Higher levels smooth more edges and cost more GPU time.</p>
               </div>
             </div>
             <div class="settings-row">
@@ -3830,7 +3812,7 @@ if (typeof window !== "undefined") {
     {"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.182.0/build/three.module.js"}}
   </script>
   <script type="module" src="js/game-cursor.js?v=1"></script>
-  <script type="module" src="js/main.js?v=20261112-camera-recording-look-v1"></script>
+  <script type="module" src="js/main.js?v=20261112-texture-upscale-i18n-door-v2"></script>
   <footer id="pageFooter" style="position:fixed;left:0;right:0;bottom:0;display:flex;justify-content:center;align-items:center;gap:16px;padding:10px 14px;background:transparent;backdrop-filter:none;z-index:101;pointer-events:auto;">
     <img src="images/tintly555.png" alt="Tintly555" style="height:28px;width:auto;display:block;opacity:0.75;" />
     <img src="images/jimmyqrg.png" alt="JimmyQrg" style="height:32px;width:auto;display:block;margin-bottom:2px;opacity:0.75;" />

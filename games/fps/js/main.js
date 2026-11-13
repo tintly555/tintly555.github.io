@@ -3,7 +3,7 @@
     import { RoundedBoxGeometry } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/geometries/RoundedBoxGeometry.js";
     import { mergeGeometries, toCreasedNormals } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/utils/BufferGeometryUtils.js";
     import { clone as cloneSkinnedModel } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/utils/SkeletonUtils.js";
-    import { createPvpMaps } from "./pvp-maps.js?v=lighting-v8";
+    import { createPvpMaps } from "./pvp-maps.js?v=lighting-v9-dustfall-area-doors";
     import { createPvpWorld } from "./pvp-world.js?v=4";
     import { createBossNavigation } from "./boss-navigation.js?v=2";
     import { BOSS_ATTACK_BY_ID, chooseBossAttack } from "./boss-attacks.js?v=2";
@@ -16,7 +16,7 @@
     import { createGauntletRuntime } from "./gauntlet-runtime.js?v=22";
     import { createWorldAudio } from "./world-audio.js?v=4";
     import { createGauntletThemes } from "./gauntlet-themes.js?v=10";
-    import { createPostFx, applyDisplayTone } from "./post-fx.js?v=11";
+    import { createPostFx, applyDisplayTone } from "./post-fx.js?v=12-manual-aa";
     import { DEFAULT_FX, loadFxSettings, mountFxSettings } from "./post-fx-settings.js?v=4";
     import { createImpactFx } from "./impact-fx.js?v=4";
     import { poseZombieVariant } from "./zombie-variants.js?v=5";
@@ -29,7 +29,7 @@
     // import + catch is kept so a missing/renamed i18n file still lets the menu boot with a minimal stub.
     let GAME_I18N, LANG_META, translateGame;
     try {
-      const _i18n = await import("./translation.js?v=20261113-pvp-fx");
+      const _i18n = await import("./translation.js?v=20261112-graphics-i18n-v2");
       GAME_I18N     = _i18n.GAME_I18N;
       LANG_META     = _i18n.LANGUAGE_OPTIONS;
       translateGame = _i18n.translate;
@@ -156,6 +156,14 @@
     const lblAdsLookSens = document.getElementById("lblAdsLookSens");
     const btnQualityPrev = document.getElementById("btnQualityPrev");
     const btnQualityNext = document.getElementById("btnQualityNext");
+    const btnAutoAdaptOff = document.getElementById("btnAutoAdaptOff");
+    const btnAutoAdaptOn = document.getElementById("btnAutoAdaptOn");
+    const autoAdaptValue = document.getElementById("autoAdaptValue");
+    const manualRenderControls = document.getElementById("manualRenderControls");
+    const rngRenderScale = document.getElementById("rngRenderScale");
+    const lblRenderScale = document.getElementById("lblRenderScale");
+    const rngAntialias = document.getElementById("rngAntialias");
+    const lblAntialias = document.getElementById("lblAntialias");
     const qualityLabel = document.getElementById("qualityLabel");
     const btnTexturePrev = document.getElementById("btnTexturePrev");
     const btnTextureNext = document.getElementById("btnTextureNext");
@@ -3030,10 +3038,13 @@
       // severely GPU-limited machines appear stuck above their 65% floor.
       if (resolutionScale > ADAPTIVE_RENDER_SCALE_MIN) {
         resolutionScale = Math.max(ADAPTIVE_RENDER_SCALE_MIN, resolutionScale - 0.05);
+        syncRenderControlsUI();
         return true;
       }
       if (adaptiveAaLevel > 0) {
         adaptiveAaLevel--;
+        postFx?.setAntialiasLevel(adaptiveAaLevel);
+        syncRenderControlsUI();
         return true;
       }
       return false;
@@ -3258,7 +3269,7 @@
 
     // ── Post-processing ──────────────────
     let postFx = null, postFxBroken = false, _postW = 0, _postH = 0, _postDpr = 0, _postLookKey = "";
-    let postConfigDirty = true, postTier = "", fallbackBlur = "";
+    let postConfigDirty = true, postTier = "", fallbackBlur = "", _postFxMode = null;
     const bossOptics = { water: "puddles" };
     const syncFxControls = mountFxSettings(document.getElementById("fxSettings"), () => gameSettings.effects, saveGameSettings, () => {
       postConfigDirty = true;
@@ -3308,14 +3319,15 @@
       }
       const fogLook = wantFogDisplayLook();
       if (fogLook !== fogDisplayLook) { fogDisplayLook = fogLook; applySceneFogAndCameraFar(); }
-      const usePost = postFxWanted() && gameWorldReady;
+      const postEffectsEnabled = postFxWanted() && gameWorldReady;
+      const usePost = postEffectsEnabled || (gameWorldReady && adaptiveAaLevel > 0);
       const cfg = gameSettings.effects;
       const hurt = gameWorldReady ? THREE.MathUtils.clamp(1 - player.health / (player.maxHealth * .43), 0, 1) : 0;
       const needle = state.speedNeedle;
       const weakGoal = gameWorldReady && needle.phase === "weak"
         ? cfg.weakness * (.52 + .48 * THREE.MathUtils.smoothstep(needle.timer, 0, 1200)) : 0;
-      const weak = impactFx.update(dt, weakGoal, hurt, usePost, cfg.blood);
-      const blur = !usePost && weak > .018 ? `blur(${(weak * 5.5).toFixed(2)}px)` : "";
+      const weak = impactFx.update(dt, weakGoal, hurt, postEffectsEnabled, cfg.blood);
+      const blur = !postEffectsEnabled && weak > .018 ? `blur(${(weak * 5.5).toFixed(2)}px)` : "";
       if (blur !== fallbackBlur) { renderer.domElement.style.filter = blur; fallbackBlur = blur; }
       if (!usePost) { renderer.render(scene, camera); return; }
       try {
@@ -3332,29 +3344,42 @@
         const key = CURRENT_MAP + (isGauntletMap(CURRENT_MAP) ? currentGauntletTheme().id : "");
         const environment = pvpDef(CURRENT_MAP)?.env || (isBossArenaMap(CURRENT_MAP) ? bossOptics : null);
         const quality = getQualityId();
-        const renderCfg = quality === "potato" ? {
+        const neutralFx = {
+          ...DEFAULT_FX,
+          bloom: 0, ao: "off", aoStrength: 0, ssr: 0, shafts: 0, flare: 0, adapt: 0,
+          blood: 0, weakness: 0, dof: 0, motion: 0, fringe: 0, distortion: 0,
+          cameraLens: 0, vignette: 0,
+        };
+        const renderCfg = !postEffectsEnabled ? neutralFx : quality === "potato" ? {
           ...cfg,
           bloom: 0, ao: "off", aoStrength: 0, ssr: 0,
           shafts: 0, flare: 0, adapt: 0, dof: 0,
           fringe: 0, distortion: 0,
         } : cfg;
-        if (postConfigDirty || postTier !== quality || key !== _postLookKey) {
-          postFx.configure(renderCfg, quality, quality === "potato" ? null : environment);
+        const postFxModeChanged = _postFxMode !== postEffectsEnabled;
+        if (postConfigDirty || postTier !== quality || key !== _postLookKey || postFxModeChanged) {
+          postFx.configure(renderCfg, quality, postEffectsEnabled && quality !== "potato" ? environment : null);
           postConfigDirty = false;
           postTier = quality;
+          _postFxMode = postEffectsEnabled;
         }
-        if (key !== _postLookKey) {
+        if (key !== _postLookKey || postFxModeChanged) {
           _postLookKey = key;
-          if (isGauntletMap(CURRENT_MAP)) postFx.look(POST_LOOKS[currentGauntletTheme().id] || {});
+          if (!postEffectsEnabled) postFx.look({ tint: 0xffffff, vignette: 0, bloom: 0, threshold: 2, saturation: 1, contrast: 1 });
+          else if (isGauntletMap(CURRENT_MAP)) postFx.look(POST_LOOKS[currentGauntletTheme().id] || {});
           else if (pvpDef(CURRENT_MAP)) postFx.look(pvpDef(CURRENT_MAP).env.look || {});
           else if (CURRENT_MAP === "arena") postFx.look({ vignette: 0.35, bloom: 0.10, threshold: 1.55, contrast: 1.03 });
           else if (isBossArenaMap(CURRENT_MAP)) postFx.look({ vignette: 0.14, bloom: 0.16, threshold: 1.45, contrast: 0.95 });
           else if (isBrightIndoorMap(CURRENT_MAP) || isTrainingMap(CURRENT_MAP)) postFx.look({ vignette: 0.22, bloom: 0.2, threshold: 1.4 });
           else postFx.look({ vignette: 0.42, bloom: 0.4, contrast: 1.08 });
         }
-        postFx.update(dt, { weak, aiming: state.adsProgress > .50, motionBlur: gameSettings.motionBlur !== false,
-          fringe: performance.now() < state.dashActiveUntil ? .006 : 0,
-          waterTime: environment?.water ? Date.now() / 1000 % 1024 : 0 });
+        postFx.update(dt, {
+          weak: postEffectsEnabled ? weak : 0,
+          aiming: state.adsProgress > .50,
+          motionBlur: postEffectsEnabled && gameSettings.motionBlur !== false,
+          fringe: postEffectsEnabled && performance.now() < state.dashActiveUntil ? .006 : 0,
+          waterTime: postEffectsEnabled && environment?.water ? Date.now() / 1000 % 1024 : 0,
+        });
         postFx.render(dt);
       } catch (e) {
         console.warn("[post-fx] disabled:", e);
@@ -3663,8 +3688,8 @@
       // Prefer the square high-detail gameplay texture. Keep the original as a
       // deployment fallback; background.png belongs only to the menu backdrop.
       return [
-        ...assetUrlList("images/walls-hd.jpg"),
-        ...assetUrlList("images/walls.png"),
+        ...assetUrlList("images/walls-hd.jpg?v=4x-20261112"),
+        ...assetUrlList("images/walls.png?v=4x-20261112"),
       ];
     }
 
@@ -3675,7 +3700,7 @@
      * getWallTextureUrlList (which serves the in-game arena/boss walls via walls.png).
      */
     function getMenuWallTextureUrlList() {
-      return assetUrlList("images/background.png");
+      return assetUrlList("images/background.png?v=4x-20261112");
     }
 
     /** Mini Three scene behind main menu: wall texture (Lambert, in-game style) + warm fill + center lamp; lamp intensity follows menu.mp3 (session peak = 100%). */
@@ -3951,9 +3976,9 @@
         ? window.__FPS_UI_LAYER_PATHS__
         : [
             {
-              menuBg: "images/background.png",
-              btnTex: "images/button.png",
-              settingsBg: "images/modal-bg.png",
+              menuBg: "images/background.png?v=4x-20261112",
+              btnTex: "images/button.png?v=4x-20261112",
+              settingsBg: "images/modal-bg.png?v=4x-20261112",
             },
           ]);
 
@@ -10763,7 +10788,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       if (realZombieAssetsPromise) return realZombieAssetsPromise;
       realZombieAssetsPromise = (async () => {
         const base = "models/zombie/";
-        const atlas = loadTextureFromGameAssets(base + "character-atlas.webp?v=2", true);
+        const atlas = loadTextureFromGameAssets(base + "character-atlas.webp?v=4x-20261112", true);
         const [model, idle, walk, run, attack, death, characters] = await Promise.all([
           loadGltfFromGameAssets(base + "zombie.glb"),
           loadGltfFromGameAssets(base + "idle.glb"),
@@ -21485,6 +21510,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         lblAdsLookSens.textContent = `${am.toFixed(2)}×`;
       }
       syncSensReadout();
+      syncRenderControlsUI();
       qualityLabel.textContent = QUALITY_LABELS[gameSettings.qualityIndex] || "REGULAR";
       textureLabel.textContent = gameSettings.texturesOn ? "ON" : "OFF";
       const postLabelEl = document.getElementById("postLabel");
@@ -21505,6 +21531,26 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       if (skipClickVal) skipClickVal.textContent = gameSettings.skipClickToPlay ? "ON" : "OFF";
       renderKeyBindingsUI();
       applyLanguageUI();
+    }
+
+    function syncRenderControlsUI() {
+      const automatic = !!gameSettings.autoAdaptPerformance;
+      if (autoAdaptValue) autoAdaptValue.textContent = tr(automatic ? "autoStatusOn" : "autoStatusOff", automatic ? "ON" : "OFF");
+      btnAutoAdaptOff?.setAttribute("aria-pressed", String(!automatic));
+      btnAutoAdaptOn?.setAttribute("aria-pressed", String(automatic));
+      if (manualRenderControls) manualRenderControls.setAttribute("aria-disabled", String(automatic));
+      if (rngRenderScale) {
+        rngRenderScale.disabled = automatic;
+        rngRenderScale.value = String(Math.round(resolutionScale * 100));
+      }
+      if (lblRenderScale) lblRenderScale.textContent = `${Math.round(resolutionScale * 100)}%`;
+      const aaKeys = ["aaOff", "aaLow", "aaMedium", "aaHigh", "aaUltra"];
+      const aaFallback = ["OFF", "LOW", "MEDIUM", "HIGH", "ULTRA"];
+      if (rngAntialias) {
+        rngAntialias.disabled = automatic;
+        rngAntialias.value = String(adaptiveAaLevel);
+      }
+      if (lblAntialias) lblAntialias.textContent = tr(aaKeys[adaptiveAaLevel] || "aaOff", aaFallback[adaptiveAaLevel] || "OFF");
     }
 
     let settingsReturnFocus = null;
@@ -24679,11 +24725,15 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
 
       if (performance.now() >= renderChangeCooldownUntil && renderHighSeconds >= RENDER_HIGH_HOLD_S) {
         if (resolutionScale < 0.999) resolutionScale = Math.min(1, resolutionScale + 0.05);
-        else if (adaptiveAaLevel < ADAPTIVE_AA_LEVELS - 1) adaptiveAaLevel++;
+        else if (adaptiveAaLevel < ADAPTIVE_AA_LEVELS - 1) {
+          adaptiveAaLevel++;
+          postFx?.setAntialiasLevel(adaptiveAaLevel);
+        }
         else {
           clearAdaptiveRenderWindow();
           return;
         }
+        syncRenderControlsUI();
         renderChangeCooldownUntil = performance.now() + RENDER_CHANGE_COOLDOWN_MS;
         clearAdaptiveRenderWindow();
         syncGameRendererSize();
@@ -26403,6 +26453,45 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     }
     btnQualityPrev.addEventListener("click", () => cycleQuality(-1));
     btnQualityNext.addEventListener("click", () => cycleQuality(1));
+
+    function setAutoAdaptPerformance(enabled) {
+      enabled = !!enabled;
+      if (gameSettings.autoAdaptPerformance === enabled) return;
+      gameSettings.manualRenderScale = THREE.MathUtils.clamp(resolutionScale, RENDER_SCALE_MIN, 1);
+      gameSettings.manualAntialiasLevel = THREE.MathUtils.clamp(adaptiveAaLevel | 0, 0, ADAPTIVE_AA_LEVELS - 1);
+      gameSettings.autoAdaptPerformance = enabled;
+      resetAdaptiveRenderControl(false);
+      syncGameRendererSize();
+      postFx?.resetHistory();
+      syncRenderControlsUI();
+      saveGameSettings();
+    }
+    btnAutoAdaptOff?.addEventListener("click", () => setAutoAdaptPerformance(false));
+    btnAutoAdaptOn?.addEventListener("click", () => setAutoAdaptPerformance(true));
+
+    rngRenderScale?.addEventListener("input", () => {
+      if (gameSettings.autoAdaptPerformance) return;
+      resolutionScale = THREE.MathUtils.clamp((+rngRenderScale.value || 70) / 100, RENDER_SCALE_MIN, 1);
+      gameSettings.manualRenderScale = resolutionScale;
+      clearAdaptiveRenderWindow();
+      renderChangeCooldownUntil = performance.now() + RENDER_CHANGE_COOLDOWN_MS;
+      syncRenderControlsUI();
+      syncGameRendererSize();
+      postFx?.resetHistory();
+    });
+    rngRenderScale?.addEventListener("change", saveGameSettings);
+
+    rngAntialias?.addEventListener("input", () => {
+      if (gameSettings.autoAdaptPerformance) return;
+      adaptiveAaLevel = THREE.MathUtils.clamp(+rngAntialias.value | 0, 0, ADAPTIVE_AA_LEVELS - 1);
+      gameSettings.manualAntialiasLevel = adaptiveAaLevel;
+      clearAdaptiveRenderWindow();
+      renderChangeCooldownUntil = performance.now() + RENDER_CHANGE_COOLDOWN_MS;
+      postFx?.setAntialiasLevel(adaptiveAaLevel);
+      postFx?.resetHistory();
+      syncRenderControlsUI();
+    });
+    rngAntialias?.addEventListener("change", saveGameSettings);
 
     for (const id of ["btnPostPrev", "btnPostNext"]) {
       const btn = document.getElementById(id);

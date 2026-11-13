@@ -167,7 +167,7 @@ export function town(core) {
           collider.userData.wallBox.dyn = true;
           colliders.push(collider);
         }
-        swingDoors.push({ cx, cz, y0, width, height, leafW, segmentLength, hingeX, hingeZ, baseYaw, out, alongX, pivot, colliders, angle: 0, openUntil: -Infinity, pushSign: 1 });
+        swingDoors.push({ cx, cz, y0, width, height, leafW, segmentLength, hingeX, hingeZ, baseYaw, out, alongX, pivot, colliders, angle: 0, open: false, pushSign: 1 });
       };
       /** An upper floor slab with a rectangular hole (for a stair). */
       const slab = (x0, x1, z0, z1, y, hole, material) => {
@@ -384,27 +384,50 @@ export function town(core) {
       kit.box(2.2, 0.8, 1.0, 21, 0, 15.6, woodDark); kit.box(1.8, 0.5, 0.9, 15.5, 0, 15.5, plank); kit.box(1.0, 1.9, 1.0, 14, 0, 9.5, woodDark);
 
       // Dustfall doors swing on the shared map clock and collide as short oriented slabs.
-      // The leaf opens before the player reaches it, then eases back shut after they pass.
-      world.tick((dt, t, p) => {
-        const people = world.players?.() || (p ? [p] : []);
+      // A narrower approach area opens the leaf; a wider hold area adds hysteresis and keeps
+      // it open until every player collider has cleared the doorway plus a safety margin.
+      world.tick((dt, _t, p) => {
+        const listedPeople = world.players?.();
+        const people = listedPeople?.length ? listedPeople : (p ? [p] : []);
         for (const door of swingDoors) {
-          let target = 0;
-          const actor = people.map(person => {
+          let approached = false, occupied = false, withinHoldArea = false;
+          let positiveVotes = 0, negativeVotes = 0;
+          for (const person of people) {
+            if (!Number.isFinite(person?.x) || !Number.isFinite(person?.z)) continue;
+            const radius = Math.max(0, Number.isFinite(person.radius) ? person.radius : 0.34);
+            const feet = Number.isFinite(person.feet) ? person.feet : 0;
+            const bodyHeight = Math.max(0, Number.isFinite(person.height) ? person.height : 3.3);
+            const verticalOverlap = feet < door.y0 + door.height + 0.12
+              && feet + bodyHeight > door.y0 - 0.12;
+            if (!verticalOverlap) continue;
+
             const dx = person.x - door.cx, dz = person.z - door.cz;
             const planeDistance = door.alongX ? Math.abs(dz) : Math.abs(dx);
             const alongDistance = door.alongX ? Math.abs(dx) : Math.abs(dz);
-            const feet = person.feet ?? 0;
-            const withinReach = planeDistance < 3 && alongDistance < door.width / 2 + 1.25
-              && feet < door.y0 + door.height + 0.35 && feet + 1.9 > door.y0;
-            return { person, dx, dz, withinReach, distance: planeDistance * planeDistance + alongDistance * alongDistance };
-          }).filter(item => item.withinReach).sort((a, b) => a.distance - b.distance)[0];
-          if (actor) {
-            door.openUntil = t + 1.2;
-            const signedSide = door.alongX ? actor.dz : actor.dx;
-            const side = Math.sign(signedSide) || door.out;
-            door.pushSign = side * door.out * (door.alongX ? 1 : -1);
+            const clearance = 0.45;
+            if (planeDistance <= 0.45 + radius + clearance
+                && alongDistance <= door.width / 2 + radius + clearance) occupied = true;
+            if (planeDistance <= 3 + radius
+                && alongDistance <= door.width / 2 + 1.25 + radius) withinHoldArea = true;
+            if (planeDistance <= 2.5 + radius
+                && alongDistance <= door.width / 2 + 0.9 + radius) {
+              approached = true;
+              const signedSide = door.alongX ? dz : dx;
+              if (Math.abs(signedSide) > 0.05) {
+                const side = Math.sign(signedSide);
+                const sign = side * door.out * (door.alongX ? 1 : -1);
+                if (sign > 0) positiveVotes++; else negativeVotes++;
+              }
+            }
           }
-          if (actor || t < door.openUntil) target = door.pushSign * 1.36;
+
+          const shouldOpen = approached || (door.open && (occupied || withinHoldArea));
+          if (shouldOpen && !door.open) {
+            if (positiveVotes > negativeVotes) door.pushSign = 1;
+            else if (negativeVotes > positiveVotes) door.pushSign = -1;
+          }
+          door.open = shouldOpen;
+          const target = door.open ? door.pushSign * 1.36 : 0;
           door.angle += THREE.MathUtils.clamp(target - door.angle, -dt * 5.2, dt * 5.2);
           const yaw = door.baseYaw + door.angle;
           door.pivot.rotation.y = yaw;

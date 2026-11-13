@@ -24,7 +24,7 @@ import { createNature } from "./pvp-nature.js?v=53";
 import { foundry } from "./pvp-map-foundry.js?v=17";
 import { station } from "./pvp-map-station.js?v=11";
 import { ruins } from "./pvp-map-ruins.js?v=20-collision";
-import { town } from "./pvp-map-town.js?v=13";
+import { town } from "./pvp-map-town.js?v=14-area-door-occupancy";
 
 const TAU = Math.PI * 2;
 

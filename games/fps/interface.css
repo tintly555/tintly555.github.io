@@ -369,7 +369,7 @@ body.game-active #menuBg { display: none; }
 :is(#btnResume, #btnDeathRestart, #btnNameOk, #gClearNext):hover { background: #ffd28c; }
 
 #gameBootOverlay {
-  background: linear-gradient(90deg, #101410fa, #10141070), url("images/bulkhead-key-art.jpg") 64% center / cover;
+  background: linear-gradient(90deg, #101410fa, #10141070), url("images/bulkhead-key-art.jpg?v=4x-20261112") 64% center / cover;
 }
 #gameBootOverlay .game-boot-spinner { border-top-color: var(--console-accent); }
 #gameBootOverlay .game-boot-text { font: 700 32px/1 var(--console-display); }
@@ -692,8 +692,8 @@ body.game-active #cameraRecordOSD { display: flex; }
 
 /* Worn steel for structural surfaces, brushed metal for controls, etched glass for HUD readouts. */
 :root {
-  --zn-brushed: url("images/button.png");
-  --zn-steel: url("images/modal-bg.png");
+  --zn-brushed: url("images/button.png?v=4x-20261112");
+  --zn-steel: url("images/modal-bg.png?v=4x-20261112");
   --zn-panel: radial-gradient(ellipse at 100% 4%, #6d30242e, transparent 56%),
     linear-gradient(145deg, #1019201f, #07090d91), var(--zn-steel) center / 100% 100% no-repeat #171b20;
   --zn-glass: linear-gradient(153deg, #1a2833b0, #080f18d9),

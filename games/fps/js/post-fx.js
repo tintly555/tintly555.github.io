@@ -77,6 +77,7 @@ export function createPostFx(THREE, renderer, scene, camera, { width, height, pi
   const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), .28, .55, 1);
   const output = new OutputPass();
   const fxaa = new ShaderPass(FXAAShader);
+  fxaa.enabled = false;
   for (const pass of [output, fxaa]) {
     pass.material.depthTest = false;
     pass.material.depthWrite = false;
@@ -191,6 +192,7 @@ export function createPostFx(THREE, renderer, scene, camera, { width, height, pi
       const next = THREE.MathUtils.clamp(Math.round(level || 0), 0, fxaaFootprints.length - 1);
       if (next === antialiasLevel) return;
       antialiasLevel = next;
+      fxaa.enabled = next > 0;
       applyAntialiasLevel();
     },
     setSize(w, h, dpr) {
