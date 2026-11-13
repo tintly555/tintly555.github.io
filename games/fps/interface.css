@@ -224,12 +224,7 @@ body.game-active #menuBg { display: none; }
   padding: 12px;
   text-align: left;
   font: 800 27px/1.05 var(--console-display);
-  border-left: 3px solid #8b9a87;
 }
-#menu #menuStart > #btnArena { border-left-color: var(--console-accent); }
-#menu #menuStart > #btnBossFight { border-left-color: #e18a70; }
-#menu #menuStart > #btnCrossfire { border-left-color: #a4c7ca; }
-#menu #menuStart > #btnGauntlet { border-left-color: #adbe8e; }
 #menu button[data-desc]::after {
   color: var(--console-muted);
   font: 500 14px/1.35 var(--console-type);
@@ -509,10 +504,6 @@ body:has(#menu[data-route]:not([data-route=""])) #menuBg {
 }
 #menu button:not(.menu-float-icon):not(#btnStart):is(:hover,:focus-visible) {
   border-color: var(--console-accent);
-}
-#menu #menuStart > button[data-desc] { border-left-color: #c38956; }
-#menu #menuStart > button[data-desc]:is(:hover,:focus-visible) {
-  box-shadow: inset 3px 0 var(--console-accent), inset 0 1px #ffffff28;
 }
 @keyframes consolePanelIn { from { opacity: 0; transform: translateX(13px) scale(.987); } to { opacity: 1; transform: none; } }
 @keyframes consoleDialogIn { from { opacity: 0; transform: translateY(9px) scale(.98); } to { opacity: 1; transform: none; } }

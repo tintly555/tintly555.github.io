@@ -41,6 +41,18 @@ export function town(core) {
       const N = kit.nature();
       const rnd = rngFor(55), srnd = rngFor(909);
       const group = new THREE.Group(); kit.deco(group);
+      // Close polygonal bounds around round masonry without filling the playable interior.
+      // Refresh each rotated proxy's AABB so movement and shot collision match its segment.
+      const ringCollider = (x, y, z, radius, height, thickness, segments = 20) => {
+        const length = 2 * radius * Math.tan(Math.PI / segments) * 1.08;
+        for (let i = 0; i < segments; i++) {
+          const angle = i / segments * TAU;
+          const part = kit.proxy(length, height, thickness, x + Math.cos(angle) * radius, y, z + Math.sin(angle) * radius);
+          part.rotation.y = angle - Math.PI / 2;
+          part.updateMatrixWorld(true);
+          part.userData.wallBox?.setFromObject(part);
+        }
+      };
 
       const plank = mat("dt-plank", surfaces.wood("dt-plank", { base: [150, 112, 74], planks: 4, grey: .35 }), { tile: 2.4 });
       const plankRed = mat("dt-plank-r", surfaces.wood("dt-plank-r", { base: [142, 70, 52], planks: 4, grey: .15 }), { tile: 2.4 });
@@ -115,7 +127,9 @@ export function town(core) {
         kit.mound({ x: 10, z: -24, w: 14, d: 4, h: 1.4, material: strata, ramps: ["W", "E"], slope: 3 });
         for (const [x, z, size] of [[-5, 26.5, 1.4], [4, 24.5, 1.2], [10, 34, 1.5], [-10, 34, 1.3], [-27, 21, 1.2], [26, 20, 1.3]]) {
           cliffParts.push(strataUv(N.rock(srnd, strata, { x, y: 0, z, size, squash: 0.8, detail: 3 })));
-          kit.proxy(size * 1.5, size * 1.25, size * 1.5, x, 0, z);
+          // `size` is the rock radius. The old proxy covered only half its visible width and
+          // ended below its crown, which let players clip through these cover boulders.
+          kit.proxy(size * 2.7, size * 1.86 * 0.8, size * 2.7, x, 0, z);
         }
       }
       const cliffMesh = new THREE.Mesh(N.mergeGeometries(cliffParts, false), strata);
@@ -252,6 +266,9 @@ export function town(core) {
         const dec = kit.batch(2);
         dec.box(w + 0.5, 1.8, 0.4, (x0 + x1) / 2, top + 1.2, frontZ + frontOut * 0.5);
         dec.box(w + 0.7, 0.22, 0.55, (x0 + x1) / 2, top + 2.2, frontZ + frontOut * 0.5);   // cornice
+        // These are standalone fascia boards above the roof, not a facade-wide proxy.
+        kit.collider(w + 0.5, 1.8, 0.4, (x0 + x1) / 2, top + 1.2, frontZ + frontOut * 0.5);
+        kit.collider(w + 0.7, 0.22, 0.55, (x0 + x1) / 2, top + 2.2, frontZ + frontOut * 0.5);
         kit.deco(dec.mesh(wall, { shadow: true }));
         if (label) {
           const sg = textSign(label, Math.min(6, w - 1), 0.9, { fg: labelColor || "#f3dfb2", bg: "#3b2616", border: "#b98a45", font: "bold 58px serif" });
@@ -319,6 +336,7 @@ export function town(core) {
         // Straw bales: strapped blocks with a straw grain.
         const straw = (() => { const c = document.createElement("canvas"); c.width = c.height = 64; const g = c.getContext("2d"); g.fillStyle = "#b89a4a"; g.fillRect(0, 0, 64, 64); for (let i = 0; i < 260; i++) { g.strokeStyle = `rgba(${150 + srnd() * 80 | 0},${120 + srnd() * 70 | 0},${40 + srnd() * 30 | 0},.8)`; g.beginPath(); const x = srnd() * 64, y = srnd() * 64; g.moveTo(x, y); g.lineTo(x + 8 + srnd() * 14, y + (srnd() - 0.5) * 3); g.stroke(); } g.fillStyle = "rgba(60,40,20,.7)"; g.fillRect(0, 20, 64, 2); g.fillRect(0, 42, 64, 2); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; const m = new THREE.MeshStandardMaterial({ map: t, roughness: 1 }); m.userData.shared = m.userData._cachedShared = true; return m; })();
         const hay = kit.batch(1); hay.box(1.4, 1.0, 1.4, -28, 0.5, 15).box(1.4, 1.0, 1.4, -26.4, 0.5, 15.2).box(1.4, 1.0, 1.4, -27.2, 1.5, 15.1);
+        kit.collider(1.4, 1.0, 1.4, -28, 0.5, 15); kit.collider(1.4, 1.0, 1.4, -26.4, 0.5, 15.2); kit.collider(1.4, 1.0, 1.4, -27.2, 1.5, 15.1);
         kit.deco(hay.mesh(straw, { shadow: true }));
       }
       {
@@ -352,6 +370,7 @@ export function town(core) {
         kit.box(3, 1.2, 1.0, (cx0 + cx1) / 2, 0, cz1 - 1.4, stone);
         const tower = kit.batch(3), mx = (cx0 + cx1) / 2;
         tower.box(3.2, 5, 3.2, mx, 8.8, cz0 + 1.5).box(3.5, 0.3, 3.5, mx, 11.4, cz0 + 1.5).box(3.5, 0.3, 3.5, mx, 6.3, cz0 + 1.5);
+        kit.collider(3.2, 5, 3.2, mx, 8.8, cz0 + 1.5);
         for (const [dx, dz] of [[-1.4, -1.4], [1.4, -1.4], [-1.4, 1.4], [1.4, 1.4]]) tower.box(0.25, 3.0, 0.25, mx + dx, 9.6, cz0 + 1.5 + dz);
         kit.deco(tower.mesh(plankWhite, { shadow: true }));
         const spire = new THREE.Mesh(new THREE.ConeGeometry(2.5, 4.2, 4), shingle); spire.position.set(mx, 13.75, cz0 + 1.5); spire.rotation.y = Math.PI / 4; spire.castShadow = true; spire.raycast = () => {}; kit.deco(spire);
@@ -411,7 +430,9 @@ export function town(core) {
       };
       {
         // Well in the street: a round stone curb, a frame, a roof and a bucket on a rope.
-        kit.box(2.6, 1.1, 2.6, 2, 0, -0.5, hidden);
+        ringCollider(2, 0, -0.5, 1.17, 1.1, 0.32);
+        kit.collider(0.2, 2.8, 0.2, 0.9, 1.4, -0.5); kit.collider(0.2, 2.8, 0.2, 3.1, 1.4, -0.5);
+        kit.collider(2.4, 0.2, 0.2, 2, 2.8, -0.5);
         const stoneDS = stone.clone(); stoneDS.side = THREE.DoubleSide;
         const curb = new THREE.Mesh(new THREE.CylinderGeometry(1.3, 1.34, 1.1, 28, 1, true), stoneDS); curb.position.set(2, 0.55, -0.5); curb.castShadow = curb.receiveShadow = true; curb.raycast = () => {}; kit.deco(curb);
         const lip = new THREE.Mesh(new THREE.RingGeometry(1.02, 1.36, 28), stoneDS); lip.rotation.x = -Math.PI / 2; lip.position.set(2, 1.1, -0.5); lip.receiveShadow = true; lip.raycast = () => {}; kit.deco(lip);
@@ -429,6 +450,7 @@ export function town(core) {
         for (const y of [2.5, 5.5]) for (const [a, b] of [[[-1.6, -1.6], [1.6, -1.6]], [[1.6, -1.6], [1.6, 1.6]], [[1.6, 1.6], [-1.6, 1.6]], [[-1.6, 1.6], [-1.6, -1.6]]]) braceB.beam([wx + a[0], y, wz + a[1]], [wx + b[0], y + 3, wz + b[1]], 0.14).beam([wx + a[0], y + 3, wz + a[1]], [wx + b[0], y, wz + b[1]], 0.14);
         kit.deco(braceB.mesh(woodDark, { shadow: true }));
         const tank = new THREE.Mesh(new THREE.CylinderGeometry(2.6, 2.6, 3.8, 28, 1), woodDark); tank.position.set(wx, 10.4, wz); tank.castShadow = tank.receiveShadow = true; tank.raycast = () => {}; kit.deco(tank);
+        ringCollider(wx, 8.5, wz, 2.48, 3.8, 0.3, 24);
         const hoops = kit.batch(1); for (const y of [9.0, 10.0, 10.9, 11.8]) hoops.cyl(2.64, 2.64, 0.12, wx, y, wz, 28);
         kit.deco(hoops.mesh(iron, { shadow: true }));
         const cap = new THREE.Mesh(new THREE.ConeGeometry(2.9, 1.6, 28), shingle); cap.position.set(wx, 13.1, wz); cap.castShadow = true; cap.raycast = () => {}; kit.deco(cap);
@@ -468,11 +490,18 @@ export function town(core) {
         const wagon = (x, z, ry) => {
           const a = Math.abs(Math.cos(ry)) > 0.5;
           kit.box(a ? 4 : 2, 1.0, a ? 2 : 4, x, 0.5, z, woodDark);
-          kit.box(a ? 4 : 0.2, 1.4, a ? 0.2 : 4, x + (a ? 0 : -1), 1.5, z + (a ? -1 : 0), hidden);
           const bed = kit.batch(2);
           const cov = kit.batch(2);
-          for (const e of [-1, 1]) { bed.box(a ? 4.1 : 0.12, 0.7, a ? 0.12 : 4.1, x + (a ? 0 : e * 1.0), 1.35, z + (a ? e * 1.0 : 0)); }
-          for (let k = -1; k <= 1; k++) for (const e of [-1, 1]) cov.box(a ? 0.07 : 0.07, 1.4, 0.07, x + (a ? k * 1.4 : e * 0.95), 1.8 + 0.5, z + (a ? e * 0.95 : k * 1.4));
+          for (const e of [-1, 1]) {
+            const railX = x + (a ? 0 : e * 1.0), railZ = z + (a ? e * 1.0 : 0);
+            bed.box(a ? 4.1 : 0.12, 0.7, a ? 0.12 : 4.1, railX, 1.35, railZ);
+            kit.collider(a ? 4.1 : 0.12, 0.7, a ? 0.12 : 4.1, railX, 1.35, railZ);
+          }
+          for (let k = -1; k <= 1; k++) for (const e of [-1, 1]) {
+            const postX = x + (a ? k * 1.4 : e * 0.95), postZ = z + (a ? e * 0.95 : k * 1.4);
+            cov.box(0.07, 1.4, 0.07, postX, 2.3, postZ);
+            kit.collider(0.1, 1.4, 0.1, postX, 2.3, postZ);
+          }
           kit.deco(bed.mesh(woodDark, { shadow: true }));
           for (const [dx, dz] of a ? [[-1.4, -1.1], [1.4, -1.1], [-1.4, 1.1], [1.4, 1.1]] : [[-1.1, -1.4], [-1.1, 1.4], [1.1, -1.4], [1.1, 1.4]]) {
             const w = new THREE.Mesh(wheelGeo, woodDark); w.position.set(x + dx, 0.72, z + dz); w.scale.setScalar(1.05); if (!a) w.rotation.y = Math.PI / 2; w.castShadow = true; w.raycast = () => {}; kit.deco(w);
@@ -502,16 +531,28 @@ export function town(core) {
         const rail = kit.batch(2);
         for (const x of [-24, -8, 8, 24]) {
           const rn = Math.max(lift(x - 1.8, -6.2, 0.2), lift(x, -6.2, 0.2), lift(x + 1.8, -6.2, 0.2)), rs = Math.max(lift(x + 2.2, 6.3, 0.2), lift(x + 4, 6.3, 0.2), lift(x + 5.8, 6.3, 0.2));
-          kit.box(3.6, 0.9, 0.2, x, rn, -6.2, hidden); kit.box(3.6, 0.9, 0.2, x + 4, rs, 6.3, hidden);
-          for (const [px, pz, b] of [[x - 1.6, -6.2, rn], [x + 1.6, -6.2, rn], [x + 2.4, 6.3, rs], [x + 5.6, 6.3, rs]]) rail.box(0.14, 1.1, 0.14, px, b + 0.55, pz);
-          rail.box(3.6, 0.1, 0.1, x, rn + 0.95, -6.2).box(3.6, 0.1, 0.1, x + 4, rs + 0.95, 6.3);
+          for (const [cx, cz, base] of [[x, -6.2, rn], [x + 4, 6.3, rs]]) {
+            for (const px of [cx - 1.6, cx + 1.6]) {
+              rail.box(0.14, 1.1, 0.14, px, base + 0.55, cz);
+              kit.collider(0.14, 1.1, 0.14, px, base + 0.55, cz);
+            }
+            rail.box(3.6, 0.1, 0.1, cx, base + 0.95, cz);
+            kit.collider(3.6, 0.1, 0.1, cx, base + 0.95, cz);
+          }
         }
         kit.deco(rail.mesh(woodDark, { shadow: true }));
         const trough = kit.batch(2); for (const [x, z] of [[-24, -5.4], [8, 5.6]]) { trough.box(2.4, 0.5, 0.7, x, lift(x, z, 1.2) + 0.25, z); }
         kit.deco(trough.mesh(woodDark, { shadow: true }));
         // Cacti: ribbed trunks with arms.
         const cactusMesh = new N.Mesher();
-        for (const [x, z] of [[-35, 25], [35, -25], [32, 28], [-31, -24], [20, 32], [-12, 32], [0, -21], [-22, -20]]) { N.cactus(cactusMesh, srnd, x, z, 2.6 + srnd() * 1.6); kit.box(0.9, 2.6, 0.9, x, 0, z, hidden); world.zone({ kind: "damage", x, z, w: 1.9, d: 1.9, y0: 0, h: 2.8, amount: 2, rate: 0.6, label: "cactus" }); }   // spines: a prick for touching one
+        for (const [x, z] of [[-35, 25], [35, -25], [32, 28], [-31, -24], [20, 32], [-12, 32], [0, -21], [-22, -20]]) {
+          const height = 2.6 + srnd() * 1.6;
+          N.cactus(cactusMesh, srnd, x, z, height);
+          // Track the full trunk (radius = 0.3 + 3% of height), without a broad box around its arms.
+          const trunk = 0.3 + height * 0.03;
+          kit.collider(trunk * 2, height, trunk * 2, x, height / 2, z);
+          world.zone({ kind: "damage", x, z, w: 1.9, d: 1.9, y0: 0, h: 2.8, amount: 2, rate: 0.6, label: "cactus" });
+        }   // spines: a prick for touching one
         for (let i = 0; i < 40; i++) { const x = (srnd() - 0.5) * 150, z = (srnd() - 0.5) * 150; if (Math.max(Math.abs(x), Math.abs(z)) < H + 3) continue; N.cactus(cactusMesh, srnd, x, z, 2.2 + srnd() * 3); }
         const cm = cactusMesh.toMesh(N.material("cactus"), { cast: true, receive: true }); if (cm) { cm.frustumCulled = false; kit.deco(cm); }
         // Street lamps: a post, a bracket and a glass lantern.
@@ -640,7 +681,18 @@ export function town(core) {
         const bm = body.mesh(wallMat, { shadow: false }); if (bm) { bm.position.y = -2.6; parts.push(bm); }
         const tm = trimB.mesh(kind === "loco" ? brass : iron, { shadow: false }); if (tm) { tm.position.y = -2.6; parts.push(tm); }
         for (const p of parts) { p.raycast = () => {}; p.castShadow = false; m.add(p); }
-        world.mover({ mesh: m, box: m.userData.wallBox, size: [9, 3.4, 3.2], home: new THREE.Vector3(0, 0.9 + 1.7, RZ), path: (t) => { const x = center(t); return x === null ? null : { x: x + offset, y: 0, z: 0 }; } });
+        const trainPath = (t) => { const x = center(t); return x === null ? null : { x, y: 0, z: 0 }; };
+        world.mover({ mesh: m, box: m.userData.wallBox, size: [9, 3.4, 3.2], home: new THREE.Vector3(offset, 0.9 + 1.7, RZ), path: trainPath });
+        if (kind === "loco") {
+          // Add only the locomotive parts missed by the established body bounds; avoid widening the body collider.
+          const trackPart = (x, y, z, w, h, d) => {
+            const box = kit.collider(w, h, d, offset + x, y, RZ + z);
+            world.mover({ mesh: new THREE.Object3D(), box, size: [w, h, d], home: new THREE.Vector3(offset + x, y, RZ + z), path: trainPath });
+          };
+          trackPart(3.5, 4.85, 0, 1.3, 1.7, 1.3);
+          trackPart(-3, 4.6, 0, 3.4, 0.16, 3.5);
+          trackPart(4.9, 0.45, 0, 1.1, 0.5, 2.4);
+        }
         world.tick((dt, t) => {
           const x = center(t);
           if (x === null) return;

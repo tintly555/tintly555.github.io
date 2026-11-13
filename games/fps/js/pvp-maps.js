@@ -23,7 +23,7 @@ import { createSurfaces, rngFor, fbm } from "./gauntlet-surfaces.js?v=3";
 import { createNature } from "./pvp-nature.js?v=53";
 import { foundry } from "./pvp-map-foundry.js?v=17";
 import { station } from "./pvp-map-station.js?v=11";
-import { ruins } from "./pvp-map-ruins.js?v=19-foliageshadow";
+import { ruins } from "./pvp-map-ruins.js?v=20-collision";
 import { town } from "./pvp-map-town.js?v=13";
 
 const TAU = Math.PI * 2;
@@ -308,15 +308,59 @@ export function createPvpMaps(THREE) {
         const mesh = new THREE.Mesh(geo, m); mesh.castShadow = mesh.receiveShadow = true; mesh.raycast = () => {};
         scene.add(mesh);
       },
-      /** A raised, flat-topped bank of earth `h` high with a slope up each listed side ("E" "W" "N" "S"). */
-      mound({ x, z, w, d, h, material, ramps = ["E", "W"], slope = 4 }) {
-        kit.box(w, h, d, x, 0, z, material);
-        for (const side of ramps) {
-          const eastWest = side === "E" || side === "W", rw = (eastWest ? d : w) * 0.7;
-          if (side === "E") kit.ramp({ x: x + w / 2 + slope, z, dir: "-x", length: slope, w: rw, h, material });
-          if (side === "W") kit.ramp({ x: x - w / 2 - slope, z, dir: "+x", length: slope, w: rw, h, material });
-          if (side === "S") kit.ramp({ x, z: z + d / 2 + slope, dir: "-z", length: slope, w: rw, h, material });
-          if (side === "N") kit.ramp({ x, z: z - d / 2 - slope, dir: "+z", length: slope, w: rw, h, material });
+      /**
+       * A natural earth bank: a flat top that falls away on every side at about 26 degrees (the run is twice the
+       * height), with a slight irregular slump. The drawn surface is a heightfield, and the collision is a grid of
+       * boxes whose tops follow that same heightfield, so a player walks the surface that is drawn. Each step of the
+       * collision is well under the 0.32 m step-up, so the slope is walked, never jumped. `ramps` is kept for old
+       * callers but no longer makes wedges: every side of a bank slopes the same way.
+       */
+      mound({ x, z, w, d, h, material, slope = 4 }) {
+        const M = Math.max(slope, 2 * h); // run from the top edge down to the ground
+        const top = (px, pz) => {
+          const ox = Math.max(Math.abs(px) - w / 2, 0), oz = Math.max(Math.abs(pz) - d / 2, 0);
+          const r = Math.hypot(ox, oz);
+          const slump = 0.035 * h * Math.sin(px * 1.1 + pz * 0.6) * Math.cos(pz * 0.9 - px * 0.4);
+          return Math.max(0, h * (1 - Math.min(1, r / M)) + (r < M ? slump : 0));
+        };
+        const ex = w / 2 + M, ez = d / 2 + M;
+        // Visible surface: a fine heightfield, uv in metres so the texture does not stretch down the slope.
+        const g = 0.25, nx = Math.ceil((ex * 2) / g), nz = Math.ceil((ez * 2) / g);
+        const pos = new Float32Array((nx + 1) * (nz + 1) * 3), uv = new Float32Array((nx + 1) * (nz + 1) * 2);
+        const tile = (material.userData && material.userData.tile) || 4;
+        for (let j = 0; j <= nz; j++) for (let i = 0; i <= nx; i++) {
+          const px = -ex + i * (ex * 2 / nx), pz = -ez + j * (ez * 2 / nz), k = j * (nx + 1) + i;
+          pos[k * 3] = x + px; pos[k * 3 + 1] = top(px, pz); pos[k * 3 + 2] = z + pz;
+          uv[k * 2] = (x + px) / tile; uv[k * 2 + 1] = (z + pz) / tile;
+        }
+        const idx = [];
+        for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
+          const a = j * (nx + 1) + i, b = a + 1, c = a + (nx + 1), dd = c + 1;
+          idx.push(a, c, b, b, c, dd);
+        }
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+        geo.setAttribute("uv", new THREE.BufferAttribute(uv, 2));
+        geo.setIndex(idx); geo.computeVertexNormals();
+        const m = material.clone(); m.side = THREE.DoubleSide; m.userData.shared = false; m.userData._cachedShared = false;
+        const mesh = new THREE.Mesh(geo, m); mesh.castShadow = mesh.receiveShadow = true; mesh.raycast = () => {};
+        kit.deco(mesh);
+        // Collision: columns of 0.5 m cells whose tops follow the heightfield. Flat runs are merged into one box.
+        const c = 0.5, cx = Math.ceil((ex * 2) / c), cz = Math.ceil((ez * 2) / c);
+        for (let j = 0; j < cz; j++) {
+          const pz = -ez + (j + 0.5) * c;
+          let i = 0;
+          while (i < cx) {
+            const px0 = -ex + (i + 0.5) * c, t0 = top(px0, pz);
+            let n = 1;
+            while (i + n < cx && Math.abs(top(-ex + (i + n + 0.5) * c, pz) - t0) < 0.02) n++;
+            if (t0 >= 0.05) {
+              const width = n * c, mx = px0 + (n - 1) * c / 2;
+              const solid = kit.box(width, t0, c, x + mx, 0, z + pz, material);
+              if (solid) solid.visible = false;
+            }
+            i += n;
+          }
         }
       },
       /** Run of stairs length in metres. */
@@ -348,6 +392,13 @@ export function createPvpMaps(THREE) {
       const def = MAPS[id];
       const kit = makeKit(host);
       def.build(kit, host);
+      // The visible perimeter remains human scale; these collision-only extensions rise
+      // far beyond jet-harness reach, so flight cannot leave any Crossfire map.
+      const edge = def.half + 1.7, span = edge * 2 + 2.4;
+      for (const [w, d, x, z] of [
+        [span, 2.4, 0, -edge], [span, 2.4, 0, edge],
+        [2.4, span, -edge, 0], [2.4, span, edge, 0],
+      ]) kit.proxy(w, 20000, d, x, 0, z);
       // A map with a sky look gets a real sky, and the light cut from it for reflections on water, glass and metal.
       const sky = def.env && def.env.sky;
       if (sky) {

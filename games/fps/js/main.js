@@ -3,7 +3,7 @@
     import { RoundedBoxGeometry } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/geometries/RoundedBoxGeometry.js";
     import { mergeGeometries, toCreasedNormals } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/utils/BufferGeometryUtils.js";
     import { clone as cloneSkinnedModel } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/utils/SkeletonUtils.js";
-    import { createPvpMaps } from "./pvp-maps.js?v=lighting-v7";
+    import { createPvpMaps } from "./pvp-maps.js?v=lighting-v8";
     import { createPvpWorld } from "./pvp-world.js?v=4";
     import { createBossNavigation } from "./boss-navigation.js?v=2";
     import { BOSS_ATTACK_BY_ID, chooseBossAttack } from "./boss-attacks.js?v=2";
@@ -362,6 +362,8 @@
       return o;
     }
 
+    const RENDER_SCALE_MIN = 0.70;
+    const RENDER_SCALE_DEFAULT = 0.76;
     let gameSettings = {
       weaponSlotOrder: [0, 2, 3, 1, 5, 6, 4, 7, 9], // last entry (AS Val) is key 8; ～～～ stays on /
       keyBindings: defaultKeyBindings(),
@@ -370,6 +372,9 @@
       musicVolume: 1,
       soundVolume: 1,
       qualityIndex: 1,
+      autoAdaptPerformance: true,
+      manualRenderScale: RENDER_SCALE_DEFAULT,
+      manualAntialiasLevel: 0,
       postFx: true,
       motionBlur: true,
       cameraMotion: true,
@@ -400,6 +405,13 @@
         if (typeof o.musicVolume === "number") gameSettings.musicVolume = THREE.MathUtils.clamp(o.musicVolume, 0, 1);
         if (typeof o.soundVolume === "number") gameSettings.soundVolume = THREE.MathUtils.clamp(o.soundVolume, 0, 1);
         if (typeof o.postFx === "boolean") gameSettings.postFx = o.postFx;
+        if (typeof o.autoAdaptPerformance === "boolean") gameSettings.autoAdaptPerformance = o.autoAdaptPerformance;
+        if (typeof o.manualRenderScale === "number") {
+          gameSettings.manualRenderScale = THREE.MathUtils.clamp(o.manualRenderScale, RENDER_SCALE_MIN, 1);
+        }
+        if (typeof o.manualAntialiasLevel === "number") {
+          gameSettings.manualAntialiasLevel = THREE.MathUtils.clamp(o.manualAntialiasLevel | 0, 0, 4);
+        }
         const hasMotionBlurToggle = typeof o.motionBlur === "boolean";
         if (hasMotionBlurToggle) gameSettings.motionBlur = o.motionBlur;
         if (typeof o.cameraMotion === "boolean") gameSettings.cameraMotion = o.cameraMotion;
@@ -2942,14 +2954,16 @@
     let appliedRendererWidth = Math.floor(_vpInit.w);
     let appliedRendererHeight = Math.floor(_vpInit.h);
     let appliedRendererDpr = _initialRendererDpr;
-    let resolutionScale = 0.76;
-    const ADAPTIVE_RENDER_SCALE_MIN = 0.65;
+    let resolutionScale = gameSettings.autoAdaptPerformance
+      ? RENDER_SCALE_DEFAULT
+      : THREE.MathUtils.clamp(gameSettings.manualRenderScale, RENDER_SCALE_MIN, 1);
+    const ADAPTIVE_RENDER_SCALE_MIN = RENDER_SCALE_MIN;
     const ADAPTIVE_AA_LEVELS = 5;
     const RENDER_SAMPLE_WINDOW_S = 1.0;
     const RENDER_LOW_HOLD_S = 1.5;
     const RENDER_HIGH_HOLD_S = 4.0;
     const RENDER_CHANGE_COOLDOWN_MS = 2500;
-    let adaptiveAaLevel = 0;
+    let adaptiveAaLevel = gameSettings.autoAdaptPerformance ? 0 : gameSettings.manualAntialiasLevel;
     let renderFrameSamples = [];
     let renderSampleSeconds = 0;
     let renderLowSeconds = 0;
@@ -3027,8 +3041,10 @@
 
     function resetAdaptiveRenderControl(resetLevels = false) {
       if (resetLevels) {
-        resolutionScale = 0.76;
-        adaptiveAaLevel = 0;
+        resolutionScale = gameSettings.autoAdaptPerformance
+          ? RENDER_SCALE_DEFAULT
+          : THREE.MathUtils.clamp(gameSettings.manualRenderScale, RENDER_SCALE_MIN, 1);
+        adaptiveAaLevel = gameSettings.autoAdaptPerformance ? 0 : gameSettings.manualAntialiasLevel;
       }
       clearAdaptiveRenderWindow();
       renderChangeCooldownUntil = performance.now() + 3000;
@@ -5542,6 +5558,7 @@
         if (idx !== -1) _texturedMeshes.splice(idx, 1);
       }
       wallBoxes.length = 0;
+      pvpWallBoxGrid = null;
     }
 
     function addWindowWallX(centerX, centerZ, totalW, wallH = 4.5, thick = 1.0, windowW = 4, windowBottom = 1.4, windowTop = 3.0) {
@@ -5710,6 +5727,13 @@
           mesh.material = material;
           return mesh;
         },
+        collider(w, h, d, x, y, z) {
+          const half = new THREE.Vector3(w / 2, h / 2, d / 2);
+          const center = new THREE.Vector3(x, y, z);
+          const box = new THREE.Box3(center.clone().sub(half), center.add(half));
+          wallBoxes.push(box);
+          return box;
+        },
         light(l) {
           // Every material compiles with every point light in the scene. Keep room for
           // the sun and player spotlight on GPUs with smaller shader budgets.
@@ -5722,6 +5746,7 @@
       try { flashlight.castShadow = false; } catch (_) {}
       const buildStart = performance.now();
       const def = pvpMaps.build(id, host);
+      indexPvpWallBoxes();
       console.info(`[pvp] built ${id} in ${(performance.now() - buildStart).toFixed(0)} ms`);
       const env = def.env;
       if (env.hemi) { const h = new THREE.HemisphereLight(env.hemi[0], env.hemi[1], env.hemi[2]); scene.add(h); pvpMapLights.push(h); }
@@ -9600,6 +9625,8 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     const _playerWallSphere = new THREE.Sphere();
     /** chunkKey -> Box3[] for arena maze walls — lets collision test only the nearby chunk ring. */
     const mazeWallBoxBuckets = new Map();
+    /** Spatial index for the detailed, mostly static collision boxes in Crossfire maps. */
+    let pvpWallBoxGrid = null;
 
     /**
      * The gauntlet's courses are hundreds of metres of thin collision slabs, far too many to scan
@@ -9625,7 +9652,25 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       }
       gauntletGrid = { cells, always };
     }
-    function forEachNearbyWallBox(x, z, cb) {
+    function indexPvpWallBoxes() {
+      const cells = new Map(), always = [];
+      for (const box of wallBoxes) {
+        if (box.dyn) { always.push(box); continue; }
+        const x0 = Math.floor(box.min.x / GAUNTLET_CELL), x1 = Math.floor(box.max.x / GAUNTLET_CELL);
+        const z0 = Math.floor(box.min.z / GAUNTLET_CELL), z1 = Math.floor(box.max.z / GAUNTLET_CELL);
+        if (!Number.isFinite(x0 + x1 + z0 + z1) || (x1 - x0 + 1) * (z1 - z0 + 1) > 400) {
+          always.push(box); continue;
+        }
+        for (let cx = x0; cx <= x1; cx++) for (let cz = z0; cz <= z1; cz++) {
+          const key = gridKey(cx, cz);
+          let list = cells.get(key);
+          if (!list) cells.set(key, list = []);
+          list.push(box);
+        }
+      }
+      pvpWallBoxGrid = { cells, always };
+    }
+    function forEachNearbyWallBox(x, z, cb, all = false) {
       if (gauntletGrid && CURRENT_MAP === "gauntlet") {
         const stamp = ++_gridStamp;
         const ccx = Math.floor(x / GAUNTLET_CELL), ccz = Math.floor(z / GAUNTLET_CELL);
@@ -9643,6 +9688,22 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         }
         const always = gauntletGrid.always;
         for (let i = 0; i < always.length; i++) cb(always[i]);
+        return;
+      }
+      if (pvpMaps.MAPS[CURRENT_MAP] && pvpWallBoxGrid) {
+        if (all) { for (const box of wallBoxes) cb(box); return; }
+        const stamp = ++_gridStamp;
+        const ccx = Math.floor(x / GAUNTLET_CELL), ccz = Math.floor(z / GAUNTLET_CELL);
+        for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) {
+          const list = pvpWallBoxGrid.cells.get(gridKey(ccx + dx, ccz + dz));
+          if (!list) continue;
+          for (const box of list) {
+            if (box._seen === stamp) continue;
+            box._seen = stamp;
+            cb(box);
+          }
+        }
+        for (const box of pvpWallBoxGrid.always) cb(box);
         return;
       }
       if (CURRENT_MAP !== "arena" || !mazeWallBoxBuckets.size) {
@@ -11753,7 +11814,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         const t = acousticHit.distanceTo(acousticOrigin);
         const edge = padding ? .001 : .06;
         if (t > edge && t < distance - edge) blocked = true;
-      });
+      }, true);
       return blocked;
     }
     const worldAudio = createWorldAudio(audioCtx, audioSfx, soundBlocked);
@@ -24563,6 +24624,10 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     let nextSlowFrameLog = 0;
 
     function adjustRenderResolution(interval) {
+      if (!gameSettings.autoAdaptPerformance) {
+        clearAdaptiveRenderWindow();
+        return;
+      }
       if (!Number.isFinite(interval) || interval <= 0) return;
       if (interval > 0.12) {
         // Treat long event stalls as outliers. A 1–3 second hitch must not cause

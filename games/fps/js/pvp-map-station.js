@@ -42,6 +42,10 @@ export function station(core) {
       const cyan = glowing("hr-cyan", 0x59d8ff, 2.2);
       const white = glowing("hr-white", 0xf2f8ff, 2.0);
       const rnd = rngFor(33);
+      // Prefer the shared collision-only API when available. The proxy fallback keeps
+      // these map-local hitboxes working with hosts that only expose solid meshes.
+      const hitbox = (w, h, d, x, cy, z) =>
+        kit.collider(w, h, d, x, cy, z) || kit.proxy(w, h, d, x, cy - h / 2, z);
 
       // One pane of glass for every window: clear face-on, a mirror of the stars at a slant.
       const glass = N.glass({ tint: 0xcfe9ff });
@@ -76,6 +80,8 @@ export function station(core) {
       const ceil = new THREE.Mesh(new THREE.PlaneGeometry(fsize, fsize), plain("hr-ceil", 0x1c2432, { rough: .75, metal: .3 }));
       ceil.material.shadowSide = THREE.DoubleSide; ceil.material.side = THREE.DoubleSide;
       ceil.rotation.x = Math.PI / 2; ceil.position.y = 12; ceil.castShadow = true; ceil.receiveShadow = true; ceil.raycast = () => {}; kit.deco(ceil);
+      // The rendered roof is a solid ceiling; keep jet-harness movement from passing through it.
+      hitbox(fsize, 0.24, fsize, 0, 12, 0);
 
       // ── Outer hull with big windows onto space ────────────────────────────────────────
       const wh = 12, th = 1.2;
@@ -107,11 +113,22 @@ export function station(core) {
         const dir = alongX ? Math.sign(x) : Math.sign(z);
         const bx = alongX ? x + dir * len / 2 : x, bz = alongX ? z : z + dir * len / 2;
         booms.box(alongX ? len : 0.5, 0.5, alongX ? 0.5 : len, bx, y, bz);
+        hitbox(alongX ? len : 0.5, 0.5, alongX ? 0.5 : len, bx, y, bz);
         for (const s of [-1, 1]) {
           const geo = new THREE.BoxGeometry(alongX ? 5.5 : 7.4, 0.14, alongX ? 7.4 : 5.5);
           const m = new THREE.Mesh(geo, solarMat);
           const px = alongX ? x + dir * len * 0.78 : x + s * 4.6, pz = alongX ? z + s * 4.6 : z + dir * len * 0.78;
-          m.position.set(px, y, pz); if (alongX) m.rotation.x = tilt * s; else m.rotation.z = -tilt * s; m.castShadow = true; m.raycast = () => {}; kit.deco(m);
+          const angle = tilt * s;
+          m.position.set(px, y, pz); if (alongX) m.rotation.x = angle; else m.rotation.z = -angle; m.castShadow = true; m.raycast = () => {}; kit.deco(m);
+          // Axis-aligned bounds of each tilted panel, rather than a broad wing-sized proxy.
+          // Panels sway by up to 0.08 rad after spawn; enclose that sweep as well.
+          const maxAngle = Math.abs(tilt) + 0.08;
+          const c = Math.cos(maxAngle), sn = Math.sin(maxAngle);
+          const panelW = alongX ? 5.5 : 7.4, panelD = alongX ? 7.4 : 5.5;
+          const boundW = alongX ? panelW : Math.max(panelW, panelW * c + 0.14 * sn);
+          const boundD = alongX ? Math.max(panelD, panelD * c + 0.14 * sn) : panelD;
+          const boundH = 0.14 * c + (alongX ? panelD : panelW) * sn;
+          hitbox(boundW, boundH, boundD, px, y, pz);
           const ref = m; ref.userData.spin = { alongX, s, tilt };
           world.tick((dt, t) => { const a = tilt + Math.sin(t * 0.03 + x + z) * 0.08; if (alongX) m.rotation.x = a * s; else m.rotation.z = -a * s; });
         }
@@ -122,7 +139,11 @@ export function station(core) {
       // A dish on a mast off the north-east.
       const dish = new THREE.Mesh(new THREE.SphereGeometry(3.4, 28, 12, 0, TAU, 0, 0.9), plain("hr-dish", 0xdfe5ec, { metal: .5, rough: .3, side: THREE.DoubleSide }));
       dish.material.side = THREE.DoubleSide; dish.position.set(14, 8, -48); dish.rotation.set(-1.9, 0.2, 0); dish.raycast = () => {}; kit.deco(dish);
+      dish.updateMatrixWorld(true);
+      const dishBounds = new THREE.Box3().setFromObject(dish), dishSize = dishBounds.getSize(new THREE.Vector3()), dishCenter = dishBounds.getCenter(new THREE.Vector3());
+      hitbox(dishSize.x, dishSize.y, dishSize.z, dishCenter.x, dishCenter.y, dishCenter.z);
       const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.3, 9, 10), steel); mast.position.set(14, 3.5, -48); mast.raycast = () => {}; kit.deco(mast);
+      hitbox(0.6, 9, 0.6, 14, 3.5, -48);
 
       // ── The atrium ───────────────────────────────────────────────────────────────────
       const A = 14, aw = 1.0, ah = 7;
@@ -145,6 +166,7 @@ export function station(core) {
         // A lintel over the doorway carrying the status lamps (lit boxes, one each side).
         const lintel = kit.batch(2);
         lintel.box(alongX ? 4.6 : 0.9, 0.5, alongX ? 0.9 : 4.6, cx, 3.95, cz);
+        hitbox(alongX ? 4.6 : 0.9, 0.5, alongX ? 0.9 : 4.6, cx, 3.95, cz);
         kit.deco(lintel.mesh(hullDark, { shadow: true }));
         const lamps = [1, -1].map((s) => {
           const m = new THREE.Mesh(new THREE.BoxGeometry(alongX ? 0.4 : 0.12, 0.26, alongX ? 0.12 : 0.4), new THREE.MeshBasicMaterial({ color: 0x50ff90 }));
@@ -173,7 +195,11 @@ export function station(core) {
       kit.box(5, 1.0, 5, 0, 0, 0, hullDark);
       kit.box(1.4, 11, 1.4, 0, 1.0, 0, hullDark);
       const cage = kit.batch(2);
-      for (let k = 0; k < 8; k++) { const a = k / 8 * TAU; cage.cyl(0.1, 0.1, 10.8, Math.cos(a) * 3.25, 6.4, Math.sin(a) * 3.25, 8); }
+      for (let k = 0; k < 8; k++) {
+        const a = k / 8 * TAU, x = Math.cos(a) * 3.25, z = Math.sin(a) * 3.25;
+        cage.cyl(0.1, 0.1, 10.8, x, 6.4, z, 8);
+        hitbox(0.22, 10.8, 0.22, x, 6.4, z);
+      }
       cage.cyl(3.7, 3.7, 0.3, 0, 1.15, 0, 32).cyl(3.7, 3.7, 0.3, 0, 11.7, 0, 32);
       for (const y of [3.2, 5.6, 8.0, 10.2]) cage.cyl(3.35, 3.35, 0.12, 0, y, 0, 32);
       kit.deco(cage.mesh(steel, { shadow: true }));
@@ -219,7 +245,10 @@ export function station(core) {
         kit.box(0.14, 1.0, b - a, sgn * gr, gy, (a + b) / 2, steel);
       }
       const gp = kit.batch(3);
-      for (const [x, z] of [[-gr, -gr], [gr, -gr], [-gr, gr], [gr, gr], [0, -gr], [0, gr], [-gr, 0], [gr, 0]]) gp.box(0.5, gy - 0.4, 0.5, x, (gy - 0.4) / 2, z);
+      for (const [x, z] of [[-gr, -gr], [gr, -gr], [-gr, gr], [gr, gr], [0, -gr], [0, gr], [-gr, 0], [gr, 0]]) {
+        gp.box(0.5, gy - 0.4, 0.5, x, (gy - 0.4) / 2, z);
+        hitbox(0.5, gy - 0.4, 0.5, x, (gy - 0.4) / 2, z);
+      }
       kit.deco(gp.mesh(hullDark, { shadow: true }));
       const lifts = [[-9.5, 0], [9.5, 0], [0, -9.5], [0, 9.5]];
       const lifters = [];
@@ -239,8 +268,18 @@ export function station(core) {
           const pane = new THREE.Mesh(new THREE.PlaneGeometry(3.0, 4.6), glass);
           pane.position.set(wx, 2.5, wz); if (nx) pane.rotation.y = Math.PI / 2; pane.raycast = () => {}; pane.renderOrder = 4; kit.deco(pane);
         }
-        for (const [px, pz] of [[-1.5, -1.5], [1.5, -1.5], [-1.5, 1.5], [1.5, 1.5]]) collar.box(0.16, 4.9, 0.16, x + px, 2.45, z + pz);
-        collar.box(3.3, 0.14, 0.16, x, 4.95, z - 1.5).box(3.3, 0.14, 0.16, x, 4.95, z + 1.5).box(0.16, 0.14, 3.3, x - 1.5, 4.95, z).box(0.16, 0.14, 3.3, x + 1.5, 4.95, z).box(3.4, 0.16, 3.4, x, 0.08, z);
+        for (const [px, pz] of [[-1.5, -1.5], [1.5, -1.5], [-1.5, 1.5], [1.5, 1.5]]) {
+          collar.box(0.16, 4.9, 0.16, x + px, 2.45, z + pz);
+          hitbox(0.16, 4.9, 0.16, x + px, 2.45, z + pz);
+        }
+        for (const [w, h, d, px, py, pz] of [
+          [3.3, 0.14, 0.16, x, 4.95, z - 1.5], [3.3, 0.14, 0.16, x, 4.95, z + 1.5],
+          [0.16, 0.14, 3.3, x - 1.5, 4.95, z], [0.16, 0.14, 3.3, x + 1.5, 4.95, z],
+        ]) {
+          collar.box(w, h, d, px, py, pz);
+          hitbox(w, h, d, px, py, pz);
+        }
+        collar.box(3.4, 0.16, 3.4, x, 0.08, z);
         const base = new THREE.Mesh(new THREE.BoxGeometry(2.7, 0.05, 2.7), cyan); base.position.set(x, 0.185, z); base.raycast = () => {}; kit.deco(base);
         const motes = [];
         for (let k = 0; k < 8; k++) { const s = sprite(0xbfeaff, 0.3, x, 1, z, 0.8); kit.deco(s); motes.push(s); }
@@ -281,7 +320,8 @@ export function station(core) {
         put(-1.6, 6, 2.4, 1.3, 2.4, 0, hullDark); put(2.5, -6.5, 2.4, 2.6, 5, 0, orange);
         rib(-5, -5, 2.4, 2.6, 6, 0, ribs); rib(-5, -5, 2.4, 2.6, 6, 2.6, ribsDark); rib(5.4, 5, 2.4, 2.6, 6, 0, ribsDark); rib(2.5, -6.5, 2.4, 2.6, 5, 0, ribsDark);
         // The shuttle: a solid core you can't pass (the hull block), dressed as a small ship.
-        kit.proxy(alongZ ? 5.4 : 7, 2.2, alongZ ? 7 : 5.4, cx, 0, cz);
+        // Match the full shuttle silhouette, including the lateral wings and nose/engines.
+        kit.proxy(alongZ ? 7.2 : 8.6, 3.1, alongZ ? 8.6 : 7.2, cx, 0, cz);
         const ship = new THREE.Group();
         const body = new THREE.Mesh(new THREE.CapsuleGeometry(1.0, 3.4, 8, 20), hullLight); body.rotation.x = Math.PI / 2; body.position.y = 1.35; body.scale.set(1.05, 1, 0.85);
         const nose = new THREE.Mesh(new THREE.SphereGeometry(1.0, 20, 14), hullLight); nose.scale.set(1.05, 0.85, 1.4); nose.position.set(0, 1.35, 2.7);
@@ -319,7 +359,12 @@ export function station(core) {
         kit.box(w + 0.7, 0.4, d + 0.7, cx, 4.4, cz, hullDark);
         // Furniture: bunks (with a mattress and a pillow), a console wall and a table.
         kit.box(1.0, 1.0, 3, cx - 3.5, 0, cz - 2.5, orange); kit.box(1.0, 1.0, 3, cx - 3.5, 0, cz + 2.5, orange);
-        for (const dz of [-2.5, 2.5]) { sheets.box(0.9, 0.18, 2.7, cx - 3.5, 1.09, cz + dz); sheets.box(0.8, 0.14, 0.5, cx - 3.5, 1.25, cz + dz - 1.0); }
+        for (const dz of [-2.5, 2.5]) {
+          sheets.box(0.9, 0.18, 2.7, cx - 3.5, 1.09, cz + dz);
+          hitbox(0.9, 0.18, 2.7, cx - 3.5, 1.09, cz + dz);
+          sheets.box(0.8, 0.14, 0.5, cx - 3.5, 1.25, cz + dz - 1.0);
+          hitbox(0.8, 0.14, 0.5, cx - 3.5, 1.25, cz + dz - 1.0);
+        }
         kit.box(4, 1.0, 1.0, cx + 1, 0, cz - 4.5, steel); kit.box(1.8, 0.9, 1.8, cx + 2.2, 0, cz + 1.5, hullDark);
         // A bank of three monitors on the wall over the console, each showing its own readout, with a keyboard below.
         [-1.15, 0, 1.15].forEach((ox, k) => {
@@ -329,6 +374,7 @@ export function station(core) {
         const keys = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.03, 0.26), hullDark); keys.position.set(cx + 0.4, 1.03, cz - 4.2); keys.raycast = () => {}; kit.deco(keys);
         lamps.box(3.2, 0.1, 0.6, cx, 4.28, cz - 1.5).box(3.2, 0.1, 0.6, cx, 4.28, cz + 1.5);   // ceiling lamp panels
         bunks.box(0.3, 1.6, 0.5, cx - 4.8, 0.8, cz + 4.3);   // a locker
+        hitbox(0.3, 1.6, 0.5, cx - 4.8, 0.8, cz + 4.3);
       }
       kit.deco(sheets.mesh(plain("hr-sheet", 0xdfe6ee, { rough: .95 }), { shadow: true }));
       kit.deco(lamps.mesh(white)); kit.deco(bunks.mesh(steel, { shadow: true }));
@@ -339,8 +385,19 @@ export function station(core) {
       for (let z = -28; z <= 28; z += 14) strips.box(H * 2 - 4, 0.1, 0.35, 0, 11.8, z);
       kit.deco(strips.mesh(white));
       const pipes = kit.batch(3);
-      for (const x of [-30, 30]) { pipes.cyl(0.4, 0.4, H * 2, x, 10.8, 0, 10, Math.PI / 2, 0, 0); for (let z = -30; z <= 30; z += 10) pipes.box(0.9, 0.12, 0.2, x, 10.8, z).box(0.12, 0.8, 0.2, x - 0.4, 11.2, z).box(0.12, 0.8, 0.2, x + 0.4, 11.2, z); }
+      for (const x of [-30, 30]) {
+        pipes.cyl(0.4, 0.4, H * 2, x, 10.8, 0, 10, Math.PI / 2, 0, 0);
+        hitbox(0.8, 0.8, H * 2, x, 10.8, 0);
+        for (let z = -30; z <= 30; z += 10) {
+          pipes.box(0.9, 0.12, 0.2, x, 10.8, z).box(0.12, 0.8, 0.2, x - 0.4, 11.2, z).box(0.12, 0.8, 0.2, x + 0.4, 11.2, z);
+          hitbox(0.9, 0.12, 0.2, x, 10.8, z);
+          hitbox(0.12, 0.8, 0.2, x - 0.4, 11.2, z);
+          hitbox(0.12, 0.8, 0.2, x + 0.4, 11.2, z);
+        }
+      }
       pipes.box(H * 2, 0.6, 0.6, 0, 11.5, -30).box(H * 2, 0.6, 0.6, 0, 11.5, 30);
+      hitbox(H * 2, 0.6, 0.6, 0, 11.5, -30);
+      hitbox(H * 2, 0.6, 0.6, 0, 11.5, 30);
       kit.deco(pipes.mesh(hullDark, { shadow: true }));
       // Atrium wall light panels.
       const pan = kit.batch(2);

@@ -56,8 +56,40 @@ export function foundry(core) {
       const roof = new THREE.Mesh(new THREE.PlaneGeometry(H * 2 + 2, H * 2 + 2), plain("fx-roof", 0x0e0b0a, { rough: 1 }));
       roof.rotation.x = Math.PI / 2; roof.position.y = 12.5; roof.raycast = () => {};
       kit.deco(roof);
+      // The dark roof is a real ceiling: jet-harness users should not pass through
+      // its visual plane into the exterior yard.
+      kit.collider(H * 2 + 2, 0.1, H * 2 + 2, 0, 12.55, 0);
 
       kit.perimeter(H, 12, brick, 1.2);
+
+      // The playable hall sits inside a larger foundry yard. The distant furnace blocks,
+      // gantries and stacks continue above the parapet so a high jump still sees a real site.
+      const yard = new THREE.Mesh(new THREE.PlaneGeometry(520, 520), conc);
+      yard.rotation.x = -Math.PI / 2; yard.position.y = -0.08; yard.receiveShadow = true; yard.raycast = () => {}; kit.deco(yard);
+      const yardwork = kit.batch(5);
+      for (let i = 0; i < 18; i++) {
+        const a = i / 18 * Math.PI * 2 + .18, r = 56 + (i % 4) * 7;
+        const x = Math.cos(a) * r, z = Math.sin(a) * r;
+        const w = 9 + (i % 3) * 3, d = 8 + (i % 4) * 2, h = 22 + (i * 11 % 34), yaw = -a + Math.PI / 2;
+        yardwork.box(w, h, d, x, h / 2, z, yaw)
+          .box(w + .8, .65, d + .8, x, h + .3, z, yaw)
+          .box(w * .72, .3, d + 1, x, h * .72, z, yaw);
+        for (const offset of [-w * .27, w * .27]) {
+          const sx = x + Math.cos(yaw) * offset, sz = z - Math.sin(yaw) * offset;
+          yardwork.cyl(.9, 1.3, h + 14, sx, (h + 14) / 2, sz, 8);
+          yardwork.cyl(1.7, 1.7, .8, sx, h + 14, sz, 8);
+        }
+      }
+      // Long pipe bridges and flare stacks knit the yard into a continuous industrial skyline.
+      for (const side of [-1, 1]) for (let z = -72; z <= 72; z += 24) {
+        yardwork.box(2.2, 1.1, 30, side * 53, 18 + (z % 3) * 2, z, side * .08)
+          .box(1.1, 17, 1.1, side * 53, 8.5, z - 12)
+          .box(1.1, 17, 1.1, side * 53, 8.5, z + 12);
+      }
+      kit.deco(yardwork.mesh(steelDark, { shadow: false }));
+      for (const [x, z, y] of [[-54,-58,37],[58,-34,49],[-62,15,44],[51,63,35],[0,-78,55]]) {
+        kit.deco(sprite(0xff7939, 8, x, y, z, .42, true));
+      }
 
       // ── Molten channels ─────────────────────────────────────────────────────────────
       const molten = new THREE.Group(); kit.deco(molten);
@@ -67,6 +99,8 @@ export function foundry(core) {
       const curbs = kit.batch(2);
       for (const s of [-1, 1]) {
         curbs.box(0.5, 0.5, H * 2, s * 3.3, 0.25, 0).box(H * 2, 0.5, 0.5, 0, 0.25, s * 3.3);
+        kit.collider(0.5, 0.5, H * 2, s * 3.3, 0.25, 0);
+        kit.collider(H * 2, 0.5, 0.5, 0, 0.25, s * 3.3);
       }
       kit.deco(curbs.mesh(conc));
       world.zone({ kind: "damage", x: 0, z: 0, w: 6, d: H * 2, y0: 0, h: 0.6, amount: 26, rate: 0.4, label: "lava" });
@@ -94,7 +128,12 @@ export function foundry(core) {
           kit.box(alongX ? len : 0.14, 1.0, alongX ? 0.14 : len, cx + (alongX ? 0 : s * (wid / 2 - 0.07)), 0.9, cz + (alongX ? s * (wid / 2 - 0.07) : 0), steelDark);
         }
         const b = kit.batch(3);
-        for (const s of [-1, 1]) for (const k of [-1, 1]) b.box(0.4, 0.9, 0.4, cx + (alongX ? k * (len / 2 - 0.3) : s * (wid / 2 - 0.2)), 0.45, cz + (alongX ? s * (wid / 2 - 0.2) : k * (len / 2 - 0.3)));
+        for (const s of [-1, 1]) for (const k of [-1, 1]) {
+          const x = cx + (alongX ? k * (len / 2 - 0.3) : s * (wid / 2 - 0.2));
+          const z = cz + (alongX ? s * (wid / 2 - 0.2) : k * (len / 2 - 0.3));
+          b.box(0.4, 0.9, 0.4, x, 0.45, z);
+          kit.collider(0.4, 0.9, 0.4, x, 0.45, z);
+        }
         kit.deco(b.mesh(steelDark));
       };
       bridge(0, 17, false); bridge(0, -17, false); bridge(17, 0, true); bridge(-17, 0, true);
@@ -125,8 +164,16 @@ export function foundry(core) {
         // bridge, and a ladle of metal hanging from its hook well above head height.
         const craneMat = plain("fx-crane", 0xc2901c, { metal: .45, rough: .5 });
         const runway = kit.batch(3);
-        for (const zz of [cz - d / 2 + 1.5, cz + d / 2 - 1.5]) runway.box(w + 4, 0.5, 0.12, cx, 5.4, zz).box(w + 4, 0.12, 0.5, cx, 5.64, zz).box(w + 4, 0.12, 0.5, cx, 5.16, zz);
-        for (let u = -w / 2 - 1.5; u <= w / 2 + 1.5; u += 3) for (const zz of [cz - d / 2 + 1.5, cz + d / 2 - 1.5]) runway.box(0.3, 0.9, 0.4, cx + u, 5.9, zz);
+        for (const zz of [cz - d / 2 + 1.5, cz + d / 2 - 1.5]) {
+          runway.box(w + 4, 0.5, 0.12, cx, 5.4, zz).box(w + 4, 0.12, 0.5, cx, 5.64, zz).box(w + 4, 0.12, 0.5, cx, 5.16, zz);
+          kit.collider(w + 4, 0.5, 0.12, cx, 5.4, zz);
+          kit.collider(w + 4, 0.12, 0.5, cx, 5.64, zz);
+          kit.collider(w + 4, 0.12, 0.5, cx, 5.16, zz);
+        }
+        for (let u = -w / 2 - 1.5; u <= w / 2 + 1.5; u += 3) for (const zz of [cz - d / 2 + 1.5, cz + d / 2 - 1.5]) {
+          runway.box(0.3, 0.9, 0.4, cx + u, 5.9, zz);
+          kit.collider(0.3, 0.9, 0.4, cx + u, 5.9, zz);
+        }
         kit.deco(runway.mesh(steelDark, { shadow: true }));
         const bridge = new THREE.Group();
         const bb = kit.batch(3), gl = d - 2.2;
@@ -174,9 +221,15 @@ export function foundry(core) {
         const sc = kit.batch(3);
         sc.cyl(1.3, 1.5, 18, cx + 9, 9, cz - 9, 16).cyl(1.45, 1.45, 0.4, cx + 9, 18.2, cz - 9, 16);
         sc.box(0.5, 6, 0.5, cx - 6, 3, cz - 6).box(0.5, 6, 0.5, cx + 6, 3, cz - 6);
+        // Collision for the stack and ladder-rack posts in this merged scenery batch.
+        kit.collider(3, 18.4, 3, cx + 9, 9.2, cz - 9);
+        kit.collider(0.5, 6, 0.5, cx - 6, 3, cz - 6);
+        kit.collider(0.5, 6, 0.5, cx + 6, 3, cz - 6);
         kit.deco(sc.mesh(steelDark));
         const pots = kit.batch(3);
         pots.cyl(1.2, 0.8, 1.4, cx - 3, 4.0, cz + 3, 12).cyl(1.2, 0.8, 1.4, cx + 3, 4.0, cz - 4, 12);
+        kit.collider(2.4, 1.4, 2.4, cx - 3, 4.0, cz + 3);
+        kit.collider(2.4, 1.4, 2.4, cx + 3, 4.0, cz - 4);
         kit.deco(pots.mesh(steel));
         const glow = sprite(0xff8a3a, 7, cx - 3, 4.9, cz + 3, 0.8); kit.deco(glow);
       }
@@ -207,6 +260,7 @@ export function foundry(core) {
             kit.proxy(0.12, 1.5, 1.7, bx - 1.3, 1.1, zc);
             kit.proxy(0.12, 1.5, 1.7, bx + 1.3, 1.1, zc);
             kit.proxy(2.9, 0.15, 1.7, bx, 2.525, zc);
+            kit.proxy(2.9, 0.2, 0.2, bx, 2.45, outer);
             for (let fx = -1.15; fx <= 1.16; fx += 0.4) flaps.box(0.36, 1.6, 0.05, bx + fx, 1.8, outer);
             hood.box(2.9, 0.2, 0.2, bx, 2.55, outer);
           }
@@ -244,7 +298,9 @@ export function foundry(core) {
         const bar = kit.batch(2);
         for (const [x, z] of [[-11, 14], [-12.2, 14.6], [-30, 29]]) bar.cyl(0.5, 0.5, 1.1, x, 0.55, z, 12);
         kit.deco(bar.mesh(steelDark));
-        for (const [x, z] of [[-11, 14], [-12.2, 14.6], [-30, 29]]) kit.box(1.0, 1.1, 1.0, x - 0.5, 0, z - 0.5, steelDark);
+        // The visible barrels are centered on (x,z); use a centered collision-only bound
+        // so the cylinder stays the sole visible shape and the player cannot clip through it.
+        for (const [x, z] of [[-11, 14], [-12.2, 14.6], [-30, 29]]) kit.collider(1.0, 1.1, 1.0, x, 0.55, z);
       }
 
       // ── SE: the control room and the ladle lane ─────────────────────────────────────
@@ -321,7 +377,10 @@ export function foundry(core) {
         // Posts under the walkway (scenery) every 9 m.
         const posts = kit.batch(3);
         for (let u = -27; u <= 27; u += 9) for (const s of [-1, 1]) {
-          posts.box(0.5, top - 0.4, 0.5, u, (top - 0.4) / 2, s * (H - wdt - 0.2)).box(0.5, top - 0.4, 0.5, s * (H - wdt - 0.2), (top - 0.4) / 2, u);
+          const py = (top - 0.4) / 2, edge = s * (H - wdt - 0.2);
+          posts.box(0.5, top - 0.4, 0.5, u, py, edge).box(0.5, top - 0.4, 0.5, edge, py, u);
+          kit.collider(0.5, top - 0.4, 0.5, u, py, edge);
+          kit.collider(0.5, top - 0.4, 0.5, edge, py, u);
         }
         kit.deco(posts.mesh(steelDark));
         // Four corner flights up onto it.
@@ -340,7 +399,10 @@ export function foundry(core) {
               return { x: 0, y: y * (top - 0.3), z: 0 };
             },
           });
-          const guide = kit.batch(3); guide.box(0.3, 12, 0.3, lx + (lx < 0 ? -2.1 : 2.1), 6, lz - 2).box(0.3, 12, 0.3, lx + (lx < 0 ? -2.1 : 2.1), 6, lz + 2);
+          const guide = kit.batch(3), gx = lx + (lx < 0 ? -2.1 : 2.1);
+          guide.box(0.3, 12, 0.3, gx, 6, lz - 2).box(0.3, 12, 0.3, gx, 6, lz + 2);
+          kit.collider(0.3, 12, 0.3, gx, 6, lz - 2);
+          kit.collider(0.3, 12, 0.3, gx, 6, lz + 2);
           kit.deco(guide.mesh(steelDark));
         }
       }
@@ -362,13 +424,24 @@ export function foundry(core) {
       });
       // ── Roof trusses, hanging lamps, drifting sparks (scenery) ───────────────────────
       const tr = kit.batch(3);
-      for (let x = -30; x <= 30; x += 10) tr.box(0.5, 0.7, H * 2, x, 11.8, 0);
-      for (let z = -30; z <= 30; z += 15) tr.box(H * 2, 0.5, 0.5, 0, 11.4, z);
+      for (let x = -30; x <= 30; x += 10) {
+        tr.box(0.5, 0.7, H * 2, x, 11.8, 0);
+        kit.collider(0.5, 0.7, H * 2, x, 11.8, 0);
+      }
+      for (let z = -30; z <= 30; z += 15) {
+        tr.box(H * 2, 0.5, 0.5, 0, 11.4, z);
+        kit.collider(H * 2, 0.5, 0.5, 0, 11.4, z);
+      }
       kit.deco(tr.mesh(steelDark, { shadow: true }));
       // Pipework along the walls: two runs with brackets.
       const piping = kit.batch(2);
       for (const [y, r] of [[9.2, 0.28], [6.9, 0.2]]) {
         piping.cyl(r, r, H * 2 - 2, 0, y, -H + 0.7, 10, 0, Math.PI / 2, 0).cyl(r, r, H * 2 - 2, 0, y, H - 0.7, 10, 0, Math.PI / 2, 0).cyl(r, r, H * 2 - 2, -H + 0.7, y, 0, 10, Math.PI / 2, 0, 0).cyl(r, r, H * 2 - 2, H - 0.7, y, 0, 10, Math.PI / 2, 0, 0);
+        const diameter = r * 2, run = H * 2 - 2, edge = H - 0.7;
+        kit.collider(run, diameter, diameter, 0, y, -edge);
+        kit.collider(run, diameter, diameter, 0, y, edge);
+        kit.collider(diameter, diameter, run, -edge, y, 0);
+        kit.collider(diameter, diameter, run, edge, y, 0);
         for (let u = -32; u <= 32; u += 8) piping.box(0.12, 0.5, 0.3, u, y, -H + 0.45).box(0.12, 0.5, 0.3, u, y, H - 0.45).box(0.3, 0.5, 0.12, -H + 0.45, y, u).box(0.3, 0.5, 0.12, H - 0.45, y, u);
       }
       kit.deco(piping.mesh(steel, { shadow: true }));
@@ -386,6 +459,7 @@ export function foundry(core) {
       for (const [x, z] of lampSprites) {
         const sh = new THREE.Mesh(shadeGeo, shadeMat); sh.position.set(x, 8.9, z); sh.castShadow = true; sh.raycast = () => {}; kit.deco(sh);
         const bu = new THREE.Mesh(new THREE.SphereGeometry(0.34, 14, 10), bulb); bu.position.set(x, 8.55, z); bu.raycast = () => {}; kit.deco(bu);
+        kit.collider(2.1, 0.8, 2.1, x, 9.02, z);
       }
       for (const [x, z] of [[-18, -18], [18, 18], [-18, 18], [18, -18]]) { const pl = new THREE.PointLight(0xffc890, 46, 28, 2); pl.position.set(x, 8, z); kit.light(pl); }
       const sparks = [];

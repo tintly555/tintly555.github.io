@@ -91,7 +91,23 @@ export function ruins(core) {
       // ── Plants and rocks (collected, then merged into a few meshes) ──────────────────
       const bark = new N.Mesher(), leaf = new N.Mesher(), low = new N.Mesher();
       const rockParts = [];
-      const rockAt = (x, z, size, squash = 0.7, y = 0) => rockParts.push(N.rock(srnd, stoneRock, { x, y, z, size, squash, detail: 3 }));
+      const rockAt = (x, z, size, squash = 0.7, y = 0) => {
+        rockParts.push(N.rock(srnd, stoneRock, { x, y, z, size, squash, detail: 3 }));
+        // Three stacked volumes follow the boulder's rounded profile more closely than one
+        // oversized box. Small stream pebbles stay walkable; cover rocks and forest boulders block.
+        if (size >= 0.45) {
+          const rx = size * 1.32, ry = rx * squash;
+          const cy = y + size * squash * 0.55, bottom = Math.max(0, cy - ry), top = cy + ry;
+          const bands = 3, overlap = 0.06;
+          for (let i = 0; i < bands; i++) {
+            const y0 = bottom + (top - bottom) * i / bands;
+            const y1 = bottom + (top - bottom) * (i + 1) / bands;
+            const nearest = cy < y0 ? y0 - cy : cy > y1 ? cy - y1 : 0;
+            const radius = rx * Math.sqrt(Math.max(0.12, 1 - (nearest / ry) ** 2)) + size * 0.035;
+            kit.collider(radius * 2, y1 - y0 + overlap, radius * 2, x, (y0 + y1) / 2, z);
+          }
+        }
+      };
 
       // Perimeter wall: a solid core you cannot pass, dressed with blocks on the inside.
       kit.perimeter(H, 6.5, stoneDark, 1.4);
@@ -105,7 +121,14 @@ export function ruins(core) {
       const crest = kit.batch(4);
       for (let i = -H; i < H; i += 1.5) {
         for (const [x, z, ry] of [[i, -H - 0.7, 0], [i, H + 0.7, 0], [-H - 0.7, i, Math.PI / 2], [H + 0.7, i, Math.PI / 2]]) {
-          if (srnd() < 0.55) crest.box(1.4, 0.35 + srnd() * 0.5, 1.5, x + (srnd() - 0.5) * 0.3, 6.5 + 0.2 + srnd() * 0.15, z, ry + (srnd() - 0.5) * 0.15);
+          if (srnd() < 0.55) {
+            const w = 1.4, h = 0.35 + srnd() * 0.5, d = 1.5;
+            const px = x + (srnd() - 0.5) * 0.3, py = 6.5 + 0.2 + srnd() * 0.15;
+            const yaw = ry + (srnd() - 0.5) * 0.15;
+            crest.box(w, h, d, px, py, z, yaw);
+            const c = Math.abs(Math.cos(yaw)), s = Math.abs(Math.sin(yaw));
+            kit.collider(c * w + s * d + 0.06, h + 0.06, s * w + c * d + 0.06, px, py, z);
+          }
         }
       }
       kit.deco(wallBlocks.mesh(block, { shadow: true })); kit.deco(crest.mesh(blockDark, { shadow: true }));
@@ -120,8 +143,28 @@ export function ruins(core) {
       const hTree = (min, max) => min + srnd() * (max - min);
       const planted = [];
       const plant = (x, z, h, collide, dense = 1, crown = 1) => {
-        N.tree(bark, leaf, srnd, { x, z, h, lean: 0.07, crown, dense });
-        if (collide) kit.proxy(1.1, 9, 1.1, x, 0, z);
+        // Capture the tree's three trunk-shape seeds while forwarding every RNG draw unchanged.
+        const shape = [];
+        const treeRnd = () => { const v = srnd(); if (shape.length < 3) shape.push(v); return v; };
+        N.tree(bark, leaf, treeRnd, { x, z, h, lean: 0.07, crown, dense });
+        if (collide) {
+          const a0 = shape[0] * TAU, bend = (shape[1] - 0.3) * 0.07 * h * 1.3, phase = shape[2] * 6;
+          const trunkR = Math.max(0.3, h * 0.026), trunkH = h * 0.6, segments = 7;
+          const point = (t) => {
+            const off = bend * t * t, sway = Math.sin(t * 4 + phase) * trunkR * 0.4 * t;
+            return { x: x + Math.cos(a0) * off + Math.cos(a0 + 1.57) * sway,
+              y: t === 0 ? -0.25 : trunkH * t,
+              z: z + Math.sin(a0) * off + Math.sin(a0 + 1.57) * sway };
+          };
+          for (let i = 0; i < segments; i++) {
+            const p0 = point(i / segments), p1 = point((i + 1) / segments);
+            const r0 = trunkR * (1 - 0.5 * i / segments) * (1 + 1.1 * Math.exp(-(i / segments) * 11));
+            const r1 = trunkR * (1 - 0.5 * (i + 1) / segments) * (1 + 1.1 * Math.exp(-((i + 1) / segments) * 11));
+            const radius = Math.max(r0, r1) + 0.04;
+            kit.collider(Math.abs(p1.x - p0.x) + radius * 2, p1.y - p0.y + radius * 2,
+              Math.abs(p1.z - p0.z) + radius * 2, (p0.x + p1.x) / 2, (p0.y + p1.y) / 2, (p0.z + p1.z) / 2);
+          }
+        }
         planted.push([x, z]);
       };
       // Ring just inside the wall: side 0/1 = north/south, 2/3 = west/east.
@@ -186,7 +229,6 @@ export function ruins(core) {
       for (const [x, z, size] of [[-17, -11, 1.5], [17, 11, 1.4], [11, -17, 1.3], [-11, 17, 1.5], [-31, 28, 1.2], [31, -28, 1.2], [-3, 31, 1.1], [3, -31, 1.1]]) {
         if (nearSpawn(x, z, 3) || blocked(x, z, -1)) continue;
         rockAt(x, z, size, 0.75);
-        kit.proxy(size * 1.6, size * 1.1, size * 1.6, x, 0, z);
       }
       for (let i = 0; i < 90; i++) {   // boulders and boulder-fields in the forest
         const x = (srnd() - 0.5) * 200, z = (srnd() - 0.5) * 200;
@@ -195,7 +237,20 @@ export function ruins(core) {
       }
       // A palm or two: the clearing is tropical, not temperate.
       for (const [x, z] of [[-26, 36], [26, -36], [36, 26], [-36, -26], [-4, 35], [5, -36]]) {
-        if (!blocked(x, z, 0.5) && !nearSpawn(x, z, 3)) { N.palm(bark, low, srnd, x, z, 7 + srnd() * 3); kit.proxy(0.7, 7, 0.7, x, 0, z); }
+        if (!blocked(x, z, 0.5) && !nearSpawn(x, z, 3)) {
+          const h = 7 + srnd() * 3, shape = [];
+          const palmRnd = () => { const v = srnd(); if (shape.length < 2) shape.push(v); return v; };
+          N.palm(bark, low, palmRnd, x, z, h);
+          const bx = (shape[0] - 0.5) * h * 0.35, bz = (shape[1] - 0.5) * h * 0.35;
+          for (let i = 0; i < 6; i++) {
+            const t0 = i / 6, t1 = (i + 1) / 6, tm = (t0 + t1) / 2;
+            const x0 = x + bx * t0 * t0, x1 = x + bx * t1 * t1;
+            const z0 = z + bz * t0 * t0, z1 = z + bz * t1 * t1;
+            const radius = 0.23 * (1 - tm * 0.35) + 0.035;
+            kit.collider(Math.abs(x1 - x0) + radius * 2, h / 6 + radius * 2,
+              Math.abs(z1 - z0) + radius * 2, (x0 + x1) / 2, h * tm, (z0 + z1) / 2);
+          }
+        }
       }
 
       // ── Causeways ────────────────────────────────────────────────────────────────────
@@ -204,6 +259,7 @@ export function ruins(core) {
         const post = kit.batch(2);
         for (const s of [-1, 1]) for (const e of [-1, 1]) {
           const px = x + (alongX ? e * 3.4 : s * 2.4), pz = z + (alongX ? s * 2.4 : e * 3.4);
+          kit.collider(0.82, 1.62, 0.82, px, 0.68, pz);
           post.box(0.6, 1.3, 0.6, px, 0.65, pz).box(0.78, 0.16, 0.78, px, 1.34, pz).box(0.7, 0.14, 0.7, px, 0.07, pz);
         }
         kit.deco(post.mesh(carved, { shadow: true }));
@@ -225,6 +281,8 @@ export function ruins(core) {
         kit.masonry(dress, srnd, { x0: -half, z0: -half, x1: half, z1: half, y0: prev, y1: top, course: 0.48, len: 1.2, thick: 0.24, gaps: 0.04 });
         // Below the tier's own top face (coplanar faces flash), but wide enough to overhang it.
         cornice.box(half * 2 + 0.5, 0.2, half * 2 + 0.5, 0, top - 0.13, 0).box(half * 2 + 0.7, 0.12, half * 2 + 0.7, 0, top - 0.33, 0);
+        kit.collider(half * 2 + 0.74, 0.24, half * 2 + 0.74, 0, top - 0.13, 0);
+        kit.collider(half * 2 + 0.94, 0.16, half * 2 + 0.94, 0, top - 0.33, 0);
         // Stairs on all four faces, 3 m wide, up from the ledge below.
         const outer = half + 4.4;
         for (const [dir, x, z] of [["-x", outer, 0], ["+x", -outer, 0], ["-z", 0, outer], ["+z", 0, -outer]]) {
@@ -272,11 +330,17 @@ export function ruins(core) {
       }
       shrine.box(2.3, 0.2, 2.3, 0, shrineY + 1.2, 0).box(9.9, 0.18, 9.9, 0, shrineY + 4.2, 0);
       kit.deco(shrine.mesh(carved, { shadow: true }));
+      kit.collider(2.36, 0.24, 2.36, 0, shrineY + 1.2, 0);
+      for (const [sx, sz] of [[-3.6, -3.6], [3.6, -3.6], [-3.6, 3.6], [3.6, 3.6]]) {
+        kit.collider(1.46, 0.42, 1.46, sx, shrineY + 0.17, sz);
+        kit.collider(1.46, 0.42, 1.46, sx, shrineY + 3.4, sz);
+      }
       const lathe = (pts, material, x, y, z, seg = 18) => {
         const m = new THREE.Mesh(new THREE.LatheGeometry(pts.map(([r, h]) => new THREE.Vector2(r, h)), seg), material);
         m.position.set(x, y, z); m.castShadow = m.receiveShadow = true; m.raycast = () => {}; kit.deco(m); return m;
       };
       lathe([[0.001, 0], [0.34, 0], [0.4, 0.12], [0.3, 0.4], [0.2, 0.66], [0.3, 0.84], [0.34, 1.08], [0.24, 1.3], [0.2, 1.42], [0.28, 1.5], [0.26, 1.68], [0.14, 1.78], [0.001, 1.8]], gold, 0, shrineY + 1.3, 0);
+      kit.collider(0.84, 1.86, 0.84, 0, shrineY + 2.2, 0);
       { const il = new THREE.PointLight(0xffc870, 9, 11, 2); il.position.set(0, shrineY + 2.4, 0); kit.light(il); }   // the idol is lit by a lamp under the roof, not a sprite the roof would cut
       // Braziers on the lower tier: stone bowls (solid) with a real fire in each and coals glowing below it.
       const fireGroup = new THREE.Group(); kit.deco(fireGroup);
@@ -318,6 +382,8 @@ export function ruins(core) {
       const drums = kit.batch(2);
       for (const [x, z, long] of DRUMS) {
         kit.box(long ? 6 : 1.4, 1.2, long ? 1.4 : 6, x, 0, z, carved);
+        // The segmented stone drum sits slightly proud of its rectangular footing at the ends and crown.
+        kit.collider(long ? 6.28 : 1.34, 1.34, long ? 1.34 : 6.28, x, 0.65, z);
         const L = 6.2, r = 0.62;
         for (let k = 0; k < 6; k++) {
           const u = -L / 2 + (k + 0.5) * L / 6;
@@ -333,6 +399,8 @@ export function ruins(core) {
         slab.position.set(x, 0.7 + 1.25, z); slab.rotation.y = face; slab.castShadow = slab.receiveShadow = true; slab.raycast = () => {}; kit.deco(slab);
         const cap = new THREE.Mesh(new THREE.BoxGeometry(1.14, 0.16, 0.46), carved); cap.position.set(x, 3.38, z); cap.rotation.y = face; cap.castShadow = true; cap.raycast = () => {}; kit.deco(cap);
         kit.proxy(1.0, 2.5, 0.8, x, 0.7, z);
+        const c = Math.abs(Math.cos(face)), s = Math.abs(Math.sin(face));
+        kit.collider(c * 1.14 + s * 0.46 + 0.06, 0.2, s * 1.14 + c * 0.46 + 0.06, x, 3.38, z);
       }
 
       // ── Spike plates ─────────────────────────────────────────────────────────────────
@@ -340,10 +408,15 @@ export function ruins(core) {
         const phase = i * 1.7;
         const pad = new THREE.Mesh(new THREE.BoxGeometry(4, 0.14, 4), carved);
         pad.position.set(x, 0.07, z); pad.receiveShadow = true; pad.raycast = () => {}; kit.deco(pad);
+        kit.collider(4.04, 0.18, 4.04, x, 0.07, z);
         const holes = kit.batch(1), spikes = kit.batch(1);
+        const spikeColliders = [];
         for (let a = -1; a <= 1; a++) for (let b = -1; b <= 1; b++) {
           holes.cyl(0.22, 0.22, 0.02, x + a * 1.1, 0.145, z + b * 1.1, 10);
           spikes.cone(0.17, 1.4, x + a * 1.1, 0.7, z + b * 1.1, 6);
+          const collider = kit.collider(0.4, 1.3, 0.4, x + a * 1.1, 0.8, z + b * 1.1);
+          if (collider) { collider.dyn = true; collider.makeEmpty(); }
+          spikeColliders.push([collider, a, b]);
         }
         kit.deco(holes.mesh(plain("rt-hole", 0x0d0c0a, { rough: 1 })));
         const sm = spikes.mesh(metal, { shadow: false });
@@ -359,6 +432,13 @@ export function ruins(core) {
           sm.visible = rise > 0 || stir > 0;
           sm.position.y = -1.5 + (rise > 0 ? rise * 1.5 : stir);
           sm.position.x = rise === 0 && stir ? Math.sin(t * 61) * 0.012 : 0;
+          for (const [collider, a, b] of spikeColliders) {
+            const tip = sm.position.y + 1.4;
+            if (!collider || tip <= 0.16) { collider?.makeEmpty(); continue; }
+            const y0 = 0.14, y1 = tip;
+            collider.setFromCenterAndSize(new THREE.Vector3(x + a * 1.1 + sm.position.x, (y0 + y1) / 2, z + b * 1.1),
+              new THREE.Vector3(0.4, y1 - y0, 0.4));
+          }
         });
       });
 
@@ -377,6 +457,8 @@ export function ruins(core) {
         const boulderGeo = N.rock(srnd, stoneRock, { x: 0, y: -1.9 * 0.55, z: 0, size: 1.9, squash: 1, detail: 4 });
         const boulder = new THREE.Mesh(boulderGeo, stoneRock);
         boulder.castShadow = false; boulder.position.set(lane.x, 1.9, -lane.dir * 31); boulder.raycast = () => {}; boulder.visible = false; kit.deco(boulder);
+        const boulderBox = kit.collider(5.06, 5.06, 5.06, lane.x, 1.9, -lane.dir * 31);
+        if (boulderBox) { boulderBox.dyn = true; boulderBox.makeEmpty(); }
         const dust = sprite(0xcdbf9a, 7, lane.x, 1.4, -lane.dir * 30, 0, false); kit.deco(dust);
         const cycle = 30, travel = 5.2;
         const posAt = (t) => { const c = (t + lane.phase) % cycle; if (c < 25) return null; const u = (c - 25) / travel; return u <= 1 ? -lane.dir * 29 + lane.dir * 58 * u : null; };
@@ -386,6 +468,7 @@ export function ruins(core) {
           boulder.visible = z !== null;
           if (z !== null) {
             boulder.position.z = z;
+            boulderBox?.setFromCenterAndSize(new THREE.Vector3(lane.x, 1.9, z), new THREE.Vector3(5.06, 5.06, 5.06));
             // No-slip rolling: at the bottom contact point, angular velocity
             // opposes the boulder's forward surface travel. For motion along +Z,
             // that is a positive X rotation; the opposite lane uses the inverse.
@@ -393,7 +476,7 @@ export function ruins(core) {
             // must advance with the same sign as the boulder's actual travel.
             const runStartZ = -lane.dir * 29;
             boulder.rotation.x = (z - runStartZ) / 1.9;
-          }
+          } else boulderBox?.makeEmpty();
           dust.material.opacity = c >= 21 && c < 25 ? 0.3 + 0.2 * Math.sin(t * 9) : 0;
         });
       }
@@ -403,6 +486,9 @@ export function ruins(core) {
       for (const s of [-1, 1]) arch.box(2.0, 0.4, 2.0, s * 4.2, 0.2, 36.6).box(1.9, 0.3, 1.9, s * 4.2, 6.55, 36.6);   // base and capital; the posts are the solid boxes below
       arch.box(10.4, 1.2, 1.8, 0, 6.8, 36.6).box(11, 0.3, 2.2, 0, 7.55, 36.6);
       kit.deco(arch.mesh(carved, { shadow: true }));
+      for (const s of [-1, 1]) kit.collider(1.96, 0.36, 1.96, s * 4.2, 6.55, 36.6);
+      kit.collider(10.46, 1.26, 1.86, 0, 6.8, 36.6);
+      kit.collider(11.06, 0.36, 2.26, 0, 7.55, 36.6);
       for (const s of [-1, 1]) kit.box(1.6, 6.4, 1.6, s * 4.2, 0, 36.6, carved);
 
       // ── Merge the natural things into a handful of meshes ────────────────────────────
