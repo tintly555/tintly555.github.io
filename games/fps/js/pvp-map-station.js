@@ -24,7 +24,7 @@ export function station(core) {
     ],
     env: {
       bg: 0x05080f, fog: 0x0b111b, fogNear: 40, fogFar: 340, bright: true,
-      hemi: [0xe4eeff, 0x8a96aa, 2.3], ambient: [0xdfe9ff, 0.55], sun: [0xfff0dc, 4.6, [-0.62, 0.36, 0.5]], shadow: 50, envIntensity: 0.9,
+      hemi: [0xe4eeff, 0x8a96aa, 2.6], ambient: [0xdfe9ff, 0.55], sun: [0xfff0dc, 7.5, [-0.62, 0.36, 0.5]], shadow: 50, envIntensity: 1.3,
       sky: { space: true, sun: [-0.62, 0.36, 0.5], planet: [0.3, -0.16, 0.94], radius: 0.62 },
       look: { tint: 0xeaf4ff, vignette: 0.3, bloom: 0.45, threshold: 1.15 },
     },

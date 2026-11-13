@@ -8,8 +8,8 @@ import { Pass, FullScreenQuad } from "https://cdn.jsdelivr.net/npm/three@0.182.0
 import { ShaderPass } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/postprocessing/ShaderPass.js";
 import { OutputPass } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/postprocessing/OutputPass.js";
 import { FXAAShader } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/shaders/FXAAShader.js";
-import { VERTEX, LIGHTING, REFLECTION, METER, ADAPT, COMPOSITE, GRADE } from "./post-fx-shaders.js";
-import { DEFAULT_FX } from "./post-fx-settings.js";
+import { VERTEX, LIGHTING, REFLECTION, METER, ADAPT, COMPOSITE, GRADE } from "./post-fx-shaders.js?v=11-no-edge-outline";
+import { DEFAULT_FX } from "./post-fx-settings.js?v=7-no-edge-outline";
 
 const wrap = values => Object.fromEntries(Object.entries(values).map(([key, value]) => [key, { value }]));
 
@@ -87,7 +87,7 @@ export function createPostFx(THREE, renderer, scene, camera, { width, height, pi
   const gradeU = {
     ...matrices,
     ...wrap({
-      tDiffuse: null, uPreviousVP: previousVP, uTime: 0, uVignette: .25, uGrain: .018,
+      tDiffuse: null, uPreviousVP: previousVP, uVignette: .25,
       uFringe: .001, uSaturation: 1, uContrast: 1, uWeak: 0, uDOF: 0, uMotion: 0,
       uDistortion: 0, uPanini: 0, uWhiteBalance: new THREE.Vector3(1,1,1), uTint: new THREE.Color(1,1,1),
       uLift: new THREE.Vector3(), uGamma: new THREE.Vector3(1,1,1), uGain: new THREE.Vector3(1,1,1),
@@ -175,11 +175,13 @@ export function createPostFx(THREE, renderer, scene, camera, { width, height, pi
   }
   function applyLook() {
     gradeU.uTint.value.set(look.tint ?? 0xffffff).convertLinearToSRGB();
-    gradeU.uVignette.value = (look.vignette ?? .34) * cfg.vignette;
+    gradeU.uVignette.value = Math.max(look.vignette ?? .34, .46) * cfg.vignette;
     gradeU.uSaturation.value = (look.saturation ?? 1.03) * cfg.saturation;
     gradeU.uContrast.value = (look.contrast ?? 1.035) * cfg.contrast;
+    // Stronger bloom on the real highlights (sun, lamps). The threshold stays as authored, so a bright sky
+    // does not bleed into a haze over the whole frame.
     bloom.threshold = look.threshold ?? 1.23;
-    bloom.strength = (look.bloom ?? .33) * cfg.bloom;
+    bloom.strength = (look.bloom ?? .33) * cfg.bloom * 2.4;
     bloom.enabled = bloom.strength > .001;
   }
 
@@ -224,7 +226,6 @@ export function createPostFx(THREE, renderer, scene, camera, { width, height, pi
       gradeU.uHighlight.value.set(cfg.highlightTone).convertLinearToSRGB();
       gradeU.uSplit.value = cfg.split;
       gradeU.uBalance.value = cfg.splitBalance;
-      gradeU.uGrain.value = cfg.grain * .066;
       applyLook();
     },
     look(settings = {}) {
@@ -235,12 +236,11 @@ export function createPostFx(THREE, renderer, scene, camera, { width, height, pi
     resetHistory() { hasHistory = false; needsExposureReset = true; },
     update(delta, { weak = 0, fringe = 0, aiming = false, motionBlur = true, waterTime = 0 } = {}) {
       dt = delta;
-      gradeU.uTime.value = (gradeU.uTime.value + dt) % 100;
       gradeU.uWeak.value = weak;
       gradeU.uFringe.value = (cfg.fringe * .007 + fringe * cfg.fringe) * (aiming ? .45 : 1);
       gradeU.uDOF.value = cfg.dof * (aiming ? .55 : 1);
       gradeU.uDistortion.value = aiming ? 0 : cfg.distortion;
-      gradeU.uPanini.value = aiming ? 0 : cfg.panini;
+      gradeU.uPanini.value = cfg.cameraLens;
       reflectionU.uWaterTime.value = waterTime;
       motion = motionBlur ? cfg.motion * (aiming ? .32 : 1) : 0;
     },

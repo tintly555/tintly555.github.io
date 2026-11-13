@@ -20,11 +20,11 @@
  */
 import { mergeGeometries } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/utils/BufferGeometryUtils.js";
 import { createSurfaces, rngFor, fbm } from "./gauntlet-surfaces.js?v=3";
-import { createNature } from "./pvp-nature.js?v=40";
-import { foundry } from "./pvp-map-foundry.js?v=16";
-import { station } from "./pvp-map-station.js?v=10";
-import { ruins } from "./pvp-map-ruins.js?v=15";
-import { town } from "./pvp-map-town.js?v=11";
+import { createNature } from "./pvp-nature.js?v=53";
+import { foundry } from "./pvp-map-foundry.js?v=17";
+import { station } from "./pvp-map-station.js?v=11";
+import { ruins } from "./pvp-map-ruins.js?v=19-foliageshadow";
+import { town } from "./pvp-map-town.js?v=13";
 
 const TAU = Math.PI * 2;
 
@@ -180,6 +180,8 @@ export function createPvpMaps(THREE) {
         mesh.visible = false; mesh.castShadow = false;
         return mesh;
       },
+      /** Collision-only box using the same centre convention as merged map geometry. */
+      collider(w, h, d, x, y, z) { return host.collider ? host.collider(w, h, d, x, y, z) : null; },
       /** A ray-only volume for glass that blocks bullets without changing player movement. */
       shotBlocker(w, h, d, x, y, z, rotationY = 0) {
         const material = new THREE.MeshBasicMaterial({
@@ -216,8 +218,16 @@ export function createPvpMaps(THREE) {
               const proud = (rnd() - 0.5) * 0.06, t = thick * (0.8 + rnd() * 0.5);
               const c = fixed + out * (t / 2 + proud - 0.05), m = (a + b) / 2, hh = rh * (0.9 + rnd() * 0.1);
               const yaw = (rnd() - 0.5) * 0.02, tilt = (rnd() - 0.5) * 0.015;
-              if (alongX) batch.box(b - a - 0.04, hh, t, m, y0 + r * rh + rh / 2, c, yaw, 0, tilt);
-              else batch.box(t, hh, b - a - 0.04, c, y0 + r * rh + rh / 2, m, yaw, tilt, 0);
+              const width = b - a - 0.04, cy = y0 + r * rh + rh / 2;
+              // The blocks sit proud of their core wall. Keep the hitboxes per stone so the
+              // player cannot clip through the visible relief or see through its uneven face.
+              if (alongX) {
+                host.collider?.(width + 0.035, hh + 0.015, t + 0.035, m, cy, c);
+                batch.box(width, hh, t, m, cy, c, yaw, 0, tilt);
+              } else {
+                host.collider?.(t + 0.035, hh + 0.015, width + 0.035, c, cy, m);
+                batch.box(t, hh, width, c, cy, m, yaw, tilt, 0);
+              }
             }
           }
         };
@@ -344,11 +354,15 @@ export function createPvpMaps(THREE) {
         const n = nature();
         const dome = sky.space ? n.space(sky) : n.sky(sky);
         host.scene.add(dome);
+        // Point the leaf-realism sun/colour at the map's own sun (static per map).
+        if (dome.material.uniforms.uSun) n.leafFx.sunDir.value.copy(dome.material.uniforms.uSun.value).normalize();
+        if (dome.material.uniforms.uSunColor) n.leafFx.sunColor.value.copy(dome.material.uniforms.uSunColor.value);
         host.world.tick((dt, t, p) => {
           dome.material.uniforms.uTime.value = t % 7200; if (dome.material.uniforms.uCT) dome.material.uniforms.uCT.value = t % 600; n.windTime.value = t % 7200;   // wall-clock seconds are too big for a shader float
           n.wake.update(t, p);
           if (dome.material.uniforms.uTier) dome.material.uniforms.uTier.value = host.tier ? host.tier() : 1;     // clouds: none, layer, raymarched, raymarched with self-shadow
           n.motion.value = host.quality ? host.quality() : 2;     // plants: 0 still, 1 wind, 2 wind and contact
+          n.leafFx.fidelity.value = host.tier ? host.tier() : 1;  // leaf realism: off below HIGH, full at EXTREME
         });
         if (host.renderer && host.environment) host.environment(n.environment(host.renderer, sky), def.env.envIntensity ?? 1);
       }

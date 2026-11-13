@@ -7,13 +7,13 @@ const rgb = (key, label, value, min, max) => ["Red", "Green", "Blue"].map((c, i)
 
 export const FX_GROUPS = [
   ["Light and surfaces", [
-    slider("bloom", "Bloom", .75),
+    slider("bloom", "Bloom", 1),
     pick("ao", "Ambient occlusion", "auto", { auto: "Auto", off: "Off", ssao: "SSAO", hbao: "HBAO" }),
     slider("aoStrength", "Contact shadow strength", .60),
     slider("ssr", "Water reflections (SSR)", .78),
     slider("shafts", "Light shafts", .50),
     slider("flare", "Lens flare", .28),
-    slider("adapt", "Eye adaptation", .48),
+    slider("adapt", "Eye adaptation", 1),
     pick("tone", "Tone mapping", "aces", { aces: "ACES Filmic", agx: "AgX", neutral: "Neutral", reinhard: "Reinhard" }),
     slider("exposure", "Exposure (EV)", 0, -.65, .65),
   ]],
@@ -24,9 +24,8 @@ export const FX_GROUPS = [
     slider("motion", "Camera motion blur intensity", .16),
     slider("fringe", "Chromatic aberration", .14),
     slider("distortion", "Lens distortion", 0, -.35, .35),
-    slider("panini", "Panini projection", 0),
-    slider("grain", "Film grain", .24),
-    slider("vignette", "Vignette", .70),
+    slider("cameraLens", "Recording lens compression", .46),
+    slider("vignette", "Vignette", .86),
   ]],
   ["Color adjustment and white balance", [
     slider("saturation", "Saturation", 1, 0, 1.5),

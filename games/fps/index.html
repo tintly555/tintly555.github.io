@@ -631,7 +631,7 @@
     .hv-stam i span { position: absolute; left: 0; top: 0; bottom: 0; width: 100%; background: rgba(150, 205, 235, 0.55); }
     .hv-stam i.full span { background: #bfe6ff; }
     .hv-stam.jet i span { background: var(--hud-blue); box-shadow: 0 0 6px var(--hud-blue); }
-    .hv-stam.locked i span { background: repeating-linear-gradient(135deg, #6a4a46 0 4px, #3a2a28 4px 8px); }
+    .hv-stam.locked i span { background: linear-gradient(90deg, #6a4a46, #3a2a28); }
     .hv-stam.deny { animation: hudDeny 0.32s ease-out; }
     .hv-stam.deny i { background: rgba(255, 90, 74, 0.45); }
 
@@ -1916,19 +1916,6 @@
       min-width: 0;
     }
 
-    #warFilmOverlay {
-      position: fixed;
-      inset: 0;
-      pointer-events: none;
-      z-index: 14;
-      opacity: 0;
-      transition: opacity 0.35s ease;
-      background:
-        radial-gradient(ellipse at center, transparent 35%, rgba(15,12,8,0.28) 100%),
-        rgba(58,48,32,0.07);
-      mix-blend-mode: multiply;
-    }
-
     /* Smooth dark red vignette; avoid scan lines or angular screen bands. */
     #shadeOverlay {
       position: fixed;
@@ -2069,15 +2056,6 @@
       pointer-events: none;
       z-index: 1;
     }
-    #healthBarTrack::after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      background: repeating-linear-gradient(90deg, transparent 0 23px, rgba(255,255,255,0.10) 23px 24px);
-      opacity: 0.45;
-      pointer-events: none;
-      z-index: 2;
-    }
     #healthBarFill {
       height: 100%;
       width: 100%;
@@ -2178,7 +2156,7 @@
     #needleHud.nh-inject .nh-label { color: #88ccff; text-shadow: 0 0 6px #88ccff88; }
     #needleHud.nh-inject .nh-bar-fill { background: #88ccff; }
 </style>
-  <link rel="stylesheet" href="interface.css?v=21-canvas-focus-ring">
+  <link rel="stylesheet" href="interface.css?v=22-remove-scanline-overlays">
   <script>
     (function () {
       function normBase(b) {
@@ -2438,7 +2416,6 @@
     <p id="gameBootLabel" class="game-boot-text" data-i18n="loadingWorld">Loading world…</p>
   </div>
   <div id="shadeOverlay" aria-hidden="true"></div>
-  <div id="warFilmOverlay" aria-hidden="true"></div>
   <div id="healthBarWrap">
     <div id="healthBarTrack"><div id="healthBarFill"></div></div>
   </div>
@@ -2467,6 +2444,28 @@
     <div id="fpsChatHint" style="opacity:0.72;font-size:11px;margin-top:3px;letter-spacing:0.02em;" data-i18n="hudHelpChat">Press T to chat</div>
     <div id="fpsHintFlash" style="opacity:0.72;font-size:11px;margin-top:3px;letter-spacing:0.02em;" data-i18n="hudHelpLight">Press L to toggle light &amp; flashlight</div>
   </div>
+  <div id="cameraRecordOSD" aria-hidden="true">
+    <span class="camera-record-state"><i></i>REC</span>
+    <time id="cameraRecordTimecode">00:00:00:00</time>
+    <span class="camera-record-mode">HD&nbsp;·&nbsp;60</span>
+  </div>
+  <script>
+    (() => {
+      const readout = document.getElementById("cameraRecordTimecode");
+      let startedAt = 0;
+      window.setInterval(() => {
+        if (!document.body.classList.contains("game-active")) { startedAt = 0; return; }
+        const now = performance.now();
+        if (!startedAt) startedAt = now;
+        const elapsed = (now - startedAt) / 1000;
+        const hours = Math.floor(elapsed / 3600).toString().padStart(2, "0");
+        const minutes = Math.floor(elapsed / 60 % 60).toString().padStart(2, "0");
+        const seconds = Math.floor(elapsed % 60).toString().padStart(2, "0");
+        const frames = Math.floor(elapsed % 1 * 30).toString().padStart(2, "0");
+        readout.textContent = `${hours}:${minutes}:${seconds}:${frames}`;
+      }, 100);
+    })();
+  </script>
   <div class="hint" id="hint" data-i18n="hintClick">Click anywhere</div>
   <div id="impactFx" aria-hidden="true" hidden><div class="impact-vignette"></div><canvas></canvas></div>
   <div class="blind-text" id="blindText" data-i18n="hudSlowed" aria-hidden="true">IMMOBILIZED</div>
@@ -3808,7 +3807,7 @@ if (typeof window !== "undefined") {
     {"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.182.0/build/three.module.js"}}
   </script>
   <script type="module" src="js/game-cursor.js?v=1"></script>
-  <script type="module" src="js/main.js?v=20261112-hell-summon-budget-v1"></script>
+  <script type="module" src="js/main.js?v=20261112-camera-recording-look-v1"></script>
   <footer id="pageFooter" style="position:fixed;left:0;right:0;bottom:0;display:flex;justify-content:center;align-items:center;gap:16px;padding:10px 14px;background:transparent;backdrop-filter:none;z-index:101;pointer-events:auto;">
     <img src="images/tintly555.png" alt="Tintly555" style="height:28px;width:auto;display:block;opacity:0.75;" />
     <img src="images/jimmyqrg.png" alt="JimmyQrg" style="height:32px;width:auto;display:block;margin-bottom:2px;opacity:0.75;" />

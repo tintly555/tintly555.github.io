@@ -30,8 +30,8 @@ export function town(core) {
     ],
     env: {
       bg: 0xe3d5b8, fog: 0xe3d5b8, fogNear: 30, fogFar: 260, bright: true,
-      hemi: [0xfff0dc, 0x9b7d58, 1.6], sun: [0xffe8bc, 4.6, [-40, 44, 26]], shadow: 60, envIntensity: 0.7,
-      sky: { sun: [-40, 44, 26], zenith: 0x3c72bb, horizon: 0xebddbf, ground: 0xb99d72, sunColor: 0xfff0cc, cloud: 0.34 },
+      hemi: [0xfff0dc, 0x9b7d58, 2.0], sun: [0xffe8bc, 7.5, [-40, 44, 26]], shadow: 60, envIntensity: 1.2,
+      sky: { sun: [-40, 44, 26], zenith: 0x5f98dc, horizon: 0xf7eedd, ground: 0xb99d72, sunColor: 0xfff4d8, cloud: 0.5 },
       look: { tint: 0xfff0d4, vignette: 0.28, bloom: 0.3, threshold: 1.3, saturation: 1.08 },
     },
     preview: { eye: 1.7, path: [[-36, 2], [-20, 1], [-8, -1], [6, 1], [20, -1], [34, 1], [34, 19], [18, 21], [0, 24], [-18, 21], [-34, 19], [-36, 2]] },

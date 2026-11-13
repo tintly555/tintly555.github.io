@@ -3,7 +3,7 @@
     import { RoundedBoxGeometry } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/geometries/RoundedBoxGeometry.js";
     import { mergeGeometries, toCreasedNormals } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/utils/BufferGeometryUtils.js";
     import { clone as cloneSkinnedModel } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/utils/SkeletonUtils.js";
-    import { createPvpMaps } from "./pvp-maps.js?v=48";
+    import { createPvpMaps } from "./pvp-maps.js?v=lighting-v7";
     import { createPvpWorld } from "./pvp-world.js?v=4";
     import { createBossNavigation } from "./boss-navigation.js?v=2";
     import { BOSS_ATTACK_BY_ID, chooseBossAttack } from "./boss-attacks.js?v=2";
@@ -16,8 +16,8 @@
     import { createGauntletRuntime } from "./gauntlet-runtime.js?v=22";
     import { createWorldAudio } from "./world-audio.js?v=4";
     import { createGauntletThemes } from "./gauntlet-themes.js?v=10";
-    import { createPostFx, applyDisplayTone } from "./post-fx.js?v=6";
-    import { DEFAULT_FX, loadFxSettings, mountFxSettings } from "./post-fx-settings.js?v=2";
+    import { createPostFx, applyDisplayTone } from "./post-fx.js?v=11";
+    import { DEFAULT_FX, loadFxSettings, mountFxSettings } from "./post-fx-settings.js?v=4";
     import { createImpactFx } from "./impact-fx.js?v=4";
     import { poseZombieVariant } from "./zombie-variants.js?v=5";
     import { BOSS_IMPACT, ZOMBIE_MELEE, zombieStrikeClipPhase, zombieGait } from "./zombie-motion.js";
@@ -166,7 +166,6 @@
     const btnLangPrev = document.getElementById("btnLangPrev");
     const btnLangNext = document.getElementById("btnLangNext");
     const languageValue = document.getElementById("languageValue");
-    const warFilmOverlay = document.getElementById("warFilmOverlay");
     const shadeOverlay = document.getElementById("shadeOverlay");
     const chatBox = document.getElementById("chatBox");
     const chatMessages = document.getElementById("chatMessages");
@@ -198,7 +197,6 @@
       fogSize: 10,
       pointLights: 8,
       spotLights: 4,
-      warFilm: "0.035",
       shade: "0.06",
     });
     const QUALITY_LEVELS = Object.keys(QUALITY_PRESETS);
@@ -2948,9 +2946,9 @@
     const ADAPTIVE_RENDER_SCALE_MIN = 0.65;
     const ADAPTIVE_AA_LEVELS = 5;
     const RENDER_SAMPLE_WINDOW_S = 1.0;
-    const RENDER_LOW_HOLD_S = 2.0;
-    const RENDER_HIGH_HOLD_S = 2.5;
-    const RENDER_CHANGE_COOLDOWN_MS = 6000;
+    const RENDER_LOW_HOLD_S = 1.5;
+    const RENDER_HIGH_HOLD_S = 4.0;
+    const RENDER_CHANGE_COOLDOWN_MS = 2500;
     let adaptiveAaLevel = 0;
     let renderFrameSamples = [];
     let renderSampleSeconds = 0;
@@ -3013,12 +3011,15 @@
     }
 
     function lowerAdaptiveRenderCost() {
-      if (adaptiveAaLevel > 0) {
-        adaptiveAaLevel--;
-        return true;
-      }
+      // On sustained low FPS, lower the actual 3D pixel count first. Spending
+      // several cooldowns stepping AA down while the scale stays at 76% made
+      // severely GPU-limited machines appear stuck above their 65% floor.
       if (resolutionScale > ADAPTIVE_RENDER_SCALE_MIN) {
         resolutionScale = Math.max(ADAPTIVE_RENDER_SCALE_MIN, resolutionScale - 0.05);
+        return true;
+      }
+      if (adaptiveAaLevel > 0) {
+        adaptiveAaLevel--;
         return true;
       }
       return false;
@@ -3319,7 +3320,7 @@
           ...cfg,
           bloom: 0, ao: "off", aoStrength: 0, ssr: 0,
           shafts: 0, flare: 0, adapt: 0, dof: 0,
-          fringe: 0, distortion: 0, panini: 0, grain: 0, vignette: 0,
+          fringe: 0, distortion: 0,
         } : cfg;
         if (postConfigDirty || postTier !== quality || key !== _postLookKey) {
           postFx.configure(renderCfg, quality, quality === "potato" ? null : environment);
@@ -3383,7 +3384,6 @@
       applySceneFogAndCameraFar();
       applyAtmosphericFogQuality();
 
-      if (warFilmOverlay) warFilmOverlay.style.opacity = FAIR_PRESENTATION.warFilm;
       if (shadeOverlay) shadeOverlay.style.opacity = FAIR_PRESENTATION.shade;
 
       syncGameRendererSize();
@@ -20189,7 +20189,9 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           .filter(Boolean)
           .sort((a, b) => a.distance - b.distance)[0] || null;
         const wallDist = obstacleHit ? obstacleHit.distance : Infinity;
-        for (const mirror of pvpWaterMirrors) mirror.shot(ray.ray.origin, ray.ray.direction, wallDist, Date.now() / 1000);
+        // Bullet splash size by weapon: a heavier round throws more water.
+        const waterSplash = ({ Pistol: .5, SMG: .5, "Assault Rifle": .7, Shotgun: 1.2, "Anti-Materiel Rifle": 1.5, "Paralysis Dart": .25 })[w?.name] ?? .6;
+        for (const mirror of pvpWaterMirrors) mirror.shot(ray.ray.origin, ray.ray.direction, wallDist, Date.now() / 1000, waterSplash);
 
         let bestEnemy = null;
         let bestEnemyHitT = Infinity;
@@ -24816,6 +24818,9 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           } else if (TRAINING_COOP) updateTrainingDummies(dt);
           publishWorldState(dt);
         }
+        // Multiplayer keeps the world running while paused, so a falling player keeps falling and can't hang in
+        // the air by opening the pause menu. Keys are released on pause, so this is gravity and landing only.
+        if (MULTIPLAYER && gameWorldReady && player.health > 0) updatePlayer(dt);
         tickFpsMeter(rawDelta);
         renderWorld(dt);
         return;

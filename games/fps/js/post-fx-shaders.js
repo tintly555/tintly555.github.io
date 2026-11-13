@@ -170,9 +170,9 @@ export const ADAPT = `
   uniform float uDelta,uReset;
   void main(){
     float logAverage=textureLod(tMeter,vec2(.5),5.).r*12.-8.;
-    float target=clamp(1.+(-2.8-logAverage)*.075,.74,1.27);
+    float target=clamp(1.+(-2.8-logAverage)*1.,.5,3.5);
     float prev=texture2D(tPrevious,vec2(.5)).r;
-    float rate=target<prev?3.1:1.12;
+    float rate=target<prev?8.:5.;
     float e=mix(prev,target,max(uReset,1.-exp(-uDelta*rate)));
     gl_FragColor=vec4(e,0.,0.,1.);
   }
@@ -228,7 +228,14 @@ export const COMPOSITE = `
       }
       col+=(uSunColor*bloom+vec3(.52,.78,.75)*ghost)*vis*uFlare;
     }
-    if(uAdapt>0.)col*=mix(1.,texture2D(tExposure,vec2(.5)).r,uAdapt);
+    if(uAdapt>0.){
+      // Only true shadows (very low luminance) respond more than the rest: a shadow drops further when the eye
+      // darkens. Mid-dark surfaces such as water keep the ordinary exposure response.
+      float e=max(texture2D(tExposure,vec2(.5)).r,.001);
+      float L=dot(col,vec3(.2126,.7152,.0722));
+      float k=mix(1.4,1.,smoothstep(0.,.15,L));
+      col*=mix(1.,pow(e,k),uAdapt);
+    }
     gl_FragColor=vec4(col,1.);
   }
 `;
@@ -236,7 +243,7 @@ export const COMPOSITE = `
 export const GRADE = `
   varying vec2 vUv;
   uniform sampler2D tDiffuse;
-  uniform float uTime,uVignette,uGrain,uFringe,uSaturation,uContrast,uWeak;
+  uniform float uVignette,uFringe,uSaturation,uContrast,uWeak;
   uniform float uDOF,uMotion,uDistortion,uPanini,uSplit,uBalance,uWhitePoint;
   uniform vec3 uWhiteBalance,uTint,uLift,uGamma,uGain,uCurveRGB,uShadow,uHighlight,uMixR,uMixG,uMixB;
   uniform vec4 uCurve;
@@ -343,7 +350,6 @@ export const GRADE = `
     col*=1.-uVignette*smoothstep(.18,.73,radial);
     col=mix(col,vec3(luma(col)),uWeak*.29);
     col*=1.-uWeak*(.08+.63*smoothstep(.07,.68,radial));
-    col+=(hash(gl_FragCoord.xy+floor(uTime*29.)*vec2(17.,11.))-.5)*uGrain*(.36+.64*sin(clamp(luma(col),0.,1.)*3.14159));
     gl_FragColor=vec4(clamp(col,0.,1.),1.);
   }
 `;

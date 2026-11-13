@@ -38,6 +38,12 @@ export function createCombatEnvironment(kind, wall, targets = []) {
     panel.position.set(x, y, z);
     root.add(panel);
   }
+  // Collision-only extensions keep a jetting player inside the playable footprint. The visible
+  // architecture stays at human scale; the top of this slab is far beyond harness reach.
+  function boundary(w, d, x, z) {
+    const mesh = wall(w, 20000, d, x, 10000, z, 0x000000);
+    if (mesh) { mesh.visible = false; mesh.castShadow = false; mesh.receiveShadow = false; }
+  }
 
   if (training) {
     // An open firing court framed by covered booths, a target gantry and a reinforced backstop.
@@ -88,6 +94,35 @@ export function createCombatEnvironment(kind, wall, targets = []) {
       for (let i = 0; i < 4; i++) box("frame", w * .62, .09, .15, x, h * (.34 + i * .12), z + d * .5 + .05);
       box("stripe", w * .91, .12, .10, x, h * .86, z + d * .5);
     }
+    // A real horizon beyond the range: low, cool ridgelines with sparse relay towers and
+    // distant test structures. These stay outside the firing court and read above its backstop.
+    const ridgeMaterials = [
+      new THREE.MeshStandardMaterial({ color: 0x536a75, roughness: 1, fog: true }),
+      new THREE.MeshStandardMaterial({ color: 0x748b91, roughness: 1, fog: true }),
+    ];
+    const ridge = new THREE.IcosahedronGeometry(1, 1);
+    for (let i = 0; i < 18; i++) {
+      const a = i / 18 * Math.PI * 2 + .13;
+      const radius = 78 + (i % 3) * 9;
+      const h = 13 + (i * 17 % 21);
+      const hill = new THREE.Mesh(ridge, ridgeMaterials[i % 2]);
+      hill.position.set(Math.cos(a) * radius, h * .26 - 3, -11 + Math.sin(a) * radius);
+      hill.scale.set(18 + i % 4 * 3, h, 15 + i % 5 * 2);
+      hill.rotation.y = a * .7;
+      hill.castShadow = false; hill.receiveShadow = true; hill.raycast = () => {};
+      root.add(hill);
+      if (i % 3 === 0) {
+        const tx = Math.cos(a) * (radius - 12), tz = -11 + Math.sin(a) * (radius - 12), th = 23 + i % 4 * 7;
+        box("frame", .55, th, .55, tx, th / 2, tz, a);
+        box("signal", 3.4, .16, .18, tx, th * .72, tz, a);
+        box("signal", 2.2, .14, .18, tx, th * .84, tz, a);
+      }
+    }
+    // Four tall invisible faces meet the court walls and block vertical jet escapes.
+    boundary(70, 2.4, 0, -48);
+    boundary(70, 2.4, 0, 26);
+    boundary(2.4, 76, -34, -11);
+    boundary(2.4, 76, 34, -11);
     for (const { lane, x, z, kind: targetKind } of targets) {
       const tx = lane ? (lane.xMin + lane.xMax) * .5 : x;
       const tz = lane ? lane.z : z;
@@ -135,6 +170,30 @@ export function createCombatEnvironment(kind, wall, targets = []) {
       }
     }
     sign("CONTAINMENT", "#efae81", 0, 7.75, -48.45, 13.0);
+    // The containment hall sits inside a much larger industrial complex. Broken rooflines,
+    // exhaust stacks and warm furnace windows fill the view above the arena wall.
+    for (let i = 0; i < 20; i++) {
+      const a = i / 20 * Math.PI * 2 + .08;
+      const r = 72 + (i % 4) * 8;
+      const x = Math.cos(a) * r, z = Math.sin(a) * r;
+      const w = 9 + (i % 4) * 2.2, d = 8 + (i * 3 % 5) * 1.8, h = 18 + (i * 13 % 32);
+      const yaw = -a + Math.PI / 2;
+      box("frame", w, h, d, x, h / 2, z, yaw);
+      box("recess", w * .72, h * .62, d + .08, x, h * .52, z, yaw);
+      box("skin", w + .5, .55, d + .5, x, h + .24, z, yaw);
+      box("stripe", w * .84, .22, d + .7, x, h * .78, z, yaw);
+      box("signal", w * .58, .34, .18, x, h * .42, z + Math.cos(a) * (d * .52), yaw);
+      if (i % 2 === 0) {
+        const stackH = 20 + (i % 5) * 6;
+        box("recess", 2.1, stackH, 2.1, x + Math.cos(a) * (w * .33), h + stackH * .5, z + Math.sin(a) * (d * .33), yaw);
+        box("frame", 3.3, .8, 3.3, x + Math.cos(a) * (w * .33), h + stackH, z + Math.sin(a) * (d * .33), yaw);
+      }
+    }
+    // Tall collision walls sit on the visible perimeter so flight cannot bypass the arena.
+    boundary(102, 2.2, 0, -50);
+    boundary(102, 2.2, 0, 50);
+    boundary(2.2, 102, -50, 0);
+    boundary(2.2, 102, 50, 0);
   }
 
   // One mesh per material keeps the additional fixtures cheap even on low graphics settings.

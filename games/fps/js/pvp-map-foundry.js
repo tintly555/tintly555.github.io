@@ -27,7 +27,7 @@ export function foundry(core) {
     env: {
       bg: 0x120a07, fog: 0x1a0f0a, fogNear: 12, fogFar: 90, hemi: [0xffd2aa, 0x3a2418, 3.0], ambient: [0xffc9a0, 1.4], bright: false,
       // Lit from overhead like a shop under its lamps: a high warm light with a static shadow under every platform and pot.
-      sun: [0xffd6a8, 2.0, [8, 80, 12]], shadow: 50, envIntensity: 0.9,
+      sun: [0xffd6a8, 3.2, [8, 80, 12]], shadow: 50, envIntensity: 1.2,
       sky: { sun: [0.1, 0.9, 0.12], zenith: 0x1c120d, horizon: 0x7a3a16, ground: 0xff6a24, sunColor: 0xffb878, cloud: 0 },
       look: { tint: 0xffe6cc, vignette: 0.36, bloom: 0.3, threshold: 1.2, contrast: 1.05 },
     },

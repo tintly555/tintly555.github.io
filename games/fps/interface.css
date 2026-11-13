@@ -483,9 +483,7 @@ body:has(#menu[data-route]:not([data-route=""])) #menuBg {
   grid-column: 2;
   width: 100%;
   position: relative;
-  background:
-    repeating-linear-gradient(100deg,#d6dce305 0px,#d6dce305 1px,transparent 1px,transparent 5px),
-    linear-gradient(144deg,#343a40fa,#15191efa 72%);
+  background: linear-gradient(144deg,#343a40fa,#15191efa 72%);
   border: 1px solid #60676e;
   border-top: 2px solid #d49b63;
   border-radius: 0;
@@ -670,23 +668,53 @@ html.game-pointer-painted :is(button:not(:disabled), a[href], select, summary, [
 #menu #menuPvpMaps > div { gap: 14px !important; }
 #menu .pvp-map-card { flex: 1 1 260px; max-width: 360px; }
 
+/* A small camera status readout, kept independent of the gameplay info panels. */
+#cameraRecordOSD {
+  position: fixed;
+  z-index: 46;
+  top: 14px;
+  left: 50%;
+  display: none;
+  align-items: center;
+  gap: 12px;
+  transform: translateX(-50%);
+  color: rgba(235, 241, 245, .82);
+  font: 10px/1 var(--console-type, ui-monospace, monospace);
+  letter-spacing: .12em;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 5px #000, 0 0 8px #000;
+  pointer-events: none;
+  user-select: none;
+}
+body.game-active #cameraRecordOSD { display: flex; }
+.camera-record-state { display: inline-flex; align-items: center; gap: 5px; color: #ff7770; font-weight: 700; }
+.camera-record-state i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ff514d;
+  box-shadow: 0 0 7px rgba(255, 81, 77, .7);
+  animation: cameraRecordPulse 1.25s steps(2, end) infinite;
+}
+.camera-record-mode { color: rgba(225, 233, 239, .62); }
+@keyframes cameraRecordPulse { to { opacity: .35; } }
+
 /* Worn steel for structural surfaces, brushed metal for controls, etched glass for HUD readouts. */
 :root {
   --zn-brushed: url("images/button.png");
   --zn-steel: url("images/modal-bg.png");
-  --zn-glass-lines: repeating-linear-gradient(0deg, #bdeaff0b 0 1px, transparent 1px 5px);
   --zn-panel: radial-gradient(ellipse at 100% 4%, #6d30242e, transparent 56%),
     linear-gradient(145deg, #1019201f, #07090d91), var(--zn-steel) center / 100% 100% no-repeat #171b20;
-  --zn-glass: var(--zn-glass-lines), linear-gradient(153deg, #1a2833b0, #080f18d9),
+  --zn-glass: linear-gradient(153deg, #1a2833b0, #080f18d9),
     var(--zn-brushed) center / 100% 150% no-repeat #111a21;
   --zn-scrim: radial-gradient(ellipse at 75% 24%, #3c191849, transparent 61%),
-    repeating-linear-gradient(125deg, #a6bfd608 0 1px, transparent 1px 7px), #05080bc9;
+    linear-gradient(145deg, #10182070, #05080bc9);
   --zn-steel-coat: linear-gradient(165deg, #151e2650, #080d14bb);
   --zn-hover-coat: linear-gradient(165deg, #6a594940, #141c24b5);
   --zn-active-coat: linear-gradient(158deg, #7a482a5e, #26170fb0);
   --zn-bronze-coat: linear-gradient(157deg, #ffe8b6e8, #be7639d9);
   --zn-bronze-hover: linear-gradient(157deg, #fff2c2ed, #db9450de);
-  --zn-etch: repeating-linear-gradient(120deg, #fff2 0 1px, transparent 1px 5px);
+  --zn-etch: linear-gradient(180deg, #ffffff14, #ffffff05 48%, #00000012);
 }
 
 body :is(button, input[type="button"], input[type="submit"], [role="button"], .inv-slot, .hb-order-slot, kbd) {

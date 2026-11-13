@@ -38,8 +38,8 @@ export function ruins(core) {
     env: {
       water: true,
       bg: 0xa9c9cc, fog: 0xa9c9cc, fogNear: 30, fogFar: 250, bright: true,
-      hemi: [0xcfe4f6, 0x58653b, 0.8], sun: [0xfff0d2, 3.4, [-34, 52, 24]], shadow: 62, envIntensity: 0.85,
-      sky: { sun: [-34, 52, 24], zenith: 0x3b78bf, horizon: 0xb4d2d4, ground: 0x52623c, sunColor: 0xfff0cf, cloud: 0.5 },
+      hemi: [0xcfe4f6, 0x58653b, 0.8], sun: [0xfff0d2, 9, [-34, 52, 24]], shadow: 62, envIntensity: 1.0,
+      sky: { sun: [-34, 52, 24], zenith: 0x5c9ee0, horizon: 0xdcf0f4, ground: 0x52623c, sunColor: 0xfff4d8, cloud: 0.5 },
       look: { tint: 0xfff6e2, vignette: 0.26, bloom: 0.16, threshold: 1.65, saturation: 1.08 },
     },
     preview: { eye: 1.7, path: [[-35, 14], [-26, 8], [-24, 0], [-14, 0], [-14, -14], [0, -22], [16, -16], [24, 0], [18, 14], [0, 24], [-18, 22], [-35, 14]] },
@@ -407,7 +407,12 @@ export function ruins(core) {
 
       // ── Merge the natural things into a handful of meshes ────────────────────────────
       const barkMesh = bark.toMesh(N.material("bark"), { cast: true, receive: true });
-      const leafMesh = leaf.toMesh(N.material("leaf"), { cast: true, receive: true });
+      // Leaf cards do NOT cast shadows: the sun shadow map is ~6 cm/texel over 124 m, so a dense
+      // canopy of alpha-tested cards casts hundreds of tiny overlapping shadows that collapse into
+      // blocky dark masses at a distance. The trunks (bark) still cast, so trees stay anchored, and
+      // the canopy's form now comes from the lit/shaded shading in foliage-realism (which follows the
+      // sun) instead of from the shadow map. Receiving shadows (from walls, trunks) is kept.
+      const leafMesh = leaf.toMesh(N.material("leaf"), { cast: false, receive: true });
       const lowMesh = low.toMesh(N.material("ground"), { cast: false, receive: true });
       for (const m of [barkMesh, leafMesh, lowMesh]) if (m) { m.frustumCulled = false; kit.deco(m); }
       if (rockParts.length) {
