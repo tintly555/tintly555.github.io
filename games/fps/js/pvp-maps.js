@@ -20,7 +20,7 @@
  */
 import { mergeGeometries } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/utils/BufferGeometryUtils.js";
 import { createSurfaces, rngFor, fbm } from "./gauntlet-surfaces.js?v=3";
-import { createNature } from "./pvp-nature.js?v=53";
+import { createNature } from "./pvp-nature.js?v=55";
 import { foundry } from "./pvp-map-foundry.js?v=17";
 import { station } from "./pvp-map-station.js?v=12";
 import { ruins } from "./pvp-map-ruins.js?v=20-collision";

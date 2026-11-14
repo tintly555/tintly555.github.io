@@ -10,7 +10,7 @@
 import { mergeGeometries } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/utils/BufferGeometryUtils.js";
 import { fbm, rngFor } from "./gauntlet-surfaces.js?v=3";
 import { TEMPLE_WATER_GLSL, TEMPLE_WATER_Y, templeWaterBank, templeWaterGeometry } from "./water-shape.js";
-import { makeFoliageFx, enhanceFoliage } from "./foliage-realism.js?v=20261112-foliage-v3";
+import { makeFoliageFx, enhanceFoliage } from "./foliage-realism.js?v=20261113-foliage-v4";
 
 const TAU = Math.PI * 2;
 
@@ -57,7 +57,7 @@ export function createNature(THREE) {
         if (around) {
           // Shade a clump like a ball: normals lean away from its centre, so it has a lit and a dark side.
           const dx = cx + p.x - around[0], dy = cy + p.y - around[1], dz = cz + p.z - around[2], l = Math.hypot(dx, dy, dz) || 1;
-          nx = dx / l * 0.8 + n0.x * 0.2; ny = dy / l * 0.8 + n0.y * 0.2 + 0.15; nz = dz / l * 0.8 + n0.z * 0.2;
+          nx = dx / l * 0.5 + n0.x * 0.5; ny = dy / l * 0.5 + n0.y * 0.5 + 0.1; nz = dz / l * 0.5 + n0.z * 0.5;
         }
         this.vert(cx + p.x, cy + p.y, cz + p.z, nx, ny, nz, corners[k + 2], corners[k + 3], tint[0], tint[1], tint[2]);
       }
@@ -141,7 +141,7 @@ export function createNature(THREE) {
       g.clearRect(0, 0, W, H);
       const leaf = (x, y, len, wid, ang, hue) => {
         g.save(); g.translate(x, y); g.rotate(ang);
-        const l0 = 26 + rnd() * 7;
+        const l0 = 29 + rnd() * 2.5;   // narrow: a canopy reads as one leaf colour with small variation
         const grad = g.createLinearGradient(0, -wid, 0, wid);       // lighter along one edge, like a leaf turned to the sun
         grad.addColorStop(0, `hsl(${hue - 4},46%,${l0 + 9}%)`); grad.addColorStop(0.55, `hsl(${hue},48%,${l0 + 3}%)`); grad.addColorStop(1, `hsl(${hue + 4},44%,${l0 - 3}%)`);
         g.fillStyle = grad;
@@ -853,7 +853,7 @@ export function createNature(THREE) {
   // ── Trees and plants ─────────────────────────────────────────────────────────────
   const RECTS = [[0, 0.5, 0.5, 1], [0.5, 0.5, 1, 1], [0, 0, 0.5, 0.5], [0.5, 0, 1, 0.5]];   // leaf atlas cells (v up)
   const FERN = [0, 0, 0.5, 1], GRASS = [0.5, 0, 1, 1];
-  const tintOf = (rnd, hueShift = 0) => { const k = 0.78 + rnd() * 0.4; return [k * (0.92 + hueShift), k, k * 0.86]; };
+  const tintOf = (rnd, hueShift = 0) => { const k = 0.93 + rnd() * 0.14; return [k * (0.97 + hueShift), k, k * 0.9]; };
 
   /**
    * One broadleaf tree: a trunk that leans and swells into surface roots, limbs that curve up and out and fork,

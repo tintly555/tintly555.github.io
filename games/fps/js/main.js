@@ -3,7 +3,7 @@
     import { RoundedBoxGeometry } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/geometries/RoundedBoxGeometry.js";
     import { mergeGeometries, toCreasedNormals } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/utils/BufferGeometryUtils.js";
     import { clone as cloneSkinnedModel } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/utils/SkeletonUtils.js";
-    import { createPvpMaps } from "./pvp-maps.js?v=simplify-1";
+    import { createPvpMaps } from "./pvp-maps.js?v=leaf-lightness-v1";
     import { createPvpWorld } from "./pvp-world.js?v=4";
     import { createBossNavigation } from "./boss-navigation.js?v=2";
     import { BOSS_ATTACK_BY_ID, chooseBossAttack } from "./boss-attacks.js?v=2";
@@ -3405,9 +3405,12 @@
     function applyGraphicsQuality() {
       const p = getQualityPreset();
       applyDisplayTone(THREE, renderer, gameSettings.effects, FAIR_PRESENTATION.exposure);
+      // POTATO draws no shadow maps at all: no shadow pass over every shadow-casting mesh, no 2048 map on themed maps.
+      renderer.shadowMap.enabled = getQualityId() !== "potato";
       renderer.shadowMap.type = p.shadowSoft ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
       const themedSun = pvpMaps.MAPS[CURRENT_MAP] && pvpMaps.MAPS[CURRENT_MAP].env.shadow;
-      moon.shadow.mapSize.set(themedSun ? Math.max(p.shadowSz, 2048) : p.shadowSz, themedSun ? Math.max(p.shadowSz, 2048) : p.shadowSz);
+      const shadowSize = themedSun ? Math.max(p.shadowSz, 2048) : p.shadowSz;
+      moon.shadow.mapSize.set(shadowSize, shadowSize);
       moon.shadow.bias = p.bias;
       moon.shadow.normalBias = p.normalBias;
       moon.shadow.radius = p.shadowSoft ? 2 : 1;

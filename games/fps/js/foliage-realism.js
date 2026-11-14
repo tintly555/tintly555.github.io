@@ -102,7 +102,7 @@ export function enhanceFoliage(material, THREE, fx, opts = {}) {
          float clump = fract(sin(dot(floor(vFoliageWPos * 0.22), vec3(12.99, 78.23, 37.72))) * 43758.5453);  // ~4.5 m clump
          float tip = clamp(vFoliageCell.y, 0.0, 1.0);
          // Lightness: per-leaf and per-clump, centred on 1.0 so the canopy's overall level is unchanged.
-         float val = 1.0 + (cs - 0.5) * 0.46 + (clump - 0.5) * 0.34;
+         float val = 1.0 + (cs - 0.5) * 0.14 + (clump - 0.5) * 0.12;
          // Hue: whole clumps drift green<->olive; sunlit tips go a touch warmer.
          float warmth = (clump - 0.5) * 0.55 + tip * 0.22;
          vec3 tint = vec3(1.0 + warmth * 0.17, 1.0, 1.0 - warmth * 0.20);
