@@ -3,7 +3,7 @@
     import { RoundedBoxGeometry } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/geometries/RoundedBoxGeometry.js";
     import { mergeGeometries, toCreasedNormals } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/utils/BufferGeometryUtils.js";
     import { clone as cloneSkinnedModel } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/utils/SkeletonUtils.js";
-    import { createPvpMaps } from "./pvp-maps.js?v=leaf-lightness-v1";
+    import { createPvpMaps } from "./pvp-maps.js?v=material-footsteps-v1";
     import { createPvpWorld } from "./pvp-world.js?v=4";
     import { createBossNavigation } from "./boss-navigation.js?v=2";
     import { BOSS_ATTACK_BY_ID, chooseBossAttack } from "./boss-attacks.js?v=2";
@@ -13,10 +13,12 @@
     import { createBossCreature, BOSS_RADIUS, CLAW_STRIKE_S, QUAKE_SLAM_S, LOB_RELEASE_S, DURATIONS as BOSS_DURATIONS } from "./boss-creature.js?v=11";
     import { buildOperatorShell } from "./operator-model.js?v=1";
     import { extendGauntletCourses, GAUNTLET_CHAPTERS, GAUNTLET_CHAPTER_SIZE } from "./gauntlet-courses.js?v=5";
-    import { createGauntletRuntime } from "./gauntlet-runtime.js?v=22";
-    import { createWorldAudio } from "./world-audio.js?v=4";
-    import { createGauntletThemes } from "./gauntlet-themes.js?v=10";
-    import { createPostFx, applyDisplayTone } from "./post-fx.js?v=15-luminance-directed-adaptation";
+    import { createGauntletRuntime } from "./gauntlet-runtime.js?v=23-touchboxes";
+    import { createWorldAudio } from "./world-audio.js?v=5-material-footsteps-water-entry";
+    import { createGauntletThemes } from "./gauntlet-themes.js?v=13-support-colliders";
+    import { createGauntletMusic } from "./gauntlet-music.js?v=1";
+    import { templeWaterBank, TEMPLE_WATER_Y } from "./water-shape.js?v=3-footsteps";
+    import { createPostFx, applyDisplayTone } from "./post-fx.js?v=16-gauntlet-light-balance";
     import { DEFAULT_FX, loadFxSettings, mountFxSettings } from "./post-fx-settings.js?v=6";
     // Built once: the "post effects off" settings used by renderWorld, and the weapon-to-water-splash table.
     const NEUTRAL_FX = { ...DEFAULT_FX, bloom: 0, ao: "off", aoStrength: 0, ssr: 0, shafts: 0, flare: 0, adapt: 0,
@@ -3283,16 +3285,16 @@
       applyDisplayTone(THREE, renderer, gameSettings.effects, FAIR_PRESENTATION.exposure);
     });
     const POST_LOOKS = {
-      "ashen-city": { tint: 0xfff2e4, vignette: 0.38, bloom: 0.4 },
-      foundry: { tint: 0xffe8d0, vignette: 0.4, bloom: 0.55, threshold: 0.85 },
-      switchyard: { tint: 0xeaf2ff, vignette: 0.34, bloom: 0.4 },
-      "frozen-dam": { tint: 0xeef6ff, vignette: 0.26, bloom: 0.22, threshold: 1.6, saturation: 0.98 },
-      "orbital-relay": { tint: 0xf4f8ff, vignette: 0.3, bloom: 0.4, threshold: 1.2, contrast: 1.1 },
-      "maze-causeway": { tint: 0xe8fff8, vignette: 0.4, bloom: 0.42 },
-      "missile-silos": { tint: 0xffe6dc, vignette: 0.4, bloom: 0.5, threshold: 0.9 },
-      "alien-outpost": { tint: 0xfff0e0, vignette: 0.3, bloom: 0.35, threshold: 1.1, saturation: 1.12 },
-      "starship-hangar": { tint: 0xe8f4ff, vignette: 0.32, bloom: 0.45, threshold: 1.1 },
-      "weapon-factory": { tint: 0xfff4e6, vignette: 0.36, bloom: 0.5, threshold: 0.9 },
+      "ashen-city": { tint: 0xfff2e4, vignette: 0.38, bloom: 0.12, threshold: 1.65 },
+      foundry: { tint: 0xffe8d0, vignette: 0.4, bloom: 0.13, threshold: 1.8 },
+      switchyard: { tint: 0xeaf2ff, vignette: 0.34, bloom: 0.12, threshold: 1.7 },
+      "frozen-dam": { tint: 0xeef6ff, vignette: 0.26, bloom: 0.08, threshold: 1.8, saturation: 0.98 },
+      "orbital-relay": { tint: 0xe7efff, vignette: 0.34, bloom: 0.06, threshold: 1.9, contrast: 1.0, saturation: 0.96 },
+      "maze-causeway": { tint: 0xe8fff8, vignette: 0.4, bloom: 0.10, threshold: 1.75 },
+      "missile-silos": { tint: 0xffe6dc, vignette: 0.4, bloom: 0.10, threshold: 1.8 },
+      "alien-outpost": { tint: 0xfff0e0, vignette: 0.3, bloom: 0.10, threshold: 1.8, saturation: 1.04 },
+      "starship-hangar": { tint: 0xe8f4ff, vignette: 0.32, bloom: 0.10, threshold: 1.8 },
+      "weapon-factory": { tint: 0xfff4e6, vignette: 0.36, bloom: 0.10, threshold: 1.8 },
     };
     function postFxWanted() {
       const potatoMotionPass = getQualityId() === "potato"
@@ -4710,10 +4712,22 @@
       scene.add(mesh);
       wallMeshes.push(mesh);
       const wallBox = new THREE.Box3().setFromObject(mesh);
+      wallBox.footstepSurface = inferFootstepSurface(surface);
       mesh.userData.wallBox = wallBox;
       wallBoxes.push(wallBox);
       _texturedMeshes.push({ mesh, rx: 1, ry: 1, tint, surface });
       return mesh;
+    }
+
+    function inferFootstepSurface(value) {
+      const key = String(value || "").toLowerCase();
+      if (/ice|frozen|slick/.test(key)) return "ice";
+      if (/water|wet|mud|bog/.test(key)) return "water";
+      if (/wood|crate|plank|timber/.test(key)) return "wood";
+      if (/gravel|sand|soil|dirt|regolith|ash|asphalt/.test(key)) return "gravel";
+      if (/metal|steel|hull|grate|rail|factory|pipe|beam|hangar|interchange|relay|silo|switchyard|foundry/.test(key)) return "metal";
+      if (/stone|rock|brick|temple|masonry/.test(key)) return "stone";
+      return "concrete";
     }
 
     /** ── Infinite procedural maze (chunk-streamed; walls texture on floor/roof per chunk) ── */
@@ -5749,6 +5763,7 @@
         },
         solid(w, h, d, x, y, z, material) {
           const mesh = addWallBox(w, h, d, x, y, z, 0x888888);
+          mesh.userData.wallBox.footstepSurface = material.userData?.footstepSurface || "concrete";
           const tracked = _texturedMeshes.findIndex((e) => e.mesh === mesh);
           if (tracked !== -1) _texturedMeshes.splice(tracked, 1);   // keep the map's own material
           mesh.geometry.dispose();
@@ -7268,6 +7283,7 @@
       };
       const themedSolid = (w, h, d, x, y, z, color) => {
         const mesh = addWallBox(w, h, d, x, y, z, color);
+        mesh.userData.wallBox.footstepSurface = inferFootstepSurface(theme.id + (color === 0x546573 ? "-deck" : "-wall"));
         return themed(mesh, w, h, d, color === 0x546573 ? style.deck(0x6bbbc7, 0) : style.wall(color));
       };
       if (spec.checkpoints) {
@@ -7814,14 +7830,14 @@
       // own lights and this one was only adding the exit beacon. A cool overhead key plus a
       // run of lamps down the course, so you can actually see the next platform edge.
       const light = theme.light;
-      const amb = new THREE.AmbientLight(light.ambient[0], 3.4 * light.ambient[1]);
+      const amb = new THREE.AmbientLight(light.ambient[0], 1.8 * light.ambient[1]);
       scene.add(amb); pvpMapLights.push(amb);
-      const hemi = new THREE.HemisphereLight(light.hemi[0], light.hemi[1], 5.6 * light.hemi[2]);
+      const hemi = new THREE.HemisphereLight(light.hemi[0], light.hemi[1], 3.0 * light.hemi[2]);
       scene.add(hemi); pvpMapLights.push(hemi);
-      const key = new THREE.DirectionalLight(light.sun[0], 11.0 * light.sun[1]);
+      const key = new THREE.DirectionalLight(light.sun[0], 5.6 * light.sun[1]);
       key.position.set(light.sun[2][0] * 1.5, light.sun[2][1] * 1.5, light.sun[2][2] * 1.5); key.castShadow = false;
       scene.add(key); pvpMapLights.push(key);
-      const fill = new THREE.DirectionalLight(light.fill[0], 4.0 * light.fill[1]);
+      const fill = new THREE.DirectionalLight(light.fill[0], 2.2 * light.fill[1]);
       fill.position.set(-22, 30, -40); fill.castShadow = false;
       scene.add(fill); pvpMapLights.push(fill);
       // Floodlight masts beside the course, every 30 m along it. Each one is a visible pole and
@@ -7844,7 +7860,7 @@
         scene.add(mast); gauntletProps.push(mast);
         const head = new THREE.Mesh(
           new THREE.BoxGeometry(1.4, 0.5, 0.7),
-          new THREE.MeshStandardMaterial({ color: 0x1b1f24, emissive: theme.lamp, emissiveIntensity: 1.6, roughness: 0.5 })
+          new THREE.MeshStandardMaterial({ color: 0x1b1f24, emissive: theme.lamp, emissiveIntensity: 0.65, roughness: 0.5 })
         );
         head.position.set(mx - -dz * side * 0.5, c.y + 8.1, mz - dx * side * 0.5);
         head.rotation.y = -Math.atan2(dz, dx) + Math.PI / 2;
@@ -7856,26 +7872,45 @@
       {
         const pool = [];
         for (let i = 0; i < Math.min(5, mastHeads.length); i++) {
-          const lamp = createPhysicalSpotLight(theme.lamp, 2600, 60, Math.PI / 4, 0.55);
+          const lamp = createPhysicalSpotLight(theme.lamp, 650, 60, Math.PI / 4, 0.55);
+          lamp.userData.poolIntensity = lamp.intensity;
+          lamp.userData.poolFade = 1;
           lamp.castShadow = false;
           scene.add(lamp); scene.add(lamp.target);
           pvpMapLights.push(lamp, lamp.target);
           pool.push(lamp);
         }
-        let clock = 1;
-        const assign = () => {
+        let assignments = [];
+        const assign = (dt = 1 / 60) => {
           const px = player.position.x, pz = player.position.z;
           const nearest = mastHeads.map((m) => ({ m, d: (m.x - px) ** 2 + (m.z - pz) ** 2 })).sort((a, b) => a.d - b.d);
+          const usedMasts = new Set();
           pool.forEach((lamp, i) => {
-            const m = nearest[i].m;
-            lamp.position.set(m.x, m.y, m.z);
-            lamp.target.position.set((m.tx + m.ax) / 2, m.ty, (m.tz + m.az) / 2);
+            const candidate = nearest.find(entry => !usedMasts.has(entry.m));
+            const prior = assignments[i];
+            const priorEntry = prior && nearest.find(entry => entry.m === prior);
+            const m = priorEntry && !usedMasts.has(prior) && priorEntry.d < candidate.d * 1.2
+              ? prior : candidate.m;
+            usedMasts.add(m);
+            if (!assignments[i]) {
+              lamp.position.set(m.x, m.y, m.z);
+              lamp.target.position.set((m.tx + m.ax) / 2, m.ty, (m.tz + m.az) / 2);
+            } else if (assignments[i] !== m) {
+              // Keep pooled spotlights attached to actual masts; fade while swapping their
+              // assignments so a moving lamp beam never sweeps across the course.
+              lamp.position.set(m.x, m.y, m.z);
+              lamp.target.position.set((m.tx + m.ax) / 2, m.ty, (m.tz + m.az) / 2);
+              lamp.userData.poolFade = 0;
+            }
+            assignments[i] = m;
+            lamp.userData.poolFade = Math.min(1, lamp.userData.poolFade + Math.min(dt, 0.1) / 0.32);
+            lamp.intensity = lamp.userData.poolIntensity * lamp.userData.poolFade;
             lamp.target.updateMatrixWorld();
           });
         };
         if (pool.length) {
           assign();
-          gauntletTicks.push((dt) => { clock += dt; if (clock > 0.25) { clock = 0; assign(); } });
+          gauntletTicks.push((dt) => assign(dt));
         }
       }
 
@@ -7932,9 +7967,11 @@
         }
         const supports = gauntletThemes.buildSupports(theme, {
           decks, ribbons: ribbonDecks, movers: gauntletRuntime ? gauntletRuntime.movers() : [], ramps: gauntletRuntime ? gauntletRuntime.ramps : [],
+          portals: gauntletRuntime ? gauntletRuntime.portals : [],
           groundY: lowY - theme.groundDepth, lowY, highY: highest, length: Math.abs(bounds.z1 - bounds.z0), mid: (bounds.z0 + bounds.z1) / 2,
           bounds, add: (obj) => { scene.add(obj); gauntletProps.push(obj); }, tick: (fn) => gauntletTicks.push(fn),
         });
+        if (supports.colliders?.length) wallBoxes.push(...supports.colliders);
         for (const d of supports.hover) gauntletHover.push({ mesh: d.mesh, box: d.box, x: d.x, z: d.z, w: d.w, d: d.d, offset: 0, vel: 0, wasOn: false });
         for (const c of supports.hoverChunks || []) gauntletHover.push({ mesh: c.mesh, boxes: c.boxes, cx: c.cx, cz: c.cz, reach: c.reach, offset: 0, vel: 0, wasOn: false });
       }
@@ -8989,7 +9026,6 @@
     }
 
     function checkAchievements() {
-      if (bossKillCount >= 1) unlockAchievement("what_is_this");
       if (sessionKillCount >= 200) unlockAchievement("monster_hunter");
       if (!MULTIPLAYER && isBossArenaMap(CURRENT_MAP) && sessionBossKillCount >= 3) {
         unlockAchievement("strong_one");
@@ -9467,6 +9503,7 @@
       totalKillCount++;
       if (enemy.isBoss) {
         bossKillCount++;
+        if (!isGauntletMap(CURRENT_MAP)) unlockAchievement("what_is_this");
         if (isBossArenaMap(CURRENT_MAP)) sessionBossKillCount++;
       } else if (!enemy.trainingDummy) {
         sessionKillCount++;
@@ -11831,6 +11868,39 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         && !chatOpen && !settingsModalOpen && !gauntletClearOpen;
     }
 
+    function defaultFootstepSurface() {
+      if (isGauntletMap(CURRENT_MAP)) {
+        const id = currentGauntletTheme().id;
+        if (id === "frozen-dam") return "ice";
+        if (id === "ashen-city" || id === "alien-outpost") return "gravel";
+        if (id === "maze-causeway") return "stone";
+        return "metal";
+      }
+      if (CURRENT_MAP === "pvp_ruins") return "stone";
+      if (CURRENT_MAP === "pvp_town") return "gravel";
+      if (CURRENT_MAP === "crossfire_grid" || CURRENT_MAP === "crossfire") return "metal";
+      return "concrete";
+    }
+
+    function footstepSurfaceAt(x, z, feet) {
+      if (CURRENT_MAP === "pvp_ruins" && templeWaterBank(x, z) > 0) return "water";
+      let found = null, bestGap = 0.34;
+      forEachNearbyWallBox(x, z, box => {
+        if (box.enemyOnly || !box.footstepSurface) return;
+        const gap = feet - box.max.y;
+        if (gap < -0.14 || gap > bestGap || x < box.min.x - 0.08 || x > box.max.x + 0.08
+            || z < box.min.z - 0.08 || z > box.max.z + 0.08) return;
+        bestGap = gap;
+        found = box.footstepSurface;
+      });
+      return found || defaultFootstepSurface();
+    }
+
+    function footstepSoundKind(surface, zombie = false) {
+      const name = String(surface || "concrete").toLowerCase();
+      return `${zombie ? "zombie" + name[0].toUpperCase() + name.slice(1) : name}Step`;
+    }
+
     function updateSoundListener(now) {
       if (now >= acousticSampleAt) {
         acousticSampleAt = now + 250;
@@ -11880,7 +11950,8 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         footPosition.y = (enemy.baseY ?? y) + 0.17;
         footPosition.z = z;
         worldAudio.step(enemy, footPosition, !!enemy.gaitAction, enemy.gaitStepDistance || 0.8,
-          "zombieStep", { volume: heavy ? 0.78 : 0.46, heading: enemy.visYaw });
+          footstepSoundKind(footstepSurfaceAt(x, z, enemy.baseY ?? y), true),
+          { volume: heavy ? 0.78 : 0.46, heading: enemy.visYaw });
         const voiceAt = zombieVoiceTimes.get(enemy);
         if (voiceAt === undefined || now >= voiceAt) {
           zombieVoiceTimes.set(enemy, now + (enemy.aware ? 2800 : 6200) + Math.random() * 5500);
@@ -11905,6 +11976,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     let arenaBgmAudio = null;
     let pvpBgmAudio = null;
     let arena19hz = null; // { osc, gain } — 19 Hz sine routed to audioMusic, started with arena BGM
+    const gauntletMusic = createGauntletMusic();
 
     /**
      * Slider position → amplitude. Hearing is logarithmic, so a linear map made the
@@ -11929,6 +12001,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       audioSfx.gain.value = pauseMuted ? 0 : volumeTaper(gameSettings.soundVolume);
       audioMusic.gain.value = pauseMuted ? 0 : volumeTaper(gameSettings.musicVolume);
       const musicLevel = calcMusicLevel();
+      gauntletMusic.setVolume(musicLevel);
       if (menuBgmMenuGain) {
         // This path already runs through audioMusic → audioMaster, which apply both
         // sliders. Leave the node at unity so the music slider is not applied twice.
@@ -12146,6 +12219,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           if (isArenaLikeMap(CURRENT_MAP)) { ensureArenaBgmAudio(); tryStartArenaBgmPlayback(); }
           else if (isBossArenaMap(CURRENT_MAP)) tryPlayBossBgm(BOSS_HELL_MODE);
           else if (isPvpCrossfireMap(CURRENT_MAP)) tryPlayPvpBgm();
+          else if (isGauntletMap(CURRENT_MAP)) tryPlayGauntletBgm();
         }
         return;
       }
@@ -12273,6 +12347,17 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
 
     function shouldPlayArenaBgm() {
       return gameWorldReady && !paused && isArenaLikeMap(CURRENT_MAP);
+    }
+
+    function shouldPlayGauntletBgm() {
+      return gameWorldReady && !paused && isGauntletMap(CURRENT_MAP);
+    }
+
+    function tryPlayGauntletBgm() {
+      if (!shouldPlayGauntletBgm()) return;
+      gauntletMusic.select(gauntletLevel);
+      gauntletMusic.setVolume(calcMusicLevel());
+      gauntletMusic.play();
     }
 
     function syncArenaBgmRoutingAndVolumes() {
@@ -15209,7 +15294,10 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
             nearest = Math.min(nearest, flashlightHit.distanceTo(flashlightRay.origin));
           });
           flashlight.position.set(.105, -.12, -Math.min(.62, Math.max(.10, nearest - .18)));
-          flashlightTargetPower = FLASH_POWER * (.14 + .86 * THREE.MathUtils.smoothstep(nearest, .62, 4.5));
+          const environmentScale = isGauntletMap(CURRENT_MAP)
+            && currentGauntletTheme().id === "starship-hangar" ? 0.52 : 1;
+          flashlightTargetPower = FLASH_POWER * environmentScale
+            * (.14 + .86 * THREE.MathUtils.smoothstep(nearest, .62, 4.5));
         }
       }
       const power = dampScalar(flashlight.intensity, flashlightTargetPower, dt, 22);
@@ -20978,6 +21066,12 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           const damage = fallDamage(drop, waterFallReduction());
           if (damage > 0) damagePlayer(damage, null, "body", -1, true, "fall");
         }
+        if (_wasAirborne && CURRENT_MAP === "pvp_ruins" && templeWaterBank(player.position.x, player.position.z) > 0
+            && _impactVy < -1.8) {
+          worldAudio.play("waterEntry", {
+            x: player.position.x, y: TEMPLE_WATER_Y, z: player.position.z,
+          }, { local: true, volume: THREE.MathUtils.clamp(0.62 + (-_impactVy) * 0.045, 0.7, 1.25) });
+        }
         player.fallApexY = null;
       }
 
@@ -21312,6 +21406,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         } catch (_) {}
         try { if (arenaBgmAudio && !arenaBgmAudio.paused) arenaBgmAudio.pause(); } catch (_) {}
         try { if (bossBgmAudio && !bossBgmAudio.paused) bossBgmAudio.pause(); } catch (_) {}
+        gauntletMusic.pause();
       }
     }
 
@@ -21325,6 +21420,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         try { applyAudioVolumes(); } catch (_) {}
         try { if (isArenaLikeMap(CURRENT_MAP) && arenaBgmAudio) tryStartArenaBgmPlayback(); } catch (_) {}
         try { if (isBossArenaMap(CURRENT_MAP) && bossBgmAudio) tryStartBossBgmPlayback(); } catch (_) {}
+        try { if (isGauntletMap(CURRENT_MAP)) tryPlayGauntletBgm(); } catch (_) {}
       }
     }
 
@@ -24793,7 +24889,8 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           const walking = moving && !rpAirborne;
           if (walking) rp.walkPhase = (rp.walkPhase || 0) + dt * Math.min(gSpeed * 4.2, 14);
           if (playWorldSounds && MULTIPLAYER && rp.group.visible) {
-            worldAudio.step(rp, rp.group.position, walking, 0.89, "bootStep",
+            const rpSurface = footstepSurfaceAt(rp.group.position.x, rp.group.position.z, rp.group.position.y);
+            worldAudio.step(rp, rp.group.position, walking, THREE.MathUtils.clamp(gSpeed * 0.32, 0.68, 2.0), footstepSoundKind(rpSurface),
               { heading: rp.yaw, volume: 0.61 - 0.30 * rpCrouch });
           } else worldAudio.resetSteps(rp);
           rp.idlePhase = (rp.idlePhase || 0) + dt * 1.28;
@@ -24936,8 +25033,11 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         footPosition.x = player.position.x;
         footPosition.y = player.position.y - 1.52;
         footPosition.z = player.position.z;
+        const surface = footstepSurfaceAt(footPosition.x, footPosition.z, player.position.y - 1.65);
+        const groundSpeed = Math.hypot(state.velX, state.velZ);
+        const stride = Math.max(0.62, THREE.MathUtils.clamp(groundSpeed * 0.32, 0.68, 2.0) - crouchAmt * 0.1);
         worldAudio.step(player, footPosition, player.onGround && audioNow >= state.dashActiveUntil,
-          0.89 - crouchAmt * 0.24, isGauntletMap(CURRENT_MAP) ? "steelStep" : "bootStep",
+          stride, footstepSoundKind(surface),
           { local: true, volume: 0.67 - crouchAmt * 0.34 });
       }
 
@@ -25279,6 +25379,8 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       bumpRendererLayoutSync(280);
       stopMenuBackdropLoop();
       pauseMenuBgm();
+      gauntletMusic.pause();
+      if (isGauntletMap(mapName)) gauntletMusic.select(gauntletLevel);
 
       bossDeathPickupPos = null;
       if (!isTrainingMap(mapName)) removeAnimationShowcase();
@@ -25423,6 +25525,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       if (isBossArenaMap(CURRENT_MAP)) tryPlayBossBgm(BOSS_HELL_MODE);
       else if (isArenaLikeMap(CURRENT_MAP)) tryPlayArenaBgm();
       else if (isPvpCrossfireMap(CURRENT_MAP)) tryPlayPvpBgm();
+      else if (isGauntletMap(CURRENT_MAP)) tryPlayGauntletBgm();
       try {
         renderer.domElement.tabIndex = 0;
       } catch (_) {}
@@ -25484,6 +25587,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       pauseBossBgm();
       pauseArenaBgm();
       pausePvpBgm();
+      gauntletMusic.pause();
       tryPlayMenuBgm();
       player.health = 100;
       impactFx.reset();

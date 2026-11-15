@@ -387,12 +387,14 @@ export function createGauntletRuntime(THREE, solid, decorate, hooks, style = nul
     // Each hazard works out its own state for this frame once, and answers "does it touch a body
     // standing at (x, z)?" for anything that asks: the player, and the zombies.
     let test = () => false;
+    let hitHalfHeight = .12;
     if (hazard.kind === "rotor") {
       const a = cycle * TAU;
       hazard.mesh.rotation.y = a;
       test = (x, z) => {
         const dx = x - hazard.x, dz = z - hazard.z;
-        return Math.abs(dx * Math.sin(a) + dz * Math.cos(a)) < .35 && Math.abs(dx * Math.cos(a) - dz * Math.sin(a)) < hazard.radius + .24;
+        return Math.abs(dx * Math.sin(a) + dz * Math.cos(a)) < .35 + .28
+          && Math.abs(dx * Math.cos(a) - dz * Math.sin(a)) < hazard.radius + .24 + .28;
       };
     } else if (hazard.kind === "beam") {
       hazard.mesh.visible = cycle < .43;
@@ -400,23 +402,25 @@ export function createGauntletRuntime(THREE, solid, decorate, hooks, style = nul
       hazard.mesh.material.opacity = opacity;
       hazard.mesh.userData.fade?.forEach(material => { material.opacity = Math.min(1, opacity + .1); });
       const live = cycle > .14 && cycle < .43;
-      test = (x, z) => live && Math.abs(z - hazard.z) < .32 && Math.abs(x - hazard.x) < hazard.width / 2;
+      hitHalfHeight = .35;
+      test = (x, z) => live && Math.abs(z - hazard.z) < .32 + .28 && Math.abs(x - hazard.x) < hazard.width / 2 + .28;
     } else if (hazard.kind === "dart") {
       const travel = cycle / .39;
       const x0 = hazard.ox + (hazard.x - hazard.ox) * (1 - travel * 2);
       const previous = hazard.mesh.visible ? hazard.mesh.position.x : hazard.x;
       hazard.mesh.visible = travel < 1;
       hazard.mesh.position.x = x0;
-      test = (x, z) => travel < 1 && Math.abs(z - hazard.z) < .34 && x >= Math.min(x0, previous) - .33 && x <= Math.max(x0, previous) + .33;
+      test = (x, z) => travel < 1 && Math.abs(z - hazard.z) < .34 + .28 && x >= Math.min(x0, previous) - .33 - .28 && x <= Math.max(x0, previous) + .33 + .28;
     } else if (hazard.kind === "chase") {
       const start = section.links.get(hazard.trigger)?.from;
       const offset = start == null ? -1 : (time - start) * hazard.speed;
       hazard.mesh.visible = offset >= 0 && offset < hazard.range;
       hazard.mesh.position.z = hazard.z - offset;
-      test = (x, z) => hazard.mesh.visible && Math.abs(z - hazard.mesh.position.z) < .49 && Math.abs(x - hazard.ox) < hazard.width / 2;
+      hitHalfHeight = .85;
+      test = (x, z) => hazard.mesh.visible && Math.abs(z - hazard.mesh.position.z) < .49 + .28 && Math.abs(x - hazard.ox) < hazard.width / 2 + .28;
     }
     const y = hazard.mesh.position.y;
-    const reach = test(p.x, p.z) && y >= feet + .045 && y <= head;
+    const reach = test(p.x, p.z) && y + hitHalfHeight >= feet + .045 && y - hitHalfHeight <= head;
     if (reach && hazard.kind === "rotor" && time - hazard.pushAt > .16) {
       // Shove the player along the arm's sweep, harder near the tip, with a little outward kick.
       hazard.pushAt = time;
@@ -435,7 +439,7 @@ export function createGauntletRuntime(THREE, solid, decorate, hooks, style = nul
     if (bodies && bodies.length) {
       hazard.enemyHit ||= new Map();
       for (const b of bodies) {
-        if (!test(b.x, b.z) || y < b.y + .045 || y > b.y + 1.9) continue;
+        if (!test(b.x, b.z) || y + hitHalfHeight < b.y + .045 || y - hitHalfHeight > b.y + 1.9) continue;
         if (time - (hazard.enemyHit.get(b.ref) ?? -Infinity) < .7) continue;
         hazard.enemyHit.set(b.ref, time);
         hooks.hurtBody(b.ref, Math.round(hazard.damage * ENV_DAMAGE_SCALE), b.x, b.y + 1, b.z);

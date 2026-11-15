@@ -35,6 +35,22 @@ export function createPvpMaps(THREE) {
   /** Foliage, water, rocks and sky: built on first use, so maps that need none pay nothing. */
   const nature = () => natureKit || (natureKit = createNature(THREE));
 
+  /** Keep material audio tags aligned with the surface classes used by player footsteps. */
+  function inferFootstepSurface(key) {
+    const name = String(key || "").toLowerCase();
+    if (/ice|frozen|slick/.test(name)) return "ice";
+    if (/water|wet|mud|bog|pool|river/.test(name)) return "water";
+    if (/grass|foliage|moss|turf/.test(name)) return "grass";
+    if (/wood|crate|plank|timber|board/.test(name)) return "wood";
+    if (/gravel|sand|soil|dirt|regolith|ash|asphalt|strata|dune|earth/.test(name)) return "gravel";
+    if (/metal|steel|hull|grate|rail|pipe|beam|iron|brass|gold|spike/.test(name)) return "metal";
+    if (/stone|rock|brick|temple|masonry|adobe/.test(name)) return "stone";
+    // The foundry's fx-floor is a poured industrial slab; the station's hr-floor is plated metal.
+    if (/^fx-floor$/.test(name)) return "concrete";
+    if (/^hr-floor$/.test(name)) return "metal";
+    return "concrete";
+  }
+
   /** A shared standard material from a procedural surface set (never disposed with a map). */
   function mat(key, set, { color = 0xffffff, rough = 1, metal = 0, emissive = 0, glow = 0, tile = 3, opacity = 1 } = {}) {
     if (materials.has(key)) return materials.get(key);
@@ -45,6 +61,7 @@ export function createPvpMaps(THREE) {
     });
     m.userData.shared = m.userData._cachedShared = true;
     m.userData.tile = tile;
+    m.userData.footstepSurface = inferFootstepSurface(key);
     materials.set(key, m);
     return m;
   }

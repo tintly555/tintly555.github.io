@@ -674,14 +674,14 @@ export function createGauntletThemes(THREE) {
       const s = i % 2 ? 1 : -1, x = ctx.cx + s * (46 + ctx.rnd() * 36 + ctx.wx * .6), z = ctx.z0 + 10 - i * ((ctx.length + 80) / 5), l = 50 + ctx.rnd() * 40, wd = 12 + ctx.rnd() * 8;
       ships.box(wd, 7, l, x, g + 5, z).box(wd * .55, 5, l * .35, x, g + 4.5, z - l * .6, 0, 0).box(l * .7, .9, l * .34, x, g + 4, z + l * .12).box(.9, 11, 8, x, g + 12, z + l * .38);
       ships.box(3, 2, 6, x, g + 2, z - l * .4).box(.5, .5, l * .6, x - wd * .4, g + 9, z, 0, .2);
-      for (const e of [-1, 1]) { ships.cyl(2.1, 2.5, 6, x + e * wd * .32, g + 4.8, z + l / 2 + 2, 18, Math.PI / 2, 0); ctx.add(glow(0x7fd0ff, 12, x + e * wd * .32, g + 4.8, z + l / 2 + 6, .8)); }
+      for (const e of [-1, 1]) { ships.cyl(2.1, 2.5, 6, x + e * wd * .32, g + 4.8, z + l / 2 + 2, 18, Math.PI / 2, 0); ctx.add(glow(0x7fd0ff, 6, x + e * wd * .32, g + 4.8, z + l / 2 + 6, .28)); }
     }
     for (let i = 0; i < 5; i++) { const z = ctx.z0 - i * (ctx.length / 4), x = ctx.cx + (i % 2 ? 1 : -1) * 28; gantry.box(1.4, 36, 1.4, x, g + 18, z).box(1.4, 36, 1.4, x + 12, g + 18, z).box(14, 1.4, 1.4, x + 6, g + 36, z).box(1, 1, 18, x + 6, g + 34.5, z - 6); }
     place(frame.mesh(hullMat), ctx);
     place(ships.mesh(material(surfaces.composite("ship2", { base: [196, 202, 208], accent: [60, 150, 210] }), { metal: .3, rough: .5 })), ctx);
     place(gantry.mesh(steelMaterial("hgantry", { base: [210, 150, 40], paint: [216, 156, 40] })), ctx);
-    place(strips.mesh(new THREE.MeshBasicMaterial({ color: 0xbfeaff })), ctx);
-    for (let i = 0; i < 18; i++) ctx.add(glow(0x7fd8ff, 22, ctx.scatterX(120), g + 10 + ctx.rnd() * 20, ctx.z0 - ctx.rnd() * (ctx.length + 100), .3));
+    place(strips.mesh(new THREE.MeshBasicMaterial({ color: 0x66869b })), ctx);
+    for (let i = 0; i < 18; i++) ctx.add(glow(0x7fd8ff, 10, ctx.scatterX(120), g + 10 + ctx.rnd() * 20, ctx.z0 - ctx.rnd() * (ctx.length + 100), .08));
   }
 
   function weaponFactory(ctx) {
@@ -753,13 +753,33 @@ export function createGauntletThemes(THREE) {
    * Hold the course up. Every static deck gets what its chapter would really use, sized to its
    * span and standing on the ground (or hung from the ceiling, or lifted by thrusters).
    * info = { decks, movers, ramps, groundY, lowY, highY, add, tick, rnd }.
-   * Returns { hover } — the decks that sag and float back when walked on.
+   * Returns hover decks/chunks, plus Box3 colliders for exposed vertical hanger poles.
    */
   function buildSupports(theme, style, info) {
     const { groundY: ground, add } = info;
     const mode = theme.support;
-    const hover = [], hoverChunks = [];
+    const hover = [], hoverChunks = [], colliders = [];
     const concrete = new Batch(theme.tile), steel = new Batch(theme.tile);
+    const addCollider = (x0, y0, z0, x1, y1, z1) => {
+      colliders.push(new THREE.Box3(
+        new THREE.Vector3(Math.min(x0, x1), Math.min(y0, y1), Math.min(z0, z1)),
+        new THREE.Vector3(Math.max(x0, x1), Math.max(y0, y1), Math.max(z0, z1)),
+      ));
+    };
+    const beamCollider = (a, b, thickness) => {
+      const half = thickness / 2;
+      const distance = Math.hypot(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+      const segments = Math.max(1, Math.ceil(distance / 1.25));
+      for (let i = 0; i < segments; i++) {
+        const t0 = i / segments, t1 = (i + 1) / segments;
+        const p0 = a.map((v, axis) => v + (b[axis] - v) * t0);
+        const p1 = a.map((v, axis) => v + (b[axis] - v) * t1);
+        addCollider(
+          Math.min(p0[0], p1[0]) - half, Math.min(p0[1], p1[1]) - half, Math.min(p0[2], p1[2]) - half,
+          Math.max(p0[0], p1[0]) + half, Math.max(p0[1], p1[1]) + half, Math.max(p0[2], p1[2]) + half,
+        );
+      }
+    };
     const braces = (batch, x0, x1, z, top, bottom) => {
       const span = Math.abs(x1 - x0), h = top - bottom;
       const levels = Math.max(1, Math.floor(h / 16));
@@ -767,19 +787,35 @@ export function createGauntletThemes(THREE) {
       for (let i = 1; i <= levels; i++) {
         const y = bottom + dy * i;
         batch.box(span, .5, .5, (x0 + x1) / 2, y, z);
+        addCollider(x0, y - .25, z - .25, x1, y + .25, z + .25);
         const length = Math.hypot(span, dy), angle = Math.atan2(dy, span);
         batch.box(length, .3, .3, (x0 + x1) / 2, y - dy / 2, z, 0, angle).box(length, .3, .3, (x0 + x1) / 2, y - dy / 2, z, 0, -angle);
+        const braceY = y - dy / 2;
+        beamCollider([x0, braceY, z], [x1, braceY + dy, z], .3);
+        beamCollider([x0, braceY + dy, z], [x1, braceY, z], .3);
       }
     };
     const column = (x, z, under) => {
       if (mode === "pier") {
         const h = under - ground;
         concrete.box(1.6, h, 1.6, x, ground + h / 2, z).box(2.8, 1.2, 2.8, x, ground + .6, z).box(2.2, .9, 2.2, x, under - .45, z);
-      } else if (mode === "steel") hColumn(steel, x, z, under, ground, 1.2);
+        addCollider(x - .8, ground + .6, z - .8, x + .8, under - .45, z + .8);
+        addCollider(x - 1.4, ground, z - 1.4, x + 1.4, ground + 1.2, z + 1.4);
+        addCollider(x - 1.1, under - .9, z - 1.1, x + 1.1, under, z + 1.1);
+      } else if (mode === "steel") {
+        hColumn(steel, x, z, under, ground, 1.2);
+        addCollider(x - .132, ground + .25, z - .6, x + .132, under - .3, z + .6);
+        for (const offset of [-.456, .456]) addCollider(x - .6, ground + .25, z + offset - .144, x + .6, under - .3, z + offset + .144);
+        addCollider(x - 1.2, ground, z - 1.2, x + 1.2, ground + .5, z + 1.2);
+        addCollider(x - .9, under - .6, z - .9, x + .9, under, z + .9);
+      }
       else if (mode === "pipe") {
         steel.cyl(.55, .6, under - ground, x, ground + (under - ground) / 2, z, 12);
         concrete.box(2.4, 1.2, 2.4, x, ground + .6, z);
         steel.cyl(.9, .9, .5, x, under - .25, z, 12);
+        addCollider(x - .6, ground + .6, z - .6, x + .6, under - .5, z + .6);
+        addCollider(x - 1.2, ground, z - 1.2, x + 1.2, ground + 1.2, z + 1.2);
+        addCollider(x - .45, under - .5, z - .45, x + .45, under, z + .45);
       }
     };
     const supported = [];
@@ -794,6 +830,7 @@ export function createGauntletThemes(THREE) {
           if (xs.length === 2) {
             braces(steel, xs[0], xs[1], z, deck.under - .6, ground + 1);
             (mode === "pier" ? concrete : steel).box(deck.w * .96, .8, 1.8, deck.x, deck.under - .4, z);
+            addCollider(deck.x - deck.w * .48, deck.under - .8, z - .9, deck.x + deck.w * .48, deck.under, z + .9);
           }
         }
         supported.push(deck);
@@ -816,8 +853,12 @@ export function createGauntletThemes(THREE) {
               const yy = ground + 1 + dy * i;
               steel.beam([a[0], yy, a[1]], [b[0], yy, b[1]], .5);
               steel.beam([a[0], yy - dy, a[1]], [b[0], yy, b[1]], .3).beam([b[0], yy - dy, b[1]], [a[0], yy, a[1]], .3);
+              beamCollider(a.map((v, i) => i === 1 ? yy : v), b.map((v, i) => i === 1 ? yy : v), .5);
+              beamCollider([a[0], yy - dy, a[1]], [b[0], yy, b[1]], .3);
+              beamCollider([b[0], yy - dy, b[1]], [a[0], yy, a[1]], .3);
             }
             (mode === "pier" ? concrete : steel).beam([a[0], under - .4, a[1]], [b[0], under - .4, b[1]], .9);
+            beamCollider([a[0], under - .4, a[1]], [b[0], under - .4, b[1]], .9);
             void span;
           }
         }
@@ -841,6 +882,20 @@ export function createGauntletThemes(THREE) {
       const ceilY = info.highY + 64;
       const bounds = info.bounds;
       const cx = bounds ? (bounds.x0 + bounds.x1) / 2 : 0;
+      const portalClearance = 2.4;
+      const clearOfPortals = (x, z) => (info.portals || []).every(portal => {
+        const center = portal?.center;
+        if (!center) return true;
+        const dx = x - center.x, dz = z - center.z;
+        return dx * dx + dz * dz >= portalClearance * portalClearance;
+      });
+      const hangerPole = (x, z, bottom, top) => {
+        if (!clearOfPortals(x, z)) return;
+        const height = top - bottom;
+        if (!(height > 0)) return;
+        steel.box(.28, height, .28, x, bottom + height / 2, z);
+        addCollider(x - .14, bottom, z - .14, x + .14, top, z + .14);
+      };
       if (info.ribbons && info.ribbons.length) {
         // A ceiling rail follows the course wherever it winds; hangers drop from it to every deck.
         for (const ribbon of info.ribbons) {
@@ -848,6 +903,7 @@ export function createGauntletThemes(THREE) {
           for (let i = 0; i < S.length - 1; i += step) {
             const a = S[i], b = S[Math.min(S.length - 1, i + step)];
             steel.beam([a.x, ceilY, a.z], [b.x, ceilY, b.z], 1.4);
+            beamCollider([a.x, ceilY, a.z], [b.x, ceilY, b.z], 1.4);
           }
           const count = Math.max(1, Math.round((S.length - 1) / 24));
           for (let k = 0; k < count; k++) {
@@ -856,23 +912,33 @@ export function createGauntletThemes(THREE) {
             const offs = ribbon.w >= 5 ? [-(ribbon.w / 2 - .7), ribbon.w / 2 - .7] : [0];
             for (const o of offs) {
               const x = s.x + Math.cos(s.th) * o, z = s.z + Math.sin(s.th) * o;
-              steel.box(.28, ceilY - under, .28, x, under + (ceilY - under) / 2, z);
-              if (Math.abs(o) > .1) steel.beam([x, ceilY - .4, z], [s.x, ceilY - .4, s.z], .8);
+              hangerPole(x, z, under, ceilY);
+              if (Math.abs(o) > .1) {
+                steel.beam([x, ceilY - .4, z], [s.x, ceilY - .4, s.z], .8);
+                beamCollider([x, ceilY - .4, z], [s.x, ceilY - .4, s.z], .8);
+              }
             }
           }
         }
-      } else steel.box(1.4, 1.6, info.length + 300, cx, ceilY, info.mid);
+      } else {
+        steel.box(1.4, 1.6, info.length + 300, cx, ceilY, info.mid);
+        addCollider(cx - .7, ceilY - .8, info.mid - (info.length + 300) / 2, cx + .7, ceilY + .8, info.mid + (info.length + 300) / 2);
+      }
       for (const deck of [...info.decks, ...info.movers.map(m => ({ x: m.x, z: m.z, w: m.w, d: m.d, under: m.y - m.h / 2 }))]) {
         const rodZs = Math.max(1, Math.round(deck.d / 12));
         for (let i = 0; i < rodZs; i++) {
           const z = deck.z - deck.d / 2 + deck.d * (i + .5) / rodZs;
           const xs = deck.w >= 5 ? [deck.x - deck.w / 2 + .7, deck.x + deck.w / 2 - .7] : [deck.x];
-          for (const x of xs) steel.box(.28, ceilY - deck.under, .28, x, deck.under + (ceilY - deck.under) / 2, z);
-          if (Math.abs(deck.x) > 1) steel.box(Math.abs(deck.x), 1, 1, deck.x / 2, ceilY - .4, z);
+          for (const x of xs) hangerPole(x, z, deck.under, ceilY);
+          if (Math.abs(deck.x - cx) > 1) {
+            const span = Math.abs(deck.x - cx);
+            steel.box(span, 1, 1, (deck.x + cx) / 2, ceilY - .4, z);
+            addCollider((deck.x + cx) / 2 - span / 2, ceilY - .9, z - .5, (deck.x + cx) / 2 + span / 2, ceilY + .1, z + .5);
+          }
         }
       }
     } else if (mode === "hover") {
-      const pods = new Batch(2), glows = [];
+      const pods = new Batch(2);
       const targets = [...info.decks.map(d => ({ ...d, mesh: d.mesh })), ...info.movers.map(m => ({ x: m.x, z: m.z, w: m.w, d: m.d, mesh: m.mesh, under: m.y - m.h / 2, thick: m.h, moving: true }))];
       for (const deck of targets) {
         if (!deck.mesh) continue;
@@ -891,10 +957,9 @@ export function createGauntletThemes(THREE) {
         if (podMesh) { podMesh.frustumCulled = true; deck.mesh.add(podMesh); }
         const glowGeometry = mergeGeometries(quads, false);
         quads.forEach(q => q.dispose());
-        const glowMesh = new THREE.Mesh(glowGeometry, new THREE.MeshBasicMaterial({ color: 0x7fd0ff, map: glowTexture(), transparent: true, opacity: .9, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
+        const glowMesh = new THREE.Mesh(glowGeometry, new THREE.MeshBasicMaterial({ color: 0x7fd0ff, map: glowTexture(), transparent: true, opacity: .34, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
         glowMesh.raycast = () => {};
         deck.mesh.add(glowMesh);
-        glows.push(glowMesh);
         if (!deck.moving) hover.push(deck);
       }
       // Free-form decks: thrusters under every drawn chunk, which sags and floats back as one.
@@ -919,25 +984,24 @@ export function createGauntletThemes(THREE) {
           if (podMesh) chunk.mesh.add(podMesh);
           const glowGeometry = mergeGeometries(quads, false);
           quads.forEach(q => q.dispose());
-          const glowMesh = new THREE.Mesh(glowGeometry, new THREE.MeshBasicMaterial({ color: 0x7fd0ff, map: glowTexture(), transparent: true, opacity: .9, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
+          const glowMesh = new THREE.Mesh(glowGeometry, new THREE.MeshBasicMaterial({ color: 0x7fd0ff, map: glowTexture(), transparent: true, opacity: .34, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
           glowMesh.raycast = () => {};
           glowMesh.frustumCulled = false;
           chunk.mesh.add(glowMesh);
-          glows.push(glowMesh);
           let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
           for (const b of chunk.boxes) { minX = Math.min(minX, b.min.x); maxX = Math.max(maxX, b.max.x); minZ = Math.min(minZ, b.min.z); maxZ = Math.max(maxZ, b.max.z); }
           hoverChunks.push({ mesh: chunk.mesh, boxes: chunk.boxes, cx: (minX + maxX) / 2, cz: (minZ + maxZ) / 2, reach: Math.max(maxX - minX, maxZ - minZ) / 2 });
         }
       }
-      let t = 0;
-      info.tick(dt => { t += dt; glows.forEach((m, i) => { m.material.opacity = .72 + Math.sin(t * 9 + i) * .12 + Math.random() * .06; }); });
+      // Keep thruster pools steady: per-frame pulse/randomness reads as electrical flicker and
+      // additive overlap can wash out the pale hangar floor.
     }
     const supportMaterial = style.role("wall");
     const concreteMesh = concrete.mesh(supportMaterial);
     if (concreteMesh) add(concreteMesh);
     const steelMesh = steel.mesh(style.role("beam"));
     if (steelMesh) add(steelMesh);
-    return { hover, hoverChunks };
+    return { hover, hoverChunks, colliders };
   }
 
   // ---- Theme table -----------------------------------------------------------------------
@@ -981,7 +1045,7 @@ export function createGauntletThemes(THREE) {
     },
     {
       id: "orbital-relay", name: "Orbital Relay", tile: 2.6, groundDepth: 200, support: "hover", bg: 0x03050a, fog: 0x03050a, fogNear: 60, fogFar: 900, camFar: 4200,
-      light: { ambient: [0x6f8fb8, .45], hemi: [0x9fb8e0, 0x10141c, .5], sun: [0xfff4e0, 2.1, [60, 50, 40]], fill: [0x4a68a0, .5] }, lamp: 0xcfe8ff,
+      light: { ambient: [0x6f8fb8, .4], hemi: [0x9fb8e0, 0x10141c, .35], sun: [0xfff4e0, .9, [60, 50, 40]], fill: [0x4a68a0, .35] }, lamp: 0xcfe8ff,
       roles: s => ({
         deck: s.composite("relay-deck"), room: s.composite("relay-room", { base: [188, 194, 200], accent: [220, 140, 60] }),
         beam: s.steel("relay-beam", { base: [170, 176, 184], rust: 0 }), exit: s.composite("relay-exit", { base: [196, 222, 204], accent: [60, 200, 120] }), wall: s.composite("relay-wall", { base: [200, 204, 208], accent: [70, 150, 190] }),
@@ -1017,7 +1081,7 @@ export function createGauntletThemes(THREE) {
     },
     {
       id: "starship-hangar", name: "Interchange", tile: 2.8, groundDepth: 70, support: "hanger", bg: 0x0b121b, fog: 0x0b121b, fogNear: 14, fogFar: 260, camFar: 3600,
-      light: { ambient: [0x8aa6c8, .75], hemi: [0xa8c4e4, 0x121a24, .8], sun: [0xcfe6ff, .9, [10, 55, -10]], fill: [0x4a9ed8, .8] }, lamp: 0xbfeaff,
+      light: { ambient: [0x8aa6c8, .38], hemi: [0xa8c4e4, 0x121a24, .4], sun: [0xcfe6ff, .42, [10, 55, -10]], fill: [0x4a9ed8, .24] }, lamp: 0xbfeaff,
       roles: s => ({
         deck: s.hull("hg-deck", { base: [82, 94, 110] }), room: s.hull("hg-room", { base: [64, 74, 90] }), beam: s.steel("hg-beam", { base: [140, 150, 164] }),
         exit: s.composite("hg-exit", { base: [190, 222, 206], accent: [60, 210, 150] }), wall: s.hull("hg-wall", { base: [92, 104, 120] }),

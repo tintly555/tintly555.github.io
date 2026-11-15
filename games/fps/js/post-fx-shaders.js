@@ -172,9 +172,11 @@ export const ADAPT = `
     float logAverage=textureLod(tMeter,vec2(.5),5.).r*12.-8.;
     // Meter the whole frame around middle gray: brighter average luminance must
     // produce a smaller exposure multiplier; darker luminance must produce a larger one.
-    float target=clamp(exp2(-2.473931-logAverage),.12,2.2);
+    float target=clamp(exp2(-2.473931-logAverage),.12,1.7);
     float prev=texture2D(tPrevious,vec2(.5)).r;
-    float rate=target<prev?8.:5.;
+    // Let exposure settle gently as the view moves between lamps and darker spaces.
+    // Darkening stays quicker than brightening so a bright frame cannot wash out the scene.
+    float rate=target<prev?4.5:1.8;
     float e=mix(prev,target,max(uReset,1.-exp(-uDelta*rate)));
     gl_FragColor=vec4(e,0.,0.,1.);
   }

@@ -8,19 +8,43 @@ export function createWorldAudio(context, destination, isObstructed) {
   let activeVoices = 0;
   const ear = { x: 0, y: 0, z: 0 };
   let yaw = 0;
+  const stepSurfaces = {
+    Step: "boot", step: "boot", bootStep: "boot", metalStep: "metal", steelStep: "metal",
+    concreteStep: "concrete", stoneStep: "stone", gravelStep: "gravel", woodStep: "wood",
+    grassStep: "grass", sandStep: "sand", waterStep: "water", iceStep: "ice", slickStep: "ice",
+  };
+
+  function stepProfile(kind) {
+    const name = String(kind || "");
+    const zombie = name.startsWith("zombie");
+    const rawBase = zombie ? name.slice(6) : name;
+    const base = zombie && rawBase ? rawBase[0].toLowerCase() + rawBase.slice(1) : rawBase;
+    const surface = stepSurfaces[base] || null;
+    return surface ? { surface, zombie } : null;
+  }
 
   function makeSample(kind) {
     const voice = kind === "zombieVoice";
     const roar = kind === "bossRoar" || kind === "hellRoar";
     const hell = kind === "hellRoar";
     const shot = kind === "shot";
-    const heavy = kind === "zombieStep";
-    const metal = kind === "steelStep";
-    const duration = roar ? (hell ? 2.18 : 1.79) : voice ? 0.95 : shot ? 0.34 : heavy ? 0.34 : metal ? 0.3 : 0.26;
+    const entrySplash = kind === "waterEntry";
+    const profile = stepProfile(kind);
+    const heavy = kind === "zombieStep" || !!profile?.zombie;
+    const surface = profile?.surface || "boot";
+    const duration = roar ? (hell ? 2.18 : 1.79) : voice ? 0.95 : shot ? 0.34
+      : entrySplash ? 1.12 : profile ? (surface === "water" ? 0.4 : surface === "gravel" || surface === "sand" ? 0.32 : 0.29)
+        : kind === "zombieStep" ? 0.34 : 0.26;
     const rate = context.sampleRate;
     const buffer = context.createBuffer(1, Math.ceil(rate * duration), rate);
     const data = buffer.getChannelData(0);
     const pitch = 1 + (Math.random() - 0.5) * 0.27;
+    const splashDrops = entrySplash
+      ? Array.from({ length: 5 }, (_, d) => 0.12 + d * 0.105 + Math.random() * 0.055)
+      : [];
+    const gravelHits = surface === "gravel"
+      ? Array.from({ length: 4 }, (_, pebble) => 0.025 + pebble * 0.047 + Math.random() * 0.025)
+      : [];
     let low = 0;
     let rasp = 0;
     let phase = 0;
@@ -65,22 +89,71 @@ export function createWorldAudio(context, destination, isObstructed) {
       } else if (shot) {
         data[i] = noise * 0.61 * Math.exp(-t * 68) + low * 1.05 * Math.exp(-t * 15)
           + Math.sin(t * 2 * Math.PI * 96 * pitch) * 0.27 * Math.exp(-t * 30);
+      } else if (entrySplash) {
+        // A rounded footfall impact followed by a broad splash, small droplets, and a soft gurgle.
+        const impact = Math.sin(2 * Math.PI * (68 + 14 * Math.sin(t * 9)) * t * pitch)
+          * Math.exp(-t * 8.5) * 0.34;
+        const splash = (rasp * 0.68 + noise * 0.32) * Math.exp(-t * 4.8)
+          * Math.min(1, t * 34);
+        const wash = low * Math.exp(-t * 2.6) * 0.42;
+        const burble = Math.sin(2 * Math.PI * (46 + 19 * Math.sin(t * 14)) * t * pitch)
+          * Math.exp(-Math.max(0, t - 0.12) * 5.4) * (t > 0.12 ? 0.09 : 0);
+        let droplets = 0;
+        for (let d = 0; d < 5; d++) {
+          const at = splashDrops[d];
+          const age = t - at;
+          if (age > 0) {
+            const envelope = Math.exp(-age * (21 + d * 2)) * Math.min(1, age * 75);
+            droplets += Math.sin(2 * Math.PI * (720 + d * 137) * age * pitch) * envelope * (0.045 - d * 0.004);
+          }
+        }
+        data[i] = impact + splash * 0.55 + wash + burble + droplets;
       } else {
-        // Heel strike, then toe-off about 0.11 s later: a real step is two contacts, not one thud.
-        const thud = Math.sin(t * 2 * Math.PI * (heavy ? 55 : 88) * pitch) * Math.exp(-t * 44);
-        const scuff = (rasp * 0.65 + noise * 0.16) * Math.exp(-Math.abs(t - 0.044) * (heavy ? 29 : 45));
-        const heel = low * Math.exp(-t * 54);
-        const toeT = t - 0.11;
-        const toe = toeT > 0
-          ? (rasp * 0.5 + noise * 0.12) * Math.exp(-toeT * 60)
-            + Math.sin(toeT * 2 * Math.PI * (heavy ? 70 : 120) * pitch) * Math.exp(-toeT * 55) * 0.2
-          : 0;
-        // Metal grating rings at two partials, so steel reads as a different surface.
-        const ring = metal
-          ? (Math.sin(t * 2 * Math.PI * 420 * pitch) * 0.10 + Math.sin(t * 2 * Math.PI * 1130 * pitch) * 0.04) * Math.exp(-t * 29)
-          : 0;
-        data[i] = thud * (heavy ? 0.53 : 0.35) + scuff * (heavy ? 0.42 : 0.27) + heel * 0.3
-          + toe * (heavy ? 0.3 : 0.22) + ring;
+        // Shared boot contact: heel, sole scuff, then toe release, each softly enveloped.
+        const heelEnv = Math.exp(-t * (heavy ? 30 : 35)) * Math.min(1, t * 85);
+        const thud = Math.sin(2 * Math.PI * (heavy ? 58 : 82) * pitch * t) * heelEnv;
+        const scuffEnv = Math.exp(-Math.abs(t - 0.035) * 28) * Math.min(1, Math.max(0, t) * 70);
+        const scuff = (rasp * 0.68 + noise * 0.12) * scuffEnv;
+        const toeT = t - 0.105;
+        const toeEnv = toeT > 0 ? Math.exp(-toeT * 29) * Math.min(1, toeT * 80) : 0;
+        const toe = (rasp * 0.43 + noise * 0.09
+          + Math.sin(2 * Math.PI * (heavy ? 76 : 108) * pitch * toeT) * 0.14) * toeEnv;
+        let detail = 0;
+        if (surface === "metal") {
+          detail = (Math.sin(2 * Math.PI * 360 * pitch * t) * 0.09
+            + Math.sin(2 * Math.PI * 690 * pitch * t) * 0.045) * Math.exp(-t * 13) * Math.min(1, t * 90);
+        } else if (surface === "stone" || surface === "concrete") {
+          detail = (noise * 0.085 + rasp * 0.12) * Math.exp(-t * 26) * Math.min(1, t * 95);
+        } else if (surface === "gravel") {
+          for (let pebble = 0; pebble < 4; pebble++) {
+            const at = gravelHits[pebble];
+            const age = t - at;
+            if (age > 0) detail += (noise * 0.52 + rasp * 0.28)
+              * Math.exp(-age * (34 + pebble * 4)) * Math.min(1, age * 90) * (0.13 - pebble * 0.018);
+          }
+        } else if (surface === "wood") {
+          detail = (Math.sin(2 * Math.PI * 145 * pitch * t) * 0.13
+            + Math.sin(2 * Math.PI * 232 * pitch * t) * 0.055) * Math.exp(-t * 18) * Math.min(1, t * 80);
+        } else if (surface === "grass") {
+          detail = (low * 0.15 + rasp * 0.28 + noise * 0.07)
+            * Math.exp(-t * 17) * Math.min(1, t * 65);
+        } else if (surface === "sand") {
+          detail = (low * 0.11 + rasp * 0.34 + noise * 0.08)
+            * Math.exp(-t * 12) * Math.min(1, t * 55);
+        } else if (surface === "water") {
+          detail = (rasp * 0.38 + noise * 0.14) * Math.exp(-t * 9) * Math.min(1, t * 50)
+            + Math.sin(2 * Math.PI * 510 * pitch * t) * 0.025 * Math.exp(-t * 16) * Math.min(1, t * 80);
+        } else if (surface === "ice") {
+          detail = (Math.sin(2 * Math.PI * 275 * pitch * t) * 0.045
+            + Math.sin(2 * Math.PI * 418 * pitch * t) * 0.022
+            + rasp * 0.09) * Math.exp(-t * 12) * Math.min(1, t * 80);
+        } else {
+          detail = (low * 0.15 + rasp * 0.16) * Math.exp(-t * 18) * Math.min(1, t * 70);
+        }
+        const materialWeight = surface === "grass" || surface === "sand" ? 0.62
+          : surface === "water" || surface === "ice" ? 0.58 : 1;
+        data[i] = (thud * (heavy ? 0.62 : 0.49) + scuff * (heavy ? 0.35 : 0.30)
+          + toe * 0.27 + detail) * materialWeight;
       }
       data[i] *= Math.min(1, t * 800, (duration - t) * 80);
     }
@@ -99,7 +172,7 @@ export function createWorldAudio(context, destination, isObstructed) {
         low += (Math.random() * 2 - 1 - low) * 0.21;
         if (t > 0.016) data[i] = low * Math.exp(-(t - 0.016) * 23) * 0.017;
       }
-      for (const [delay, gain] of [[0.019, 0.36], [0.038, 0.18], [0.064, 0.085]]) {
+      for (const [delay, gain] of [[0.019, 0.20], [0.038, 0.095], [0.064, 0.045]]) {
         data[Math.floor((delay + ch * 0.004) * rate)] += gain;
       }
     }
@@ -137,7 +210,8 @@ export function createWorldAudio(context, destination, isObstructed) {
     if (!Number.isFinite(distance) || (!local && distance >= range)) return;
     const blocked = !local && distance > 1.5 && isObstructed(ear, position);
     // Footsteps keep several synthesized variants so consecutive steps don't repeat the same sample.
-    if (!samples.has(kind)) samples.set(kind, Array.from({ length: /Step$/.test(kind) ? 4 : 1 }, () => makeSample(kind)));
+    const isStep = kind === "zombieStep" || !!stepProfile(kind);
+    if (!samples.has(kind)) samples.set(kind, Array.from({ length: isStep || kind === "waterEntry" ? 4 : 1 }, () => makeSample(kind)));
     const variants = samples.get(kind);
     const source = context.createBufferSource();
     source.buffer = variants[Math.floor(Math.random() * variants.length)];
@@ -164,7 +238,8 @@ export function createWorldAudio(context, destination, isObstructed) {
     let send;
     if (room > 0.05) {
       send = context.createGain();
-      send.gain.value = room * (echoOnly ? 0.14 : blocked ? 0.095 : 0.075);
+      const wetAmount = kind === "waterEntry" ? 0.105 : isStep ? 0.055 : 0.075;
+      send.gain.value = room * (echoOnly ? 0.14 : blocked ? wetAmount * 0.72 : wetAmount);
       output.connect(send);
       send.connect(roomReverb());
     }
