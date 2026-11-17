@@ -20,7 +20,9 @@ export function extendGauntletCourses(firstTwenty) {
     const boss = level % 20 === 0;
     const combat = boss || level % 4 !== 1;
     const enemies = combat ? 2 + (level * 3 % 5) + Math.floor(tier / 2) : 0;
-    const segs = mechanics.map((id, i) => obstacle(id, level, i, tier));
+    // The Relay chapter has no purple-pink slowing goo: its adhesion strip becomes a speed strip.
+    const relay = GAUNTLET_CHAPTERS[chapter] === "Relay";
+    const segs = mechanics.map((id, i) => obstacle(relay && id === "dragStrip" ? "runup" : id, level, i, tier));
     if (combat) {
       const at = segs.length === 1 ? level % 2 : (level * 7) % (segs.length - 1) + 1;
       segs.splice(at, 0, { ...room, boss });

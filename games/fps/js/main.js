@@ -3,7 +3,7 @@
     import { RoundedBoxGeometry } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/geometries/RoundedBoxGeometry.js";
     import { mergeGeometries, toCreasedNormals } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/utils/BufferGeometryUtils.js";
     import { clone as cloneSkinnedModel } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/utils/SkeletonUtils.js";
-    import { createPvpMaps } from "./pvp-maps.js?v=lava-bloom-v1";
+    import { createPvpMaps } from "./pvp-maps.js?v=relay-temple-v1";
     import { createPvpWorld } from "./pvp-world.js?v=4";
     import { createBossNavigation } from "./boss-navigation.js?v=2";
     import { BOSS_ATTACK_BY_ID, chooseBossAttack } from "./boss-attacks.js?v=2";
@@ -12,7 +12,7 @@
     import { createArenaRealism } from "./arena-realism.js?v=20261112-arena-v1";
     import { createBossCreature, BOSS_RADIUS, CLAW_STRIKE_S, QUAKE_SLAM_S, LOB_RELEASE_S, DURATIONS as BOSS_DURATIONS } from "./boss-creature.js?v=11";
     import { buildOperatorShell } from "./operator-model.js?v=1";
-    import { extendGauntletCourses, GAUNTLET_CHAPTERS, GAUNTLET_CHAPTER_SIZE } from "./gauntlet-courses.js?v=5";
+    import { extendGauntletCourses, GAUNTLET_CHAPTERS, GAUNTLET_CHAPTER_SIZE } from "./gauntlet-courses.js?v=relay-no-goo-v1";
     import { createGauntletRuntime } from "./gauntlet-runtime.js?v=23-touchboxes";
     import { createWorldAudio } from "./world-audio.js?v=5-material-footsteps-water-entry";
     import { createGauntletThemes } from "./gauntlet-themes.js?v=13-support-colliders";
@@ -9987,14 +9987,19 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
      * Only boxes whose underside is above the feet count, so floors and ledges never trigger it.
      */
     function lowCeilingAbove() {
-      const px = player.position.x, pz = player.position.z, r = player.radius * 0.9;
-      const feet = player.position.y - 1.65;
+      const px = player.position.x, pz = player.position.z;
       const standingTop = player.position.y + 0.12;
+      // Only something that would hit the head on the way up counts: its underside must sit between
+      // the crouched head and the standing head. A lip or stair edge at waist height is not overhead,
+      // and treating it as one forced the crouch and dropped the camera by ~0.6 m at the wall.
+      // It must also be over the body's centre. A protrusion grazing the shoulder from the side is not an
+      // overhead, and grazing one while walking along a wall was enough to pin the crouch.
+      const crouchedTop = player.position.y - CROUCH_EYE_DROP;
       let low = false;
       forEachNearbyWallBox(px, pz, (box) => {
         if (low || box.enemyOnly) return;
-        if (px < box.min.x - r || px > box.max.x + r || pz < box.min.z - r || pz > box.max.z + r) return;
-        if (box.min.y > feet + 0.6 && box.min.y < standingTop && box.max.y > feet + 0.6) low = true;
+        if (px < box.min.x - 0.1 || px > box.max.x + 0.1 || pz < box.min.z - 0.1 || pz > box.max.z + 0.1) return;
+        if (box.min.y >= crouchedTop && box.min.y < standingTop && box.max.y > crouchedTop) low = true;
       });
       return low;
     }
@@ -26795,6 +26800,8 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         get pvp() { return pvpWorld; },
         get spawns() { const d = pvpDef(CURRENT_MAP); return d ? d.spawns : null; },
         collidesAt(x, y, z) { return collidesWithWalls(new THREE.Vector3(x, y + 1.65, z)); },
+        /** Collision boxes as [minX, minY, minZ, maxX, maxY, maxZ] (debug: audit ledge heights). */
+        boxes() { return wallBoxes.filter(b => !b.enemyOnly).map(b => [b.min.x, b.min.y, b.min.z, b.max.x, b.max.y, b.max.z].map(v => +v.toFixed(3))); },
         collides(dx = 0, dz = 0) { return collidesWithWalls(new THREE.Vector3(player.position.x + dx, player.position.y, player.position.z + dz)); },
         near(r = 2.5) {
           const out = [];
