@@ -29,7 +29,7 @@ export function foundry(core) {
       // Lit from overhead like a shop under its lamps: a high warm light with a static shadow under every platform and pot.
       sun: [0xffd6a8, 3.2, [8, 80, 12]], shadow: 50, envIntensity: 1.2,
       sky: { sun: [0.1, 0.9, 0.12], zenith: 0x1c120d, horizon: 0x7a3a16, ground: 0xff6a24, sunColor: 0xffb878, cloud: 0 },
-      look: { tint: 0xffe6cc, vignette: 0.36, bloom: 0.3, threshold: 1.2, contrast: 1.05 },
+      look: { tint: 0xffe6cc, vignette: 0.36, bloom: 0.1, threshold: 1.9, contrast: 1.05 },   // lava is very bright: only the hottest cores bloom
     },
     // Where the walk-through preview strolls: [x, z] points at eye height.
     preview: { eye: 1.7, path: [[-31, 20], [-20, 9], [-9, 17], [0, 17], [9, 17], [17, 9], [17, -9], [9, -17], [-6, -17], [-17, -9], [-26, 4], [-31, 20]] },
