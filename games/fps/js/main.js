@@ -20950,7 +20950,9 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       state.spaceWasDown = keys.space;
       let _jumped = false;
       if (!_dashing && !healLock && !moveLocked && keys.space && (player.onGround || _canCoyote) && crouchAmt < 0.5) {
-        player.velocityY = 5.8 * (terrain?.jump ?? 1);
+        // Dustfall's crates, planters and steps reach 1.2–1.4 m, just past a 1.2 m jump. Its jump is
+        // 15% stronger (apex about 1.6 m) so those tops can be jumped without changing the boxes.
+        player.velocityY = 5.8 * (terrain?.jump ?? 1) * (CURRENT_MAP === "pvp_town" ? 1.15 : 1);
         player.onGround = false;
         state.jumpedSinceGround = true;
         _jumped = true;
