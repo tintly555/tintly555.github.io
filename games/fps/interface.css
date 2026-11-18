@@ -779,6 +779,9 @@ body :is(input[type="text"], input[type="number"], input[type="password"], selec
     #tutPrompt, #hint, #combatFeedback, #castBarWrap, #needleHud) {
   background: var(--zn-glass) !important;
 }
+#tutPrompt { background: transparent !important; border-color: transparent; box-shadow: none; padding: 0; }
+#tutPrompt .tp-verb { text-shadow: 0 1px 4px #000, 0 0 8px #000a; }
+#tutPrompt .tp-ico { filter: drop-shadow(0 1px 3px #000); }
 #fpsOverlay, #questHud { border: 1px solid #8aa6ba55; border-radius: 2px; padding: 6px 9px; }
 #fpsOverlay { border-right: 2px solid var(--console-accent); }
 #gauntletClear .gc-stat { padding: 6px 10px; border: 1px solid #8293a440; }

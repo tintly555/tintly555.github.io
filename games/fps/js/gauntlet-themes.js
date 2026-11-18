@@ -715,7 +715,10 @@ export function createGauntletThemes(THREE) {
     const g = ctx.groundY;
     groundPlane(ctx, g, surfaces.factory("wf-floor", { base: [60, 60, 62] }), 1800, 80);
     const darkMat = steelMaterial("line", { base: [70, 74, 78], paint: [54, 58, 62], rust: .1 }, { metal: .6, rough: .6 });
-    const belts = new Batch(5), props = new Batch(3), rails = new Batch(3), presses = new Batch(4), ovens = new Batch(5), stacks = new Batch(3);
+    const belts = new Batch(5), props = new Batch(3), rails = new Batch(3), diffusers = new Batch(3), presses = new Batch(4), ovens = new Batch(5), stacks = new Batch(3);
+    const diffuserMaterial = new THREE.MeshStandardMaterial({
+      color: 0x8a7655, emissive: 0xb58b52, emissiveIntensity: .22, roughness: .86, metalness: .04,
+    });
     const lanes = [-3, -2, 2, 3, 4];
     for (const lane of lanes) {
       const x = ctx.cx + lane * 22 + Math.sign(lane) * ctx.wx * .5;
@@ -741,7 +744,12 @@ export function createGauntletThemes(THREE) {
       const z = ctx.z0 + 30 - i * ((ctx.length + 120) / 12);
       const half = Math.max(94, ctx.wx + 60);
       rails.box(half * 2 + 2, 2, 2, ctx.cx, ctx.highY + 50, z).box(2, ctx.highY + 50 - g, 2, ctx.cx - half, g + (ctx.highY + 50 - g) / 2, z).box(2, ctx.highY + 50 - g, 2, ctx.cx + half, g + (ctx.highY + 50 - g) / 2, z);
-      for (let k = 0; k < 3; k++) { const lx = ctx.cx + (ctx.rnd() - .5) * 2 * (half - 30); rails.cyl(.12, .12, 8, lx, ctx.highY + 45.5, z, 6); ctx.add(glow(0xfff1dc, 14, lx, ctx.highY + 40, z, .85)); }
+      for (let k = 0; k < 3; k++) {
+        const lx = ctx.cx + (ctx.rnd() - .5) * 2 * (half - 30);
+        rails.cyl(.035, .035, 1.25, lx, ctx.highY + 49.25, z, 8);
+        rails.box(2.4, .38, 1.15, lx, ctx.highY + 48.45, z);
+        diffusers.box(1.9, .035, .72, lx, ctx.highY + 48.24, z);
+      }
     }
     place(belts.mesh(darkMat), ctx);
     place(props.mesh(material(surfaces.factory("crate", { base: [88, 82, 70] }), {})), ctx);
@@ -749,6 +757,7 @@ export function createGauntletThemes(THREE) {
     place(ovens.mesh(steelMaterial("oven", { base: [66, 64, 66], rust: .3 })), ctx);
     place(stacks.mesh(darkMat), ctx);
     place(rails.mesh(darkMat), ctx);
+    place(diffusers.mesh(diffuserMaterial), ctx);
     const armMat = steelMaterial("arm", { base: [214, 130, 36], paint: [226, 142, 40], rust: .05 }, { metal: .35, rough: .5 });
     const armObjects = [];
     for (let i = 0; i < 14; i++) {

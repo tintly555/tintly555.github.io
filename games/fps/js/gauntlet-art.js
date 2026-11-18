@@ -385,16 +385,6 @@ export function createGauntletArt(THREE, { decorate, solid, scroll, spin, tick, 
     g.fillStyle = "rgba(255,255,255,.05)";
     for (let i = 0; i < 300; i++) g.fillRect(rnd() * w, rnd() * h, 2, 1);
   });
-  const lightBarMap = () => texture("lightbars", 64, 128, g => {
-    for (const y of [24, 88]) {
-      const bar = g.createLinearGradient(0, y - 12, 0, y + 12);
-      bar.addColorStop(0, "rgba(120,190,255,0)");
-      bar.addColorStop(.5, "rgba(214,242,255,1)");
-      bar.addColorStop(1, "rgba(120,190,255,0)");
-      g.fillStyle = bar;
-      g.fillRect(8, y - 12, 48, 24);
-    }
-  });
   /** A tileless basalt-and-molten-rock surface: dark crust islands around flowing orange seams. */
   function hotPlate() {
     const hit = cache.get("t:hotplate");
@@ -695,16 +685,16 @@ export function createGauntletArt(THREE, { decorate, solid, scroll, spin, tick, 
   function maglev(piece, x, y, z) {
     const { w, d } = piece;
     floorPlane(w, d, new THREE.MeshStandardMaterial({ color: 0x1b2025, roughness: .5, metalness: .6 }), x, y + .03, z);
-    const map = copy(lightBarMap(), 1, Math.max(1, d / 1.6));
-    scroll(map, 0, -5);
-    floorPlane(w * .86, d, new THREE.MeshBasicMaterial({
-      map, color: 0xa6dcff, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
-    }), x, y + .045, z);
-    const coil = lit(0x9a6232, .15, { roughness: .35, metalness: .85 });
-    for (let c = 0; c < Math.floor(d / 2.4); c++) {
-      const bar = new THREE.Mesh(new THREE.BoxGeometry(w * .9, .07, .3), coil);
-      bar.position.set(x, y + .07, z - d / 2 + 1.2 + c * 2.4);
-      add(bar);
+    const rail = metal(0x68737a, .46);
+    const inlay = new THREE.MeshStandardMaterial({ color: 0x7195a2, emissive: 0x18313a, emissiveIntensity: .18, roughness: .72, metalness: .38 });
+    for (const side of [-1, 1]) {
+      const track = new THREE.Mesh(new THREE.BoxGeometry(.22, .045, d - .16), rail);
+      track.position.set(x + side * w * .37, y + .055, z);
+      add(track);
+      const guide = new THREE.Mesh(new THREE.PlaneGeometry(.045, d - .4), inlay);
+      guide.rotation.x = -Math.PI / 2;
+      guide.position.set(x + side * w * .37, y + .079, z);
+      add(guide);
     }
   }
 

@@ -2,70 +2,113 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Operator model preview</title>
-<style>html,body{margin:0;height:100%;background:#1b1f24;overflow:hidden}canvas{display:block}#hud{position:fixed;left:8px;top:6px;color:#9fb;font:12px monospace}</style>
+<style>
+html,body{margin:0;height:100%;background:#1b1f24;overflow:hidden;color:#eee;font:14px system-ui}
+canvas{display:block}nav{position:fixed;inset:16px 16px auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+button{background:#343a3c;color:inherit;border:1px solid #717a78;border-radius:5px;padding:8px 12px}
+button[aria-pressed="true"]{background:#c2cbac;color:#161b16}#hud{margin:0 6px;color:#afb6b1}
+</style>
+<nav aria-label="Operator poses">
+  <button data-pose="stand" aria-pressed="true">Stand</button>
+  <button data-pose="walk" aria-pressed="false">Walk</button>
+  <button data-pose="strafe" aria-pressed="false">Strafe</button>
+  <button data-pose="crouch" aria-pressed="false">Crouch</button>
+  <button data-pose="jump" aria-pressed="false">Jump</button>
+  <button id="orbit" aria-pressed="false">Orbit</button>
 <div id="hud"></div>
+</nav>
 <script type="importmap">
 {"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.182.0/build/three.module.js"}}
 </script>
 <script type="module">
 import * as THREE from "three";
-import { buildOperatorShell } from "../js/operator-model.js?v=preview-2";
-
-// Same palette the game gives a remote operator (applyRemoteAvatarPalette, non-bright map).
-function palette(hex = { camoA: 0x3a4549, camoB: 0x293638, helm: 0x526264, vest: 0x535f60, pants: 0x383f43 }) {
-  const mk = (c, rough, metal) => new THREE.MeshStandardMaterial({ color: c, roughness: rough, metalness: metal || 0 });
-  return {
-    mCamo1: mk(hex.camoA, .82, 0), mCamo2: mk(hex.camoB, .84, 0), mHelm: mk(hex.helm, .68, .05),
-    mVest: mk(hex.vest, .78, 0), mPants: mk(hex.pants, .88, 0),
-  };
-}
+import { loadOperatorAsset, createImportedOperator, animateImportedOperator } from "../js/operator-asset.js?v=male-rig-hands-v3";
 
 const q = new URLSearchParams(location.search);
+const status = document.getElementById("hud");
+status.textContent = "Loading shared soldier…";
+if (!await loadOperatorAsset({
+  model: ["../models/operator-shared/male-soldier.glb?v=2"],
+  idle: ["../models/operator-shared/idle.glb?v=2"],
+  walk: ["../models/operator-shared/walk.glb?v=2"],
+  run: ["../models/operator-shared/run.glb?v=2"],
+})) {
+  status.textContent = "Could not load the soldier model.";
+  throw new Error("Missing soldier");
+}
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(2, devicePixelRatio));
 renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.outputColorSpace = THREE.SRGBColorSpace;
 document.body.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x1b1f24);
-const cam = new THREE.PerspectiveCamera(30, innerWidth / innerHeight, 0.05, 50);
-scene.add(new THREE.HemisphereLight(0xbfd0e0, 0x2a2420, 1.0));
-const key = new THREE.DirectionalLight(0xffe6cc, 2.6);
-key.position.set(2.5, 3.2, 3.5); key.castShadow = true;
-key.shadow.mapSize.set(2048, 2048);
+scene.background = new THREE.Color(0x242a31);
+const camera = new THREE.PerspectiveCamera(30, innerWidth / innerHeight, .05, 50);
+scene.add(new THREE.HemisphereLight(0xe5ecff, 0x706053, 2.0));
+const key = new THREE.DirectionalLight(0xffe6cc, 2.7);
+key.position.set(2.5, 3.2, 3.5);
+key.castShadow = true;
+key.shadow.mapSize.set(1024, 1024);
 Object.assign(key.shadow.camera, { left: -2, right: 2, top: 2, bottom: -2, near: .5, far: 12 });
 scene.add(key);
-const rim = new THREE.DirectionalLight(0x9fd8ff, 1.6); rim.position.set(-3, 2.5, -3.5); scene.add(rim);
-const floor = new THREE.Mesh(new THREE.CircleGeometry(4, 48), new THREE.MeshStandardMaterial({ color: 0x2b3137, roughness: .95 }));
-floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
+const rim = new THREE.DirectionalLight(0x9fd8ff, 1.6);
+rim.position.set(-3, 2.5, -3.5);
+scene.add(rim);
+const floor = new THREE.Mesh(new THREE.CircleGeometry(4, 48), new THREE.MeshStandardMaterial({ color: 0x333b44, roughness: .95 }));
+floor.rotation.x = -Math.PI / 2;
+floor.receiveShadow = true;
+scene.add(floor);
 
-const pal = palette();
-const tBuild = performance.now();
-const { carrier, waist, headGroup, armShell, legShell } = buildOperatorShell(pal);
-const buildMs = Math.round(performance.now() - tBuild);
-const root = new THREE.Group();
-root.add(carrier, waist, headGroup);
-const armR = new THREE.Group(), armL = new THREE.Group();
-armR.position.set(.262, 1.40, 0); armL.position.set(-.262, 1.40, 0);
-root.add(armR, armL);
-armShell(armR, "R"); armShell(armL, "L");
-root.add(legShell(.11), legShell(-.11));
-root.traverse(o => { if (o.isMesh) o.castShadow = o.receiveShadow = true; });
-scene.add(root);
-
-const pose = q.get("pose") || "stand";
-const yaw = parseFloat(q.get("yaw") || "0");
-root.rotation.y = yaw;
-const target = new THREE.Vector3(0, parseFloat(q.get('ty') || '1.22'), 0);
-const dist = parseFloat(q.get("dist") || "3.3");
-const height = parseFloat(q.get("h") || "1.5");
-const ang = parseFloat(q.get("cam") || "0");
-cam.position.set(Math.sin(ang) * dist, height, Math.cos(ang) * dist);
-cam.lookAt(target);
-renderer.render(scene, cam);
-window.done = true;
-document.getElementById("hud").textContent = `pose=${pose} yaw=${yaw} cam=${ang} build=${buildMs}ms tris=${renderer.info.render.triangles}`;
+const importedOperator = createImportedOperator();
+for (const mesh of importedOperator.meshes) mesh.castShadow = mesh.receiveShadow = true;
+const group = new THREE.Group();
+group.add(importedOperator.root);
+group.rotation.y = Number(q.get("yaw") || 0);
+scene.add(group);
+const avatar = { group, importedOperator };
+let pose = q.get("pose") || "stand", orbit = false, previous = 0;
+for (const button of document.querySelectorAll("[data-pose]")) {
+  button.setAttribute("aria-pressed", button.dataset.pose === pose);
+  button.onclick = () => {
+    pose = button.dataset.pose;
+    for (const other of document.querySelectorAll("[data-pose]")) other.setAttribute("aria-pressed", other === button);
+  };
+}
+document.getElementById("orbit").onclick = ({ currentTarget }) => {
+  orbit = !orbit;
+  currentTarget.setAttribute("aria-pressed", orbit);
+};
+const credits = document.createElement("a");
+credits.textContent = "Male Soldier 01 · CodeLove / Microsoft";
+credits.href = "https://models.codelove.in/models/military-male-01/";
+credits.style.color = "inherit";
+status.replaceChildren(credits);
+const target = new THREE.Vector3(0, Number(q.get("ty") || ".94"), 0);
+const distance = Number(q.get("dist") || "4.4");
+const height = Number(q.get("h") || "1.24");
+let angle = Number(q.get("cam") || ".39");
+renderer.setAnimationLoop(now => {
+  const dt = Math.min(.05, (now - previous) * .001);
+  previous = now;
+  const jump = pose === "jump" ? Math.max(0, Math.sin(now * .0046)) : 0;
+  group.position.y = jump * .34;
+  avatar.crouchAmt = pose === "crouch" ? 1 : 0;
+  avatar.operatorSpeed = pose === "walk" || pose === "strafe" ? 1.55 : pose === "crouch" ? .8 : 0;
+  avatar.operatorLateral = pose === "strafe" ? 1 : 0;
+  avatar.operatorForward = pose === "strafe" ? 0 : 1;
+  avatar.operatorAirborne = jump > .02;
+  animateImportedOperator(avatar, dt, now, 0);
+  if (orbit) angle += dt * .46;
+  camera.position.set(Math.sin(angle) * distance, height, Math.cos(angle) * distance);
+  camera.lookAt(target);
+  renderer.render(scene, camera);
+  window.done = true;
+});
+window.addEventListener("resize", () => {
+  renderer.setSize(innerWidth, innerHeight);
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+});
 </script>

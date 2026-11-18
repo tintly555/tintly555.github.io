@@ -1,373 +1,357 @@
-import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.182.0/build/three.module.js";
-import { meshField, sdEllipsoid, sdRoundCone, smin } from "./boss-sculpt.js?v=operator-sculpt-v1";
+import * as THREE from "three";
+import { mergeGeometries } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/utils/BufferGeometryUtils.js";
 
-// The operator is sculpted, not assembled from boxes: every region of the body (sleeve, torso, plate,
-// helmet, boots...) is a signed-distance field with smooth joins, meshed once with surface nets and
-// shared by every avatar. Each region keeps the rig's joints and lengths, so hands, aim, crouch and the
-// network poses are unchanged. Colour comes from the palette materials plus baked ambient occlusion.
+export const OPERATOR = Object.freeze({
+  hip: .846, pelvis: .726, chest: 1.24, shoulder: 1.466, shoulderWidth: .197, head: 1.703,
+  upperArm: .315, forearm: .291, thigh: .389, shin: .373, sole: .092,
+});
 
-// ── Cloth ───────────────────────────────────────────────────────────────────
-// A periodic value-noise camo or ripstop weave, built once per seed on a canvas and shared by every
-// avatar. The same canvas drives the colour map (tone only, mean ~1 so the palette colours hold) and a
-// bump map for the fibre relief.
-const fabricCache = new Map();
-function fabricTextures(seed, camo) {
-  if (fabricCache.has(seed)) return fabricCache.get(seed);
-  const size = 256, period = 4;
-  const canvas = document.createElement("canvas");
-  canvas.width = canvas.height = size;
-  const ctx = canvas.getContext("2d");
-  const img = ctx.createImageData(size, size);
-  const hash = (ix, iy) => {
-    const x = ((ix % period) + period) % period, y = ((iy % period) + period) % period;
-    const h = Math.sin(x * 127.1 + y * 311.7 + seed * 74.7) * 43758.5453;
-    return h - Math.floor(h);
-  };
-  const vnoise = (x, y) => {
-    const ix = Math.floor(x), iy = Math.floor(y);
-    const fx = x - ix, fy = y - iy;
-    const u = fx * fx * (3 - 2 * fx), v = fy * fy * (3 - 2 * fy);
-    const a = hash(ix, iy), b = hash(ix + 1, iy), c = hash(ix, iy + 1), d = hash(ix + 1, iy + 1);
-    return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
-  };
+const TAU = Math.PI * 2;
+const shapes = new Map();
+const fabrics = new Map();
+
+function fabricMaps(sleeve = false) {
+  if (fabrics.has(sleeve)) return fabrics.get(sleeve);
+  const size = sleeve ? 256 : 128;
+  const tone = new Uint8Array(size * size * 4);
+  const normal = new Uint8Array(tone.length);
+  const height = (x, y) => Math.cos(x * Math.PI / 2) * (.48 + .38 * Math.cos(y * Math.PI / 8))
+    + Math.cos(y * Math.PI / 2) * (.48 - .38 * Math.cos(x * Math.PI / 8));
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
-      const nx = x / size * period, ny = y / size * period;
-      const blot = vnoise(nx, ny) * 0.65 + vnoise(nx * 2 + .5, ny * 2 + .5) * 0.35;
-      const grain = vnoise(x / size * 32, y / size * 32);
-      const weave = .965 + .035 * Math.cos(Math.PI * 2 * x / 8) * Math.cos(Math.PI * 2 * y / 8);
-      let tone;
-      if (camo) {
-        const edge = Math.min(1, Math.max(0, (blot - .38) / .24));
-        tone = .80 + .22 * edge * edge * (3 - 2 * edge);
-      } else {
-        tone = .93 + .07 * blot;
-      }
-      const v = Math.min(1, tone * (.95 + .05 * grain) * weave);
-      const i = (y * size + x) * 4;
-      img.data[i] = img.data[i + 1] = img.data[i + 2] = Math.round(v * 255);
-      img.data[i + 3] = 255;
+      const index = (y * size + x) * 4;
+      const grain = (Math.imul(x + y * size + 1, 1597334677) >>> 23) / 511;
+      const fade = Math.sin(x * TAU / size) * Math.cos(y * TAU / size) + .25 * Math.sin((x + y) * TAU * 3 / size);
+      const seamOffset = sleeve ? x - (x < 99 ? 39 : 159) : size;
+      const seam = Math.abs(seamOffset);
+      const topstitch = seam === 4 && y % 11 < 6 ? 37 : 0;
+      const panel = sleeve && x > 40 && x < 158 ? 28 : 0;
+      const valley = seam < 3 ? 35 : 0;
+      const value = (sleeve ? 188 : 219) + height(x, y) * 8 + grain * 15 + fade * 13 + topstitch - panel - valley;
+      tone[index] = tone[index + 1] = tone[index + 2] = value;
+      tone[index + 3] = normal[index + 3] = 255;
+      const seamSlope = seam < 3 ? Math.sign(seamOffset) * 36 : 0;
+      normal[index] = 128 + (height(x - 1, y) - height(x + 1, y)) * 13 + seamSlope;
+      normal[index + 1] = 128 + (height(x, y - 1) - height(x, y + 1)) * 13;
+      normal[index + 2] = 252;
     }
   }
-  ctx.putImageData(img, 0, 0);
-  const map = new THREE.CanvasTexture(canvas);
-  map.colorSpace = THREE.SRGBColorSpace;
-  const bump = new THREE.CanvasTexture(canvas);
-  for (const t of [map, bump]) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 4; }
-  const out = { map, bump };
-  fabricCache.set(seed, out);
-  return out;
-}
-
-function dressOperatorPalette(palette) {
-  const camoA = fabricTextures(1, true);
-  const camoB = fabricTextures(2, true);
-  const weave = fabricTextures(3, false);
-  const dress = (material, tex, bumpScale) => {
-    if (!material || material.map) return;
-    material.map = tex.map;
-    material.bumpMap = tex.bump;
-    material.bumpScale = bumpScale;
-    material.vertexColors = true;   // baked occlusion from the sculpt
-    material.needsUpdate = true;
+  const make = (data, space) => {
+    const texture = new THREE.DataTexture(data, size, size);
+    texture.colorSpace = space;
+    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+    texture.minFilter = THREE.LinearMipmapLinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    texture.generateMipmaps = true;
+    texture.anisotropy = 4;
+    texture.needsUpdate = true;
+    return texture;
   };
-  dress(palette.mCamo1, camoA, .36);
-  dress(palette.mCamo2, camoB, .36);
-  dress(palette.mVest, weave, .22);
-  dress(palette.mPants, weave, .26);
-  dress(palette.mHelm, weave, .14);
+  const maps = { map: make(tone, THREE.SRGBColorSpace), normalMap: make(normal, THREE.NoColorSpace) };
+  fabrics.set(sleeve, maps);
+  return maps;
 }
 
-// ── Sculpt cache ────────────────────────────────────────────────────────────
-// Each region is meshed on first use and kept. Avatars get clones, so per-avatar disposal stays safe.
-const sculptCache = new Map();
-
-// Occlusion: crevices and undersides darker, the top of a shape lit.
-function shadeOcclusion(out, x, y, z, nx, ny, nz, ao) {
-  const up = .9 + .1 * ny;
-  const c = (.42 + .58 * ao) * up;
-  out[0] = out[1] = out[2] = c;
+function textile(material, strength = .72) {
+  Object.assign(material, fabricMaps());
+  material.normalScale.setScalar(strength);
+  material.needsUpdate = true;
+  return material;
 }
 
-// Triplanar-ish UVs for the cloth: each vertex projects onto the plane its normal faces most.
-function addClothUVs(geometry) {
-  const pos = geometry.attributes.position.array;
-  const nor = geometry.attributes.normal.array;
-  const uv = new Float32Array((pos.length / 3) * 2);
-  for (let i = 0; i < pos.length / 3; i++) {
-    const x = pos[i * 3], y = pos[i * 3 + 1], z = pos[i * 3 + 2];
-    const ax = Math.abs(nor[i * 3]), ay = Math.abs(nor[i * 3 + 1]), az = Math.abs(nor[i * 3 + 2]);
-    let u, v;
-    if (ax >= ay && ax >= az) { u = z; v = y; }
-    else if (ay >= az) { u = x; v = z; }
-    else { u = x; v = y; }
-    uv[i * 2] = u * 2.2;
-    uv[i * 2 + 1] = v * 2.2;
+export function operatorSleeveMaterial(color = 0x3e4638) {
+  return new THREE.MeshStandardMaterial({
+    color, ...fabricMaps(true), roughness: 1, metalness: 0, normalScale: new THREE.Vector2(.76, .76),
+  });
+}
+
+function cached(key, make) {
+  let geometry = shapes.get(key);
+  if (!geometry) {
+    geometry = make();
+    shapes.set(key, geometry);
   }
-  geometry.setAttribute("uv", new THREE.BufferAttribute(uv, 2));
+  return geometry.clone();
 }
 
-function sculptGeometry(key, field, lo, hi, cell) {
-  let base = sculptCache.get(key);
-  if (!base) {
-    base = meshField(THREE, field, lo, hi, cell, shadeOcclusion);
-    addClothUVs(base);
-    sculptCache.set(key, base);
+export function garmentGeometry(rings, sections = 24, sleeve = false) {
+  const positions = [], uvs = [], triangles = [];
+  for (let row = 0; row < rings.length; row++) {
+    const [height, width, depth, front = 0, wrinkling = 0] = rings[row];
+    for (let column = 0; column <= sections; column++) {
+      const angle = TAU * (column % sections) / sections;
+      const fold = wrinkling * (.64 * Math.sin(angle * 3 + height * 13) + .36 * Math.cos(angle * 7 - height * 22));
+      positions.push((width + fold) * Math.cos(angle), height, front + (depth + fold) * Math.sin(angle));
+      uvs.push(sleeve ? column / sections : column / sections * 3,
+        sleeve ? (height - rings.at(-1)[0]) / (rings[0][0] - rings.at(-1)[0]) : height * 8);
+      if (row && column) {
+        const current = row * (sections + 1) + column;
+        const previous = current - sections - 1;
+        triangles.push(previous - 1, previous, current, previous - 1, current, current - 1);
+      }
+    }
   }
-  return base.clone();
+  const geometry = new THREE.BufferGeometry();
+  geometry.setIndex(triangles);
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+  geometry.computeVertexNormals();
+  const normals = geometry.attributes.normal;
+  const average = new THREE.Vector3(), edge = new THREE.Vector3();
+  for (let row = 0; row < rings.length; row++) {
+    const first = row * (sections + 1), last = first + sections;
+    average.fromBufferAttribute(normals, first).add(edge.fromBufferAttribute(normals, last)).normalize();
+    normals.setXYZ(first, average.x, average.y, average.z);
+    normals.setXYZ(last, average.x, average.y, average.z);
+  }
+  return geometry;
 }
 
-// ── Field helpers ───────────────────────────────────────────────────────────
-const hypot = Math.hypot;
-// A shell of thickness t round a solid field d (the surface of the solid, thickened both ways).
-const shell = (d, t) => Math.abs(d + t) - t;
-const band = (d, half, centre) => Math.abs(d - centre) - half;
-// Rounded box: gear, plates and pads are cut like real kit (flat faces, soft edges), not as blobs.
-function sdRoundBox(x, y, z, bx, by, bz, r) {
-  const qx = Math.abs(x) - bx + r, qy = Math.abs(y) - by + r, qz = Math.abs(z) - bz + r;
-  return hypot(Math.max(qx, 0), Math.max(qy, 0), Math.max(qz, 0)) + Math.min(Math.max(qx, qy, qz), 0) - r;
+export function bindGarment(parent, joint, material, geometry, span) {
+  const weights = [], indices = [];
+  const positions = geometry.attributes.position;
+  for (let index = 0; index < positions.count; index++) {
+    const lower = 1 - THREE.MathUtils.smoothstep(positions.getY(index), joint.position.y - span, joint.position.y + span);
+    weights.push(1 - lower, lower, 0, 0);
+    indices.push(0, 1, 0, 0);
+  }
+  geometry.setAttribute("skinWeight", new THREE.Float32BufferAttribute(weights, 4));
+  geometry.setAttribute("skinIndex", new THREE.Uint16BufferAttribute(indices, 4));
+  const mesh = new THREE.SkinnedMesh(geometry, material);
+  parent.add(mesh);
+  parent.updateWorldMatrix(true, true);
+  mesh.bind(new THREE.Skeleton([parent, joint]), parent.matrixWorld);
+  mesh.boundingSphere = new THREE.Sphere(new THREE.Vector3(), .85);
+  return mesh;
 }
-const rbox = (x, y, z, cx, cy, cz, bx, by, bz, r) => sdRoundBox(x - cx, y - cy, z - cz, bx, by, bz, r);
-const ell = (x, y, z, cx, cy, cz, rx, ry, rz) => sdEllipsoid(x - cx, y - cy, z - cz, rx, ry, rz);
+
+const upper = OPERATOR.upperArm;
+const fore = OPERATOR.forearm;
+const thigh = OPERATOR.thigh;
+const shin = OPERATOR.shin;
+const arms = [
+  [.047,.002,.002], [.037,.044,.049], [.012,.063,.065], [-.030,.068,.066,0,.003], [-.09,.064,.063,-.004,.005],
+  [-.16,.058,.061,-.006,.004], [-upper+.078,.055,.053,-.003,.004], [-upper+.031,.051,.051,-.004,.005],
+  [-upper,.049,.050,-.003,.006], [-upper-.033,.054,.052,.001,.005], [-upper-.075,.058,.053,.004,.004],
+  [-upper-.127,.051,.047,.004,.005], [-upper-.190,.044,.042,.003,.004], [-upper-fore+.032,.034,.032,0,.003],
+  [-upper-fore,.034,.030],
+];
+const trousers = [
+  [.066,.002,.002], [.047,.092,.084,-.015], [-.018,.105,.095,-.012,.004], [-.105,.101,.096,-.009,.006],
+  [-.165,.092,.088,-.002,.005], [-.245,.082,.078,.005,.005], [-thigh+.056,.069,.071,.008,.004],
+  [-thigh+.024,.066,.071,.008,.006], [-thigh,.065,.070,.008,.005], [-thigh-.030,.066,.066,0,.005],
+  [-thigh-.099,.069,.072,-.016,.004], [-thigh-.155,.066,.072,-.020,.005], [-thigh-.22,.056,.058,-.017,.004],
+  [-thigh-shin+.066,.042,.044,-.010,.004], [-thigh-shin+.029,.044,.041,-.006,.005], [-thigh-shin+.018,.041,.039],
+];
+const jacket = [
+  [.354,.002,.002], [.332,.055,.054,.005], [.272,.086,.068,.002], [.249,.124,.083,-.005],
+  [.232,.199,.106,-.012], [.204,.221,.114,-.014,.003], [.153,.218,.124,-.017,.005],
+  [.097,.205,.133,-.014,.005], [.011,.184,.124,-.010,.004], [-.115,.163,.108,-.007,.005],
+  [-.218,.153,.106,-.002,.005], [-.315,.169,.114,.002,.006], [-.390,.176,.110,.002,.004],
+  [-.422,.156,.100], [-.424,.002,.002],
+];
+
+function sculptedVolume(outline, depth, bevel) {
+  const shape = new THREE.Shape();
+  outline.forEach(([x, y], index) => index ? shape.lineTo(x, y) : shape.moveTo(x, y));
+  shape.closePath();
+  const geometry = new THREE.ExtrudeGeometry(shape, {
+    depth, bevelEnabled: true, bevelSize: bevel, bevelThickness: bevel, bevelSegments: 2, curveSegments: 1,
+  });
+  geometry.translate(0, 0, -depth / 2);
+  return geometry;
+}
+
+function mesh(parent, geometry, material, x = 0, y = 0, z = 0) {
+  const part = new THREE.Mesh(geometry, material);
+  part.position.set(x, y, z);
+  parent.add(part);
+  return part;
+}
+
+function block(width, height, depth, radius = .008) {
+  return sculptedVolume([[-width / 2, -height / 2], [width / 2, -height / 2],
+    [width / 2, height / 2], [-width / 2, height / 2]], depth, radius);
+}
+
+function batch(parent) {
+  const groups = new Map();
+  for (const child of parent.children) {
+    if (!child.isMesh || child.isSkinnedMesh) continue;
+    const parts = groups.get(child.material) || [];
+    parts.push(child);
+    groups.set(child.material, parts);
+  }
+  for (const [material, parts] of groups) {
+    if (parts.length < 2) continue;
+    const baked = parts.map(part => {
+      part.updateMatrix();
+      const geometry = part.geometry.index ? part.geometry.toNonIndexed() : part.geometry.clone();
+      geometry.clearGroups();
+      geometry.applyMatrix4(part.matrix);
+      return geometry;
+    });
+    const merged = mergeGeometries(baked);
+    baked.forEach(geometry => geometry.dispose());
+    if (!merged) continue;
+    parent.remove(...parts);
+    parts.forEach(part => part.geometry.dispose());
+    mesh(parent, merged, material);
+  }
+}
 
 export function buildOperatorShell(palette) {
-  dressOperatorPalette(palette);
-  const cloth = palette.mCamo1;
-  const panels = palette.mCamo2;
-  const armor = palette.mVest;
-  const shellMat = palette.mHelm;
-  const pants = palette.mPants;
-  const mat = (color, roughness, metalness = 0) => new THREE.MeshStandardMaterial({
-    color, roughness, metalness, emissive: 0, vertexColors: true,
-  });
-  const rubber = mat(0x23292c, .95);
-  const webbing = mat(0x3d4241, .94);
-  const glass = mat(0x305761, .24, .43);
-  const hardware = mat(0x5e6868, .51, .42);
-  const markings = mat(0xae8961, .82);
+  const cloth = textile(palette.mCamo1), nylon = textile(palette.mCamo2), pants = textile(palette.mPants);
+  const sleeveCloth = operatorSleeveMaterial(cloth.color.clone().lerp(new THREE.Color(0x30382c), .63));
+  const armor = palette.mVest, helmet = palette.mHelm;
+  const make = (color, roughness, metalness = 0) => new THREE.MeshStandardMaterial({ color, roughness, metalness });
+  const leather = make(0x282725, .88);
+  const rubber = make(0x191b1a, .95);
+  const straps = textile(make(0x575342, .92));
+  const fastener = make(0x777b73, .61, .4);
+  const skin = make(0xa48168, .85);
+  const glass = make(0x243234, .27, .35);
+  const lining = textile(make(0x242626, .95));
+  const carrier = new THREE.Group(), waist = new THREE.Group(), headGroup = new THREE.Group();
+  carrier.position.y = OPERATOR.chest;
+  waist.position.y = OPERATOR.pelvis;
+  headGroup.position.y = OPERATOR.head;
 
-  function region(parent, material, key, field, lo, hi, cell = .014) {
-    const mesh = new THREE.Mesh(sculptGeometry(key, field, lo, hi, cell), material);
-    parent.add(mesh);
-    return mesh;
+  mesh(carrier, cached("jacket", () => garmentGeometry(jacket, 32)), cloth);
+  const collar = mesh(carrier, cached("collar", () => garmentGeometry([
+    [.32,.061,.057], [.302,.066,.062], [.266,.076,.071], [.252,.077,.074],
+  ])), lining);
+  collar.position.z = .006;
+  mesh(carrier, new THREE.BoxGeometry(.008, .48, .008), straps, 0, -.084, .119);
+  const plate = [[-.145,-.162],[.145,-.162],[.143,.093],[.089,.165],[-.089,.165],[-.143,.093]];
+  mesh(carrier, sculptedVolume(plate, .035, .012), nylon, 0, .011, .12);
+  mesh(carrier, sculptedVolume(plate, .047, .013), nylon, 0, .004, -.109);
+  const belly = mesh(carrier, block(.254,.056,.161), straps, 0, -.132, .007);
+  belly.rotation.x = -.06;
+  for (const side of [-1, 1]) {
+    const harness = mesh(carrier, block(.038,.168,.033,.006), straps, side*.103,.133,.104);
+    harness.rotation.x = -.43;
+    harness.rotation.z = side * -.10;
+    mesh(carrier, block(.033,.020,.016,.003), fastener, side*.099,.084,.146);
+    const elbowRoom = mesh(carrier, block(.054,.131,.096,.012), nylon, side*.144,-.071,-.065);
+    elbowRoom.rotation.y = side * .21;
+  }
+  for (const center of [-.092, -.006, .08]) {
+    mesh(carrier, block(.073,.111,.047,.009), armor, center,-.071,.157);
+    mesh(carrier, block(.074,.023,.052,.005), straps, center,-.023,.159);
+    mesh(carrier, block(.019,.015,.007,.002), fastener, center,-.065,.188);
+  }
+  mesh(carrier, block(.073,.026,.007,.003), straps, -.059,.075,.152);
+  mesh(carrier, block(.043,.015,.006,.002), fastener, -.059,.074,.16);
+  mesh(carrier, block(.162,.197,.085,.018), nylon, -.039,-.031,-.174);
+  mesh(carrier, block(.169,.041,.088,.010), straps, -.039,.06,-.174);
+  for (const side of [-1, 1]) {
+    mesh(carrier, block(.023,.116,.016,.004), straps, -.039 + side*.051,-.034,-.220).rotation.z = side * .05;
+    mesh(carrier, block(.026,.018,.012,.002), fastener, -.039 + side*.051,.005,-.229);
+  }
+  mesh(carrier, block(.054,.109,.041,.006), lining, .113,-.026,-.155);
+  mesh(carrier, new THREE.CylinderGeometry(.004,.006,.13,8), rubber, .116,.083,-.156).rotation.z = -.13;
+  mesh(waist, cached("seat", () => garmentGeometry([
+    [.156,.002,.002], [.144,.149,.106], [.098,.174,.114], [.034,.175,.117,-.013,.004],
+    [-.051,.167,.104,-.017,.005], [-.105,.112,.067,-.011], [-.121,.002,.002],
+  ])), pants);
+  mesh(waist, cached("belt", () => garmentGeometry([[.142,.154,.114],[.112,.164,.119],[.105,.163,.116]])), straps);
+  mesh(waist, block(.053,.026,.017,.005), fastener, 0,.121,.116);
+  mesh(waist, block(.069,.095,.062,.010), nylon, .167,.049,-.040).rotation.z = .16;
+  mesh(waist, block(.090,.080,.055,.010), armor, -.161,.038,-.078).rotation.y = -.27;
+
+  mesh(headGroup, cached("face", () => garmentGeometry([
+    [.124,.002,.002], [.108,.051,.068,-.016], [.077,.077,.090,-.013], [.026,.084,.098,-.009],
+    [-.019,.080,.096,-.004], [-.052,.071,.085,-.005], [-.088,.050,.068,-.006],
+    [-.104,.029,.041,-.008], [-.152,.047,.044,-.023], [-.211,.049,.046,-.022],
+  ], 32)), skin);
+  mesh(headGroup, cached("gaiter", () => garmentGeometry([
+    [-.035,.059,.071,-.021], [-.057,.073,.076,-.018], [-.093,.057,.063,-.010,.002],
+    [-.125,.048,.051,-.018,.003], [-.153,.050,.049,-.021,.004], [-.189,.056,.053,-.018,.003],
+  ])), lining);
+  mesh(headGroup, cached("helmet", () => garmentGeometry([
+    [.153,.002,.002], [.145,.051,.066,-.019], [.124,.083,.099,-.018], [.090,.100,.113,-.018],
+    [.054,.110,.119,-.017], [.031,.109,.117,-.017],
+  ], 32)), helmet);
+  const shroud = [[-.105,.039],[-.098,.012],[-.065,-.031],[.065,-.031],[.098,.012],[.105,.039]];
+  mesh(headGroup, sculptedVolume(shroud, .018,.007), rubber, 0,.008,.083);
+  for (const side of [-1, 1]) {
+    const lens = mesh(headGroup, block(.066,.033,.013,.008), glass, side*.043,.029,.102);
+    lens.rotation.y = side*.32;
+    mesh(headGroup, block(.017,.082,.047,.009), lining, side*.089,-.014,-.019);
+    mesh(headGroup, block(.022,.017,.116,.004), straps, side*.086,-.057,-.014).rotation.z = side*.11;
+  }
+  mesh(headGroup, block(.112,.040,.022,.009), straps, 0,-.006,-.116);
+  mesh(headGroup, block(.059,.060,.030,.009), helmet, 0,.012,-.124);
+  const mask = [[-.069,.009],[-.024,.037],[.024,.037],[.069,.009],[.059,-.048],[.025,-.063],[-.025,-.063],[-.059,-.048]];
+  mesh(headGroup, sculptedVolume(mask,.032,.010), rubber, 0,-.059,.071);
+  const filter = mesh(headGroup, new THREE.CylinderGeometry(.033,.035,.028,16), helmet, -.057,-.083,.095);
+  filter.rotation.set(Math.PI/2,-.12,.31);
+  for (let slit = 0; slit < 4; slit++) {
+    mesh(headGroup, new THREE.BoxGeometry(.035 - slit*.005,.003,.004), fastener, .011,-.064-slit*.008,.101);
   }
 
-  // ── Torso (carrier origin 1.24 above the feet; shoulders at +0.28, belt at about -0.4) ──
-  const carrier = new THREE.Group();
-  carrier.position.y = 1.24;
-
-  const torsoBody = (x, y, z) => {
-    const shoulders = ell(x, y, z, 0, .17, -.004, .212, .11, .118);
-    const chest = ell(x, y, z, 0, -.02, -.008, .188, .20, .122);
-    const belly = ell(x, y, z, 0, -.30, -.004, .165, .12, .1);
-    let d = smin(shoulders, chest, .06);
-    d = smin(d, belly, .05);
-    const neck = sdRoundCone(x, y, z, 0, .25, 0, 0, .31, 0, .050, .042);
-    return smin(d, neck, .03);
-  };
-  region(carrier, cloth, "torso", torsoBody, [-.24, -.46, -.17], [.24, .38, .17]);
-
-  // Armour plate: a flat chest plate with soft edges, standing off the body.
-  const plate = (x, y, z) => {
-    const width = .154 - Math.max(0, y - .09) * .66 - Math.max(0, -.06 - y) * .18;
-    return rbox(x, y, z, 0, .012, .125 - Math.abs(x) * .19, width, .177, .036, .025);
-  };
-  region(carrier, armor, "plate", plate, [-.2, -.24, .0], [.2, .24, .2], .012);
-  // Chest-rig straps running over the plate.
-  const rig = (x, y, z) => Math.min(
-    rbox(x, y, z, -.085, .02, .175, .012, .17, .012, .008),
-    rbox(x, y, z, .085, .02, .175, .012, .17, .012, .008));
-  region(carrier, webbing, "rig", rig, [-.12, -.2, .14], [.12, .2, .2], .010);
-  const chestPockets = (x, y, z) => {
-    const innerX = Math.abs(x);
-    return Math.min(rbox(x, y, z, 0, -.098, .174, .038, .056, .035, .013),
-      rbox(innerX, y, z, .080, -.100, .162, .036, .063, .031, .010));
-  };
-  region(carrier, panels, "chestPockets", chestPockets, [-.13, -.18, .10], [.13, -.03, .22], .010);
-  const pocketFlaps = (x, y, z) => Math.min(
-    rbox(x, y, z, 0, -.048, .188, .034, .014, .022, .008),
-    rbox(Math.abs(x), y, z, .080, -.043, .177, .031, .013, .020, .007));
-  region(carrier, webbing, "pocketFlaps", pocketFlaps, [-.13, -.069, .145], [.13, -.022, .218], .007);
-  const chestBadge = (x, y, z) => rbox(x, y, z, -.048, .077, .160, .039, .013, .007, .004);
-  region(carrier, markings, "chestBadge", chestBadge, [-.093, .059, .148], [-.005, .094, .17], .004);
-
-  // Rubber collar where the plate meets the neck.
-  const collar = (x, y, z) => Math.max(band(hypot(x, z * .95), .014, .084), band(y, .028, .283));
-  region(carrier, rubber, "collar", collar, [-.13, .22, -.13], [.13, .34, .13], .010);
-
-  // Rucksack: a rounded pack on the back with a top flap and webbing straps over the shoulders.
-  const pack = (x, y, z) => rbox(x, y, z, 0, -.028, -.184, .137, .183, .090, .047);
-  region(carrier, panels, "pack", pack, [-.16, -.24, -.30], [.16, .18, -.075], .012);
-  const packFlap = (x, y, z) => rbox(x, y, z, 0, .137, -.189, .125, .034, .086, .024);
-  region(carrier, webbing, "packFlap", packFlap, [-.14, .095, -.292], [.14, .19, -.09], .010);
-  const packRails = (x, y, z) => Math.min(
-    rbox(Math.abs(x), y, z, .068, -.048, -.269, .012, .15, .013, .007),
-    rbox(x, y, z, 0, -.126, -.274, .10, .015, .012, .007));
-  region(carrier, webbing, "packRails", packRails, [-.115, -.215, -.30], [.115, .12, -.25], .009);
-  const strap = (x, y, z) => {
-    const a = sdRoundCone(x, y, z, .135, .19, -.10, .14, .02, .13, .017, .015);
-    const b = sdRoundCone(x, y, z, .135, .02, .13, .14, -.22, .12, .015, .014);
-    const c = sdRoundCone(x, y, z, -.135, .19, -.10, -.14, .02, .13, .017, .015);
-    const d = sdRoundCone(x, y, z, -.135, .02, .13, -.14, -.22, .12, .015, .014);
-    return Math.min(a, b, c, d);
-  };
-  region(carrier, webbing, "straps", strap, [-.2, -.28, -.2], [.2, .26, .17], .012);
-
-  // ── Waist and hips (own group: the hips move with the legs) ──────────────────
-  const waist = new THREE.Group();
-  waist.position.y = .72;
-  const pelvis = (x, y, z) => {
-    const hips = ell(x, y, z, 0, .05, 0, .17, .104, .104);
-    const seat = ell(x, y, z, 0, -.01, -.012, .158, .074, .094);
-    return smin(hips, seat, .04);
-  };
-  region(waist, pants, "pelvis", pelvis, [-.24, -.12, -.16], [.24, .2, .16]);
-  const beltBand = (x, y, z) => Math.max(band(hypot(x, z * 1.55), .013, .157), band(y, .021, .094));
-  region(waist, webbing, "belt", beltBand, [-.24, .04, -.2], [.24, .13, .2], .010);
-  const buckle = (x, y, z) => rbox(x, y, z, 0, .092, .106, .039, .020, .012, .008);
-  region(waist, hardware, "buckle", buckle, [-.05, .063, .089], [.05, .12, .124], .007);
-  const pouches = (x, y, z) => Math.min(
-    rbox(x, y, z, .14, .02, .075, .062, .07, .046, .022),
-    rbox(x, y, z, -.14, .02, .075, .062, .07, .046, .022));
-  region(waist, webbing, "pouches", pouches, [-.24, -.08, .0], [.24, .12, .15], .010);
-
-  // ── Head (origin at the top of the neck) ─────────────────────────────────────
-  const headGroup = new THREE.Group();
-  headGroup.position.y = 1.75;
-  const face = (x, y, z) => {
-    const skull = ell(x, y, z, 0, .004, .004, .098, .122, .108);
-    const jaw = ell(x, y, z, 0, -.062, -.008, .082, .068, .088);
-    return smin(skull, jaw, .03);
-  };
-  region(headGroup, rubber, "face", face, [-.12, -.16, -.12], [.12, .14, .12], .011);
-  const neck = (x, y, z) => sdRoundCone(x, y, z, 0, -.08, -.01, 0, -.24, -.01, .046, .052);
-  region(headGroup, rubber, "neck", neck, [-.07, -.31, -.07], [.07, -.04, .07], .011);
-  const helmet = (x, y, z) => {
-    const dome = ell(x, y, z, 0, -.004, -.006, .13, .122, .138);
-    const hs = Math.max(shell(dome, .016), -(y + .036));
-    const brow = rbox(x, y, z, 0, .05, .105, .105, .012, .03, .011);
-    const rail = sdRoundCone(x, y, z, 0, .124, .064, 0, .128, -.14, .010, .010);
-    return smin(smin(hs, brow, .02), rail, .010);
-  };
-  region(headGroup, shellMat, "helmet", helmet, [-.15, -.04, -.17], [.15, .16, .17], .011);
-  const visor = (x, y, z) => {
-    const v = ell(x, y, z, 0, .004, -.012, .124, .05, .15);
-    return Math.max(shell(v, .007), -(z - .112));
-  };
-  region(headGroup, glass, "visor", visor, [-.14, -.07, .1], [.14, .07, .18], .009);
-  const respirator = (x, y, z) => {
-    const facepiece = rbox(x, y, z, 0, -.080, .082, .071, .041, .040, .025);
-    const filters = ell(Math.abs(x), y, z, .061, -.088, .098, .023, .029, .028);
-    return smin(facepiece, filters, .012);
-  };
-  region(headGroup, armor, "respirator", respirator, [-.095, -.132, .025], [.095, -.035, .139], .008);
-  const vents = (x, y, z) => Math.min(
-    rbox(x, y, z, 0, -.069, .121, .034, .0033, .0045, .003),
-    rbox(x, y, z, 0, -.083, .123, .030, .0033, .0045, .003),
-    rbox(x, y, z, 0, -.097, .120, .025, .0033, .0045, .003));
-  region(headGroup, hardware, "respiratorVents", vents, [-.038, -.105, .11], [.038, -.061, .134], .0035);
-  const pod = (x, y, z) => rbox(x, y, z, 0, -.01, -.133, .044, .05, .030, .018);
-  region(headGroup, rubber, "pod", pod, [-.07, -.09, -.24], [.07, .07, -.08], .010);
-  const comms = (x, y, z) => Math.min(
-    rbox(x, y, z, -.134, -.02, -.01, .02, .04, .04, .014),
-    rbox(x, y, z, .134, -.02, -.01, .02, .04, .04, .014));
-  region(headGroup, armor, "comms", comms, [-.17, -.08, -.06], [.17, .07, .06], .010);
-  const helmetReinforcement = new THREE.Group();
-  headGroup.add(helmetReinforcement);
-  const browReinforcement = (x, y, z) => rbox(x, y, z, 0, .064, .108 - Math.abs(x) * .41, .099, .019, .028, .017);
-  region(helmetReinforcement, shellMat, "browReinforcement", browReinforcement, [-.111, .037, .036], [.111, .092, .144], .006);
-  const jawGuard = new THREE.Group();
-  headGroup.add(jawGuard);
-  const jawPlates = (x, y, z) => rbox(Math.abs(x), y, z, .085, -.073, .034, .026, .044, .062, .018);
-  region(jawGuard, shellMat, "jawPlates", jawPlates, [-.118, -.124, -.036], [.118, -.022, .105], .008);
-  const armorReinforcement = new THREE.Group();
-  carrier.add(armorReinforcement);
-  const upperPlate = (x, y, z) => rbox(x, y, z, 0, .119, .123 - Math.abs(x) * .31, .107, .031, .024, .015);
-  region(armorReinforcement, armor, "upperPlate", upperPlate, [-.118, .082, .065], [.118, .156, .157], .007);
-  const flankGuard = new THREE.Group();
-  carrier.add(flankGuard);
-  const ribPlates = (x, y, z) => rbox(Math.abs(x), y, z, .157, -.118, .043, .034, .099, .077, .019);
-  region(flankGuard, armor, "ribPlates", ribPlates, [-.2, -.23, -.046], [.2, -.011, .129], .009);
-
+  const helmetArmor = new THREE.Group(), faceArmor = new THREE.Group(), chestArmor = new THREE.Group();
+  headGroup.add(helmetArmor, faceArmor);
+  carrier.add(chestArmor);
+  mesh(helmetArmor, block(.085,.028,.037,.005), helmet, 0,.069,.097);
+  for (const side of [-1, 1]) {
+    mesh(faceArmor, block(.026,.067,.071,.010), helmet, side*.083,-.062,.044).rotation.x = -.24;
+    mesh(chestArmor, block(.041,.176,.058,.013), armor, side*.155,-.060,.006).rotation.y = side*.14;
+  }
   function setArmorLook(helmetTier, vestTier) {
-    helmetReinforcement.visible = helmetTier >= 1;
-    jawGuard.visible = helmetTier >= 3;
-    armorReinforcement.visible = vestTier >= 1;
-    flankGuard.visible = vestTier >= 2;
+    helmetArmor.visible = helmetTier >= 1;
+    faceArmor.visible = helmetTier >= 3;
+    chestArmor.visible = vestTier >= 2;
   }
   setArmorLook(0, 0);
+  for (const part of [carrier, waist, headGroup, helmetArmor, chestArmor, faceArmor]) batch(part);
 
-  // ── Arms: a sleeve from the shoulder, a forearm below the elbow ─────────────────
   function armShell(arm, side) {
-    const sleeve = (x, y, z) => {
-      const upper = sdRoundCone(x, y, z, 0, -.02, 0, 0, -.20, 0, .07, .06);
-      const lower = sdRoundCone(x, y, z, 0, -.19, 0, 0, -.335, 0, .06, .055);
-      const deltoid = ell(x, y, z, 0, .01, 0, .076, .088, .076);
-      return smin(smin(upper, lower, .02), deltoid, .03);
-    };
-    region(arm, cloth, "sleeve", sleeve, [-.1, -.41, -.1], [.1, .12, .1], .011);
-    const outside = side === "R" ? 1 : -1;
-    const pad = (x, y, z) => rbox(x, y, z, outside * .042, -.045, .002, .053, .085, .077, .034);
-    region(arm, armor, "shoulderPad" + side, pad, [-.105, -.145, -.093], [.105, .055, .099], .009);
-
-    const elbow = new THREE.Group();
-    elbow.position.y = -.36;
+    const elbow = new THREE.Bone();
+    elbow.position.y = -upper;
     arm.add(elbow);
-    const forearm = (x, y, z) => {
-      const d = sdRoundCone(x, y, z, 0, -.01, 0, 0, -.27, 0, .058, .046);
-      const muscle = ell(x, y, z, 0, -.052, -.010, .061, .090, .060);
-      return smin(d, muscle, .03);
-    };
-    region(elbow, panels, "forearm", forearm, [-.09, -.32, -.09], [.09, .25, .09], .011);
-    const cuff = (x, y, z) => sdRoundCone(x, y, z, 0, -.27, 0, 0, -.33, 0, .049, .052);
-    region(elbow, rubber, "cuff", cuff, [-.08, -.40, -.08], [.08, -.2, .08], .010);
-    const elbowPad = (x, y, z) => rbox(x, y, z, 0, -.03, .045, .056, .05, .03, .02);
-    region(elbow, armor, "elbowPad", elbowPad, [-.08, -.1, -.02], [.08, .04, .1], .010);
-    const bracer = (x, y, z) => rbox(x, y, z, outside * .032, -.164, .012, .023, .092, .039, .018);
-    region(elbow, armor, "bracer" + side, bracer, [-.067, -.269, -.037], [.067, -.064, .061], .009);
+    bindGarment(arm, elbow, sleeveCloth, cached("sleeves", () => garmentGeometry(arms, 28, true)), .068);
+    const sign = side === "R" ? 1 : -1;
+    const pocket = mesh(arm, block(.016,.105,.077,.010), nylon, sign*.062,-.107,-.007);
+    pocket.rotation.z = sign*-.12;
+    mesh(arm, block(.010,.023,.068,.004), straps, sign*.069,-.067,-.005);
+    const reinforcement = mesh(elbow, block(.064,.082,.013,.011), nylon, 0,-.038,-.046);
+    reinforcement.rotation.x = -.08;
+    mesh(elbow, cached("cuff", () => garmentGeometry([
+      [-fore+.030,.036,.033], [-fore+.019,.038,.034], [-fore+.003,.036,.032], [-fore,.033,.029],
+    ])), lining);
+    batch(arm);
     return elbow;
   }
 
-  // ── Legs: thigh and hip from the hip joint, shin and boot below the knee ─────────
   function legShell(px) {
-    const leg = new THREE.Group();
-    const thigh = (x, y, z) => {
-      const d = sdRoundCone(x, y, z, 0, .00, 0, 0, -.37, 0, .098, .074);
-      const hip = ell(x, y, z, 0, .02, 0, .094, .09, .094);
-      return smin(d, hip, .03);
-    };
-    region(leg, pants, "thigh", thigh, [-.12, -.47, -.12], [.12, .11, .12], .013);
-    const outside = Math.sign(px);
-    const cargo = (x, y, z) => rbox(x, y, z, outside * .071, -.153, -.002, .032, .098, .065, .023);
-    region(leg, panels, "cargo" + outside, cargo, [-.115, -.267, -.08], [.115, -.044, .08], .010);
-    const knee = new THREE.Group();
+    const leg = new THREE.Bone(), knee = new THREE.Bone(), ankle = new THREE.Bone();
     knee.name = "knee";
-    knee.rotation.order = "YXZ";
-    knee.position.y = -.38;
+    knee.position.y = -thigh;
+    ankle.position.y = -shin;
     leg.add(knee);
-    const kneePad = (x, y, z) => rbox(x, y, z, 0, -.02, .05, .07, .06, .03, .022);
-    region(knee, armor, "kneePad", kneePad, [-.09, -.1, -.01], [.09, .06, .11], .010);
-    const shin = (x, y, z) => {
-      const d = sdRoundCone(x, y, z, 0, -.01, 0, 0, -.345, 0, .074, .054);
-      const calf = ell(x, y, z, 0, -.14, -.024, .072, .12, .07);
-      return smin(d, calf, .03);
-    };
-    region(knee, pants, "shin", shin, [-.11, -.4, -.12], [.11, .03, .12], .013);
-    const ankle = new THREE.Group();
-    ankle.position.y = -.366;
     knee.add(ankle);
-    const boot = (x, y, z) => {
-      const shaft = sdRoundCone(x, y, z, 0, .04, 0, 0, -.06, 0, .064, .068);
-      const upper = ell(x, y, z, 0, -.05, .03, .072, .07, .112);
-      const toe = ell(x, y, z, 0, -.07, .12, .07, .052, .07);
-      const sole = rbox(x, y, z, 0, -.10, .03, .075, .022, .165, .018);
-      return smin(smin(smin(shaft, upper, .025), toe, .03), sole, .012);
-    };
-    region(ankle, rubber, "boot", boot, [-.12, -.16, -.16], [.12, .08, .22], .010);
-    const toeCap = (x, y, z) => Math.max(
-      shell(ell(x, y, z, 0, -.067, .114, .074, .054, .075), .012), .086 - z);
-    region(ankle, armor, "toeCap", toeCap, [-.084, -.126, .076], [.084, -.005, .197], .008);
-    leg.position.set(px, .865, 0);
+    bindGarment(leg, knee, pants, cached("trousers", () => garmentGeometry(trousers)), .062);
+    const side = Math.sign(px);
+    mesh(leg, block(.025,.156,.115,.012), nylon, side*.086,-.155,.003).rotation.z = side*-.10;
+    mesh(leg, block(.029,.030,.116,.007), straps, side*.094,-.091,.007);
+    const kneepad = [[-.061,.041],[-.052,-.032],[-.035,-.064],[.039,-.064],[.057,-.030],[.060,.041]];
+    mesh(knee, sculptedVolume(kneepad,.014,.010), rubber, 0,-.027,.065);
+    mesh(ankle, cached("boot-upper", () => garmentGeometry([
+      [.090,.039,.039,-.005], [.044,.049,.046,-.008], [-.008,.049,.071,.016], [-.034,.054,.105,.043],
+      [-.057,.057,.121,.052], [-.079,.056,.121,.051], [-.081,.002,.002,.051],
+    ])), leather);
+    mesh(ankle, cached("boot-sole", () => garmentGeometry([
+      [-.068,.057,.124,.051], [-.085,.059,.124,.051], [-.092,.055,.117,.051], [-.0925,.001,.001,.051],
+    ])), rubber);
+    for (let lace = 0; lace < 4; lace++) {
+      const stitch = mesh(ankle, block(.046,.003,.005,.001), straps, 0,.019-lace*.015,.045+lace*.028);
+      stitch.rotation.z = lace % 2 ? .14 : -.14;
+    }
+    batch(leg);
+    batch(ankle);
+    leg.position.set(px, OPERATOR.hip, 0);
     leg.userData.knee = knee;
     leg.userData.ankle = ankle;
     return leg;

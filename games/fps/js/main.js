@@ -11,12 +11,14 @@
     import { createTrainingWallMaterial, createTrainingDust } from "./training-realism.js?v=20261112-train-v2";
     import { createArenaRealism } from "./arena-realism.js?v=20261112-arena-v1";
     import { createBossCreature, BOSS_RADIUS, CLAW_STRIKE_S, QUAKE_SLAM_S, LOB_RELEASE_S, DURATIONS as BOSS_DURATIONS } from "./boss-creature.js?v=11";
-    import { buildOperatorShell } from "./operator-model.js?v=operator-field-kit";
-    import { digitGeometry, sleeveGeometry, operatorFootPose } from "./operator-hands.js?v=1";
+    import { buildOperatorShell, OPERATOR, operatorSleeveMaterial } from "./operator-model.js?v=field-rig";
+    import { animateImportedOperator, createImportedOperator, loadOperatorAsset } from "./operator-asset.js?v=male-rig-hands-v4";
+    import { advanceOperatorGait, buildOperatorGlove, buildOperatorViewSleeve, operatorEnvelope,
+      operatorShot, operatorStride, poseOperatorFoot, poseOperatorViewSleeve, solveOperatorLimb } from "./operator-hands.js?v=field-rig-hands-v2";
     import { extendGauntletCourses, GAUNTLET_CHAPTERS, GAUNTLET_CHAPTER_SIZE } from "./gauntlet-courses.js?v=relay-no-goo-v1";
-    import { createGauntletRuntime } from "./gauntlet-runtime.js?v=23-touchboxes";
+    import { createGauntletRuntime } from "./gauntlet-runtime.js?v=24-maglev-track";
     import { createWorldAudio } from "./world-audio.js?v=5-material-footsteps-water-entry";
-    import { createGauntletThemes } from "./gauntlet-themes.js?v=14-lava-uv-variants";
+    import { createGauntletThemes } from "./gauntlet-themes.js?v=15-mounted-fixtures";
     import { createGauntletMusic } from "./gauntlet-music.js?v=1";
     import { templeWaterBank, TEMPLE_WATER_Y } from "./water-shape.js?v=3-footsteps";
     import { createPostFx, applyDisplayTone } from "./post-fx.js?v=16-gauntlet-light-balance";
@@ -2450,27 +2452,20 @@
       return c.getHex();
     }
 
-    /**
-     * Bright duel arena (`crossfire_grid`): cooler textile tones + slight emissive rim so silhouettes read in daylight fog.
-     */
     function applyRemoteAvatarPalette(opts) {
       const duelBright = !!opts.duelBright;
       const hueShift = typeof opts.hueShift === "number" ? opts.hueShift : 0;
-      const camoA = duelBright ? 0x4c5b61 : 0x3a4549;
-      const camoB = duelBright ? 0x36464b : 0x293638;
-      const helm = duelBright ? 0x65777d : 0x526264;
-      const vest = duelBright ? 0x657476 : 0x535f60;
-      const pants = duelBright ? 0x465256 : 0x383f43;
-      const emissive = duelBright ? 0x222d2f : 0x000000;
-      const emissiveIntensity = duelBright ? 0.22 : 0;
+      const camoA = duelBright ? 0x696e60 : 0x4d5145;
+      const camoB = duelBright ? 0x50564d : 0x40463f;
+      const helm = duelBright ? 0x65685f : 0x4e5148;
+      const vest = duelBright ? 0x77705a : 0x625c4a;
+      const pants = duelBright ? 0x555950 : 0x444942;
       const mk = (hex, rough, metal) => {
         const col = tintHexColor(hex, hueShift * 0.08);
         return new THREE.MeshStandardMaterial({
           color: col,
           roughness: rough,
           metalness: metal || 0,
-          emissive: emissive,
-          emissiveIntensity,
         });
       };
       return {
@@ -2629,13 +2624,17 @@
       rp.gunModel = equipped.model;
       rp.primarySocket = equipped.primary;
       rp.supportSocket = equipped.support;
+      if (rp.importedOperator) {
+        for (const socket of [rp.primarySocket, rp.supportSocket]) {
+          socket?.traverse(node => { if (node.isMesh) node.visible = false; });
+        }
+      }
       rp.currentWeapon = type;
       rp.equippedAt = performance.now();
     }
 
-    const armDown = new THREE.Vector3(0, -1, 0);
-    const armReach = new THREE.Vector3(), armBend = new THREE.Vector3(), armJoint = new THREE.Vector3();
-    const armFore = new THREE.Vector3(), armPoint = new THREE.Vector3(), armRotation = new THREE.Quaternion();
+    const armBend = new THREE.Vector3(), armPoint = new THREE.Vector3();
+    const torsoOffset = new THREE.Vector3(), supportWrist = new THREE.Vector3();
 
     function socketWrist(rp, socket, out) {
       out.copy(socket.userData.wrist);
@@ -2644,40 +2643,30 @@
     }
 
     function poseOperatorArm(shoulder, elbow, wrist, side) {
-      const upper = 0.36, lower = 0.35;
-      armReach.subVectors(wrist, shoulder.position);
-      const length = Math.max(0.08, Math.min(upper + lower - 0.005, armReach.length()));
-      armReach.normalize();
-      armBend.set(side * 0.75, -1, -0.12);
-      armBend.addScaledVector(armReach, -armBend.dot(armReach)).normalize();
-      const along = (upper * upper - lower * lower + length * length) / (2 * length);
-      const out = Math.sqrt(Math.max(0, upper * upper - along * along));
-      armJoint.copy(armReach).multiplyScalar(along).addScaledVector(armBend, out);
-      shoulder.quaternion.setFromUnitVectors(armDown, armFore.copy(armJoint).normalize());
-      armFore.copy(armReach).multiplyScalar(length).sub(armJoint).normalize();
-      armFore.applyQuaternion(armRotation.copy(shoulder.quaternion).invert());
-      elbow.quaternion.setFromUnitVectors(armDown, armFore);
+      armBend.set(side * .83, -1, -.25);
+      solveOperatorLimb(shoulder, elbow, wrist, armBend, OPERATOR.upperArm, OPERATOR.forearm);
     }
 
-    function updateRemoteOperator(rp, dt, stride, walk, aim, now) {
+    function updateRemoteOperator(rp, dt, walk, aim, now) {
       const type = rp.currentWeapon | 0;
       const stance = REMOTE_TWO_HAND_STANCE[type] || REMOTE_ONE_HAND_STANCE[type] || REMOTE_TWO_HAND_STANCE[1];
       const model = rp.gunModel;
       if (!model || !rp.primarySocket) return;
       const age = Math.max(0, now - (rp.firedAt ?? -Infinity)) * 0.001;
-      const kick = Math.exp(-age * (type === 2 || type === 5 ? 14 : 22)) * (type === 2 || type === 5 ? 1 : 0.56);
-      const recovery = Number.isFinite(age) ? Math.sin(age * 25) * Math.exp(-age * 12) * .026 : 0;
+      const heavy = type === 2 || type === 5;
+      const kick = operatorShot(age, heavy) * (heavy ? 1 : .56);
       const reload = rp.isReloading ? rp.remoteReload ?? Math.min(1, (rp.reloadPhase += dt) / Math.max(.01, weapons[type].reloadTime / 1000)) : 0;
       if (!rp.isReloading) rp.reloadPhase = 0;
-      const service = THREE.MathUtils.smoothstep(reload, 0, .13) * (1 - THREE.MathUtils.smoothstep(reload, .78, 1));
+      const service = operatorEnvelope(reload, .19, .78);
       rp.healBlend = dampScalar(rp.healBlend || 0, type === 4 ? rp.healProgress || 0 : 0, dt, 14);
       const heal = rp.healBlend;
-      const treatment = Math.sin(heal * Math.PI);
-      const carry = Math.sin(rp.idlePhase) * 0.011 * (1 - aim);
+      const treatment = operatorEnvelope(heal, .24, .78);
+      const breath = Math.sin(rp.idlePhase * 1.37);
+      const carry = (breath * .004 + walk * .009) * (1 - aim * .82);
       const dash = rp.dashBlend = dampScalar(rp.dashBlend || 0, rp.dashing ? 1 : 0, dt, 15);
       const slashAge = (now - (rp.swungAt ?? -Infinity)) / 450;
-      const slash = THREE.MathUtils.smoothstep(slashAge, 0, .27) * (1 - THREE.MathUtils.smoothstep(slashAge, .36, 1));
-      const equip = 1 - THREE.MathUtils.smoothstep(now - (rp.equippedAt ?? -Infinity), 0, type === 5 ? 410 : 270);
+      const slash = operatorEnvelope(slashAge, .31, .40);
+      const equip = 1 - THREE.MathUtils.smootherstep(now - (rp.equippedAt ?? -Infinity), 0, heavy ? 410 : 275);
       const poseDrop = rp.poseDrop ?? rp.crouchDrop ?? 0;
       const hold = rp.weaponHold;
       const injecting = rp.needlePhase === 1;
@@ -2685,16 +2674,30 @@
       const gear = rp.gearBlend = dampScalar(rp.gearBlend || 0, injecting || strapping ? 1 : 0, dt, 13);
       hold.visible = gear < .82;
       if (rp.carrier) {
-        rp.carrier.rotation.set(stride * .11 + (rp.crouchDrop || 0) * .31 + treatment * .09 + dash * .16 - kick * .042,
-          walk * .085 - service * .11, -walk * .031 + (rp.gaitSide || 0) * .092);
+        const lateral = rp.gaitSide || 0, driving = rp.gaitForward || 0;
+        const effort = rp.travelBlend || 0;
+        const weightShift = Math.sin(rp.walkPhase - .58) * effort;
+        const lean = driving * .105 + (rp.crouchAmt || 0) * .25 + treatment * .08 + dash * .20;
+        rp.carrier.rotation.set(lean - kick * .046 + breath * .012 + Math.cos(rp.walkPhase * 2) * Math.abs(walk) * .045,
+          weightShift * (.11 - aim * .048) - service * .09 + lateral * .078,
+          -weightShift * .053 + lateral * .092, "YXZ");
+        const chestY = OPERATOR.chest - poseDrop;
+        rp.carrier.position.set(weightShift * .026 * (1 - aim * .5), chestY + breath * .003, -.065 * (rp.crouchAmt || 0) + driving * .024);
+        for (const [shoulder, sign] of [[rp.rightArm, 1], [rp.leftArm, -1]]) {
+          shoulder.position.copy(torsoOffset.set(OPERATOR.shoulderWidth * sign, OPERATOR.shoulder - OPERATOR.chest, -.006)
+            .applyQuaternion(rp.carrier.quaternion).add(rp.carrier.position));
+        }
+        rp.headGroup.position.copy(torsoOffset.set(0, OPERATOR.head - OPERATOR.chest, -.008)
+          .applyQuaternion(rp.carrier.quaternion).add(rp.carrier.position));
       }
       hold.position.set(
         stance.holdX - aim * .11 - service * .05 - treatment * .10 + walk * .018 + equip * .065 - slash * .068,
         stance.holdY + aim * .15 - service * .12 + treatment * .18 - dash * .10 + carry - poseDrop - equip * .16,
         stance.holdZ - .11 + aim * .035 - kick * .065 - service * .035 + slash * .13 - equip * .07
       );
-      hold.rotation.set(-(rp.remotePitch || 0) * .90 - kick * .10 + recovery + service * .14 + dash * .19 + equip * .29,
+      hold.rotation.set(-(rp.remotePitch || 0) * .87 - kick * .14 + service * .14 + dash * .19 + equip * .29,
         slash * -.9 - equip * .14, service * .61 + walk * .033 - treatment * .24 + equip * .19, "YXZ");
+      if (rp.importedOperator) hold.position.x *= -1;
       const cyclePart = type === 2 ? .12 * Math.sin(Math.PI * THREE.MathUtils.smoothstep(age, .10, .42))
         : type === 5 ? .19 * Math.sin(Math.PI * THREE.MathUtils.smoothstep(age, .14, .58)) : kick * .055;
       if (model.userData.slide) model.userData.slide.position.z = cyclePart;
@@ -2708,6 +2711,24 @@
       if (model.userData.medLid) model.userData.medLid.rotation.x = -treatment * 1.20;
 
       rp.group.updateWorldMatrix(true, true);
+      const twoHanded = rp.supportSocket && gear < .82;
+      const armLimit = OPERATOR.upperArm + OPERATOR.forearm - .013;
+      for (let iteration = 0; !rp.importedOperator && iteration < 2; iteration++) {
+        socketWrist(rp, rp.primarySocket, armPoint);
+        armPoint.sub(rp.rightArm.position);
+        let extension = armPoint.length() - armLimit;
+        if (twoHanded && service < .08) {
+          socketWrist(rp, rp.supportSocket, supportWrist);
+          supportWrist.sub(rp.leftArm.position);
+          const leftExtension = supportWrist.length() - armLimit;
+          if (leftExtension > extension) {
+            extension = leftExtension;
+            armPoint.copy(supportWrist);
+          }
+        }
+        if (extension <= 0) break;
+        hold.position.addScaledVector(armPoint, -extension / (extension + armLimit));
+      }
       rp.primarySocket.visible = gear < .82;
       const triggerFinger = rp.primarySocket.userData.triggerFinger;
       if (triggerFinger) triggerFinger.rotation.set(-kick * .24, kick * -.22, 0);
@@ -2719,7 +2740,7 @@
         armPoint.z = THREE.MathUtils.lerp(armPoint.z, injecting ? .32 : .27, gear);
       }
       poseOperatorArm(rp.rightArm, rp.rightElbow, armPoint, 1);
-      const support = rp.supportSocket && !rp.isReloading && gear < .82;
+      const support = twoHanded && service <= .04;
       if (rp.supportSocket) rp.supportSocket.visible = !!support;
       if (rp.leftFreeHand) rp.leftFreeHand.visible = !support;
       if (support) {
@@ -2742,8 +2763,13 @@
         armPoint.y = THREE.MathUtils.lerp(armPoint.y, 1.11 - poseDrop, gear);
         armPoint.z = THREE.MathUtils.lerp(armPoint.z, .30, gear);
       }
+      if (twoHanded && !support && service > .04) {
+        socketWrist(rp, rp.supportSocket, supportWrist);
+        armPoint.lerp(supportWrist, 1 - THREE.MathUtils.smootherstep(service, .04, .62));
+      }
       poseOperatorArm(rp.leftArm, rp.leftElbow, armPoint, -1);
       if (rp.leftFreeHand) rp.leftFreeHand.rotation.set(service * -.50 + treatment * -.42, .12, service * -.35);
+      animateImportedOperator(rp, dt, now, aim);
 
       if (rp.muzzleFlash) {
         rp.muzzleFlash.visible = age < 0.053 && type !== 4 && type !== 7;
@@ -2759,68 +2785,59 @@
     }
 
     let operatorFlashTexture;
-    const footPose = { hip: 0, knee: 0, roll: 0, ankle: 0 };
-
-    function updateRemoteLegs(rp, dt, hipHeight, moveX, moveZ, airborne, airHeight) {
-      const tuck = THREE.MathUtils.smoothstep(airHeight, .04, 1.05);
-      const airBlend = rp.airPose = dampScalar(rp.airPose || 0, airborne ? 1 : 0, dt, 16);
+    function updateRemoteLegs(rp, dt, speed, dirX, dirZ, airborne, verticalSpeed, landing = 0) {
+      rp.operatorSpeed = speed;
+      rp.operatorLateral = dirX;
+      rp.operatorForward = dirZ;
+      rp.operatorAirborne = airborne;
+      const crouch = rp.crouchAmt || 0;
+      const move = operatorStride(speed, crouch);
+      rp.travelBlend = dampScalar(rp.travelBlend || 0, Math.min(1, speed / 3.5), dt, 12);
+      const moveX = rp.stepX = dampScalar(rp.stepX || 0, dirX * move, dt, 15);
+      const moveZ = rp.stepZ = dampScalar(rp.stepZ || 0, dirZ * move, dt, 15);
+      const airBlend = rp.airPose = dampScalar(rp.airPose || 0, airborne ? 1 : 0, dt, airborne ? 19 : 16);
+      const flight = THREE.MathUtils.clamp(verticalSpeed * .13, -1, 1);
+      const dash = rp.dashBlend || 0;
+      const widest = Math.hypot(moveX, moveZ) + .044;
+      const length = OPERATOR.thigh + OPERATOR.shin - .012;
+      const extension = Math.sqrt(Math.max(.12, length * length - widest * widest)) + OPERATOR.sole;
+      const hipHeight = Math.min(OPERATOR.hip, extension) - crouch * .46 - landing
+        - (.008 + .008 * Math.cos(rp.walkPhase * 2)) * Math.min(1, move * 3) * (1 - airBlend);
+      rp.poseDrop = OPERATOR.hip - hipHeight;
       for (const side of [-1, 1]) {
         const leg = side < 0 ? rp.leftLeg : rp.rightLeg;
-        const knee = leg.userData.knee;
-        const ankle = leg.userData.ankle;
-        operatorFootPose(footPose, rp.walkPhase, side, moveX, moveZ, hipHeight, airBlend, tuck, rp.dashBlend || 0);
-        leg.position.set(side * .135, hipHeight, -rp.crouchAmt * .085);
-        leg.rotation.set(footPose.hip, side * (.045 + rp.crouchAmt * .10), footPose.roll, "ZXY");
-        knee.rotation.x = footPose.knee;
-        ankle.rotation.x = footPose.ankle;
-        ankle.rotation.z = -footPose.roll;
+        poseOperatorFoot(leg, rp.walkPhase, side, moveX, moveZ, hipHeight, crouch, airBlend, flight, dash);
       }
-      rp.waist.position.set(0, hipHeight - .12, -.085 * rp.crouchAmt);
-      rp.waist.rotation.z = dampScalar(rp.waist.rotation.z, moveX * -.12, dt, 15);
-    }
-
-    function batchOperatorShell(parent) {
-      const byMaterial = new Map();
-      for (const mesh of parent.children) {
-        if (!mesh.isMesh || mesh.material.transparent || Array.isArray(mesh.material)) continue;
-        const parts = byMaterial.get(mesh.material) || [];
-        parts.push(mesh);
-        byMaterial.set(mesh.material, parts);
-      }
-      for (const [material, parts] of byMaterial) {
-        if (parts.length < 2) continue;
-        const baked = parts.map(mesh => {
-          mesh.updateMatrix();
-          const geometry = mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry.clone();
-          geometry.applyMatrix4(mesh.matrix);
-          geometry.clearGroups();
-          return geometry;
-        });
-        const merged = mergeGeometries(baked);
-        for (const geometry of baked) geometry.dispose();
-        if (!merged) continue;
-        parent.remove(...parts);
-        for (const geometry of new Set(parts.map(mesh => mesh.geometry))) geometry.dispose();
-        parent.add(new THREE.Mesh(merged, material));
-      }
+      rp.waist.position.set(0, hipHeight - .12, -.093 * crouch);
+      const shift = Math.sin(rp.walkPhase - .58) * rp.travelBlend;
+      rp.waist.rotation.set(crouch * -.08, shift * -.087, moveX * -.13 + shift * .046, "YXZ");
     }
 
     function createRemotePlayer(name, localAvatar = false) {
       const group = new THREE.Group();
       const duelBright = isBrightIndoorMap(CURRENT_MAP);
-      const hueShift = hashRemoteTint(name || "player");
-      const pal = applyRemoteAvatarPalette({ duelBright, hueShift });
-      const { carrier, waist, headGroup, armShell, legShell, setArmorLook } = buildOperatorShell(pal);
+      const importedOperator = createImportedOperator();
+      const fallback = importedOperator ? null : buildOperatorShell(applyRemoteAvatarPalette({ duelBright, hueShift: hashRemoteTint(name || "player") }));
+      const carrier = fallback?.carrier || new THREE.Group(), waist = fallback?.waist || new THREE.Group();
+      const headGroup = fallback?.headGroup || new THREE.Group();
+      const setArmorLook = fallback?.setArmorLook || (() => {});
       group.add(carrier, waist, headGroup);
+      if (importedOperator) group.add(importedOperator.root);
 
-      const rightArm = new THREE.Group();
-      const leftArm = new THREE.Group();
+      const rightArm = new THREE.Bone();
+      const leftArm = new THREE.Bone();
       const makePlayerArm = (arm, side) => {
-        const elbow = armShell(arm, side);
+        if (importedOperator) {
+          const elbow = new THREE.Bone();
+          elbow.position.y = -OPERATOR.upperArm;
+          arm.add(elbow);
+          return { elbow, hand: null };
+        }
+        const elbow = fallback.armShell(arm, side);
         const hand = new THREE.Group();
-        hand.position.set(0, -0.355, 0.012);
         const kit = new GunKit();
-        buildGripGlove(kit, hand, side, 0.013, 0.015);
+        const wrist = buildGripGlove(kit, hand, side, .013, .015);
+        hand.position.set(-wrist[0], -OPERATOR.forearm - wrist[1], -wrist[2]);
         kit.flush();
         elbow.add(hand);
         return { elbow, hand };
@@ -2828,25 +2845,28 @@
       const rArm = makePlayerArm(rightArm, "R");
       const lArm = makePlayerArm(leftArm, "L");
       const rightElbow = rArm.elbow, leftElbow = lArm.elbow;
-      rightArm.position.set(.242, 1.425, .023);
-      leftArm.position.set(-.242, 1.425, .023);
+      rightArm.position.set(OPERATOR.shoulderWidth, OPERATOR.shoulder, -.006);
+      leftArm.position.set(-OPERATOR.shoulderWidth, OPERATOR.shoulder, -.006);
       rightArm.rotation.order = "YXZ";
       leftArm.rotation.order = "YXZ";
       rightArm.rotation.set(-0.85, -0.10, 0.00);
       leftArm.rotation.set(-0.85, 0.55, 0.00);
       group.add(rightArm, leftArm);
 
-      const legR = legShell(0.15);
-      const legL = legShell(-0.15);
+      const makeLeg = side => {
+        if (fallback) return fallback.legShell(side * .109);
+        const leg = new THREE.Group(), knee = new THREE.Group(), ankle = new THREE.Group();
+        knee.position.y = -OPERATOR.thigh;
+        ankle.position.y = -OPERATOR.shin;
+        leg.add(knee);
+        knee.add(ankle);
+        Object.assign(leg.userData, { knee, ankle });
+        return leg;
+      };
+      const legR = makeLeg(1);
+      const legL = makeLeg(-1);
       legR.rotation.order = legL.rotation.order = "ZXY";
       group.add(legR, legL);
-
-      const rightHandGrip = new THREE.Group();
-      rightHandGrip.position.set(0, -0.72, 0.12);
-      rightHandGrip.rotation.order = "YXZ";
-      rightHandGrip.rotation.x = 0.14;
-      rightHandGrip.rotation.y = -0.04;
-      rightArm.add(rightHandGrip);
 
       const weaponHold = getOrCreateRemoteWeaponHold(group);
       const gunModel = makeThirdPersonGun(1);
@@ -2854,6 +2874,11 @@
       weaponHold.add(gunModel);
       const supportSocket = attachRemoteSupportHand(gunModel, 1);
       const primarySocket = attachRemotePrimaryHand(gunModel, 1);
+      if (importedOperator) {
+        for (const socket of [primarySocket, supportSocket]) {
+          socket.traverse(node => { if (node.isMesh) node.visible = false; });
+        }
+      }
 
       const ns = makeNameSprite(name || "Player", null);
       ns.sprite.position.set(0, 2.55, 0);
@@ -2881,10 +2906,6 @@
       muzzleFlash.visible = false;
       group.add(muzzleFlash);
 
-      for (const part of [carrier, waist, headGroup, rightArm, leftArm, rightElbow, leftElbow,
-        legR, legL, legR.userData.knee, legL.userData.knee, legR.userData.ankle, legL.userData.ankle]) {
-        batchOperatorShell(part);
-      }
       group.userData.operator = true;
       group.traverse(o => { if (o.isMesh) { o.castShadow = !isTrainingMap(CURRENT_MAP); o.receiveShadow = true; } });
       group.visible = false;
@@ -2902,13 +2923,13 @@
         nameTex: ns.tex,
         equippedAchievement: null,
         rightArm,
+        importedOperator,
         leftArm,
         rightElbow,
         leftElbow,
         rightFreeHand: rArm.hand,
         leftFreeHand: lArm.hand,
         muzzleFlash,
-        rightHandGrip,
         rightLeg: legR,
         leftLeg: legL,
         rightKnee: legR.userData.knee,
@@ -6185,6 +6206,7 @@
       rp.nameSprite.scale.set(2.75, .515, 1);
       rp.nameSprite.position.y = 2.19;
       rp.showcaseHitMeshes = [];
+      if (rp.importedOperator) rp.showcaseHitMeshes.push(...rp.importedOperator.meshes);
       for (const [zone, groups] of [
         ["head", [rp.headGroup]],
         ["body", [rp.carrier, rp.waist, rp.leftArm, rp.rightArm]],
@@ -6294,7 +6316,10 @@
     }
 
     function showAnimationShowcaseHit(hit) {
-      const zone = hit.object.userData.showcaseZone;
+      const rig = showcaseRp?.importedOperator;
+      const head = rig?.bones.Head.getWorldPosition(showcaseRayClosest).y;
+      const hip = rig?.bones.Hips.getWorldPosition(showcaseRayCenter).y;
+      const zone = hit.object.userData.showcaseZone || (hit.point.y > head - .09 ? "head" : hit.point.y < hip - .11 ? "leg" : "body");
       registerTrainingHit(zone);
       createSparks(hit.point, 0x98deed);
       triggerHitFeedback(false, zone === "head");
@@ -6394,16 +6419,11 @@
       const avatar = enemy.avatar;
       if (avatar) {
         const stride = moving ? THREE.MathUtils.clamp(enemy.patrolSpeed / 5.4, 0, 1) : 0;
-        const height = .846 - stride * .04;
         avatar.gaitSide = dampScalar(avatar.gaitSide || 0, enemy.patrolDir * stride, dt, 12);
-        avatar.poseDrop = .846 - height;
-        avatar.walkPhase = enemy.walkPhase;
+        if (moving) avatar.walkPhase = advanceOperatorGait(avatar.walkPhase, enemy.patrolSpeed, dt, 0);
         avatar.idlePhase = (avatar.idlePhase || 0) + dt * 1.28;
-        updateRemoteLegs(avatar, dt, height, avatar.gaitSide * .26, 0, false, 0);
-        avatar.carrier.position.y = 1.24 - avatar.poseDrop;
-        avatar.headGroup.position.y = 1.76 - avatar.poseDrop;
-        avatar.rightArm.position.y = avatar.leftArm.position.y = 1.425 - avatar.poseDrop;
-        updateRemoteOperator(avatar, dt, stride, Math.sin(avatar.walkPhase) * .49 * stride, 0, performance.now());
+        updateRemoteLegs(avatar, dt, moving ? enemy.patrolSpeed : 0, enemy.patrolDir, 0, false, 0);
+        updateRemoteOperator(avatar, dt, Math.sin(avatar.walkPhase) * .49 * stride, 0, performance.now());
         return;
       }
       if (enemy.isBoss) return;   // the boss target holds the static pose set at build time
@@ -8077,7 +8097,7 @@
       {
         const pool = [];
         for (let i = 0; i < Math.min(5, mastHeads.length); i++) {
-          const lamp = createPhysicalSpotLight(theme.lamp, 650, 60, Math.PI / 4, 0.55);
+          const lamp = createPhysicalSpotLight(theme.lamp, 180, 44, Math.PI / 5, 0.72);
           lamp.userData.poolIntensity = lamp.intensity;
           lamp.userData.poolFade = 1;
           lamp.castShadow = false;
@@ -8226,6 +8246,8 @@
     // Keep the lifetime summon roster bounded even when a large hit crosses
     // multiple health thresholds at once.
     const HELL_BOSS_MINIONS_PER_STAGE = 2;
+    const HELL_BOSS_MAX_ACTIVE_MINIONS = 8;
+    const HELL_BOSS_MAX_MINIONS_PER_FIGHT = 16;
     /** Multiplier for how far from players a zombie must spawn (0.4 = tighter / closer spawns). */
     const ZOMBIE_SPAWN_PLAYER_CLEAR_SCALE = 0.4;
     const SPAWN_MIN_DIST_BASE = 18 * ZOMBIE_SPAWN_PLAYER_CLEAR_SCALE;
@@ -15647,7 +15669,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       _gloveMats = {
         glove: new THREE.MeshStandardMaterial({ color: 0x292c29, roughness: 0.85, roughnessMap: S.grainR, normalMap: S.stippleN, normalScale: V(0.36) }),
         pad: new THREE.MeshStandardMaterial({ color: 0x414a4d, roughness: 0.64, metalness: 0.05, normalMap: S.grainN, normalScale: V(0.40) }),
-        sleeve: new THREE.MeshStandardMaterial({ color: 0x424946, roughness: 0.93, roughnessMap: S.grainR, normalMap: S.grainN, normalScale: V(0.56) }),
+        sleeve: operatorSleeveMaterial(0x414734),
         seam: new THREE.MeshStandardMaterial({ color: 0x666d61, roughness: 0.94 }),
         webbing: new THREE.MeshStandardMaterial({ color: 0x272e30, roughness: 0.91, normalMap: S.stippleN, normalScale: V(0.40) }),
       };
@@ -15659,153 +15681,22 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
      * knuckle armour on +X (right hand) or -X (left), four fingers curling round the front
      * (-Z) to the far side, thumb along the near side. Returns the wrist point.
      */
-    function buildGloveParts(kit, parent, side, r) {
-      const G = getGloveMaterials();
-      const sx = side === "L" ? -1 : 1;
-      kit.put(parent, gunProfile([[-0.028, 0.042], [0.036, 0.04], [0.042, -0.044], [-0.022, -0.046]], 0.024, { r: 0.014, bevel: 0.008 }),
-        G.glove, sx * (r + 0.011), 0, 0.006);
-      kit.put(parent, gunProfile([[-0.026, 0.036], [0.002, 0.036], [0.002, -0.03], [-0.026, -0.03]], 0.008, { r: 0.006, bevel: 0.0025 }),
-        G.pad, sx * (r + 0.0235), 0.002, 0.0);
-      for (let finger = 0; finger < 4; finger++) {
-        const height = .030 - finger * .019;
-        const girth = finger === 3 ? .007 : .009;
-        kit.put(parent, digitGeometry(THREE, [
-          [sx * (r + .010), height, -.009, girth],
-          [sx * (r * .70), height + .002, -r - .009, girth],
-          [-sx * r * .42, height + .001, -r - .010, girth * .86],
-          [-sx * (r + .008), height, -r * (.44 + finger * .09), girth * .72],
-          [-sx * (r + .007), height, -r * (.32 + finger * .09), .0005],
-        ]), G.glove);
-      }
-      kit.put(parent, digitGeometry(THREE, [
-        [sx * (r + .011), .021, .018, .012], [sx * r * .58, .043, .024, .011],
-        [-sx * r * .43, .049, .017, .009], [-sx * r * .74, .047, .009, .0005],
-      ]), G.pad);
-      // Wrist at the heel of the hand, on the finger side (template -Z): once the support
-      // hand is turned onto a handguard that is underneath, so the forearm leaves from below.
-      const wrist = [sx * (r + 0.004), -0.05, -0.026];
-      kit.put(parent, gunSegment([wrist[0], wrist[1] + 0.016, wrist[2] + 0.008], [wrist[0], wrist[1] - 0.008, wrist[2] - 0.004], 0.027, 0.029, 12), G.pad);
-      return wrist;
+    function buildGloveParts(kit, parent, side, radius) {
+      return buildOperatorGlove(kit, parent, getGloveMaterials(), side === "L" ? -1 : 1, radius, radius, false, true);
     }
 
-    /** Plan-view part: [x, z] outline extruded `height` along Y, centred on y = 0. */
-    function gunPlan(pts, height, opts = {}) {
-      const shape = new THREE.Shape();
-      gunRoundedPath(shape, pts, opts.r ?? 0.004);
-      const b = Math.min(opts.bevel ?? 0.004, height * 0.3);
-      const depth = Math.max(0.0004, height - 2 * b);
-      let geo = new THREE.ExtrudeGeometry(shape, {
-        depth, bevelEnabled: b > 0, bevelThickness: b, bevelSize: b, bevelOffset: -b, bevelSegments: 2, curveSegments: 4,
-      });
-      geo.translate(0, 0, -depth / 2);
-      geo.rotateX(Math.PI / 2);
-      return toCreasedNormals(geo, 0.6);
+    function buildGripGlove(kit, parent, side, width, depth, trigger = false) {
+      return buildOperatorGlove(kit, parent, getGloveMaterials(), side === "L" ? -1 : 1, width, depth, trigger);
     }
 
-    /**
-     * Gloved hand closed on a pistol grip whose cross-section is `a` (half width) by `b`
-     * (half depth), grip axis along local Y. Palm and back-strap web are one piece; the four
-     * fingers are separate slices wrapping the front strap round to the far side, so from the
-     * shooter's eye you see the thumb, fingertips and the web of the hand, as on a real grip.
-     */
-    function buildGripGlove(kit, parent, side, a, b, trigger = false) {
-      const G = getGloveMaterials();
-      const sx = side === "L" ? -1 : 1;
-      const t = 0.017;
-      const X = (pts) => pts.map(([x, z, r]) => (r === undefined ? [x * sx, z] : [x * sx, z, r]));
-      // palm on the strong side + web over the back strap
-      kit.put(parent, gunPlan(X([[a, -b * 0.55], [a + t, -b * 0.6, 0.006], [a + t, b + t, 0.014], [-a * 0.7, b + t, 0.01],
-        [-a * 0.7, b], [a, b]]), 0.074, { bevel: 0.006 }), G.glove, 0, -0.004, 0);
-      // knuckle armour across the back of the hand
-      kit.put(parent, gunPlan(X([[a + t - 0.002, -b * 0.5], [a + t + 0.006, -b * 0.45, 0.003], [a + t + 0.006, b * 0.4, 0.003], [a + t - 0.002, b * 0.45]]), 0.05, { bevel: 0.002 }),
-        G.pad, 0, 0.004, 0);
-      // fingers: front strap round to the weak side
-      for (let finger = trigger ? 1 : 0; finger < 4; finger++) {
-        const height = .026 - finger * .0185;
-        const girth = finger === 3 ? .007 : .0085;
-        const front = -b - .010 + finger * .001;
-        kit.put(parent, digitGeometry(THREE, [
-          [sx * (a + .010), height, -b * .45, girth],
-          [sx * (a + .008), height - .001, front, girth * 1.06],
-          [sx * (-a + .004), height - .002, front - .002, girth * .90],
-          [-sx * (a + .009), height - .002, -b * .33, girth * .75],
-          [-sx * (a + .006), height - .002, b * (finger === 3 ? -.11 : .29), .0005],
-        ]), G.glove);
-        kit.put(parent, gunPlan(X([[a + .012, -.010], [a + .019, -.011], [a + .022, .004], [a + .015, .006]]),
-          .010, { r: .002, bevel: .002 }), G.pad, 0, height + .002, -b * .48);
-      }
-      if (trigger) {
-        const indexFinger = new THREE.Group();
-        indexFinger.position.set(sx * (a + .011), .022, -b * .44);
-        parent.add(indexFinger);
-        parent.userData.triggerFinger = indexFinger;
-        kit.put(indexFinger, digitGeometry(THREE, [
-          [0, 0, .005, .009], [sx * .002, .010, -.017, .0085], [-sx * .006, .009, -.037, .007],
-          [-sx * .014, .005, -.046, .005], [-sx * .018, .004, -.049, .0005],
-        ]), G.glove);
-      }
-      kit.put(parent, digitGeometry(THREE, [
-        [sx * (a + .010), .018, b + .010, .015], [sx * (a * .36), .036, b + .013, .012],
-        [-sx * (a + .006), .046, b * .44, .011], [-sx * (a + .010), .043, -b * .42, .008],
-        [-sx * (a + .009), .040, -b * .55, .0005],
-      ]), G.glove);
-      // cuff
-      const wrist = [sx * a * 0.5, -0.048, b * 0.55];
-      kit.put(parent, gunSegment([wrist[0], wrist[1] + 0.012, wrist[2] - 0.01], [wrist[0], wrist[1] - 0.012, wrist[2] + 0.014], 0.03, 0.031, 12), G.pad);
-      return wrist;
-    }
-
-    /**
-     * Glove + forearm for a grip stub. The forearm always heads down and back toward the
-     * camera in gun space, whatever rake the grip stub is rotated to.
-     */
-    const sleeveForward = new THREE.Vector3(0, 0, 1);
-    const sleeveAxis = new THREE.Vector3();
     const sleeveAnchor = new THREE.Vector3();
-    const sleeveRings = [
-      [-.012, .028, .025, 0, .01], [.005, .030, .026, 0, .025], [.027, .033, .028, -.001, .035],
-      [.046, .037, .031, -.004, .065], [.073, .037, .032, -.005, .035], [.101, .040, .034, -.005, .042],
-      [.146, .041, .034, -.003, .040], [.188, .043, .036, -.002, .055], [.218, .044, .038, -.001, .024],
-      [.246, .045, .039, 0, .035], [.278, .047, .041, .003, .055], [.32, .049, .043, .004, .045],
-      [.335, .045, .039, .004, .025], [.350, .020, .018, .004], [.362, .001, .001, .004],
-    ];
 
-    function buildViewSleeve(kit, parent, wrist, reach, side) {
-      const G = getGloveMaterials();
-      const sleeve = new THREE.Group();
-      parent.add(sleeve);
-      sleeve.position.set(...wrist);
-      sleeveAxis.set(...reach);
-      sleeve.scale.z = sleeveAxis.length() / .32;
-      sleeve.quaternion.setFromUnitVectors(sleeveForward, sleeveAxis.normalize());
-      if (side) parent.userData.viewSleeve = { sleeve, side };
-      kit.put(sleeve, sleeveGeometry(THREE, sleeveRings), G.sleeve);
-      kit.put(sleeve, sleeveGeometry(THREE, [
-        [-.012, .029, .027], [.001, .032, .029], [.019, .034, .030],
-        [.033, .035, .031], [.038, .034, .030],
-      ]), G.webbing);
-      kit.put(sleeve, gunPlan([[-.026, .103], [.019, .10], [.027, .119], [.024, .207], [.008, .235], [-.022, .214], [-.032, .14]],
-        .014, { r: .009, bevel: .004 }), G.pad, 0, .032, 0, 0, 0, -.10);
-      kit.put(sleeve, gunBox(.039, .008, .022), G.pad, -.004, .031, .024, 0, 0, -.12);
-      kit.put(sleeve, gunBox(.022, .002, .006), G.seam, -.004, .036, .021, 0, 0, -.12);
-      for (let seam = 0; seam < 10; seam++) {
-        kit.put(sleeve, gunBox(.0028, .0016, .008), G.seam, .036 + seam * .0011, .008, .061 + seam * .023, .04, -.06, -1.2);
-        kit.put(sleeve, gunBox(.0045, .0015, .005), G.webbing, -.013 + seam * .003, .039, .132, 0, 0, -.1);
-      }
+    function buildViewSleeve(parent, wrist, reach, side) {
+      parent.userData.viewSleeve = buildOperatorViewSleeve(getGloveMaterials(), parent, wrist, reach, side);
     }
 
-    function aimViewSleeve(hand, anchorRoot, move = 0, raise = 0) {
-      const rig = hand?.userData.viewSleeve;
-      if (!rig || !hand.visible) return;
-      const { sleeve, side } = rig;
-      sleeveAnchor.set(side * (.29 + move * .018), -.65 + raise, -.15);
-      anchorRoot.localToWorld(sleeveAnchor);
-      hand.worldToLocal(sleeveAnchor);
-      sleeveAxis.subVectors(sleeveAnchor, sleeve.position);
-      const length = sleeveAxis.length();
-      if (length < .001) return;
-      sleeve.quaternion.setFromUnitVectors(sleeveForward, sleeveAxis.multiplyScalar(1 / length));
-      sleeve.scale.z = THREE.MathUtils.clamp(length, .14, .82) / .32;
+    function aimViewSleeve(hand, move = 0, raise = 0) {
+      poseOperatorViewSleeve(hand, camera, move, raise);
     }
 
     function makeViewHandMesh(side, grip, spec) {
@@ -15817,7 +15708,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       const w = buildGripGlove(kit, g, side, a, b, side === "R" && spec !== MEDPACK_GRIP);
       const elbow = new THREE.Vector3(side === "L" ? -.11 : .07, -.34, .28);
       if (grip) elbow.applyQuaternion(new THREE.Quaternion().setFromEuler(grip.rotation).invert());
-      buildViewSleeve(kit, g, w, [elbow.x, elbow.y, elbow.z], side === "L" ? -1 : 1);
+      buildViewSleeve(g, w, [elbow.x, elbow.y, elbow.z], side === "L" ? -1 : 1);
       kit.flush();
       return g;
     }
@@ -16403,8 +16294,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       const wrist = buildGloveParts(kit, inner, "L", r);
       inner.updateMatrix();
       const w = new THREE.Vector3(...wrist).applyMatrix4(inner.matrix);
-      const k = 1.8;
-      buildViewSleeve(kit, outer, [w.x, w.y, w.z], elbow.map(value => value * k), -1);
+      buildViewSleeve(outer, [w.x, w.y, w.z], elbow, -1);
       kit.flush();
       parent.add(outer);
       root.userData.supportHand = outer;
@@ -16947,7 +16837,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       const handGrp = new THREE.Group();
       const kit = new GunKit();
       const wrist = buildGloveParts(kit, handGrp, "R", .016);
-      buildViewSleeve(kit, handGrp, wrist, [.05, -.27, .13], 1);
+      buildViewSleeve(handGrp, wrist, [.05, -.27, .13], 1);
       kit.flush();
       handGrp.position.set(0, 0, .048);
       handGrp.rotation.x = -Math.PI / 2;
@@ -17030,7 +16920,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       for (const [hand, side, sign] of [[handL, "L", -1], [handR, "R", 1]]) {
         hand.rotation.z = sign * .65;
         const wrist = buildGripGlove(kit, hand, side, .014, .013);
-        buildViewSleeve(kit, hand, wrist, [sign * .08, -.22, .20], sign);
+        buildViewSleeve(hand, wrist, [sign * .08, -.22, .20], sign);
       }
       kit.flush();
 
@@ -17230,7 +17120,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
 
       const armKit = new GunKit();
       const wrist = buildGripGlove(armKit, arm, "R", .014, .020);
-      buildViewSleeve(armKit, arm, wrist, [.07, -.28, .16], 1);
+      buildViewSleeve(arm, wrist, [.07, -.28, .16], 1);
       armKit.flush();
       arm.rotation.set(Math.PI / 2, 0, -.15);
       arm.position.set(0, -.002, .108);
@@ -17690,7 +17580,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         // Paralysis Dart: sequential per-dart loading. The pose is shared with the left
         // glove (see getDartLoaderPose) so the dart is always in the hand loading it.
         const dart = ud.animDart;
-        const pose = getDartLoaderPose(ud, p);
+        const pose = getDartLoaderPose(ud, rp);
         if (dart && pose) {
           const grip = ud.dartHandGrip;
           const follow = pose.handEnter * (1 - pose.handHome);
@@ -19116,7 +19006,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
               syr.position.z = THREE.MathUtils.lerp(bp.z - 0.10, bp.z + 0.06, su);
               syr.rotation.z += THREE.MathUtils.lerp(-0.08, 0.45, su);
             }
-            aimViewSleeve(needleRoot.userData.animHand, camera);
+            aimViewSleeve(needleRoot.userData.animHand);
           }
         }
         if (elapsed >= NEEDLE_INJECT_DUR_MS) {
@@ -19429,8 +19319,8 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           ud.handR.rotation.z = .68 - pullL * .39 + release * .21;
           ud.handL.visible = release < .999;
           ud.handR.visible = release < .999;
-          aimViewSleeve(ud.handL, camera);
-          aimViewSleeve(ud.handR, camera);
+          aimViewSleeve(ud.handL);
+          aimViewSleeve(ud.handR);
           // Nozzles light as it comes online.
           for (const f of ud.flames) f.material.opacity = 0.55 * spin;
         }
@@ -20715,7 +20605,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       motion.dash = dampScalar(motion.dash, now < state.dashActiveUntil ? 1 : 0, dt, 14);
       motion.air = dampScalar(motion.air, player.onGround ? 0 : THREE.MathUtils.clamp(player.velocityY / 8, -1, 1), dt, 10);
       const aimWeight = 1 - state.adsProgress * 0.94;
-      const uiMotion = gameSettings.cameraMotion === false ? .30 : 1;
+      const uiMotion = gameSettings.cameraMotion === false ? 0 : 1;
       const sideSpeed = (state.velX * Math.cos(player.yaw) - state.velZ * Math.sin(player.yaw)) / Math.max(1, player.speed);
       motion.sidestep = dampScalar(motion.sidestep, THREE.MathUtils.clamp(sideSpeed, -1, 1), dt, 12);
       const speed = Math.hypot(state.velX, state.velZ);
@@ -20723,11 +20613,12 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       const weight = state.weaponIndex === 2 || state.weaponIndex === 5 ? 1.28 : state.weaponIndex === 0 ? .84 : 1;
       motion.weight = dampScalar(motion.weight, stride, dt, 7);
       const phase = state.walkPhase;
-      const breath = Math.sin(t * 1.91) + .29 * Math.sin(t * 3.82 + .5);
-      const footing = Math.sin(phase);
-      const bobX = (footing * .013 * motion.weight + motion.lagX * .19 + motion.sidestep * .014) * aimWeight * uiMotion;
-      const bobY = ((.5 - .5 * Math.cos(phase * 2)) * .018 * stride + breath * .0021) * aimWeight * uiMotion;
-      const bobRotZ = (footing * .026 * motion.weight - motion.lagX * .56 - motion.sidestep * .043) * aimWeight * uiMotion;
+      const breath = Math.sin(t * 1.61) + .21 * Math.sin(t * 3.22 + .65);
+      const footing = Math.sin(phase - .34);
+      const footfall = .5 - .5 * Math.cos(phase * 2 - .30);
+      const bobX = (footing * .009 * motion.weight + motion.lagX * .16 + motion.sidestep * .011) * aimWeight * uiMotion;
+      const bobY = (footfall * .011 * motion.weight + breath * .0017) * aimWeight * uiMotion;
+      const bobRotZ = (footing * .019 * motion.weight - motion.lagX * .42 - motion.sidestep * .031) * aimWeight * uiMotion;
 
       state.weaponBobX = dampScalar(state.weaponBobX, bobX, dt, 16);
       state.weaponBobY = dampScalar(state.weaponBobY, bobY, dt, 16);
@@ -20841,20 +20732,19 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       }
 
       const shotAge = Math.max(0, now - (state.viewShotAt ?? -Infinity)) * .001;
-      const shotKick = Math.exp(-shotAge * (weight > 1 ? 16 : 23));
-      const spring = Number.isFinite(shotAge) ? Math.sin(shotAge * 28) * Math.exp(-shotAge * 13) : 0;
-      const muzzleSettle = weight * (.022 * shotKick - .006 * spring);
+      const shotKick = operatorShot(shotAge, weight > 1);
+      const muzzleSettle = weight * .031 * shotKick;
       const trigger = ud.viewArmR?.userData.triggerFinger;
       if (trigger) trigger.rotation.set(-.21 * shotKick + (1 - adsBlend) * .08, -.18 * shotKick, 0);
       const crouchCarry = crouchAmt * uiMotion * aimWeight;
       weaponRoot.position.set(
-        state.weaponBobX + reloadX,
-        WEAPON_VIEW_DROP_Y - state.recoil * .76 - state.weaponBobY + reloadY + crouchCarry * .018
+        state.weaponBobX + reloadX - .10,
+        WEAPON_VIEW_DROP_Y - state.recoil * .76 - state.weaponBobY + reloadY + crouchCarry * .018 + .04
           - (motion.dash * .115 + state.landDipVis * .50 + motion.air * .025) * aimWeight * uiMotion,
         reloadPushZ + state.recoil * .38 + muzzleSettle + motion.dash * .075 * uiMotion
       );
       weaponRoot.rotation.set(
-        state.recoil * (usingAds ? .62 : .84) + reloadRotX - spring * .016
+        state.recoil * (usingAds ? .62 : .84) + reloadRotX + shotKick * .023
           + (motion.lagY + motion.dash * .21 + motion.air * .035) * aimWeight * uiMotion,
         reloadRotY + motion.lagX * aimWeight * uiMotion,
         state.weaponBobRotZ + reloadRotZ + motion.dash * .12 * uiMotion + crouchCarry * .036
@@ -20870,10 +20760,12 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           ud.viewArmL.position.lerp(sleeveAnchor, 1 - release);
         }
       }
-      aimViewSleeve(ud.viewArmR, weaponRoot, motion.sidestep, crouchCarry * .025);
-      aimViewSleeve(ud.viewArmL, weaponRoot, motion.sidestep, crouchCarry * .025);
-      aimViewSleeve(ud.supportHand, weaponRoot, motion.sidestep, crouchCarry * .025);
-      aimViewSleeve(ud.knifeArm, weaponRoot, motion.sidestep);
+      if (weaponRoot.visible) {
+        aimViewSleeve(ud.viewArmR, motion.sidestep, crouchCarry * .025);
+        aimViewSleeve(ud.viewArmL, motion.sidestep, crouchCarry * .025);
+        aimViewSleeve(ud.supportHand, motion.sidestep, crouchCarry * .025);
+        aimViewSleeve(ud.knifeArm, motion.sidestep);
+      }
 
       const adsFov = Math.min(88, Math.max(28, weapon().adsFov ?? 55));
       // Helmets narrow the field of view — the higher the tier, the more you give up.
@@ -21206,7 +21098,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       const _stride = Math.min(1.6, _hSpeed / player.speed);
       const movingNow = _stride > 0.08;
       if (movingNow && player.onGround) {
-        state.walkPhase += dt * 10.5 * Math.max(0.55, _stride);
+        state.walkPhase = advanceOperatorGait(state.walkPhase, _hSpeed, dt, crouchAmt);
       }
       const cameraMotionEnabled = gameSettings.cameraMotion !== false;
       const bobTarget = (cameraMotionEnabled && movingNow && player.onGround)
@@ -21305,37 +21197,41 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       avatar.adsBlend = dampScalar(avatar.adsBlend || 0, state.adsProgress, dt, 14);
       const speed = Math.hypot(state.velX, state.velZ);
       const stride = THREE.MathUtils.clamp(speed / 5.4, 0, 1);
-      const norm = player.onGround && speed > .001 ? (1 - crouchAmt * .53) * stride / speed : 0;
+      const norm = speed > .001 ? 1 / speed : 0;
       const yaw = avatar.group.rotation.y;
       const sin = Math.sin(yaw), cos = Math.cos(yaw);
-      avatar.gaitSide = (cos * state.velX - sin * state.velZ) * norm;
+      const lateral = (cos * state.velX - sin * state.velZ) * norm;
       const forward = (sin * state.velX + cos * state.velZ) * norm;
+      avatar.gaitSide = lateral * stride;
+      avatar.gaitForward = forward * stride;
       avatar.walkPhase = state.walkPhase;
       avatar.crouchDrop = crouchAmt * .51;
-      const hipHeight = .846 - avatar.crouchDrop - stride * .06 - state.landDipVis * .26;
-      avatar.poseDrop = .846 - hipHeight;
-      updateRemoteLegs(avatar, dt, hipHeight, avatar.gaitSide * .26, forward * .32, !player.onGround, Math.abs(player.velocityY) * .13);
-      avatar.carrier.position.y = 1.24 - avatar.poseDrop;
-      avatar.rightArm.position.y = avatar.leftArm.position.y = 1.425 - avatar.poseDrop;
-      avatar.headGroup.position.y = 1.76 - avatar.poseDrop;
+      updateRemoteLegs(avatar, dt, player.onGround ? speed : 0, lateral, forward, !player.onGround, player.velocityY, state.landDipVis * .26);
       avatar.headGroup.rotation.x = -player.pitch * .78;
       avatar.headGroup.rotation.z = -avatar.gaitSide * .037;
       applyRemoteJetPack(avatar);
       updateRemoteJetPack(avatar, dt);
-      updateRemoteOperator(avatar, dt, stride, Math.sin(avatar.walkPhase) * .52 * stride, avatar.adsBlend, now);
-      const fx = -Math.sin(player.yaw), fz = -Math.cos(player.yaw);
-      const side = viewMode === 1 ? -1 : 1;                 // behind the player, or in front of them
-      const ex = camera.position.x, ey = camera.position.y, ez = camera.position.z;
-      let dist = 2.6;
-      for (let s = 0.4; s <= 2.6; s += 0.1) {
-        if (pointInWallBox(ex + fx * side * s, ey, ez + fz * side * s, 0.14)) { dist = Math.max(0.5, s - 0.2); break; }
+      updateRemoteOperator(avatar, dt, Math.sin(avatar.walkPhase) * .52 * stride, avatar.adsBlend, now);
+      const behind = viewMode === 1;
+      const target = new THREE.Vector3(player.position.x, player.position.y - 0.55, player.position.z);
+      const pitch = THREE.MathUtils.clamp(player.pitch, -1.1, 1.1);
+      const viewForward = new THREE.Vector3(
+        -Math.sin(player.yaw) * Math.cos(pitch),
+        Math.sin(pitch),
+        -Math.cos(player.yaw) * Math.cos(pitch)
+      );
+      let distance = 3.25;
+      const side = behind ? -1 : 1;
+      const cameraOffset = new THREE.Vector3(0, 0.32, 0);
+      for (let step = 0.25; step <= 3.25; step += 0.1) {
+        const probe = target.clone().addScaledVector(viewForward, side * step).add(cameraOffset);
+        if (pointInWallBox(probe.x, probe.y, probe.z, 0.14)) {
+          distance = Math.max(0.5, step - 0.2);
+          break;
+        }
       }
-      camera.position.x = ex + fx * side * dist;
-      camera.position.z = ez + fz * side * dist;
-      if (side > 0) {
-        camera.rotation.y += Math.PI;
-        camera.rotation.x = -camera.rotation.x * .35;
-      }
+      camera.position.copy(target).addScaledVector(viewForward, side * distance).add(cameraOffset);
+      camera.lookAt(target);
     }
     document.addEventListener("keydown", (e) => {
       if (e.code !== "F5" || e.repeat) return;
@@ -23993,6 +23889,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
             continue;
           }
           if (gauntlet) continue;
+          if (enemy._noRespawnSummon) continue;
           enemy.respawnTimer -= dt;
           if (enemy.respawnTimer <= 0) {
             enemy.alive = true;
@@ -24080,7 +23977,13 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
               enemy.bossAnimTimer = 0;
               playBossRoarSfx(enemy);
               const types = ["normal", "fast", "gunner", "tank"];
-              const waveSize = HELL_BOSS_MINIONS_PER_STAGE;
+              const activeMinions = state.enemies.reduce((count, candidate) => count + (candidate.alive && candidate._hellSummonedMinion ? 1 : 0), 0);
+              const totalMinions = state.enemies.reduce((count, candidate) => count + (candidate._hellSummonedMinion ? 1 : 0), 0);
+              const waveSize = Math.max(0, Math.min(
+                HELL_BOSS_MINIONS_PER_STAGE,
+                HELL_BOSS_MAX_ACTIVE_MINIONS - activeMinions,
+                HELL_BOSS_MAX_MINIONS_PER_FIGHT - totalMinions
+              ));
               for (let si = 0; si < waveSize; si++) {
                 const angle = stage * 0.55 + si * Math.PI;
                 const { x: sx, z: sz } = bossMinionSpawn(enemy, angle, 5 + Math.random() * 3);
@@ -24089,6 +23992,8 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
                 minion.netIndex = state.enemies.length;
                 minion.aware = true;
                 minion._summonedByBoss = enemy;
+                minion._hellSummonedMinion = true;
+                minion._noRespawnSummon = true;
                 beginZombieEmergence(minion);
                 drawEnemyHp(minion);
                 state.enemies.push(minion);
@@ -24104,6 +24009,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
                 const sx = enemy.group.position.x + Math.cos(angle) * 8;
                 const sz = enemy.group.position.z + Math.sin(angle) * 8;
                 const miniBoss = makeHormoneZombie(sx, sz, false);
+                miniBoss._suppressBossSummon = true;
                 // These end-phase mini-bosses use one third of a normal boss's starting health.
                 const miniBossHp = Math.max(1, Math.round(miniBoss.baseTankHp / 3));
                 miniBoss.hp = miniBoss.maxHp = miniBoss.baseTankHp = miniBoss.baseGunnerHp = miniBoss.baseSpeedHp = miniBossHp;
@@ -24114,7 +24020,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
                 state.enemies.push(miniBoss);
               }
             }
-          } else if (!enemy.summonTriggered && enemy.hp <= enemy.maxHp * 0.5 && enemy.bossAnimState === "idle") {
+          } else if (!enemy._suppressBossSummon && !enemy.summonTriggered && enemy.hp <= enemy.maxHp * 0.5 && enemy.bossAnimState === "idle") {
             enemy.summonTriggered = true;
             enemy.bossAnimState = "summoning";
             enemy.bossAnimTimer = 0;
@@ -24995,6 +24901,10 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
 
     const frameDiagnostics = new URLSearchParams(location.search).get("perf") === "1" ? [] : null;
     if (frameDiagnostics) window.__fpsFrameDiagnostics = frameDiagnostics;
+    let playerUpdateMsLastFrame = 0;
+    let altGaugeMsLastFrame = 0;
+    let enemyUpdateMsLastFrame = 0;
+    let worldRenderMsLastFrame = 0;
     let nextHudUpdate = 0;
     let nextSlowFrameLog = 0;
 
@@ -25078,6 +24988,10 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       const rawDelta = clock.getDelta();
       const dt = Math.min(rawDelta, 0.033);
       const frameStart = frameDiagnostics ? performance.now() : 0;
+      playerUpdateMsLastFrame = 0;
+      altGaugeMsLastFrame = 0;
+      enemyUpdateMsLastFrame = 0;
+      worldRenderMsLastFrame = 0;
       if (document.visibilityState === "hidden") { renderSamplingSuspended = true; return; }
       if (renderSamplingSuspended) {
         renderSamplingSuspended = false;
@@ -25141,7 +25055,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           const rpAirborne = rp.grounded === undefined ? rpGroundOffset > 0.12 : !rp.grounded;
           const moving = gSpeed > 0.14 && !rp.isDown;
           const walking = moving && !rpAirborne;
-          if (walking) rp.walkPhase = (rp.walkPhase + dt * Math.min(gSpeed * 3.6, 13.5)) % (Math.PI * 2);
+          if (walking) rp.walkPhase = advanceOperatorGait(rp.walkPhase, gSpeed, dt, rpCrouch);
           if (playWorldSounds && MULTIPLAYER && rp.group.visible) {
             const rpSurface = footstepSurfaceAt(rp.group.position.x, rp.group.position.z, rp.group.position.y);
             worldAudio.step(rp, rp.group.position, walking, THREE.MathUtils.clamp(gSpeed * 0.32, 0.68, 2.0), footstepSoundKind(rpSurface),
@@ -25153,23 +25067,17 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           const worldX = (rp.visX - spx) * normalizer;
           const worldZ = (rp.visZ - spz) * normalizer;
           const cos = Math.cos(rp.visYaw), sin = Math.sin(rp.visYaw);
-          const gaitSide = rp.gaitSide = dampScalar(rp.gaitSide || 0, (cos * worldX - sin * worldZ) * stride, dt, 14);
-          const gaitForward = rp.gaitForward = dampScalar(rp.gaitForward || 0, (sin * worldX + cos * worldZ) * stride, dt, 14);
-          if (rp._wasAirborne && !rpAirborne) rp.landSquash = 1;
+          const lateral = cos * worldX - sin * worldZ, forward = sin * worldX + cos * worldZ;
+          const gaitSide = rp.gaitSide = dampScalar(rp.gaitSide || 0, lateral * stride, dt, 14);
+          rp.gaitForward = dampScalar(rp.gaitForward || 0, forward * stride, dt, 14);
+          const verticalSpeed = (rpGroundOffset - (rp._prevGroundOffset ?? rpGroundOffset)) / Math.max(dt, .001);
+          rp._prevGroundOffset = rpGroundOffset;
+          if (rp._wasAirborne && !rpAirborne) rp.landSquash = THREE.MathUtils.clamp(-verticalSpeed * .014, .022, .092);
           rp._wasAirborne = rpAirborne;
-          rp.landSquash = Math.max(0, (rp.landSquash || 0) - dt * 3.8);
-          const bodyRise = -Math.cos(rp.walkPhase * 2) * .010 * (walking ? stride : 0);
-          const landing = Math.sin(rp.landSquash * Math.PI) * .065;
+          rp.landSquash = dampScalar(rp.landSquash || 0, 0, dt, 12);
           rp.crouchDrop = rpCrouch * .51;
           rp.group.userData.crouchDrop = rp.crouchDrop;
-          const hipHeight = .846 - rp.crouchDrop - landing - stride * .06 + bodyRise;
-          const torsoDrop = rp.crouchDrop + landing + stride * .06 - bodyRise;
-          const stepScale = 1 - rpCrouch * .53;
-          updateRemoteLegs(rp, dt, hipHeight, gaitSide * .26 * stepScale, gaitForward * .32 * stepScale, rpAirborne, rpGroundOffset);
-          rp.poseDrop = torsoDrop;
-          if (rp.carrier) rp.carrier.position.y = 1.24 - torsoDrop;
-          rp.rightArm.position.y = rp.leftArm.position.y = 1.425 - torsoDrop;
-          if (rp.headGroup) rp.headGroup.position.y = 1.76 - torsoDrop;
+          updateRemoteLegs(rp, dt, walking ? gSpeed : 0, lateral, forward, rpAirborne, verticalSpeed, rp.landSquash);
           const walk = Math.sin(rp.walkPhase) * .52 * stride;
           rp.adsBlend = dampScalar(rp.adsBlend || 0, rp.ads ? 1 : 0, dt, 13);
           if (rp.headGroup) {
@@ -25188,7 +25096,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
             }
           }
           updateRemoteJetPack(rp, dt);
-          updateRemoteOperator(rp, dt, stride, walk, rp.adsBlend, audioNow);
+          updateRemoteOperator(rp, dt, walk, rp.adsBlend, audioNow);
 
         }
       }
@@ -25220,7 +25128,9 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         const feet = { x: player.position.x, y: player.position.y, z: player.position.z };
         for (const fn of gauntletTicks) fn(dt, feet);
       }
+      const playerUpdateStart = frameDiagnostics ? performance.now() : 0;
       updatePlayer(dt);
+      if (frameDiagnostics) playerUpdateMsLastFrame = performance.now() - playerUpdateStart;
       gauntletRuntime?.updatePortals(player);
       updateFlashlightExposure(dt, audioNow);
       if (player.health > 0) updateWeapon(dt);
@@ -25270,7 +25180,9 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       updateSpeedNeedle(dt);
       updateJetHarness(dt);
       updateJetHud();
+      const altGaugeStart = frameDiagnostics ? performance.now() : 0;
       updateAltGauge();
+      if (frameDiagnostics) altGaugeMsLastFrame = performance.now() - altGaugeStart;
       updateStaminaHud();
       updateHealthBarHud();
 
@@ -25283,7 +25195,9 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           // Guard the AI step: an exception here must never abort the frame
           // before renderer.render() runs, or the game visibly stutters.
           try {
+            const enemyUpdateStart = frameDiagnostics ? performance.now() : 0;
             updateEnemies(dt);
+            if (frameDiagnostics) enemyUpdateMsLastFrame = performance.now() - enemyUpdateStart;
           } catch (eAi) {
             if (typeof console !== "undefined") console.error("updateEnemies failed", eAi);
           }
@@ -25423,16 +25337,23 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
 
       const renderStart = frameDiagnostics ? performance.now() : 0;
       renderPortalViews();
+      const worldRenderStart = frameDiagnostics ? performance.now() : 0;
       renderWorld(dt);
+      if (frameDiagnostics) worldRenderMsLastFrame = performance.now() - worldRenderStart;
       if (frameDiagnostics && (rawDelta > 0.085 || performance.now() - frameStart > 35)) {
         const sample = {
           map: CURRENT_MAP, frameMs: Math.round(rawDelta * 1000),
+          visibility: document.visibilityState, focused: document.hasFocus(),
           simulationMs: Math.round(renderStart - frameStart),
           renderSubmitMs: Math.round(performance.now() - renderStart),
           drawCalls: renderer.info.render.calls, triangles: renderer.info.render.triangles,
           shaders: renderer.info.programs?.length, enemies: state.enemies.length, chunks: mazeChunks.size,
           airborne: !player.onGround, verticalSpeed: Math.round((player.velocityY || 0) * 10) / 10,
           portalViews: portalViewsRenderedLastFrame, portalViewMs: Math.round(portalViewRenderMsLastFrame),
+          playerUpdateMs: Math.round(playerUpdateMsLastFrame * 10) / 10,
+          altGaugeMs: Math.round(altGaugeMsLastFrame * 10) / 10,
+          enemyUpdateMs: Math.round(enemyUpdateMsLastFrame * 10) / 10,
+          worldRenderMs: Math.round(worldRenderMsLastFrame * 10) / 10,
           resolutionScale: Math.round(resolutionScale * 100) / 100,
           adaptiveAaLevel,
         };
@@ -25440,7 +25361,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         if (frameDiagnostics.length > 60) frameDiagnostics.shift();
         if (audioNow >= nextSlowFrameLog) {
           nextSlowFrameLog = audioNow + 1200;
-          console.info("[fps slow frame]", sample);
+          console.info("[fps slow frame] " + JSON.stringify(sample));
         }
       }
     }
@@ -25591,6 +25512,13 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       sanitizeLoadoutSelection();
       setWeapon(0);
 
+      gameBootLabel.textContent = "Loading player model…";
+      await loadOperatorAsset({
+        model: assetUrlList("models/operator-shared/male-soldier.glb?v=2"),
+        idle: assetUrlList("models/operator-shared/idle.glb?v=2"),
+        walk: assetUrlList("models/operator-shared/walk.glb?v=2"),
+        run: assetUrlList("models/operator-shared/run.glb?v=2"),
+      });
       if (isTrainingMap(CURRENT_MAP) || isArenaLikeMap(CURRENT_MAP) || isBossArenaMap(CURRENT_MAP) || isGauntletMap(CURRENT_MAP)) {
         try {
           gameBootLabel.textContent = "Loading enemy models…";
