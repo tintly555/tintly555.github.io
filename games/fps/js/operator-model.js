@@ -71,11 +71,11 @@ function dressOperatorPalette(palette) {
     material.vertexColors = true;   // baked occlusion from the sculpt
     material.needsUpdate = true;
   };
-  dress(palette.mCamo1, camoA, .9);
-  dress(palette.mCamo2, camoB, .9);
-  dress(palette.mVest, weave, .5);
-  dress(palette.mPants, weave, .6);
-  dress(palette.mHelm, weave, .25);
+  dress(palette.mCamo1, camoA, .36);
+  dress(palette.mCamo2, camoB, .36);
+  dress(palette.mVest, weave, .22);
+  dress(palette.mPants, weave, .26);
+  dress(palette.mHelm, weave, .14);
 }
 
 // ── Sculpt cache ────────────────────────────────────────────────────────────
@@ -140,9 +140,11 @@ export function buildOperatorShell(palette) {
   const mat = (color, roughness, metalness = 0) => new THREE.MeshStandardMaterial({
     color, roughness, metalness, emissive: 0, vertexColors: true,
   });
-  const rubber = mat(0x20282c, .95);
+  const rubber = mat(0x23292c, .95);
   const webbing = mat(0x3d4241, .94);
-  const glass = mat(0x284950, .29, .46);
+  const glass = mat(0x305761, .24, .43);
+  const hardware = mat(0x5e6868, .51, .42);
+  const markings = mat(0xae8961, .82);
 
   function region(parent, material, key, field, lo, hi, cell = .014) {
     const mesh = new THREE.Mesh(sculptGeometry(key, field, lo, hi, cell), material);
@@ -157,7 +159,7 @@ export function buildOperatorShell(palette) {
   const torsoBody = (x, y, z) => {
     const shoulders = ell(x, y, z, 0, .17, -.004, .212, .11, .118);
     const chest = ell(x, y, z, 0, -.02, -.008, .188, .20, .122);
-    const belly = ell(x, y, z, 0, -.30, -.004, .18, .14, .112);
+    const belly = ell(x, y, z, 0, -.30, -.004, .165, .12, .1);
     let d = smin(shoulders, chest, .06);
     d = smin(d, belly, .05);
     const neck = sdRoundCone(x, y, z, 0, .25, 0, 0, .31, 0, .050, .042);
@@ -166,23 +168,42 @@ export function buildOperatorShell(palette) {
   region(carrier, cloth, "torso", torsoBody, [-.24, -.46, -.17], [.24, .38, .17]);
 
   // Armour plate: a flat chest plate with soft edges, standing off the body.
-  const plate = (x, y, z) => rbox(x, y, z, 0, .01, .125, .15, .17, .03, .03);
+  const plate = (x, y, z) => {
+    const width = .154 - Math.max(0, y - .09) * .66 - Math.max(0, -.06 - y) * .18;
+    return rbox(x, y, z, 0, .012, .125 - Math.abs(x) * .19, width, .177, .036, .025);
+  };
   region(carrier, armor, "plate", plate, [-.2, -.24, .0], [.2, .24, .2], .012);
   // Chest-rig straps running over the plate.
   const rig = (x, y, z) => Math.min(
     rbox(x, y, z, -.085, .02, .175, .012, .17, .012, .008),
     rbox(x, y, z, .085, .02, .175, .012, .17, .012, .008));
   region(carrier, webbing, "rig", rig, [-.12, -.2, .14], [.12, .2, .2], .010);
+  const chestPockets = (x, y, z) => {
+    const innerX = Math.abs(x);
+    return Math.min(rbox(x, y, z, 0, -.098, .174, .038, .056, .035, .013),
+      rbox(innerX, y, z, .080, -.100, .162, .036, .063, .031, .010));
+  };
+  region(carrier, panels, "chestPockets", chestPockets, [-.13, -.18, .10], [.13, -.03, .22], .010);
+  const pocketFlaps = (x, y, z) => Math.min(
+    rbox(x, y, z, 0, -.048, .188, .034, .014, .022, .008),
+    rbox(Math.abs(x), y, z, .080, -.043, .177, .031, .013, .020, .007));
+  region(carrier, webbing, "pocketFlaps", pocketFlaps, [-.13, -.069, .145], [.13, -.022, .218], .007);
+  const chestBadge = (x, y, z) => rbox(x, y, z, -.048, .077, .160, .039, .013, .007, .004);
+  region(carrier, markings, "chestBadge", chestBadge, [-.093, .059, .148], [-.005, .094, .17], .004);
 
   // Rubber collar where the plate meets the neck.
   const collar = (x, y, z) => Math.max(band(hypot(x, z * .95), .014, .084), band(y, .028, .283));
   region(carrier, rubber, "collar", collar, [-.13, .22, -.13], [.13, .34, .13], .010);
 
   // Rucksack: a rounded pack on the back with a top flap and webbing straps over the shoulders.
-  const pack = (x, y, z) => rbox(x, y, z, 0, -.02, -.36, .13, .17, .085, .05);
-  region(carrier, panels, "pack", pack, [-.2, -.24, -.5], [.2, .2, -.2], .012);
-  const packFlap = (x, y, z) => rbox(x, y, z, 0, .16, -.36, .12, .026, .09, .02);
-  region(carrier, webbing, "packFlap", packFlap, [-.14, .1, -.5], [.14, .22, -.22], .010);
+  const pack = (x, y, z) => rbox(x, y, z, 0, -.028, -.184, .137, .183, .090, .047);
+  region(carrier, panels, "pack", pack, [-.16, -.24, -.30], [.16, .18, -.075], .012);
+  const packFlap = (x, y, z) => rbox(x, y, z, 0, .137, -.189, .125, .034, .086, .024);
+  region(carrier, webbing, "packFlap", packFlap, [-.14, .095, -.292], [.14, .19, -.09], .010);
+  const packRails = (x, y, z) => Math.min(
+    rbox(Math.abs(x), y, z, .068, -.048, -.269, .012, .15, .013, .007),
+    rbox(x, y, z, 0, -.126, -.274, .10, .015, .012, .007));
+  region(carrier, webbing, "packRails", packRails, [-.115, -.215, -.30], [.115, .12, -.25], .009);
   const strap = (x, y, z) => {
     const a = sdRoundCone(x, y, z, .135, .19, -.10, .14, .02, .13, .017, .015);
     const b = sdRoundCone(x, y, z, .135, .02, .13, .14, -.22, .12, .015, .014);
@@ -196,13 +217,15 @@ export function buildOperatorShell(palette) {
   const waist = new THREE.Group();
   waist.position.y = .72;
   const pelvis = (x, y, z) => {
-    const hips = ell(x, y, z, 0, .05, 0, .205, .118, .118);
-    const seat = ell(x, y, z, 0, -.005, -.012, .192, .085, .108);
+    const hips = ell(x, y, z, 0, .05, 0, .17, .104, .104);
+    const seat = ell(x, y, z, 0, -.01, -.012, .158, .074, .094);
     return smin(hips, seat, .04);
   };
   region(waist, pants, "pelvis", pelvis, [-.24, -.12, -.16], [.24, .2, .16]);
-  const beltBand = (x, y, z) => Math.max(band(hypot(x, z), .017, .205), band(y, .02, .085));
+  const beltBand = (x, y, z) => Math.max(band(hypot(x, z * 1.55), .013, .157), band(y, .021, .094));
   region(waist, webbing, "belt", beltBand, [-.24, .04, -.2], [.24, .13, .2], .010);
+  const buckle = (x, y, z) => rbox(x, y, z, 0, .092, .106, .039, .020, .012, .008);
+  region(waist, hardware, "buckle", buckle, [-.05, .063, .089], [.05, .12, .124], .007);
   const pouches = (x, y, z) => Math.min(
     rbox(x, y, z, .14, .02, .075, .062, .07, .046, .022),
     rbox(x, y, z, -.14, .02, .075, .062, .07, .046, .022));
@@ -232,12 +255,47 @@ export function buildOperatorShell(palette) {
     return Math.max(shell(v, .007), -(z - .112));
   };
   region(headGroup, glass, "visor", visor, [-.14, -.07, .1], [.14, .07, .18], .009);
-  const pod = (x, y, z) => rbox(x, y, z, 0, -.01, -.16, .044, .05, .05, .02);
+  const respirator = (x, y, z) => {
+    const facepiece = rbox(x, y, z, 0, -.080, .082, .071, .041, .040, .025);
+    const filters = ell(Math.abs(x), y, z, .061, -.088, .098, .023, .029, .028);
+    return smin(facepiece, filters, .012);
+  };
+  region(headGroup, armor, "respirator", respirator, [-.095, -.132, .025], [.095, -.035, .139], .008);
+  const vents = (x, y, z) => Math.min(
+    rbox(x, y, z, 0, -.069, .121, .034, .0033, .0045, .003),
+    rbox(x, y, z, 0, -.083, .123, .030, .0033, .0045, .003),
+    rbox(x, y, z, 0, -.097, .120, .025, .0033, .0045, .003));
+  region(headGroup, hardware, "respiratorVents", vents, [-.038, -.105, .11], [.038, -.061, .134], .0035);
+  const pod = (x, y, z) => rbox(x, y, z, 0, -.01, -.133, .044, .05, .030, .018);
   region(headGroup, rubber, "pod", pod, [-.07, -.09, -.24], [.07, .07, -.08], .010);
   const comms = (x, y, z) => Math.min(
     rbox(x, y, z, -.134, -.02, -.01, .02, .04, .04, .014),
     rbox(x, y, z, .134, -.02, -.01, .02, .04, .04, .014));
   region(headGroup, armor, "comms", comms, [-.17, -.08, -.06], [.17, .07, .06], .010);
+  const helmetReinforcement = new THREE.Group();
+  headGroup.add(helmetReinforcement);
+  const browReinforcement = (x, y, z) => rbox(x, y, z, 0, .064, .108 - Math.abs(x) * .41, .099, .019, .028, .017);
+  region(helmetReinforcement, shellMat, "browReinforcement", browReinforcement, [-.111, .037, .036], [.111, .092, .144], .006);
+  const jawGuard = new THREE.Group();
+  headGroup.add(jawGuard);
+  const jawPlates = (x, y, z) => rbox(Math.abs(x), y, z, .085, -.073, .034, .026, .044, .062, .018);
+  region(jawGuard, shellMat, "jawPlates", jawPlates, [-.118, -.124, -.036], [.118, -.022, .105], .008);
+  const armorReinforcement = new THREE.Group();
+  carrier.add(armorReinforcement);
+  const upperPlate = (x, y, z) => rbox(x, y, z, 0, .119, .123 - Math.abs(x) * .31, .107, .031, .024, .015);
+  region(armorReinforcement, armor, "upperPlate", upperPlate, [-.118, .082, .065], [.118, .156, .157], .007);
+  const flankGuard = new THREE.Group();
+  carrier.add(flankGuard);
+  const ribPlates = (x, y, z) => rbox(Math.abs(x), y, z, .157, -.118, .043, .034, .099, .077, .019);
+  region(flankGuard, armor, "ribPlates", ribPlates, [-.2, -.23, -.046], [.2, -.011, .129], .009);
+
+  function setArmorLook(helmetTier, vestTier) {
+    helmetReinforcement.visible = helmetTier >= 1;
+    jawGuard.visible = helmetTier >= 3;
+    armorReinforcement.visible = vestTier >= 1;
+    flankGuard.visible = vestTier >= 2;
+  }
+  setArmorLook(0, 0);
 
   // ── Arms: a sleeve from the shoulder, a forearm below the elbow ─────────────────
   function armShell(arm, side) {
@@ -248,15 +306,16 @@ export function buildOperatorShell(palette) {
       return smin(smin(upper, lower, .02), deltoid, .03);
     };
     region(arm, cloth, "sleeve", sleeve, [-.1, -.41, -.1], [.1, .12, .1], .011);
-    const pad = (x, y, z) => rbox(x, y, z, 0, -.02, 0, .085, .046, .092, .03);
-    region(arm, armor, "shoulderPad", pad, [-.12, -.1, -.13], [.12, .06, .13], .010);
+    const outside = side === "R" ? 1 : -1;
+    const pad = (x, y, z) => rbox(x, y, z, outside * .042, -.045, .002, .053, .085, .077, .034);
+    region(arm, armor, "shoulderPad" + side, pad, [-.105, -.145, -.093], [.105, .055, .099], .009);
 
     const elbow = new THREE.Group();
     elbow.position.y = -.36;
     arm.add(elbow);
     const forearm = (x, y, z) => {
       const d = sdRoundCone(x, y, z, 0, -.01, 0, 0, -.27, 0, .058, .046);
-      const muscle = ell(x, y, z, 0, .12, -.01, .064, .10, .068);
+      const muscle = ell(x, y, z, 0, -.052, -.010, .061, .090, .060);
       return smin(d, muscle, .03);
     };
     region(elbow, panels, "forearm", forearm, [-.09, -.32, -.09], [.09, .25, .09], .011);
@@ -264,6 +323,8 @@ export function buildOperatorShell(palette) {
     region(elbow, rubber, "cuff", cuff, [-.08, -.40, -.08], [.08, -.2, .08], .010);
     const elbowPad = (x, y, z) => rbox(x, y, z, 0, -.03, .045, .056, .05, .03, .02);
     region(elbow, armor, "elbowPad", elbowPad, [-.08, -.1, -.02], [.08, .04, .1], .010);
+    const bracer = (x, y, z) => rbox(x, y, z, outside * .032, -.164, .012, .023, .092, .039, .018);
+    region(elbow, armor, "bracer" + side, bracer, [-.067, -.269, -.037], [.067, -.064, .061], .009);
     return elbow;
   }
 
@@ -276,6 +337,9 @@ export function buildOperatorShell(palette) {
       return smin(d, hip, .03);
     };
     region(leg, pants, "thigh", thigh, [-.12, -.47, -.12], [.12, .11, .12], .013);
+    const outside = Math.sign(px);
+    const cargo = (x, y, z) => rbox(x, y, z, outside * .071, -.153, -.002, .032, .098, .065, .023);
+    region(leg, panels, "cargo" + outside, cargo, [-.115, -.267, -.08], [.115, -.044, .08], .010);
     const knee = new THREE.Group();
     knee.name = "knee";
     knee.rotation.order = "YXZ";
@@ -300,11 +364,14 @@ export function buildOperatorShell(palette) {
       return smin(smin(smin(shaft, upper, .025), toe, .03), sole, .012);
     };
     region(ankle, rubber, "boot", boot, [-.12, -.16, -.16], [.12, .08, .22], .010);
+    const toeCap = (x, y, z) => Math.max(
+      shell(ell(x, y, z, 0, -.067, .114, .074, .054, .075), .012), .086 - z);
+    region(ankle, armor, "toeCap", toeCap, [-.084, -.126, .076], [.084, -.005, .197], .008);
     leg.position.set(px, .865, 0);
     leg.userData.knee = knee;
     leg.userData.ankle = ankle;
     return leg;
   }
 
-  return { carrier, waist, headGroup, armShell, legShell };
+  return { carrier, waist, headGroup, armShell, legShell, setArmorLook };
 }
