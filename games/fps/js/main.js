@@ -3,7 +3,7 @@
     import { RoundedBoxGeometry } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/geometries/RoundedBoxGeometry.js";
     import { mergeGeometries, toCreasedNormals } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/utils/BufferGeometryUtils.js";
     import { clone as cloneSkinnedModel } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/utils/SkeletonUtils.js";
-    import { createPvpMaps } from "./pvp-maps.js?v=relay-temple-v1";
+    import { createPvpMaps } from "./pvp-maps.js?v=town-glass-v2";
     import { createPvpWorld } from "./pvp-world.js?v=4";
     import { createBossNavigation } from "./boss-navigation.js?v=2";
     import { BOSS_ATTACK_BY_ID, chooseBossAttack } from "./boss-attacks.js?v=2";
@@ -11,11 +11,11 @@
     import { createTrainingWallMaterial, createTrainingDust } from "./training-realism.js?v=20261112-train-v2";
     import { createArenaRealism } from "./arena-realism.js?v=20261112-arena-v1";
     import { createBossCreature, BOSS_RADIUS, CLAW_STRIKE_S, QUAKE_SLAM_S, LOB_RELEASE_S, DURATIONS as BOSS_DURATIONS } from "./boss-creature.js?v=11";
-    import { buildOperatorShell } from "./operator-model.js?v=1";
+    import { buildOperatorShell } from "./operator-model.js?v=operator-sculpt-v1";
     import { extendGauntletCourses, GAUNTLET_CHAPTERS, GAUNTLET_CHAPTER_SIZE } from "./gauntlet-courses.js?v=relay-no-goo-v1";
     import { createGauntletRuntime } from "./gauntlet-runtime.js?v=23-touchboxes";
     import { createWorldAudio } from "./world-audio.js?v=5-material-footsteps-water-entry";
-    import { createGauntletThemes } from "./gauntlet-themes.js?v=13-support-colliders";
+    import { createGauntletThemes } from "./gauntlet-themes.js?v=14-lava-uv-variants";
     import { createGauntletMusic } from "./gauntlet-music.js?v=1";
     import { templeWaterBank, TEMPLE_WATER_Y } from "./water-shape.js?v=3-footsteps";
     import { createPostFx, applyDisplayTone } from "./post-fx.js?v=16-gauntlet-light-balance";
@@ -1485,7 +1485,10 @@
         rp.isDown = false;
         rp.hpEstimate = 100;
       }
-      rp.group.visible = !rp.isDown;
+      // Gauntlet Party: someone on another course is not in this world, so keep them hidden.
+      rp.partyLevel = data.gl != null ? (Number(data.gl) | 0) : 0;
+      rp.partyCleared = !!data.gc;
+      rp.group.visible = !rp.isDown && !(gauntletPartyOn() && rp.partyLevel && rp.partyLevel !== gauntletLevel);
     }
     socket.on("enemyMove", applyRemotePlayerState);
 
@@ -1689,6 +1692,7 @@
     }
 
     function handleIncomingDartSlowEvent(data) {
+      if (gauntletPartyOn()) return;   // no slows or blinds from party members
       if (window.__fpsDartDebug) {
         try { console.info("[zone-no-light-v30] custom slow/blind event recv", JSON.parse(JSON.stringify(data || {}))); } catch (_) {}
       }
@@ -1806,6 +1810,7 @@
 
     socket.on("hit", (data) => {
       if (!data || !socket || !gameWorldReady) return;
+      if (gauntletPartyOn()) return;   // no damage between party members
       if (isTrainingMap(CURRENT_MAP)) return;
       if (window.__fpsDartDebug) {
         try { console.info("[zone-no-light-v30] hit raw", JSON.parse(JSON.stringify(data))); } catch (_) {}
@@ -1852,6 +1857,7 @@
 
     socket.on("damaged", (data) => {
       if (isTrainingMap(CURRENT_MAP)) return;
+      // In a party nobody shoots anybody, so a relayed hit here is a zombie or boss hit from another client's enemies.
       if (!gameWorldReady) return;
       if (player.health <= 0) return;
       if (performance.now() < player.spawnProtectUntil) return;
@@ -6461,7 +6467,7 @@
      * Classic code stays the raw server code (back-compatible); grid gets a "-G" tag.
      */
     /** Which map a shared room code names (the relay only knows the one "crossfire" mode). */
-    const PVP_SHARE_TAGS = { crossfire_grid: "G", pvp_ruins: "R", pvp_town: "T" };
+    const PVP_SHARE_TAGS = { crossfire_grid: "G", pvp_ruins: "R", pvp_town: "T", gauntlet_party: "P" };
     function makePvpShareCode(realCode, variant) {
       const c = String(realCode || "");
       if (!c) return c;
@@ -6480,7 +6486,13 @@
       return { code: up, variant: "" };
     }
 
+    /** Gauntlet Party runs in the relay's "crossfire" room (the only mode it knows), tagged -P. */
+    function relayModeFor(mode) {
+      return mode === "gauntlet-party" ? "crossfire" : mode;
+    }
+
     function lobbyMapFromPending() {
+      if (pendingLobbyMode === "gauntlet-party") return "crossfire";
       if (pendingLobbyMode === "crossfire") return PENDING_PVP_MAP;
       if (pendingLobbyMode === "training-coop") return "training";
       if (pendingLobbyMode === "boss-coop") return "boss_arena";
@@ -6632,6 +6644,89 @@
     let gauntletState = {
       cleared: false, deaths: 0, startMs: 0, checkpointIdx: 0, finishedMs: 0,
     };
+
+    /* ── Gauntlet Party ─────────────────────────────────────────────────────
+     * Several players run the same courses over one room. Each client builds a course from its
+     * number, so the geometry matches everywhere and only positions travel, in the `move` packets
+     * (`gl` = course, `gc` = 1 once cleared). The party moves in step: a course is over when every
+     * player in the room has reached its exit, and then all of them go on together. Enemies are not
+     * shared, and no damage passes between party members. */
+    const gauntletParty = { active: false, level: 0, booting: false, rosterEl: null, rosterAt: 0, waitKey: "" };
+    function gauntletPartyOn() { return gauntletParty.active && MULTIPLAYER && isGauntletMap(CURRENT_MAP); }
+
+    function updateGauntletParty() {
+      if (gauntletParty.booting) {
+        if (gameWorldReady && !gauntletState.cleared) gauntletParty.booting = false;
+        return;
+      }
+      if (!gauntletCourse || !gameWorldReady) return;
+      let furthest = 0;
+      for (const rp of remotePlayers.values()) furthest = Math.max(furthest, rp.partyLevel || 0);
+      // A player who joins a party that is already under way starts on its course, not on course 1.
+      if (furthest > gauntletParty.level) { startGauntletLevel(furthest); return; }
+      updateGauntletPartyRoster();
+      if (!gauntletState.cleared) return;
+      const level = gauntletLevel;
+      const waiting = [];
+      for (const rp of remotePlayers.values()) {
+        if (!rp.partyLevel) continue;                              // no course reported yet
+        if (rp.partyLevel > level) continue;                       // already through
+        if (rp.partyLevel === level && rp.partyCleared) continue;  // at the exit as well
+        waiting.push(rp.name || "?");
+      }
+      setGauntletPartyWait(waiting, level);
+      if (waiting.length === 0 && level < GAUNTLET_LEVEL_COUNT) startGauntletLevel(level + 1);
+    }
+
+    function setGauntletPartyWait(waiting, level) {
+      const el = _gClearEl && _gClearEl.querySelector("#gClearParty");
+      if (!el) return;
+      const key = level + ":" + waiting.join("|");
+      if (key === gauntletParty.waitKey) return;
+      gauntletParty.waitKey = key;
+      el.textContent = waiting.length
+        ? tr("gauntletPartyWaiting", "Waiting for {names} to reach the exit.").replace("{names}", waiting.join(", "))
+        : tr("gauntletPartyGo", "Everyone is through.");
+    }
+
+    function updateGauntletPartyRoster() {
+      const p = gauntletParty;
+      const now = performance.now();
+      if (now - p.rosterAt < 350) return;
+      p.rosterAt = now;
+      if (!p.rosterEl) {
+        const style = document.createElement("style");
+        style.textContent = "#gauntletPartyRoster{position:fixed;top:96px;right:16px;z-index:40;min-width:190px;padding:9px 12px;background:rgba(8,12,16,.8);border:1px solid rgba(98,255,176,.35);border-radius:6px;font:600 12px/1.7 Audiowide,Arial,sans-serif;letter-spacing:1px;color:#dfe9f1;pointer-events:none}#gauntletPartyRoster .h{color:#62ffb0;margin-bottom:4px}#gauntletPartyRoster .r{display:flex;justify-content:space-between;gap:12px}#gauntletPartyRoster .s{color:#9fb0c0}";
+        document.head.appendChild(style);
+        p.rosterEl = document.createElement("div");
+        p.rosterEl.id = "gauntletPartyRoster";
+        document.body.appendChild(p.rosterEl);
+      }
+      const L = gauntletLevel;
+      const rows = [{ name: playerName || "You", level: L, cleared: gauntletState.cleared }];
+      for (const rp of remotePlayers.values()) rows.push({ name: rp.name || "?", level: rp.partyLevel, cleared: !!rp.partyCleared });
+      p.rosterEl.replaceChildren();
+      const head = document.createElement("div");
+      head.className = "h";
+      head.textContent = `${tr("gauntletPartyCourse", "PARTY · COURSE")} ${L}/${GAUNTLET_LEVEL_COUNT}`;
+      p.rosterEl.appendChild(head);
+      for (const row of rows) {
+        const line = document.createElement("div");
+        line.className = "r";
+        const name = document.createElement("span");
+        name.textContent = row.name;
+        const status = document.createElement("span");
+        status.className = "s";
+        status.textContent = !row.level ? "…"
+          : row.level < L ? tr("gauntletPartyBehind", "BEHIND")
+          : row.level > L ? tr("gauntletPartyAhead", "AHEAD")
+          : row.cleared ? tr("gauntletPartyCleared", "CLEARED")
+          : tr("gauntletPartyRunning", "RUNNING");
+        line.append(name, status);
+        p.rosterEl.appendChild(line);
+      }
+      p.rosterEl.style.display = "";
+    }
 
     function gauntletProgress() {
       const n = parseInt(localStorage.getItem(GAUNTLET_PROGRESS_KEY) || "0", 10);
@@ -6825,6 +6920,7 @@
     }
 
     function updateGauntlet() {
+      if (gauntletPartyOn() && gauntletCourse) updateGauntletParty();
       if (!isGauntletMap(CURRENT_MAP) || !gauntletCourse || !controlsInputReady() || gauntletState.cleared) return;
       gauntletState.startMs ||= performance.now();
       updateGauntletDoors();
@@ -7101,6 +7197,7 @@
           '<div class="gc-stat best"><b id="gClearBest"></b><span id="gClearBestLbl"></span></div>' +
           '<div class="gc-stat"><b id="gClearFalls"></b><span id="gClearFallsLbl"></span></div>' +
           '</div>' +
+          '<div class="gc-party" id="gClearParty" style="display:none;margin:4px 0 10px;color:#9fb0c0;font:600 13px/1.5 Audiowide,Arial,sans-serif;letter-spacing:1px"></div>' +
           '<div class="gc-btns">' +
           '<button type="button" id="gClearNext" class="overlay-btn overlay-btn-accent"></button>' +
           '<button type="button" id="gClearRetry" class="overlay-btn"></button>' +
@@ -7125,7 +7222,7 @@
       const bests = gauntletBestTimes();
       const prevBest = typeof bests[gauntletLevel] === "number" ? bests[gauntletLevel] : Infinity;
       const best = Math.min(prevBest, secsNum);
-      if (secsNum < prevBest) {
+      if (secsNum < prevBest && !gauntletParty.active) {
         bests[gauntletLevel] = secsNum;
         try { localStorage.setItem(GAUNTLET_BEST_KEY, JSON.stringify(bests)); } catch (_) {}
       }
@@ -7144,8 +7241,12 @@
       const nextBtn = q("#gClearNext");
       nextBtn.textContent = tr("gauntletNext", "NEXT LEVEL");
       nextBtn.style.display = last ? "none" : "";
+      const party = gauntletPartyOn();
+      nextBtn.style.display = party || last ? "none" : "";
+      q("#gClearRetry").style.display = party ? "none" : "";
       q("#gClearRetry").textContent = tr("gauntletRetry", "RETRY");
-      q("#gClearMenu").textContent = tr("gauntletMenu", "MENU");
+      q("#gClearMenu").textContent = party ? tr("gauntletLeaveParty", "LEAVE PARTY") : tr("gauntletMenu", "MENU");
+      q("#gClearParty").style.display = party ? "" : "none";
       gauntletClearOpen = true;
       document.body.classList.add("results-open");
       releaseAllInput();
@@ -7494,7 +7595,11 @@
         for (const side of [-1, 1]) {
           gate(2.8, topY + 12 - bottom, 3, side * half, (topY + 12 + bottom) / 2, doorZ, wall);   // tower
           gate(1.2, 15, 3.6, side * (half - 1.7), topY + 5.5, doorZ, beam);                         // inner jamb
+          // Foot plate: each tower stands on the deck through a wide base, so it reads as bolted down.
+          gate(4.2, 0.5, 4.6, side * half, topY + 0.25, doorZ, beam);
         }
+        // Threshold sill across the opening, so the shutter's track sits on the deck and not in the air.
+        gate(half * 2 - 0.4, 0.3, 3.2, 0, topY + 0.15, doorZ, beam);
         gate(half * 2 + 3, 2.2, 3.4, 0, topY + 11.1, doorZ, beam);        // lintel
         // The housing is tall enough to take the whole shutter when it is up, so nothing hangs in the opening.
         gate(half * 2 + 0.4, 10.4, 2.6, 0, topY + 15.9, doorZ, wall);    // shutter housing
@@ -12860,9 +12965,65 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       try { src.start(t0); src.stop(t0 + 0.10); } catch (_) {}
     }
 
+    // Synthesized body under every shot: a pitched thump (the weight), a high-passed crack (the snap) and a short
+    // low-passed tail (the room). Each weapon has its own balance, so the heavy guns hit lower and louder and the
+    // light guns stay snappy. Layered on top of the recorded slices so they keep their character.
+    const GUN_LAYER = {
+      0: { thump: 0.5, crack: 0.45, tail: 0.25, f: 180 },  // pistol
+      1: { thump: 0.6, crack: 0.55, tail: 0.3, f: 150 },   // AR
+      2: { thump: 1.0, crack: 0.4, tail: 0.5, f: 95 },     // shotgun
+      3: { thump: 0.45, crack: 0.5, tail: 0.2, f: 200 },   // SMG
+      5: { thump: 0.75, crack: 0.5, tail: 0.35, f: 120 },  // AMR
+      6: { thump: 0.6, crack: 0.5, tail: 0.3, f: 140 },    // revenge
+      8: { thump: 0.35, crack: 0.6, tail: 0.2, f: 260 },   // lazer
+      9: { thump: 0.5, crack: 0.5, tail: 0.3, f: 160 },    // Val
+    };
+    let gunLayerNoise = null;
+    function playGunLayer(idx) {
+      if (!audioCtx) return;
+      const p = GUN_LAYER[idx] || GUN_LAYER[0];
+      const sr = audioCtx.sampleRate;
+      if (!gunLayerNoise) {
+        gunLayerNoise = audioCtx.createBuffer(1, Math.floor(sr * 0.6), sr);
+        const d = gunLayerNoise.getChannelData(0);
+        for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+      }
+      const t = audioCtx.currentTime;
+      const out = audioCtx.createGain();
+      out.gain.value = 0.9;
+      out.connect(audioSfx);
+      const o = audioCtx.createOscillator();
+      o.type = "sine";
+      o.frequency.setValueAtTime(p.f, t);
+      o.frequency.exponentialRampToValueAtTime(p.f * 0.4, t + 0.18);
+      const og = audioCtx.createGain();
+      og.gain.setValueAtTime(p.thump * 0.9, t);
+      og.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+      o.connect(og); og.connect(out);
+      o.start(t); o.stop(t + 0.24);
+      const n = audioCtx.createBufferSource();
+      n.buffer = gunLayerNoise;
+      const hp = audioCtx.createBiquadFilter();
+      hp.type = "highpass"; hp.frequency.value = 1800;
+      const cg = audioCtx.createGain();
+      cg.gain.setValueAtTime(p.crack * 0.7, t);
+      cg.gain.exponentialRampToValueAtTime(0.001, t + 0.03);
+      n.connect(hp); hp.connect(cg); cg.connect(out);
+      n.start(t, 0, 0.06);
+      const tn = audioCtx.createBufferSource();
+      tn.buffer = gunLayerNoise;
+      const lp = audioCtx.createBiquadFilter();
+      lp.type = "lowpass"; lp.frequency.value = 900;
+      const tg = audioCtx.createGain();
+      tg.gain.setValueAtTime(p.tail * 0.35, t + 0.02);
+      tg.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+      tn.connect(lp); lp.connect(tg); tg.connect(out);
+      tn.start(t + 0.02, 0, 0.55);
+    }
     function playGunSound(w) {
       if (audioCtx.state === "suspended") void audioCtx.resume();
       if (state.weaponIndex === 4) return;
+      playGunLayer(state.weaponIndex);
       if (worldAudioReady()) worldAudio.play("shot", player.position, { local: true, echoOnly: true, volume: 0.65 });
       if (state.weaponIndex === 9) { playAsValGunSound(w); return; }
       if (state.weaponIndex === 5) {
@@ -15152,7 +15313,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       }
       if (MULTIPLAYER && !ARENA_COOP && !isTrainingMap(CURRENT_MAP)) {
         for (const [, rp] of remotePlayers) {
-          if (rp.isDown || !rp.group.visible) continue;
+          if (rp.isDown || !rp.group.visible || gauntletPartyOn()) continue;
           rp.group.updateMatrixWorld(true);
           const hit = humanoidHitAlongRay(ray, rp.group);
           if (hit && hit.t < portalDistance) return true;
@@ -18745,7 +18906,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       if (MULTIPLAYER && !ARENA_COOP && isPvpCrossfireMap(CURRENT_MAP)) {
         let bestRpT = glassDist;
         for (const [rpId, rp] of remotePlayers) {
-          if (rp.isDown || !rp.group.visible) continue;
+          if (rp.isDown || !rp.group.visible || gauntletPartyOn()) continue;
           rp.group.updateMatrixWorld(true);
           const hit = humanoidHitAlongRay(ray, rp.group);
           if (hit && hit.t < bestRpT) {
@@ -19761,7 +19922,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     function probeParalysisDartProximityHit(worldPos, hitPad, slowDuration, muzzleOpt, portalPath = null) {
       if (MULTIPLAYER && !ARENA_COOP && !isTrainingMap(CURRENT_MAP)) {
         for (const [rpId, rp] of remotePlayers) {
-          if (rp.isDown || !rp.group.visible) continue;
+          if (rp.isDown || !rp.group.visible || gauntletPartyOn()) continue;
           _projWorkVecA.set(rp.visX ?? rp.x ?? 0, 1.12, rp.visZ ?? rp.z ?? 0);
           const dx = worldPos.x - _projWorkVecA.x;
           const dy = worldPos.y - _projWorkVecA.y;
@@ -19857,7 +20018,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
 
           if (!consumed && MULTIPLAYER && !ARENA_COOP && !isTrainingMap(CURRENT_MAP)) {
             for (const [rpId, rp] of remotePlayers) {
-              if (rp.isDown || !rp.group.visible) continue;
+              if (rp.isDown || !rp.group.visible || gauntletPartyOn()) continue;
               rp.group.updateMatrixWorld(true);
               const rh = humanoidHitAlongRayPadded(segRay, rp.group, hitPad);
               if (rh && rh.t < segmentBlockerT) {
@@ -19979,7 +20140,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       let bestRpZ = 0;
       if (MULTIPLAYER && !ARENA_COOP && !isTrainingMap(CURRENT_MAP)) {
         for (const [rpId, rp] of remotePlayers) {
-          if (rp.isDown || !rp.group.visible) continue;
+          if (rp.isDown || !rp.group.visible || gauntletPartyOn()) continue;
           rp.group.updateMatrixWorld(true);
           const rh = humanoidHitAlongRayPadded(ray, rp.group, 1.45);
           if (rh && rh.t < bestRpT) {
@@ -20220,7 +20381,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           let bestRpT = Infinity;
           let bestRpPoint = null;
           for (const [rpId, rp] of remotePlayers) {
-            if (rp.isDown || !rp.group.visible) continue;
+            if (rp.isDown || !rp.group.visible || gauntletPartyOn()) continue;
             rp.group.updateMatrixWorld(true);
             const rh = humanoidHitAlongRayPadded(dartRay, rp.group, 1.32);
             if (rh && rh.t < bestRpT && rh.t < dartBlockerT) {
@@ -20374,7 +20535,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         let bestRpZone = "body";
         if (MULTIPLAYER && !ARENA_COOP && !isTrainingMap(CURRENT_MAP)) {
           for (const [rpId, rp] of remotePlayers) {
-            if (rp.isDown || !rp.group.visible) continue;
+            if (rp.isDown || !rp.group.visible || gauntletPartyOn()) continue;
             rp.group.updateMatrixWorld(true);
             const rh = humanoidHitAlongRay(ray, rp.group);
             if (rh && rh.t < bestRpHitT) {
@@ -21082,6 +21243,26 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         player.fallApexY = null;
       }
 
+      // Temple pool: a splash also when you wade in on foot and when you climb out (onto the causeway, a
+      // ledge or the bank). The landing sound above covers falls, so this only adds the crossings it misses.
+      if (CURRENT_MAP === "pvp_ruins") {
+        const inPool = templeWaterBank(player.position.x, player.position.z) > 0
+          && (player.position.y - 1.65) < TEMPLE_WATER_Y + 0.25;
+        const _pool = !!state.inTemplePool;
+        if (inPool !== _pool) {
+          const exiting = !inPool;
+          const fromFall = !exiting && _wasAirborne && _impactVy < -1.8;
+          if (!fromFall) {
+            const sx = player.position.x, sz = player.position.z;
+            worldAudio.play("waterEntry", { x: sx, y: TEMPLE_WATER_Y, z: sz }, {
+              local: true, volume: exiting ? 0.46 : 0.5,
+            });
+            for (const m of pvpWaterMirrors) m.splash(sx, sz, exiting ? 0.45 : 0.3, Date.now() / 1000);
+          }
+          state.inTemplePool = inPool;
+        }
+      }
+
       // Stride follows real ground speed, so the bob slows with a crouch or a heavy vest and
       // dies away as you coast to a stop instead of cutting out the frame the key lifts.
       const _hSpeed = Math.hypot(state.velX, state.velZ);
@@ -21129,7 +21310,56 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       camera.rotation.x = player.pitch + rig.pitch;
       camera.rotation.z = cameraMotionEnabled ? state.camRoll + rig.roll : 0;
       state.camFovKick = rig.fov;
+      applyViewMode();
     }
+
+    // ── View modes (F5): first person, third person behind, third person in front ──────────
+    // The third-person camera sits on the eye line, pulled back along the look direction, and stops short
+    // of any solid box so it never passes through a wall. The body is the same operator shell remote players
+    // use, placed at the feet; the held weapon and the needle/jet views are hidden outside first person.
+    let viewMode = 0;
+    let viewAvatar = null;
+    /** True when a point lies inside a solid box, with a small skin, for the third-person camera's wall test. */
+    function pointInWallBox(x, y, z, skin = 0.12) {
+      let hit = false;
+      forEachNearbyWallBox(x, z, (box) => {
+        if (hit || box.enemyOnly) return;
+        if (x < box.min.x - skin || x > box.max.x + skin || z < box.min.z - skin || z > box.max.z + skin) return;
+        if (y < box.min.y - skin || y > box.max.y + skin) return;
+        hit = true;
+      });
+      return hit;
+    }
+    function setViewMode(mode) {
+      viewMode = ((mode % 3) + 3) % 3;
+      if (viewMode > 0 && !viewAvatar) { viewAvatar = createRemotePlayer("you").group; scene.add(viewAvatar); }
+      applyViewMode();
+    }
+    function applyViewMode() {
+      const firstPerson = viewMode === 0;
+      for (const child of camera.children) if (child.isGroup) child.visible = firstPerson;
+      if (!viewAvatar) return;
+      viewAvatar.visible = !firstPerson;
+      if (firstPerson) return;
+      viewAvatar.position.set(player.position.x, player.position.y - 1.65, player.position.z);
+      viewAvatar.rotation.y = player.yaw;   // the shell faces the same way the player looks
+      const fx = -Math.sin(player.yaw), fz = -Math.cos(player.yaw);
+      const side = viewMode === 1 ? -1 : 1;                 // behind the player, or in front of them
+      const ex = camera.position.x, ey = camera.position.y, ez = camera.position.z;
+      let dist = 2.6;
+      for (let s = 0.4; s <= 2.6; s += 0.1) {
+        if (pointInWallBox(ex + fx * side * s, ey, ez + fz * side * s, 0.14)) { dist = Math.max(0.5, s - 0.2); break; }
+      }
+      camera.position.x = ex + fx * side * dist;
+      camera.position.z = ez + fz * side * dist;
+      if (side > 0) camera.rotation.y += Math.PI;
+    }
+    document.addEventListener("keydown", (e) => {
+      if (e.code !== "F5" || e.repeat) return;
+      if (!gameWorldReady) return;
+      e.preventDefault();
+      setViewMode(viewMode + 1);
+    });
 
     function publishPlayerState(now) {
       if (!MULTIPLAYER || !gameWorldReady || now - lastPlayerSyncAt < 40) return;
@@ -21146,6 +21376,8 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         needle: ["idle", "injecting", "boost", "weak"].indexOf(state.speedNeedle.phase),
         light: playerLightsPreference, beam: 0,
         slow: Math.max(0, (state.slowUntil - now) / 1000),
+        gl: gauntletPartyOn() ? gauntletLevel : 0,
+        gc: gauntletPartyOn() && gauntletState.cleared ? 1 : 0,
         achievement: equippedAchievementIds[0] || "",
       });
     }
@@ -21323,7 +21555,9 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       // walked round a wall during its wind-up can't land the hit through it.
       const hitTarget = getEnemyTarget(enemy);
       if (!clearLosToTarget(enemy.group.position.x, enemy.group.position.z, hitTarget.x, hitTarget.z, hitTarget.y ?? 1.65, eyeY)) return;
-      if (MULTIPLAYER && ARENA_COOP && (isArenaLikeMap(CURRENT_MAP) || isBossArenaMap(CURRENT_MAP)) && enemy.targetId != null) {
+      // A remote target takes the hit from the server (the target's own client applies it); only a hit on
+      // this player is applied here. Any multiplayer mode can have a remote target, not just arena co-op.
+      if (MULTIPLAYER && enemy.targetId != null) {
         socket.emit("hit", {
           target: enemy.targetId,
           damage: enemy.attackDamage,
@@ -21900,44 +22134,65 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       return { x: player.position.x, y: player.position.y, z: player.position.z };
     }
 
+    /** Everyone an enemy can go for: the local player (id null) while alive and not paused, and each remote
+     *  player who is up and on this course. */
+    function enemyTargetCandidates() {
+      const out = [];
+      if (player.health > 0 && !paused) out.push({ id: null, x: player.position.x, y: player.position.y, z: player.position.z });
+      for (const [id, rp] of remotePlayers) {
+        if (!rp.group.visible || rp.isDown) continue;
+        out.push({ id, x: rp.x, y: rp.y ?? 1.65, z: rp.z });
+      }
+      return out;
+    }
+
+    /** Multiplayer: a zombie re-picks its target every RETARGET_INTERVAL, so it moves to whichever player it can
+     *  see nearest. It only leaves its current target for one that is clearly nearer (20%), so it does not flicker
+     *  between two players who are about the same distance away. Nobody in sight: it keeps what it had. */
+    const RETARGET_MAX_DIST = 40;
     function retargetEnemy(enemy) {
-      if (!MULTIPLAYER) return;
-      const ex = enemy.group.position.x;
-      const ez = enemy.group.position.z;
-      const currentVis = computeVisibility(ex, ez,
-        enemy.targetId ? (remotePlayers.get(enemy.targetId)?.x ?? player.position.x) : player.position.x,
-        enemy.targetId ? (remotePlayers.get(enemy.targetId)?.z ?? player.position.z) : player.position.z
-      );
-
-      if (currentVis >= LOSE_RATIO) return;
-
-      let bestId = null;
-      let bestAngleDiff = Infinity;
-      const moveYaw = enemy.moveYaw;
-
-      const candidates = [];
-      candidates.push({ id: null, x: player.position.x, z: player.position.z });
-      for (const [rpId, rp] of remotePlayers) {
-        if (rp.group.visible) candidates.push({ id: rpId, x: rp.x, z: rp.z });
+      if (!MULTIPLAYER || enemy.creature) return;   // the creature boss picks its own target (pickBossTarget)
+      const ex = enemy.group.position.x, ez = enemy.group.position.z;
+      const eyeY = (enemy.baseY || 0) + 1.6;
+      const curId = enemy.targetId ?? null;
+      let curDist = Infinity, bestId, bestDist = Infinity;
+      for (const c of enemyTargetCandidates()) {
+        const dist = Math.hypot(c.x - ex, c.z - ez);
+        if (dist > RETARGET_MAX_DIST) continue;
+        if (computeVisibility(ex, ez, c.x, c.z, eyeY, c.y ?? 1.65) < LOSE_RATIO) continue;
+        if (c.id === curId) curDist = dist;
+        if (dist < bestDist) { bestDist = dist; bestId = c.id; }
       }
+      if (bestId === undefined) return;
+      if (curDist < Infinity && bestDist >= curDist * 0.8) return;
+      enemy.targetId = bestId;
+    }
 
+    /** Boss, multiplayer: at the start of each idle spell (every BOSS_PICK_S) the boss picks who to go for. It
+     *  prefers whoever is near and in view, and a player it has just attacked is pushed back by up to
+     *  BOSS_SPREAD_M for BOSS_SPREAD_MS, so its attacks rotate round the room instead of staying on one player. */
+    const BOSS_PICK_S = 2.5, BOSS_SPREAD_MS = 20000, BOSS_SPREAD_M = 18;
+    function noteBossAttackTarget(enemy) {
+      const log = enemy._bossAttackedAt || (enemy._bossAttackedAt = new Map());
+      log.set(enemy.targetId ?? "local", performance.now());
+    }
+    function pickBossTarget(enemy) {
+      const candidates = enemyTargetCandidates();
+      if (candidates.length < 2) return;
+      const pos = enemy.group.position;
+      const eyeY = (enemy.baseY || 0) + 1.6;
+      const log = enemy._bossAttackedAt;
+      const now = performance.now();
+      let bestId = enemy.targetId ?? null, bestScore = Infinity;
       for (const c of candidates) {
-        const vis = computeVisibility(ex, ez, c.x, c.z);
-        if (vis <= 0) continue;
-        const angle = Math.atan2(c.x - ex, c.z - ez);
-        let diff = angle - moveYaw;
-        if (diff > Math.PI) diff -= Math.PI * 2;
-        else if (diff < -Math.PI) diff += Math.PI * 2;
-        const absDiff = Math.abs(diff);
-        if (absDiff < bestAngleDiff) {
-          bestAngleDiff = absDiff;
-          bestId = c.id;
-        }
+        const dist = Math.hypot(c.x - pos.x, c.z - pos.z);
+        const since = log ? now - (log.get(c.id ?? "local") ?? -Infinity) : Infinity;
+        const spread = since < BOSS_SPREAD_MS ? BOSS_SPREAD_M * (1 - since / BOSS_SPREAD_MS) : 0;
+        const seen = computeVisibility(pos.x, pos.z, c.x, c.z, eyeY, c.y ?? 1.65) >= LOSE_RATIO;
+        const score = dist + spread + (seen ? 0 : 30);
+        if (score < bestScore) { bestScore = score; bestId = c.id; }
       }
-
-      if (bestAngleDiff < Infinity) {
-        enemy.targetId = bestId;
-      }
+      enemy.targetId = bestId;
     }
 
     function updateAwareness(enemy, dt) {
@@ -21957,7 +22212,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         let bestRatio = 0, bestId = null;
         const hostRatio = computeVisibility(ex, ez, player.position.x, player.position.z, eyeY, player.position.y);
         if (hostRatio > bestRatio) { bestRatio = hostRatio; bestId = null; }
-        if (MULTIPLAYER && ARENA_COOP) {
+        if (MULTIPLAYER) {
           for (const [rpId, rp] of remotePlayers) {
             if (!rp.group.visible || rp.isDown) continue;
             const r = computeVisibility(ex, ez, rp.x, rp.z, eyeY, rp.y ?? 1.65);
@@ -22695,7 +22950,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           blastPush(origin, body, f);
         }
       }
-      if (MULTIPLAYER && ARENA_COOP) {
+      if (MULTIPLAYER) {
         for (const [id, rp] of remotePlayers) {
           if (rp.isDown || !rp.group.visible) continue;
           body.set(rp.x, rp.y - 0.45, rp.z);
@@ -23188,7 +23443,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         const local = { x: player.position.x, y: player.position.y, z: player.position.z };
         if (bossPatternHit(enemy, event, local, true)) victims.push({ id: null, local: true, target: local });
       }
-      if (MULTIPLAYER && ARENA_COOP) {
+      if (MULTIPLAYER) {
         for (const [id, remote] of remotePlayers) {
           if (!remote.group.visible || remote.isDown) continue;
           const target = { x: remote.x, y: remote.y ?? 1.65, z: remote.z };
@@ -23300,6 +23555,10 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       const pos = enemy.group.position, floorY = enemy.baseY || 0;
       const cr = bossCollisionRadius(enemy);
       const routeR = BOSS_RADIUS * scale * 1.3;   // pathing keeps this much clear (a bit under the nav grid's margin)
+      if (MULTIPLAYER && enemy.bossAnimState === "idle") {
+        enemy._pickT = (enemy._pickT ?? 0) - attackDt;
+        if (enemy._pickT <= 0) { enemy._pickT = BOSS_PICK_S; pickBossTarget(enemy); }
+      }
       const target = getEnemyTarget(enemy);
       const tx = target.x, ty0 = target.y;
       const tz = target.z, ty = ty0 ?? 1.65;
@@ -23314,7 +23573,10 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       enemy.bossAnimTimer += attackDt;
       enemy.cdClaw -= attackDt; enemy.cdCharge -= attackDt; enemy.cdLob -= attackDt; enemy.cdQuake -= attackDt;
       enemy.cdPattern = Math.max(0, (enemy.cdPattern ?? 0) - attackDt);
-      const begin = (s) => { enemy.bossAnimState = s; enemy.bossAnimTimer = 0; };
+      const begin = (s) => {
+        enemy.bossAnimState = s; enemy.bossAnimTimer = 0;
+        if (MULTIPLAYER && s !== "idle" && s !== "stunned" && s !== "skid") noteBossAttackTarget(enemy);
+      };
       const finish = () => {
         enemy._smashShook = false; enemy._quakeShook = false; enemy._meleeDamagePending = false;
         begin("idle");
@@ -25569,6 +25831,10 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       closeBossResults();
       hideGauntletClear();
       gauntletCourse = null;
+      gauntletParty.active = false;
+      gauntletParty.level = 0;
+      gauntletParty.booting = false;
+      if (gauntletParty.rosterEl) gauntletParty.rosterEl.style.display = "none";
       hideDeathScreen();
       hidePause();
       closeSettingsModal();
@@ -25666,7 +25932,12 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       launch.type = "button";
       launch.textContent = tr("menuDeploy", "Start");
       launch.addEventListener("click", () => startGauntletLevel(_gauntletPanel.selected));
-      actions.append(launch);
+      const party = document.createElement("button");
+      party.type = "button";
+      party.id = "btnGauntletParty";
+      party.textContent = tr("gauntletPartyBtn", "PARTY");
+      party.addEventListener("click", () => showLobby("gauntlet-party", tr("gauntletPartyTitle", "GAUNTLET PARTY")));
+      actions.append(launch, party);
       panel.appendChild(back);
       panel.appendChild(h);
       panel.append(pager, grid, briefing, actions);
@@ -25719,6 +25990,15 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
 
     function startGauntletLevel(level) {
       gauntletLevel = THREE.MathUtils.clamp(level | 0, 1, GAUNTLET_LEVEL_COUNT);
+      if (gauntletParty.active) {
+        // Stay in the party room: the course changes, the connection does not.
+        gauntletParty.level = gauntletLevel;
+        gauntletParty.booting = true;
+        gauntletParty.waitKey = "";
+        hideGauntletClear();
+        startGame("gauntlet", true, false, false);
+        return;
+      }
       startGame("gauntlet", false, false, false);
     }
 
@@ -25997,6 +26277,8 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
 
     function showLobby(mode, title) {
       pendingLobbyMode = mode;
+      // A party is only ever made or joined by code, never matched at random.
+      btnQuickplay.style.display = mode === "gauntlet-party" ? "none" : "";
       lobbyTitle.textContent = title;
       clearLobbyErr();
       showMenuPanel("menuLobby");
@@ -26021,6 +26303,13 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       }
       if (!activeRoomId) {
         showLobbyErr(tr("mpMissingRoomId", "Could not join — missing room id from server."));
+        return;
+      }
+      if (pendingLobbyMode === "gauntlet-party") {
+        ROOM_CODE = makePvpShareCode(ROOM_CODE, "gauntlet_party");
+        gauntletParty.active = true;
+        gauntletLevel = 1;   // a party always starts on the first course
+        startGauntletLevel(1);
         return;
       }
       /**
@@ -26250,7 +26539,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       }
       // The relay only knows predefined modes; the chosen map travels in the share code we hand
       // back, so a friend who joins by that code lands on the same map.
-      _pendingServerMode = pendingLobbyMode;
+      _pendingServerMode = relayModeFor(pendingLobbyMode);
       socket.emit(eventName, {
         // The relay knows two PVP maps; the other two are named by the share code like the rest.
         mode: _pendingServerMode, map: pendingLobbyMode === "crossfire" && !(PENDING_PVP_MAP === "crossfire" || PENDING_PVP_MAP === "crossfire_grid") ? "crossfire" : lobbyMapFromPending(),
@@ -26342,12 +26631,19 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       // real server code, join with the plain mode, and adopt the host's map locally so both sides
       // build the identical world.
       let code = rawInput;
+      if (pendingLobbyMode === "gauntlet-party") {
+        if (parsePvpShareCode(rawInput).variant !== "gauntlet_party") {
+          codeError.textContent = tr("partyCodeNeeded", "Enter a Gauntlet Party code (it ends in -P).");
+          return;
+        }
+        code = parsePvpShareCode(rawInput).code;
+      }
       if (pendingLobbyMode === "crossfire") {
         const parsed = parsePvpShareCode(rawInput);
         code = parsed.code;
         if (parsed.variant) PENDING_PVP_MAP = parsed.variant;
       }
-      _pendingServerMode = pendingLobbyMode;
+      _pendingServerMode = relayModeFor(pendingLobbyMode);
       promptForPlayerName({ type: "joinByCode", code });
     });
 
@@ -26358,6 +26654,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     btnCodeBack.addEventListener("click", () => showMenuPanel("menuLobby"));
     btnLobbyBack.addEventListener("click", () => {
       if (pendingLobbyMode === "crossfire") showMenuPanel("menuPvpMaps");
+      else if (pendingLobbyMode === "gauntlet-party") showMenuPanel("menuGauntlet");
       else if (pendingLobbyMode === "training-coop") showMenuPanel("menuTrainingMode");
       else if (pendingLobbyMode === "boss-coop") showMenuPanel("menuBossDifficulty");
       else showMenuPanel("menuArenaMode");
@@ -26778,6 +27075,21 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           syncGameRendererSize();
         },
         unpause() { hidePause(); },
+        /** Gauntlet Party test hooks: start a party on course 1, deliver a fake remote packet, show the clear card. */
+        party: gauntletParty,
+        get socket() { return socket; },
+        startParty() {
+          activeRoomId = "PARTYTEST";
+          pendingLobbyMode = "gauntlet-party";
+          beginMultiplayerGame("crossfire", { roomKey: "PARTYTEST", roomCode: "PARTYTEST" });
+        },
+        fire(ev, data) {
+          const handlers = typeof socket.listeners === "function" ? socket.listeners(ev) : [];
+          for (const fn of handlers) fn(data);
+          return handlers.length;
+        },
+        showClear() { showGauntletClear(); },
+        remotes() { return [...remotePlayers.entries()].map(([id, rp]) => ({ id, name: rp.name, level: rp.partyLevel, cleared: rp.partyCleared, visible: rp.group.visible })); },
         /** Starts a map by id, quality tier (0 potato .. 3 extreme) and gauntlet level without the menus (look-testing across tiers). */
         start(map, tier, level) {
           if (tier != null) { gameSettings.qualityIndex = tier; applyGraphicsQuality(); }

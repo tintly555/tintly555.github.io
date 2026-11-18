@@ -27,6 +27,11 @@ export function createGauntletThemes(THREE) {
     m.userData.shared = m.userData._cachedShared = true;
     return m;
   }
+  /** A stable 0..1 number from a position, used to vary each box's texture offset. */
+  function boxHash(x, y, z) {
+    const h = Math.sin(x * 12.9898 + y * 78.233 + z * 37.719) * 43758.5453;
+    return h - Math.floor(h);
+  }
   /** Scale a BoxGeometry's UVs so one texture tile covers `tile` metres on every face. */
   function boxUv(geometry, w, h, d, tile) {
     const uv = geometry.attributes.uv;
@@ -45,6 +50,15 @@ export function createGauntletThemes(THREE) {
     constructor(tile = 3) { this.parts = []; this.tile = tile; }
     box(w, h, d, x, y, z, ry = 0, rz = 0) {
       const g = boxUv(new THREE.BoxGeometry(w, h, d), w, h, d, this.tile);
+      // Every box samples a different part of the shared texture (and half of them turn it a quarter), so a
+      // long run of identical blocks does not show the texture repeating as a grid from a distance.
+      const s1 = boxHash(x, y, z), s2 = boxHash(z + 7.1, x - 3.3, y + 1.9), turn = s1 > .5;
+      const uv = g.attributes.uv;
+      for (let i = 0; i < uv.count; i++) {
+        const u = uv.getX(i) + s1, v = uv.getY(i) + s2;
+        uv.setXY(i, turn ? v : u, turn ? u : v);
+      }
+      uv.needsUpdate = true;
       const m = new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, ry, rz)), new THREE.Vector3(1, 1, 1));
       g.applyMatrix4(m);
       this.parts.push(g);
@@ -332,15 +346,28 @@ export function createGauntletThemes(THREE) {
   function foundry(ctx) {
     const g = ctx.groundY;
     groundPlane(ctx, g, surfaces.factory("fdy-floor", { base: [54, 52, 52] }), 1800, 80);
-    const lava = new THREE.MeshBasicMaterial({ map: lavaTexture() });
+    // Molten channels: each one gets its own texture at a scale matched to its size (the shared 8x8 repeat
+    // stretched across a 500 m channel read as carpet stripes), is emissive so it glows, and its texture
+    // drifts slowly so the melt visibly moves.
+    const lavaFlow = [];
     for (const x of [ctx.cx - ctx.wx - 20, ctx.cx + 4, ctx.cx + ctx.wx + 40]) {
-      const channel = new THREE.Mesh(new THREE.PlaneGeometry(12, ctx.length + 500), lava);
+      const L = ctx.length + 500;
+      const tex = lavaTexture().clone();
+      tex.repeat.set(1.2, L / 14);
+      tex.needsUpdate = true;
+      const lava = new THREE.MeshStandardMaterial({
+        map: tex, emissiveMap: tex, emissive: new THREE.Color(0xff5a1c), emissiveIntensity: 1.25,
+        roughness: .34, metalness: 0,
+      });
+      lavaFlow.push(tex);
+      const channel = new THREE.Mesh(new THREE.PlaneGeometry(12, L), lava);
       channel.rotation.x = -Math.PI / 2;
       channel.position.set(x, g + .2, ctx.mid);
       channel.raycast = () => {};
       place(channel, ctx);
       for (let i = 0; i < 9; i++) ctx.add(glow(0xff8a32, 26 + ctx.rnd() * 20, x + (ctx.rnd() - .5) * 8, g + 3, ctx.z0 - ctx.rnd() * (ctx.length + 140), .5));
     }
+    ctx.tick(dt => { for (const t of lavaFlow) t.offset.y -= dt * .018; });
     const sheds = new Batch(5), furn = new Batch(6), tanks = new Batch(5), racks = new Batch(4), cranes = new Batch(4);
     for (let i = 0; i < 18 + Math.round(ctx.wx * ctx.length / 9000); i++) {
       const s = sideOf(ctx), w = 24 + ctx.rnd() * 30, d = 20 + ctx.rnd() * 40, h = 12 + ctx.rnd() * 10;

@@ -10,7 +10,7 @@
 import { mergeGeometries } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/utils/BufferGeometryUtils.js";
 import { fbm, rngFor } from "./gauntlet-surfaces.js?v=3";
 import { TEMPLE_WATER_GLSL, TEMPLE_WATER_Y, templeWaterBank, templeWaterGeometry } from "./water-shape.js";
-import { makeFoliageFx, enhanceFoliage } from "./foliage-realism.js?v=20261113-foliage-v4";
+import { makeFoliageFx, enhanceFoliage } from "./foliage-realism.js?v=20261117-foliage-backlit-v5";
 
 const TAU = Math.PI * 2;
 
@@ -204,7 +204,8 @@ export function createNature(THREE) {
       const rnd = rngFor(3), n = fbm(256, 21, 4, 4), m = fbm(256, 33, 3, 8);
       const img = g.createImageData(256, 256);
       for (let y = 0; y < 256; y++) for (let x = 0; x < 256; x++) {
-        const i = y * 256 + x, ridge = 0.5 + 0.5 * Math.sin(x * 0.52 + m[i] * 7.5 + Math.sin(y * 0.03) * 2.2);
+        const i = y * 256 + x, ridge = (0.5 + 0.5 * Math.sin(x * 0.52 + m[i] * 7.5 + Math.sin(y * 0.03) * 2.2))
+          * (0.55 + 0.45 * Math.sin(x * 0.17 + n[i] * 4.1 + y * 0.011));
         const v = 0.42 + n[i] * 0.5 + ridge * 0.34;
         img.data[i * 4] = 70 * v + 14; img.data[i * 4 + 1] = 52 * v + 10; img.data[i * 4 + 2] = 36 * v + 7; img.data[i * 4 + 3] = 255;
       }
@@ -550,9 +551,16 @@ export function createNature(THREE) {
   }
   /** A far skyline: a ring of ridges round the horizon, in haze. Two layers are enough to read as distance. */
   function skyline(group, { radius = 210, base = 6, height = 34, color = 0xb7a58f, seed = 3, bottom = -8 } = {}) {
-    const seg = 220, pos = [], idx = [], col = [], c = new THREE.Color(color);
+    // 960 segments with the noise interpolated between samples: the old 220 nearest-sample steps showed as
+    // flat facets on the silhouette from the playable area.
+    const seg = 960, pos = [], idx = [], col = [], c = new THREE.Color(color);
     const nn = fbm(256, seed * 7, 5, 6), a1 = fbm(256, seed * 3, 3, 3);
-    const hAt = (i) => { const u = i / seg, k = Math.floor(u * 255); return base + (Math.pow(nn[k], 1.3) * 1.7 + a1[k] * 0.9 - 0.5) * height + (Math.abs(Math.sin(u * TAU * 3 + seed)) > 0.8 ? height * 0.5 : 0); };
+    const sampleAt = (arr, u) => {
+      const f = u * 255, k = Math.floor(f), t = f - k;
+      const k1 = Math.min(255, k + 1);
+      return arr[k] * (1 - t) + arr[k1] * t;
+    };
+    const hAt = (i) => { const u = i / seg; return base + (Math.pow(sampleAt(nn, u), 1.3) * 1.7 + sampleAt(a1, u) * 0.9 - 0.5) * height + (Math.abs(Math.sin(u * TAU * 3 + seed)) > 0.8 ? height * 0.5 : 0); };
     for (let i = 0; i <= seg; i++) {
       const a = i / seg * TAU, x = Math.cos(a) * radius, z = Math.sin(a) * radius, hh = hAt(i % seg);
       pos.push(x, bottom, z, x, hh, z);
@@ -870,13 +878,17 @@ export function createNature(THREE) {
       rad.push(trunkR * (1 - 0.5 * t) * (1 + 1.1 * Math.exp(-t * 11)));       // flares into the roots
     }
     bark.sweep(pts, rad, 12, 1.2, barkTint());
-    // Surface roots: they leave the trunk low, arch over the ground and sink into it.
-    for (let k = 0; k < 5; k++) {
-      const ang = k / 5 * TAU + rnd() * 0.7, len = trunkR * (3.2 + rnd() * 3), rp = [], rr = [];
+    // Surface roots: a few irregular buttress roots that leave the trunk low, arch over the ground and sink into it.
+    // Five evenly spaced roots read as a spider's legs from a distance, so there are fewer, unevenly spread and
+    // lower, with the root tip sunk into the soil.
+    const rootCount = 2 + Math.floor(rnd() * 2);
+    for (let k = 0; k < rootCount; k++) {
+      const ang = (k / rootCount) * TAU + rnd() * 1.6, len = trunkR * (2.4 + rnd() * 2.2), rp = [], rr = [];
+      const lift = trunkR * (1.1 + rnd() * 0.5);
       for (let j = 0; j <= 7; j++) {
         const u = j / 7, r = trunkR * 0.55 + len * u;
-        rp.push([x + Math.cos(ang) * r, Math.max(-0.18, trunkR * 1.9 * Math.pow(1 - u, 1.7) + 0.05 - u * 0.2), z + Math.sin(ang) * r]);
-        rr.push(trunkR * 0.5 * Math.pow(1 - u, 0.8) + 0.05);
+        rp.push([x + Math.cos(ang) * r, Math.max(-0.22, lift * Math.pow(1 - u, 1.9) + 0.02 - u * 0.3), z + Math.sin(ang) * r]);
+        rr.push(trunkR * 0.42 * Math.pow(1 - u, 0.9) + 0.04);
       }
       bark.sweep(rp, rr, 8, 1.2, barkTint());
     }

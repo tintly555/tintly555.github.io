@@ -308,9 +308,9 @@ export function town(core) {
         const bal = kit.batch(2);
         for (let x = -7.8; x <= 7.8; x += 0.4) bal.cyl(0.04, 0.04, 0.9, x, FH + 0.45, sz1 + 3.1, 6);
         kit.deco(bal.mesh(woodDark, { shadow: true }));
-        // Swinging doors: louvred half-doors.
-        const doors = [-1, 1].map((s) => { const m = new THREE.Mesh(new THREE.BoxGeometry(1.0, 1.3, 0.14), woodDark); m.position.set(s * 0.55, 1.4, sz1 + 0.25); m.raycast = () => {}; kit.deco(m); return m; });
-        world.tick((dt, t) => { doors.forEach((m, i) => { m.rotation.y = Math.sin(t * 1.3 + i) * 0.06; }); });
+        // The saloon's louvred half-doors used to hang in the air a metre above the floor, in front of the
+        // real doorway, with no collision and no ray hit: you could walk and shoot straight through them.
+        // The doorway in the front wall already has a working swing door (see dress/addSwingDoor), so they are gone.
       }
       building({ x0: 11, x1: 21, z0: -17, z1: -7, front: "s", wall: stone, label: "BANK", door: 0.35, roofMaterial: stone });
       kit.wallRun(11, -13, 18, -13, 3.4, 0.5, stone, [{ at: 1.5, w: 2.2, h: 2.8 }]);

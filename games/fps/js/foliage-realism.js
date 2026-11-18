@@ -157,10 +157,12 @@ export function enhanceFoliage(material, THREE, fx, opts = {}) {
          reflectedLight.indirectDiffuse *= mix(1.0, ao, fRealism);
          // Backlight: a leaf glows only when the sun is on its far side (behind) AND the viewer is
          // looking toward the sun. Warm, strongest at the thin tips.
-         float viewToSun = pow(clamp(dot(Vv, -Lv), 0.0, 1.0), 2.5);
-         float behind = clamp(-ndl + 0.15, 0.0, 1.0);
+         // Wider than before (power 1.4 instead of 2.5, plus a wrap term) so leaves glow in a real
+         // backlit canopy, not only when you stare straight into the sun.
+         float viewToSun = pow(clamp(dot(Vv, -Lv) * 0.5 + 0.5, 0.0, 1.0), 1.4);
+         float behind = smoothstep(-0.35, 0.6, -ndl);
          float thin = 0.5 + 0.5 * vFoliageCell.y;
-         float trans = viewToSun * behind * thin * ${transScale} * (0.8 + fExtreme * 0.5);
+         float trans = viewToSun * behind * thin * ${transScale} * (0.9 + fExtreme * 0.6);
          reflectedLight.indirectDiffuse += uLeafSunColor * trans * diffuseColor.rgb * fRealism;
          if (gl_FrontFacing && ndl > 0.0) {
            // Waxy sheen: only on sunlit tops, in the sun's half-vector direction.

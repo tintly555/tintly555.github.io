@@ -1,0 +1,71 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Operator model preview</title>
+<style>html,body{margin:0;height:100%;background:#1b1f24;overflow:hidden}canvas{display:block}#hud{position:fixed;left:8px;top:6px;color:#9fb;font:12px monospace}</style>
+<div id="hud"></div>
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.182.0/build/three.module.js"}}
+</script>
+<script type="module">
+import * as THREE from "three";
+import { buildOperatorShell } from "../js/operator-model.js?v=preview-2";
+
+// Same palette the game gives a remote operator (applyRemoteAvatarPalette, non-bright map).
+function palette(hex = { camoA: 0x3a4549, camoB: 0x293638, helm: 0x526264, vest: 0x535f60, pants: 0x383f43 }) {
+  const mk = (c, rough, metal) => new THREE.MeshStandardMaterial({ color: c, roughness: rough, metalness: metal || 0 });
+  return {
+    mCamo1: mk(hex.camoA, .82, 0), mCamo2: mk(hex.camoB, .84, 0), mHelm: mk(hex.helm, .68, .05),
+    mVest: mk(hex.vest, .78, 0), mPants: mk(hex.pants, .88, 0),
+  };
+}
+
+const q = new URLSearchParams(location.search);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(2, devicePixelRatio));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x1b1f24);
+const cam = new THREE.PerspectiveCamera(30, innerWidth / innerHeight, 0.05, 50);
+scene.add(new THREE.HemisphereLight(0xbfd0e0, 0x2a2420, 1.0));
+const key = new THREE.DirectionalLight(0xffe6cc, 2.6);
+key.position.set(2.5, 3.2, 3.5); key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+Object.assign(key.shadow.camera, { left: -2, right: 2, top: 2, bottom: -2, near: .5, far: 12 });
+scene.add(key);
+const rim = new THREE.DirectionalLight(0x9fd8ff, 1.6); rim.position.set(-3, 2.5, -3.5); scene.add(rim);
+const floor = new THREE.Mesh(new THREE.CircleGeometry(4, 48), new THREE.MeshStandardMaterial({ color: 0x2b3137, roughness: .95 }));
+floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
+
+const pal = palette();
+const tBuild = performance.now();
+const { carrier, waist, headGroup, armShell, legShell } = buildOperatorShell(pal);
+const buildMs = Math.round(performance.now() - tBuild);
+const root = new THREE.Group();
+root.add(carrier, waist, headGroup);
+const armR = new THREE.Group(), armL = new THREE.Group();
+armR.position.set(.262, 1.40, 0); armL.position.set(-.262, 1.40, 0);
+root.add(armR, armL);
+armShell(armR, "R"); armShell(armL, "L");
+root.add(legShell(.11), legShell(-.11));
+root.traverse(o => { if (o.isMesh) o.castShadow = o.receiveShadow = true; });
+scene.add(root);
+
+const pose = q.get("pose") || "stand";
+const yaw = parseFloat(q.get("yaw") || "0");
+root.rotation.y = yaw;
+const target = new THREE.Vector3(0, parseFloat(q.get('ty') || '1.22'), 0);
+const dist = parseFloat(q.get("dist") || "3.3");
+const height = parseFloat(q.get("h") || "1.5");
+const ang = parseFloat(q.get("cam") || "0");
+cam.position.set(Math.sin(ang) * dist, height, Math.cos(ang) * dist);
+cam.lookAt(target);
+renderer.render(scene, cam);
+window.done = true;
+document.getElementById("hud").textContent = `pose=${pose} yaw=${yaw} cam=${ang} build=${buildMs}ms tris=${renderer.info.render.triangles}`;
+</script>
