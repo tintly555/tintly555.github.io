@@ -12,9 +12,9 @@
     import { createArenaRealism } from "./arena-realism.js?v=20261112-arena-v1";
     import { createBossCreature, BOSS_RADIUS, CLAW_STRIKE_S, QUAKE_SLAM_S, LOB_RELEASE_S, DURATIONS as BOSS_DURATIONS } from "./boss-creature.js?v=11";
     import { buildOperatorShell, OPERATOR, operatorSleeveMaterial } from "./operator-model.js?v=field-rig";
-    import { animateImportedOperator, createImportedOperator, loadOperatorAsset } from "./operator-asset.js?v=male-rig-hands-v4";
+    import { animateImportedOperator, createImportedOperator, loadOperatorAsset } from "./operator-asset.js?v=male-rig-hands-v5";
     import { advanceOperatorGait, buildOperatorGlove, buildOperatorViewSleeve, operatorEnvelope,
-      operatorShot, operatorStride, poseOperatorFoot, poseOperatorViewSleeve, solveOperatorLimb } from "./operator-hands.js?v=field-rig-hands-v2";
+      operatorShot, operatorStride, poseOperatorFoot, poseOperatorViewSleeve, solveOperatorLimb } from "./operator-hands.js?v=field-rig-hands-v3";
     import { extendGauntletCourses, GAUNTLET_CHAPTERS, GAUNTLET_CHAPTER_SIZE } from "./gauntlet-courses.js?v=relay-no-goo-v1";
     import { createGauntletRuntime } from "./gauntlet-runtime.js?v=24-maglev-track";
     import { createWorldAudio } from "./world-audio.js?v=5-material-footsteps-water-entry";
@@ -2691,12 +2691,12 @@
           .applyQuaternion(rp.carrier.quaternion).add(rp.carrier.position));
       }
       hold.position.set(
-        stance.holdX - aim * .11 - service * .05 - treatment * .10 + walk * .018 + equip * .065 - slash * .068,
+        stance.holdX - aim * .11 - service * .05 - treatment * .10 + walk * .008 + equip * .065 - slash * .068,
         stance.holdY + aim * .15 - service * .12 + treatment * .18 - dash * .10 + carry - poseDrop - equip * .16,
         stance.holdZ - .11 + aim * .035 - kick * .065 - service * .035 + slash * .13 - equip * .07
       );
       hold.rotation.set(-(rp.remotePitch || 0) * .87 - kick * .14 + service * .14 + dash * .19 + equip * .29,
-        slash * -.9 - equip * .14, service * .61 + walk * .033 - treatment * .24 + equip * .19, "YXZ");
+        slash * -.9 - equip * .14, service * .61 + walk * .012 - treatment * .24 + equip * .19, "YXZ");
       if (rp.importedOperator) hold.position.x *= -1;
       const cyclePart = type === 2 ? .12 * Math.sin(Math.PI * THREE.MathUtils.smoothstep(age, .10, .42))
         : type === 5 ? .19 * Math.sin(Math.PI * THREE.MathUtils.smoothstep(age, .14, .58)) : kick * .055;
@@ -15695,8 +15695,8 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       parent.userData.viewSleeve = buildOperatorViewSleeve(getGloveMaterials(), parent, wrist, reach, side);
     }
 
-    function aimViewSleeve(hand, move = 0, raise = 0) {
-      poseOperatorViewSleeve(hand, camera, move, raise);
+    function aimViewSleeve(hand) {
+      poseOperatorViewSleeve(hand, camera, weaponRoot);
     }
 
     function makeViewHandMesh(side, grip, spec) {
@@ -20761,10 +20761,10 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         }
       }
       if (weaponRoot.visible) {
-        aimViewSleeve(ud.viewArmR, motion.sidestep, crouchCarry * .025);
-        aimViewSleeve(ud.viewArmL, motion.sidestep, crouchCarry * .025);
-        aimViewSleeve(ud.supportHand, motion.sidestep, crouchCarry * .025);
-        aimViewSleeve(ud.knifeArm, motion.sidestep);
+        aimViewSleeve(ud.viewArmR);
+        aimViewSleeve(ud.viewArmL);
+        aimViewSleeve(ud.supportHand);
+        aimViewSleeve(ud.knifeArm);
       }
 
       const adsFov = Math.min(88, Math.max(28, weapon().adsFov ?? 55));

@@ -210,12 +210,17 @@ export function buildOperatorViewSleeve(materials, parent, wrist, initial, side)
 }
 
 const shoulder = new THREE.Vector3(), elbowHint = new THREE.Vector3();
-export function poseOperatorViewSleeve(hand, camera, move, raise) {
+const weaponHome = new THREE.Vector3(-.10, .008, 0);
+export function poseOperatorViewSleeve(hand, camera, weaponRoot = null) {
   const rig = hand?.userData.viewSleeve;
   if (!rig || !hand.visible) return;
   const { sleeve, elbow, side } = rig;
-  shoulder.set(side * (.225 + move * .014), -.245 + raise, -.17);
-  elbowHint.set(side * .29, -.49 + raise * .55, -.40);
+  shoulder.set(side * .225, -.245, -.17);
+  elbowHint.set(side * .29, -.49, -.40);
+  if (weaponRoot) {
+    shoulder.sub(weaponHome).applyQuaternion(weaponRoot.quaternion).add(weaponRoot.position);
+    elbowHint.sub(weaponHome).applyQuaternion(weaponRoot.quaternion).add(weaponRoot.position);
+  }
   camera.localToWorld(shoulder);
   camera.localToWorld(elbowHint);
   hand.worldToLocal(shoulder);

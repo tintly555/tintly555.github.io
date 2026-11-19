@@ -41,10 +41,11 @@ async function loadFirst(loader, urls) {
   throw failure || new Error("No asset URL was provided");
 }
 
-function inPlaceClip(source, name) {
+function inPlaceClip(source, name, lockArms = false) {
   const clip = source.clone();
   clip.name = name;
-  clip.tracks = clip.tracks.filter(track => !/^Bip01\.position$/.test(track.name));
+  clip.tracks = clip.tracks.filter(track => !/^Bip01\.position$/.test(track.name)
+    && !(lockArms && /^Bip01[ _][RL][ _](?:Clavicle|UpperArm|Forearm|Hand)\./i.test(track.name)));
   return clip;
 }
 
@@ -87,6 +88,7 @@ export function loadOperatorAsset(sources) {
         const gltf = await loadFirst(loader, sources[name]);
         if (!gltf.animations?.length) throw new Error(`Missing ${name} clip`);
         clips[name] = inPlaceClip(gltf.animations[0], name);
+        if (name !== "idle") clips[`${name}Armed`] = inPlaceClip(gltf.animations[0], `${name}Armed`, true);
       }
       asset = {
         scene: model.scene, clips, scale: BODY_HEIGHT / height, floor: -box.min.y * BODY_HEIGHT / height,
@@ -195,7 +197,8 @@ export function animateImportedOperator(rp, dt, now, aim) {
   const action = airborne || running ? "run" : speed > .15 ? "walk" : "idle";
   const reference = action === "run" ? 2.9 : action === "walk" ? 1.35 : 1;
   const rate = action === "idle" ? 1 : THREE.MathUtils.clamp(speed / reference, .72, action === "walk" ? 1.65 : 1.45);
-  playAction(rig, action, rate);
+  const clipName = rp.primarySocket && action !== "idle" ? `${action}Armed` : action;
+  playAction(rig, clipName, rate);
   for (const [bone, rotation] of rig.bindPose) bone.quaternion.copy(rotation);
   for (const [bone, position] of rig.bindPositions) bone.position.copy(position);
   rig.mixer.update(dt);
