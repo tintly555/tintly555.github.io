@@ -18,7 +18,7 @@
     import { extendGauntletCourses, GAUNTLET_CHAPTERS, GAUNTLET_CHAPTER_SIZE } from "./gauntlet-courses.js?v=relay-no-goo-v1";
     import { createGauntletRuntime } from "./gauntlet-runtime.js?v=24-maglev-track";
     import { createWorldAudio } from "./world-audio.js?v=5-material-footsteps-water-entry";
-    import { createGauntletThemes } from "./gauntlet-themes.js?v=15-mounted-fixtures";
+    import { createGauntletThemes } from "./gauntlet-themes.js?v=16-built-traverses";
     import { createGauntletMusic } from "./gauntlet-music.js?v=1";
     import { templeWaterBank, TEMPLE_WATER_Y } from "./water-shape.js?v=3-footsteps";
     import { createPostFx, applyDisplayTone } from "./post-fx.js?v=16-gauntlet-light-balance";
@@ -31,8 +31,8 @@
     import { poseZombieVariant } from "./zombie-variants.js?v=5";
     import { BOSS_IMPACT, ZOMBIE_MELEE, zombieStrikeClipPhase, zombieGait } from "./zombie-motion.js";
     import { ZOMBIE_LOOK_COUNT, loadZombieCharacterMeshes } from "./zombie-character-meshes.js?v=1";
-    import { Footprints, slabBoxes, sampleAt, forwardOf, createPathGeometry } from "./gauntlet-path.js?v=2";
-    import { layoutSeg, composeLeg, lengthenSegs, FIXED, mulberry32 as legRng } from "./gauntlet-legs.js?v=5";
+    import { Footprints, slabBoxes, sampleAt, forwardOf, createPathGeometry } from "./gauntlet-path.js?v=3";
+    import { layoutSeg, composeLeg, lengthenSegs, FIXED, mulberry32 as legRng } from "./gauntlet-legs.js?v=6";
     // The deployed file is translation.js (not translate.js — earlier versions of this HTML had the
     // wrong path and 404'd, which aborted the whole module and left Start unresponsive). The dynamic
     // import + catch is kept so a missing/renamed i18n file still lets the menu boot with a minimal stub.
@@ -7820,6 +7820,90 @@
         checkpoints.push(cp);
       };
       const paintEnd = (sample, w) => crossBar(sample, w, .26, .05, hazardMat(w));
+      const fixtures = [];
+      const traverse = style.traverse;
+      const diffuser = new THREE.MeshStandardMaterial({
+        color: traverse.lamp, emissive: traverse.lamp, emissiveIntensity: .3, roughness: .87,
+      });
+      let lastBay = -Infinity, bayCount = 0;
+      const dressTraverse = ({ samples, w }) => {
+        const start = samples[0].arc, end = samples[samples.length - 1].arc;
+        const length = end - start;
+        if (length < 5.2 || start - lastBay < 22) return;
+        const span = Math.min(length - 1.4, 11);
+        const from = start + (length - span) / 2, to = from + span;
+        const track = [sampleAt(samples, from), ...samples.filter(s => s.arc > from && s.arc < to), sampleAt(samples, to)];
+        if (Math.abs(track.at(-1).th - track[0].th) > .58) return;
+        const { height, kind, open } = traverse;
+        const sideHigh = (bayCount + gauntletLevel) % 2 ? -1 : 1;
+        lastBay = start;
+        bayCount++;
+        const wall = style.role("wall"), metal = style.role("beam"), brace = style.brace;
+        const half = w / 2;
+        const band = (width, offset, bottom, top, mat = wall, points = track) => {
+          const options = { width, offset, bottom, top };
+          addRibbon(points, options, mat);
+          slabBoxes(points, options).forEach(box => addSlab(box));
+        };
+        const bevel = (points, side, base, cap, bottom, top, mat) => {
+          const width = Math.abs(base[0] - base[1]), offset = side * (base[0] + base[1]) / 2;
+          const topWidth = Math.abs(cap[0] - cap[1]), topOffset = side * (cap[0] + cap[1]) / 2;
+          addRibbon(points, { width, offset, topWidth, topOffset, bottom, top }, mat);
+          const slices = Math.max(2, Math.ceil(Math.max(Math.abs(base[0] - cap[0]), Math.abs(base[1] - cap[1])) / .24));
+          for (let i = 0; i < slices; i++) {
+            const t = (i + .5) / slices;
+            slabBoxes(points, {
+              width: THREE.MathUtils.lerp(width, topWidth, t), offset: THREE.MathUtils.lerp(offset, topOffset, t),
+              bottom: THREE.MathUtils.lerp(bottom, top, i / slices), top: THREE.MathUtils.lerp(bottom, top, (i + 1) / slices),
+            }).forEach(box => addSlab(box));
+          }
+        };
+        const facing = (arc, width, center, bottom, top, mat, depth) => {
+          const points = [sampleAt(track, arc - depth / 2), sampleAt(track, arc + depth / 2)];
+          band(width, center, bottom, top, mat, points);
+        };
+        for (const side of [-1, 1]) {
+          const low = open && side !== sideHigh;
+          const edge = side * (half + .26);
+          const top = low ? 1.28 : height;
+          band(.52, edge, KERB_H, top);
+          if (kind === "cut") {
+            bevel(track, side, [half - .1, half + 2.6], [half + .18, half + 1.9], -4.2, low ? .48 : 2.1, wall);
+            if (!low) bevel(track, side, [half + .2, half + 1.9], [half + .76, half + 1.42], 2.1, height - .6, wall);
+          } else {
+            const lip = side * (half + .08);
+            band(.16, lip, .92, 1.08, brace);
+            if (!low) {
+              band(.24, lip, height - .89, height - .58, metal);
+              if (kind === "service") band(.18, lip, height - 1.28, height - 1.08, brace);
+            }
+          }
+        }
+        if (!open) band(w + 1.02, 0, height, height + .6, kind === "viaduct" ? wall : metal);
+        for (const arc of [from + .42, to - .42]) {
+          for (const side of [-1, 1]) {
+            if (open && side !== sideHigh) continue;
+            const offset = side * (half + .19);
+            facing(arc, .68, offset, -.32, height + .15, brace, .42);
+            if (!open) {
+              const rib = [sampleAt(track, arc - .2), sampleAt(track, arc + .2)];
+              const reach = kind === "hull" ? 1.65 : kind === "service" ? 1.2 : .8;
+              bevel(rib, side, [half - .16, half + .47], [half - reach, half + .47], height - 1.4, height, brace);
+            }
+          }
+          if (!open) facing(arc, w + 1.04, 0, height - .31, height + .19, brace, .42);
+        }
+        const arc = (from + to) / 2, s = sampleAt(track, arc);
+        const lightOffset = open ? sideHigh * (half - .27) : 0;
+        const lampY = height - (open ? .65 : .22);
+        facing(arc, 1.92, lightOffset, lampY, lampY + .22, metal, .52);
+        const lens = [sampleAt(track, arc - .15), sampleAt(track, arc + .15)];
+        addTrim(lens, { width: 1.64, offset: lightOffset, bottom: lampY - .032, top: lampY + .01 }, diffuser);
+        fixtures.push({
+          x: s.x + Math.cos(s.th) * lightOffset, y: s.y + lampY - .055,
+          z: s.z + Math.sin(s.th) * lightOffset, tx: s.x, ty: s.y, tz: s.z,
+        });
+      };
       const freeDeck = (part, roleName, { kerbs = false, edgeStart = false, edgeEnd = false, hazardSides = false } = {}) => {
         const { samples, w } = part;
         const chunks = addRibbon(samples, { width: w, bottom: -DECK_T, top: 0 }, style.role(roleName));
@@ -7844,6 +7928,7 @@
             addRibbon(samples, band, style.role("wall"));
             slabBoxes(samples, band).forEach((b) => addSlab(b));
           }
+          dressTraverse(part);
         }
         const entry = { samples, w, kind: part.kind, chunks };
         ribbonDecks.push(entry);
@@ -8055,88 +8140,45 @@
       // own lights and this one was only adding the exit beacon. A cool overhead key plus a
       // run of lamps down the course, so you can actually see the next platform edge.
       const light = theme.light;
-      const amb = new THREE.AmbientLight(light.ambient[0], 1.8 * light.ambient[1]);
+      const amb = new THREE.AmbientLight(light.ambient[0], 1.18 * light.ambient[1]);
       scene.add(amb); pvpMapLights.push(amb);
-      const hemi = new THREE.HemisphereLight(light.hemi[0], light.hemi[1], 3.0 * light.hemi[2]);
+      const hemi = new THREE.HemisphereLight(light.hemi[0], light.hemi[1], 2.1 * light.hemi[2]);
       scene.add(hemi); pvpMapLights.push(hemi);
-      const key = new THREE.DirectionalLight(light.sun[0], 5.6 * light.sun[1]);
+      const key = new THREE.DirectionalLight(light.sun[0], 3.5 * light.sun[1]);
       key.position.set(light.sun[2][0] * 1.5, light.sun[2][1] * 1.5, light.sun[2][2] * 1.5); key.castShadow = false;
       scene.add(key); pvpMapLights.push(key);
-      const fill = new THREE.DirectionalLight(light.fill[0], 2.2 * light.fill[1]);
+      const fill = new THREE.DirectionalLight(light.fill[0], 1.35 * light.fill[1]);
       fill.position.set(-22, 30, -40); fill.castShadow = false;
       scene.add(fill); pvpMapLights.push(fill);
-      // Floodlight masts beside the course, every 30 m along it. Each one is a visible pole and
-      // head, so the pools of light have a source. A real course is far too long for a spotlight
-      // per mast, so a few lamps follow the player and light whichever masts are nearest.
-      const mastMat = style.role("beam");
-      const mastHeads = [];
-      for (let k = 12; k < centreline.length - 6; k += 30) {
-        const c = centreline[k], n = centreline[Math.min(centreline.length - 1, k + 3)], p = centreline[Math.max(0, k - 3)];
-        let dx = n.x - p.x, dz = n.z - p.z;
-        const dl = Math.hypot(dx, dz) || 1;
-        dx /= dl; dz /= dl;
-        const side = ((k / 30) | 0) % 2 === 0 ? 1 : -1;
-        const mx = c.x + -dz * side * (GAUNTLET_W / 2 + 7), mz = c.z + dx * side * (GAUNTLET_W / 2 + 7);
-        // Never plant a mast through another stretch of the course that folds back beside this one.
-        if (footprints.conflicts([{ x: mx, y: c.y, z: mz, arc: c.arc }], 1.4)) continue;
-        // Tall enough to run down into the cloud deck instead of stopping in mid-air.
-        const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.22, 80, 8), mastMat);
-        mast.position.set(mx, c.y + 8.6 - 40, mz);
-        scene.add(mast); gauntletProps.push(mast);
-        const head = new THREE.Mesh(
-          new THREE.BoxGeometry(1.4, 0.5, 0.7),
-          new THREE.MeshStandardMaterial({ color: 0x1b1f24, emissive: theme.lamp, emissiveIntensity: 0.65, roughness: 0.5 })
-        );
-        head.position.set(mx - -dz * side * 0.5, c.y + 8.1, mz - dx * side * 0.5);
-        head.rotation.y = -Math.atan2(dz, dx) + Math.PI / 2;
-        head.raycast = () => {};
-        scene.add(head); gauntletProps.push(head);
-        const ahead = centreline[Math.min(centreline.length - 1, k + 6)];
-        mastHeads.push({ x: mx - -dz * side * 0.6, y: c.y + 7.8, z: mz - dx * side * 0.6, tx: c.x, ty: c.y, tz: c.z, ax: ahead.x, az: ahead.z });
-      }
-      {
-        const pool = [];
-        for (let i = 0; i < Math.min(5, mastHeads.length); i++) {
-          const lamp = createPhysicalSpotLight(theme.lamp, 180, 44, Math.PI / 5, 0.72);
-          lamp.userData.poolIntensity = lamp.intensity;
-          lamp.userData.poolFade = 1;
-          lamp.castShadow = false;
-          scene.add(lamp); scene.add(lamp.target);
-          pvpMapLights.push(lamp, lamp.target);
-          pool.push(lamp);
-        }
-        let assignments = [];
-        const assign = (dt = 1 / 60) => {
-          const px = player.position.x, pz = player.position.z;
-          const nearest = mastHeads.map((m) => ({ m, d: (m.x - px) ** 2 + (m.z - pz) ** 2 })).sort((a, b) => a.d - b.d);
-          const usedMasts = new Set();
-          pool.forEach((lamp, i) => {
-            const candidate = nearest.find(entry => !usedMasts.has(entry.m));
-            const prior = assignments[i];
-            const priorEntry = prior && nearest.find(entry => entry.m === prior);
-            const m = priorEntry && !usedMasts.has(prior) && priorEntry.d < candidate.d * 1.2
-              ? prior : candidate.m;
-            usedMasts.add(m);
-            if (!assignments[i]) {
-              lamp.position.set(m.x, m.y, m.z);
-              lamp.target.position.set((m.tx + m.ax) / 2, m.ty, (m.tz + m.az) / 2);
-            } else if (assignments[i] !== m) {
-              // Keep pooled spotlights attached to actual masts; fade while swapping their
-              // assignments so a moving lamp beam never sweeps across the course.
-              lamp.position.set(m.x, m.y, m.z);
-              lamp.target.position.set((m.tx + m.ax) / 2, m.ty, (m.tz + m.az) / 2);
-              lamp.userData.poolFade = 0;
+      const fixtureSlots = Array.from({ length: Math.min(3, fixtures.length) }, () => {
+        const lamp = createPhysicalSpotLight(traverse.lamp, 30, 17, Math.PI / 4, .83);
+        const intensity = lamp.intensity;
+        lamp.intensity = 0;
+        scene.add(lamp, lamp.target);
+        pvpMapLights.push(lamp, lamp.target);
+        return { lamp, intensity, fixture: null, fade: 0 };
+      });
+      if (fixtureSlots.length) {
+        gauntletTicks.push(dt => {
+          const p = player.position;
+          const distance = f => (f.x - p.x) ** 2 + (f.y - p.y) ** 2 + (f.z - p.z) ** 2;
+          const nearest = fixtures.map(f => ({ f, d: distance(f) })).sort((a, b) => a.d - b.d)
+            .slice(0, fixtureSlots.length).map(entry => entry.f);
+          for (const slot of fixtureSlots) {
+            const keep = slot.fixture && nearest.includes(slot.fixture);
+            slot.fade = THREE.MathUtils.clamp(slot.fade + dt * (keep ? 3.5 : -5), 0, 1);
+            if (!keep && slot.fade <= 0) {
+              const next = nearest.find(f => !fixtureSlots.some(other => other.fixture === f));
+              slot.fixture = next || null;
+              if (next) {
+                slot.lamp.position.set(next.x, next.y, next.z);
+                slot.lamp.target.position.set(next.tx, next.ty, next.tz);
+                slot.lamp.target.updateMatrixWorld();
+              }
             }
-            assignments[i] = m;
-            lamp.userData.poolFade = Math.min(1, lamp.userData.poolFade + Math.min(dt, 0.1) / 0.32);
-            lamp.intensity = lamp.userData.poolIntensity * lamp.userData.poolFade;
-            lamp.target.updateMatrixWorld();
-          });
-        };
-        if (pool.length) {
-          assign();
-          gauntletTicks.push((dt) => assign(dt));
-        }
+            slot.lamp.intensity = slot.intensity * slot.fade;
+          }
+        });
       }
 
       // Fog bank: a sea of soft cloud sprites below the course plus drifting mist at deck level.
@@ -8153,27 +8195,16 @@
       fogCtx.fillRect(0, 0, 128, 128);
       const fogTex = new THREE.CanvasTexture(fogCanvas);
       fogTex.colorSpace = THREE.SRGBColorSpace;
-      const fogMat = new THREE.SpriteMaterial({ map: fogTex, color: new THREE.Color(theme.fog).lerp(new THREE.Color(0xffffff), 0.22), transparent: true, opacity: 0.5, depthWrite: false });
+      const fogMat = new THREE.SpriteMaterial({ map: fogTex, color: new THREE.Color(theme.fog).lerp(new THREE.Color(0xffffff), 0.08), transparent: true, opacity: 0.22, depthWrite: false });
       const cloudSea = theme.id !== "orbital-relay" && theme.id !== "starship-hangar";
       if (cloudSea) {
         const spanX = bounds.x1 - bounds.x0 + 240, spanZ = bounds.z1 - bounds.z0 + 240;
-        const cloudCount = Math.min(240, Math.round(60 + spanX * spanZ / 2600));
+        const cloudCount = Math.min(90, Math.round(28 + spanX * spanZ / 4100));
         for (let i = 0; i < cloudCount; i++) {
           const puff = new THREE.Sprite(fogMat);
           const size = 34 + Math.random() * 46;
           puff.scale.set(size, size * 0.55, 1);
           puff.position.set(bounds.x0 - 120 + Math.random() * spanX, lowY - 10 - Math.random() * 34, bounds.z0 - 120 + Math.random() * spanZ);
-          puff.raycast = () => {};
-          scene.add(puff); gauntletProps.push(puff);
-        }
-        // Mist drifting beside the deck, wherever the course happens to be.
-        for (let i = 0; i < 70; i++) {
-          const c = centreline[Math.floor(Math.random() * centreline.length)];
-          const puff = new THREE.Sprite(fogMat);
-          const size = 14 + Math.random() * 18;
-          puff.scale.set(size, size * 0.7, 1);
-          const a = Math.random() * Math.PI * 2, r = 9 + Math.random() * 22;
-          puff.position.set(c.x + Math.cos(a) * r, c.y - 1.5 + Math.random() * 2.5, c.z + Math.sin(a) * r);
           puff.raycast = () => {};
           scene.add(puff); gauntletProps.push(puff);
         }

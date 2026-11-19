@@ -10,7 +10,7 @@
  *
  * Everything here is deterministic for a given level, so a course is the same every visit.
  */
-import { trace, DEG, STATION } from "./gauntlet-path.js?v=2";
+import { trace, DEG, STATION } from "./gauntlet-path.js?v=3";
 
 export const GAUNTLET_W = 12;
 export const GAP_JUMP = 4.2;
@@ -18,7 +18,7 @@ export const GAP_DASH = 7.0;
 /** Segments that are built axis-aligned at the current position, heading straight down -Z. */
 export const FIXED = new Set(["room", "mechanic", "lift", "shuttle"]);
 /** Keep each course focused on its authored challenges instead of long travel stretches. */
-export const COURSE_STRETCH = 1.85;
+export const COURSE_STRETCH = 1.48;
 /** Inner edge of a bend never gets tighter than this many metres of radius. */
 const EDGE_RADIUS = 4;
 const MAX_SLOPE = 0.17;
@@ -48,10 +48,16 @@ export const maxTurn = (len, width) => len / (width / 2 + EDGE_RADIUS);
 export function layoutSeg(seg, pen) {
   const parts = [];
   let p = { ...pen };
-  const deck = (kind, len, w, turn = 0, rise = 0) => {
+  const deck = (kind, len, w, turn = 0, rise = 0, offset = 0, shelf = 0) => {
     const turnOk = clamp(turn, -maxTurn(len, w), maxTurn(len, w));
     const t = trace(p, { len, turn: turnOk, rise });
-    parts.push({ kind, samples: t.samples, w, turn: turnOk, rise });
+    const samples = offset || shelf ? t.samples.map(sample => ({
+      ...sample,
+      x: sample.x + Math.cos(sample.th) * offset,
+      y: sample.y + shelf,
+      z: sample.z + Math.sin(sample.th) * offset,
+    })) : t.samples;
+    parts.push({ kind, samples, w, turn: turnOk, rise });
     p = t.end;
   };
   const pit = (len) => {
@@ -80,8 +86,13 @@ export function layoutSeg(seg, pen) {
       break;
     case "pads": {
       const each = ((seg.turn || 0) * DEG) / seg.n;
+      const handedness = Math.floor(pen.arc) % 2 ? -1 : 1;
       for (let i = 0; i < seg.n; i++) {
-        deck("deck", seg.len, seg.w || 4, each);
+        const middle = i > 0 && i < seg.n - 1;
+        const w = seg.w || 4;
+        const offset = middle ? (i % 2 ? 1 : -1) * handedness * Math.min(.95, w * .23) : 0;
+        deck("landing", seg.len, middle ? w * (i % 2 ? .92 : 1.04) : w, each, 0, offset,
+          middle ? (i % 2 ? .28 : -.13) : 0);
         if (i < seg.n - 1) pit(seg.gap || GAP_JUMP);
       }
       break;
@@ -162,7 +173,7 @@ function candidate(rng, req, startY, attempt) {
     }
   };
 
-  road(u(6, 9), GAUNTLET_W);
+  road(u(5, 7), GAUNTLET_W);
   const traverse = () => {
     const len = u(6, 10), turn = rng() < .72 ? sign() * u(20, 58) : 0;
     road(len, u(7.5, 11), turn, climb * u(.025, .11) * len);
@@ -181,11 +192,11 @@ function candidate(rng, req, startY, attempt) {
   // Heading finishes straight again, always on a plain deck.
   const w2 = 10;
   const need = -turnSum;
-  let len = clamp(Math.abs(need * DEG) * (w2 / 2 + EDGE_RADIUS) + 6, 12, 120);
+  const len = clamp(Math.abs(need * DEG) * (w2 / 2 + EDGE_RADIUS) + 4, 8, 120);
   if (Math.abs(need) * DEG > maxTurn(len, w2) + 1e-6) return null;
   const easeRise = clamp(-y * 0.45, -MAX_SLOPE * len, MAX_SLOPE * len);
   road(len, w2, need, easeRise);
-  road(u(8, 12), GAUNTLET_W);
+  road(u(5, 8), GAUNTLET_W);
   return segs;
 }
 
@@ -268,7 +279,7 @@ const rough = s => {
  */
 export function lengthenSegs(segs, { level, tier = 1, stretch = COURSE_STRETCH }) {
   const base = segs.reduce((sum, s) => sum + rough(s), 0) + 26;
-  const extra = Math.max(62, base * (stretch - 1));
+  const extra = Math.max(48, base * (stretch - 1));
   const vocab = vocabularyOf(segs);
   // Spread short platforming links through the route so it does not become a long run.
   const slots = clamp(Math.round(extra / 100), 2, segs.length);
@@ -279,7 +290,7 @@ export function lengthenSegs(segs, { level, tier = 1, stretch = COURSE_STRETCH }
   const out = [];
   segs.forEach((s, i) => {
     out.push(s);
-    if (legAfter.has(i)) out.push({ t: "leg", target: Math.max(54, share), vocab, tier, level, seed: level * 7919 + i * 104729 + 13 });
+    if (legAfter.has(i)) out.push({ t: "leg", target: Math.max(42, share), vocab, tier, level, seed: level * 7919 + i * 104729 + 13 });
   });
   return out;
 }

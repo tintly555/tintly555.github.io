@@ -13,6 +13,19 @@ import { createSurfaces, rngFor, fbm } from "./gauntlet-surfaces.js?v=3";
 const TAU = Math.PI * 2;
 const glowCache = new Map();
 
+const traverses = {
+  "ashen-city": { kind: "viaduct", height: 5.1, brace: 0x6f716f, lamp: 0xffd6a7 },
+  foundry: { kind: "service", height: 4.6, brace: 0x855d30, lamp: 0xffbb7d },
+  switchyard: { kind: "service", height: 5.5, brace: 0x596972, lamp: 0xbdddeb, open: true },
+  "frozen-dam": { kind: "viaduct", height: 5.7, brace: 0x747f86, lamp: 0xc0ddf2 },
+  "orbital-relay": { kind: "hull", height: 4.9, brace: 0x667a8b, lamp: 0xadd8ee },
+  "maze-causeway": { kind: "viaduct", height: 5.4, brace: 0x586963, lamp: 0xc0d9b3, open: true },
+  "missile-silos": { kind: "viaduct", height: 4.7, brace: 0x7a6654, lamp: 0xf0a575 },
+  "alien-outpost": { kind: "cut", height: 5.2, brace: 0x825d49, lamp: 0xffcca3, open: true },
+  "starship-hangar": { kind: "hull", height: 5.5, brace: 0x607687, lamp: 0xa8d2e7 },
+  "weapon-factory": { kind: "service", height: 4.8, brace: 0x8a6537, lamp: 0xffd1a1 },
+};
+
 export function createGauntletThemes(THREE) {
   const surfaces = createSurfaces(THREE);
   const styleCache = new Map();
@@ -579,18 +592,6 @@ export function createGauntletThemes(THREE) {
     }
     place(walls.mesh(material(wallSet, {})), ctx);
     for (let i = 0; i < 30; i++) ctx.add(glow(0x35e0d0, 16, ox + ctx.rnd() * n * cell, g + 20 + ctx.rnd() * 10, oz + ctx.rnd() * n * cell, .5));
-    // Lamp posts stand on the kerbs of the causeway itself, one every ~26 m, wherever it winds.
-    const poles = new Batch(3);
-    for (let k = 4; k < ctx.path.length - 4; k += 26) {
-      const c = ctx.path[k];
-      if (!c.kerb) continue;
-      const side = (k / 26 | 0) % 2 ? 1 : -1, th = ctx.heading(k);
-      const px = c.x + Math.cos(th) * side * (c.w / 2 + .25), pz = c.z + Math.sin(th) * side * (c.w / 2 + .25);
-      const base = c.y + 1.1;
-      poles.cyl(.16, .22, 8.6, px, base + 4.3, pz, 8).box(2.6, .3, .3, px - Math.cos(th) * side * 1.2, base + 8.5, pz - Math.sin(th) * side * 1.2, -th);
-      ctx.add(glow(0xffd28a, 3.4, px - Math.cos(th) * side * 2.2, base + 8.2, pz - Math.sin(th) * side * 2.2, .9));
-    }
-    place(poles.mesh(steelMaterial("pole", { base: [96, 104, 106] })), ctx);
     const towers = new Batch(5);
     for (let i = 0; i < 12; i++) { const x = ctx.cx + sideOf(ctx) * (ctx.wx + 40 + ctx.rnd() * 140), z = rz(ctx), hh = 50 + ctx.rnd() * 60; towers.box(8, hh, 8, x, g + hh / 2, z).box(10, 2, 10, x, g + hh + 1, z); ctx.add(glow(0xff4a3a, 5, x, g + hh + 3, z, .9)); }
     place(towers.mesh(material(wallSet, {})), ctx);
@@ -1169,6 +1170,8 @@ export function createGauntletThemes(THREE) {
       theme,
       tile: theme.tile,
       slick,
+      traverse: traverses[theme.id],
+      brace: tint("beam", traverses[theme.id].brace, .66),
       deck: (tone, mix = .2) => tint("deck", tone, mix * .55),
       role: (name) => base[name] || base.deck,
       wall: (tone) => tint("wall", tone, .06),

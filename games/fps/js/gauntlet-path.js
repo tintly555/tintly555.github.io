@@ -39,10 +39,15 @@ export function trace(pen, { len, turn = 0, rise = 0 }, ds = STATION) {
 
 /** Sample at `arc` metres along a trace (linear). */
 export function sampleAt(samples, arc) {
-  const first = samples[0].arc;
-  const i = Math.max(0, Math.min(samples.length - 2, Math.floor((arc - first) / STATION)));
-  const a = samples[i], b = samples[i + 1];
-  const t = Math.max(0, Math.min(1, (arc - a.arc) / ((b.arc - a.arc) || 1)));
+  let lo = 0, hi = samples.length - 1;
+  if (arc <= samples[lo].arc) return { ...samples[lo] };
+  if (arc >= samples[hi].arc) return { ...samples[hi] };
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >>> 1;
+    if (samples[mid].arc <= arc) lo = mid; else hi = mid;
+  }
+  const a = samples[lo], b = samples[hi];
+  const t = (arc - a.arc) / (b.arc - a.arc);
   return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, z: a.z + (b.z - a.z) * t, th: a.th + (b.th - a.th) * t, arc };
 }
 
@@ -179,18 +184,19 @@ export function slabBoxes(samples, { offset = 0, width, bottom = -1.4, top = 0, 
 
 export function createPathGeometry(THREE) {
   /** One closed ribbon (top, underside, both sides, optional end caps) as flat-shaded triangles. */
-  function sweep(samples, { offset = 0, width, bottom = -1, top = 0, tile = 3, startCap = true, endCap = true, alongArc0 = 0, alongLen = 0 }) {
+  function sweep(samples, { offset = 0, width, topOffset = offset, topWidth = width, bottom = -1, top = 0, tile = 3,
+    startCap = true, endCap = true, alongArc0 = 0, alongLen = 0 }) {
     const hw = width / 2;
     const pos = [], uv = [];
     const corner = (s, side, yRel) => {
-      const o = offset + side * hw;
+      const o = yRel === top ? topOffset + side * topWidth / 2 : offset + side * hw;
       return [s.x + Math.cos(s.th) * o, s.y + yRel, s.z + Math.sin(s.th) * o];
     };
     const quad = (a, b, c, d, ua, ub, uc, ud) => {
       pos.push(...a, ...b, ...c, ...a, ...c, ...d);
       uv.push(...ua, ...ub, ...uc, ...ua, ...uc, ...ud);
     };
-    const lat = side => (offset + side * hw) / tile;
+    const lat = (side, y = top) => (y === top ? topOffset + side * topWidth / 2 : offset + side * hw) / tile;
     for (let i = 0; i < samples.length - 1; i++) {
       const s0 = samples[i], s1 = samples[i + 1];
       const a0 = s0.arc / tile, a1 = s1.arc / tile;
@@ -201,13 +207,13 @@ export function createPathGeometry(THREE) {
         const p0 = (s0.arc - alongArc0) / alongLen, p1 = (s1.arc - alongArc0) / alongLen;
         quad(Lt0, Rt0, Rt1, Lt1, [p0, 0], [p0, 1], [p1, 1], [p1, 0]);
       } else quad(Lt0, Rt0, Rt1, Lt1, [lat(-1), a0], [lat(1), a0], [lat(1), a1], [lat(-1), a1]);
-      quad(Lb0, Lb1, Rb1, Rb0, [lat(-1), a0], [lat(-1), a1], [lat(1), a1], [lat(1), a0]);
+      quad(Lb0, Lb1, Rb1, Rb0, [lat(-1, bottom), a0], [lat(-1, bottom), a1], [lat(1, bottom), a1], [lat(1, bottom), a0]);
       quad(Rt0, Rb0, Rb1, Rt1, [a0, top / tile], [a0, bottom / tile], [a1, bottom / tile], [a1, top / tile]);
       quad(Lt0, Lt1, Lb1, Lb0, [a0, top / tile], [a1, top / tile], [a1, bottom / tile], [a0, bottom / tile]);
     }
     const cap = (s, front) => {
       const Lt = corner(s, -1, top), Rt = corner(s, 1, top), Lb = corner(s, -1, bottom), Rb = corner(s, 1, bottom);
-      const u = (side, y) => [lat(side), y / tile];
+      const u = (side, y) => [lat(side, y), y / tile];
       if (front) quad(Lt, Lb, Rb, Rt, u(-1, top), u(-1, bottom), u(1, bottom), u(1, top));
       else quad(Lt, Rt, Rb, Lb, u(-1, top), u(1, top), u(1, bottom), u(-1, bottom));
     };
