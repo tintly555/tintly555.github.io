@@ -249,7 +249,7 @@ body.game-active #menuBg { display: none; }
 #menu .pvp-map-card { flex: 1 1 210px; overflow: hidden; align-items: stretch; padding: 8px; }
 #menu .pvp-map-card .pvp-map-cover { width: 100%; height: auto; aspect-ratio: 880 / 520; object-fit: cover; display: block; border-radius: 1px !important; }
 #menu .pvp-map-card span { font: 700 16px/1.25 var(--console-type) !important; padding: 4px; }
-#menu #menuGauntlet .gauntlet-grid {
+#menu :is(#menuGauntlet, #menuGauntletCourses) .gauntlet-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 7px;
