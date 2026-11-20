@@ -174,14 +174,6 @@ export function createGauntletArt(THREE, { decorate, solid, scroll, spin, tick, 
     g.fillStyle = u;
     g.fillRect(0, 0, w, h);
   }, false);
-  const radialMap = () => texture("radial", 128, 128, g => {
-    const r = g.createRadialGradient(64, 64, 0, 64, 64, 64);
-    r.addColorStop(0, "rgba(255,255,255,1)");
-    r.addColorStop(.35, "rgba(255,255,255,.5)");
-    r.addColorStop(1, "rgba(255,255,255,0)");
-    g.fillStyle = r;
-    g.fillRect(0, 0, 128, 128);
-  }, false);
   const swirlMap = () => texture("swirl", 128, 128, g => {
     g.translate(64, 64);
     g.lineCap = "round";
@@ -322,7 +314,7 @@ export function createGauntletArt(THREE, { decorate, solid, scroll, spin, tick, 
   function pylon(x, y, z, height, tone) {
     const post = new THREE.Mesh(new THREE.CylinderGeometry(.07, .1, height, 10), metal(0x3b434b));
     post.position.set(x, y + height / 2, z);
-    const cap = new THREE.Mesh(new THREE.SphereGeometry(.13, 12, 8), lit(tone, 1.1));
+    const cap = new THREE.Mesh(new THREE.SphereGeometry(.13, 12, 8), lit(tone, .16, { roughness: .34, metalness: .12 }));
     cap.position.y = height / 2;
     post.add(cap);
     const foot = new THREE.Mesh(new THREE.CylinderGeometry(.2, .24, .08, 10), metal(0x2d343b));
@@ -333,10 +325,39 @@ export function createGauntletArt(THREE, { decorate, solid, scroll, spin, tick, 
 
   // ---- Decks, walls, rails ----------------------------------------------------------------
   // Decks and doors carry no glowing outlines: edges are read from the plate and its lighting.
-  function deckMaterial(tone, mix) { return style ? style.deck(tone, mix) : steel(tone, mix); }
+  const finishCache = new Map();
+  const finishes = {
+    "ashen-city": { deck: [.94, .025], wall: [.96, .02], door: [.76, .28] },
+    foundry: { deck: [.72, .62], wall: [.78, .48], door: [.68, .58] },
+    switchyard: { deck: [.82, .08], wall: [.72, .46], door: [.68, .58] },
+    "frozen-dam": { deck: [.88, .025], wall: [.9, .02], door: [.76, .34] },
+    "orbital-relay": { deck: [.5, .42], wall: [.56, .38], door: [.52, .62] },
+    "maze-causeway": { deck: [.94, .015], wall: [.88, .025], door: [.76, .4] },
+    "missile-silos": { deck: [.91, .02], wall: [.88, .035], door: [.75, .36] },
+    "alien-outpost": { deck: [.98, .015], wall: [.99, .01], door: [.76, .3] },
+    "starship-hangar": { deck: [.62, .48], wall: [.66, .42], door: [.52, .62] },
+    "weapon-factory": { deck: [.76, .44], wall: [.72, .5], door: [.62, .62] },
+  };
+  function finished(material, role) {
+    const finish = finishes[style?.theme?.id]?.[role];
+    if (!finish) return material;
+    const key = `${material.uuid}:${role}:${finish[0]}:${finish[1]}`;
+    let result = finishCache.get(key);
+    if (!result) {
+      result = material.clone();
+      result.roughness = finish[0];
+      result.metalness = finish[1];
+      result.userData.shared = true;
+      finishCache.set(key, result);
+    }
+    return result;
+  }
+  function deckMaterial(tone, mix) {
+    return finished(style ? style.deck(tone, mix) : steel(tone, mix), "deck");
+  }
   function wallMaterial(tone, gate) {
-    if (gate) return style ? style.door : door();
-    return style ? style.wall(tone) : panel(tone);
+    if (gate) return finished(style ? style.door : door(), "door");
+    return finished(style ? style.wall(tone) : panel(tone), "wall");
   }
   /** A copy of a themed material whose textures repeat `repeat` times per UV unit (for UVs in metres). */
   const tiledCache = new Map();
@@ -385,7 +406,7 @@ export function createGauntletArt(THREE, { decorate, solid, scroll, spin, tick, 
     g.fillStyle = "rgba(255,255,255,.05)";
     for (let i = 0; i < 300; i++) g.fillRect(rnd() * w, rnd() * h, 2, 1);
   });
-  /** A tileless basalt-and-molten-rock surface: dark crust islands around flowing orange seams. */
+  /** Charred basalt with narrow molten fissures rather than a continuous lava-like surface. */
   function hotPlate() {
     const hit = cache.get("t:hotplate");
     if (hit) return hit;
@@ -397,13 +418,13 @@ export function createGauntletArt(THREE, { decorate, solid, scroll, spin, tick, 
     for (let i = 0; i < a.length; i++) {
       const warped = Math.min(1, Math.max(0, a[i] + (warpX[i] - .5) * .22 + (warpY[i] - .5) * .16));
       const ridge = 1 - Math.abs(warped * 2 - 1);
-      const heat = Math.min(1, Math.max(0, (ridge - .79) / .17)) ** 1.2 * (.68 + detail[i] * .55);
-      const core = Math.min(1, Math.max(0, (ridge - .94) / .06)) * heat;
-      const rock = .72 + detail[i] * .55 + a[i] * .22;
+      const heat = Math.min(1, Math.max(0, (ridge - .94) / .06)) ** 2.8 * (.72 + detail[i] * .36);
+      const core = Math.min(1, Math.max(0, (ridge - .985) / .015)) * heat;
+      const rock = .58 + detail[i] * .42 + a[i] * .18;
       const k = i * 4;
-      ci.data[k] = 18 * rock + heat * (148 + core * 70);
-      ci.data[k + 1] = 13 * rock + heat * (34 + core * 105);
-      ci.data[k + 2] = 11 * rock + heat * (8 + core * 16);
+      ci.data[k] = 21 * rock + heat * (128 + core * 36);
+      ci.data[k + 1] = 18 * rock + heat * (38 + core * 48);
+      ci.data[k + 2] = 15 * rock + heat * (12 + core * 12);
       ci.data[k + 3] = 255;
       ei.data[k] = 255 * heat;
       ei.data[k + 1] = heat * (52 + core * 145);
@@ -567,7 +588,11 @@ export function createGauntletArt(THREE, { decorate, solid, scroll, spin, tick, 
       const plate = new THREE.Mesh(new THREE.CylinderGeometry(.9, 1.05, .12, 24), metal(0x2a3036, .5));
       plate.position.set(x, y + .06, z + sz * (piece.d / 2 - .2));
       add(plate);
-      const lens = new THREE.Mesh(new THREE.CircleGeometry(.62, 24), glowMaterial(low ? 0x9fd0ff : 0xff7a4a, .8, radialMap()));
+      const lensTone = low ? 0x9fd0ff : 0xff7a4a;
+      const lens = new THREE.Mesh(new THREE.CircleGeometry(.62, 24), new THREE.MeshPhysicalMaterial({
+        color: lensTone, emissive: lensTone, emissiveIntensity: .1, roughness: .42, metalness: .08,
+        clearcoat: .5, clearcoatRoughness: .2, side: THREE.DoubleSide,
+      }));
       lens.rotation.x = -Math.PI / 2;
       lens.position.set(plate.position.x, y + .13, plate.position.z);
       add(lens);
@@ -703,7 +728,7 @@ export function createGauntletArt(THREE, { decorate, solid, scroll, spin, tick, 
     const { w, d } = piece;
     const set = hotPlate();
     const maps = { map: copy(set.map), emissiveMap: copy(set.emissiveMap) };
-    const material = new THREE.MeshStandardMaterial({ map: maps.map, emissiveMap: maps.emissiveMap, emissive: 0xffffff, emissiveIntensity: 1.15, roughness: .62, metalness: .04 });
+    const material = new THREE.MeshStandardMaterial({ map: maps.map, emissiveMap: maps.emissiveMap, emissive: 0xffffff, emissiveIntensity: .34, roughness: .94, metalness: 0 });
     const makeBasin = (width, depth, seed) => {
       const geometry = new THREE.PlaneGeometry(width, depth, 40, 56);
       const position = geometry.attributes.position;
@@ -734,15 +759,14 @@ export function createGauntletArt(THREE, { decorate, solid, scroll, spin, tick, 
     lava.position.set(x, y + .042, z);
     lava.receiveShadow = true;
     add(lava);
-    airStreaks({ origin: new THREE.Vector3(x, y + .2, z), dir: [0, 1, 0], length: 3.6, spread: [w * .45, d * .45], speed: 1.7, count: 40, color: 0xffb070, opacity: .2 });
-    motes({ x, y: y + 1.4, z, w, h: 2.8, d, vy: 1, count: 46, color: 0xffa040, size: .07, opacity: .9, sway: .5 });
+    motes({ x, y: y + 1.1, z, w: w * .72, h: 2.2, d: d * .72, vy: .55, count: 14, color: 0x9a5a34, size: .035, opacity: .34, sway: .18 });
     let t = Math.random() * 6;
     tick(dt => {
       t += dt;
       const flow = (t * .008) % 1;
       maps.map.offset.set(0, flow);
       maps.emissiveMap.offset.set(0, flow);
-      material.emissiveIntensity = 1.05 + Math.sin(t * 1.8) * .13 + Math.sin(t * 4.7) * .05;
+      material.emissiveIntensity = .3 + Math.sin(t * 1.1) * .035;
     });
   }
 
@@ -773,17 +797,15 @@ export function createGauntletArt(THREE, { decorate, solid, scroll, spin, tick, 
       g.fillRect(rnd() * w, rnd() * h, 2, 2);
     }
     g.lineJoin = "round";
-    g.lineWidth = 12;
-    g.strokeStyle = "#b08a2c";
-    for (const y of [52, 104]) {
-      g.beginPath(); g.moveTo(26, y); g.lineTo(64, y - 30); g.lineTo(102, y); g.stroke();
-    }
+    g.lineWidth = 8;
+    g.strokeStyle = "#827447";
+    g.beginPath(); g.moveTo(32, 88); g.lineTo(64, 48); g.lineTo(96, 88); g.stroke();
     g.lineWidth = 3;
     g.strokeStyle = "rgba(0,0,0,.4)";
     g.strokeRect(4, 4, w - 8, h - 8);
   }, false);
 
-  /** A launch pad: steel housing, hazard-painted border, rubber deck with painted arrows, hydraulic rams. */
+  /** A launch pad: recessed steel housing, restrained direction marking and visible hydraulic rams. */
   function launchPad(piece, x, y, z) {
     const { w, d } = piece;
     const forward = (piece.zForce || -1) < 0;
@@ -798,16 +820,13 @@ export function createGauntletArt(THREE, { decorate, solid, scroll, spin, tick, 
     })));
     deck.position.y = .165;
     root.add(deck);
-    const border = (len, depth, bx, bz, turned) => {
-      const strip = new THREE.Mesh(new THREE.BoxGeometry(len, .03, depth), stripes("launch", "#d9a21b", "#17130f", Math.max(1, Math.round(len / .7))));
+    const border = (len, depth, bx, bz) => {
+      const strip = new THREE.Mesh(new THREE.BoxGeometry(len, .025, depth), stripes("launch", "#867345", "#35332b", Math.max(1, Math.round(len / 1.4))));
       strip.position.set(bx, .155, bz);
-      if (turned) strip.rotation.y = Math.PI / 2;
       root.add(strip);
     };
-    border(w - .1, .25, 0, d / 2 - .15, false);
-    border(w - .1, .25, 0, -d / 2 + .15, false);
-    border(d - .1, .25, w / 2 - .15, 0, true);
-    border(d - .1, .25, -w / 2 + .15, 0, true);
+    border(w - .7, .1, 0, d / 2 - .11);
+    border(w - .7, .1, 0, -d / 2 + .11);
     for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
       const sleeve = new THREE.Mesh(new THREE.CylinderGeometry(.1, .1, .3, 12), metal(0x2d343b, .45));
       sleeve.position.set(sx * (w / 2 - .02), .22, sz * (d / 2 - .02));
@@ -837,6 +856,20 @@ export function createGauntletArt(THREE, { decorate, solid, scroll, spin, tick, 
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     add(mesh);
+    const start = new THREE.Vector3(0, ya - .19, originZ - piece.from);
+    const end = new THREE.Vector3(0, yb - .19, originZ - piece.to);
+    const direction = end.clone().sub(start);
+    const support = new THREE.BoxGeometry(.12, .32, direction.length());
+    const orientation = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), direction.clone().normalize());
+    const structural = ["foundry", "switchyard", "orbital-relay", "starship-hangar", "weapon-factory"].includes(style?.theme?.id);
+    const supportMaterial = style ? (structural ? style.role("beam") : style.deck(piece.tone, .15)) : darkMetal();
+    for (const side of [-1, 1]) {
+      const cheek = new THREE.Mesh(support, supportMaterial);
+      cheek.position.copy(start).add(end).multiplyScalar(.5);
+      cheek.position.x = x + side * (piece.w / 2 - .08);
+      cheek.quaternion.copy(orientation);
+      add(cheek);
+    }
   }
 
   function drawField(piece, x, y, z) {
@@ -959,14 +992,19 @@ export function createGauntletArt(THREE, { decorate, solid, scroll, spin, tick, 
   // ---- Nodes ------------------------------------------------------------------------------
   function ring(radius, tone, x, y, z, swirling) {
     const hoop = new THREE.Mesh(new THREE.TorusGeometry(radius, .075, 10, 36), new THREE.MeshStandardMaterial({
-      color: tone, emissive: tone, emissiveIntensity: .9, roughness: .3, metalness: .5,
+      color: tone, emissive: tone, emissiveIntensity: .12, roughness: .38, metalness: .52,
     }));
     hoop.position.set(x, y, z);
-    const outer = new THREE.Mesh(new THREE.TorusGeometry(radius * 1.16, .025, 6, 36), glowMaterial(tone, .85, radialMap()));
+    const outer = new THREE.Mesh(new THREE.TorusGeometry(radius * 1.16, .025, 6, 36), metal(0x39434a, .52));
     hoop.add(outer);
-    const disc = new THREE.Mesh(new THREE.CircleGeometry(radius * .96, 32), glowMaterial(tone, swirling ? .8 : .42, swirling ? swirlMap() : radialMap()));
-    hoop.add(disc);
-    if (swirling) spin(disc, 1.6, "z");
+    if (swirling) {
+      const disc = new THREE.Mesh(new THREE.CircleGeometry(radius * .96, 32), new THREE.MeshStandardMaterial({
+        map: swirlMap(), color: tone, emissive: tone, emissiveIntensity: .08, roughness: .58, metalness: .18,
+        transparent: true, opacity: .42, depthWrite: false, side: THREE.DoubleSide,
+      }));
+      hoop.add(disc);
+      spin(disc, 1.6, "z");
+    }
     return hoop;
   }
 
@@ -1048,17 +1086,13 @@ export function createGauntletArt(THREE, { decorate, solid, scroll, spin, tick, 
       return { mesh: add(body), lamp: led };
     }
     if (kind === "pickup") {
-      const mesh = new THREE.Mesh(new THREE.CylinderGeometry(.15, .15, .46, 16), lit(tone, 1.1, { roughness: .25 }));
+      const mesh = new THREE.Mesh(new THREE.CylinderGeometry(.15, .15, .46, 16), lit(tone, .12, { roughness: .4, metalness: .3 }));
       mesh.position.set(x, y + .46, z);
       for (const sy of [-1, 1]) {
         const cap = new THREE.Mesh(new THREE.CylinderGeometry(.17, .17, .06, 16), metal(0x59616a));
         cap.position.y = sy * .24;
         mesh.add(cap);
       }
-      const halo = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 1.1), glowMaterial(tone, .55, radialMap()));
-      halo.rotation.x = -Math.PI / 2;
-      halo.position.y = -.4;
-      mesh.add(halo);
       spin(mesh, 1.2);
       return { mesh: add(mesh) };
     }
@@ -1071,7 +1105,10 @@ export function createGauntletArt(THREE, { decorate, solid, scroll, spin, tick, 
     const plate = new THREE.Mesh(new THREE.CylinderGeometry(radius * .78, radius * .78, .03, 28), metal(0x252b31, .5));
     plate.position.y = .045;
     base.add(plate);
-    const core = new THREE.Mesh(new THREE.CircleGeometry(radius * .62, 28), glowMaterial(tone, .9, kind === "shield" ? hexMap() : radialMap()));
+    const core = new THREE.Mesh(new THREE.CircleGeometry(radius * .62, 28), new THREE.MeshStandardMaterial({
+      map: kind === "shield" ? hexMap() : null, color: tone, emissive: tone, emissiveIntensity: .08,
+      roughness: .62, metalness: .18, transparent: true, opacity: .82, depthWrite: false, side: THREE.DoubleSide,
+    }));
     core.rotation.x = -Math.PI / 2;
     core.position.y = .066;
     base.add(core);
@@ -1171,10 +1208,6 @@ export function createGauntletArt(THREE, { decorate, solid, scroll, spin, tick, 
         const lamp = new THREE.Mesh(new THREE.SphereGeometry(.08, 10, 8), new THREE.MeshBasicMaterial({ color: 0xffb0a4 }));
         lamp.position.set(side * (piece.radius - .12), .15, 0);
         arm.add(lamp);
-        const glow = new THREE.Mesh(new THREE.PlaneGeometry(.7, .7), glowMaterial(red, .8, radialMap()));
-        glow.rotation.x = -Math.PI / 2;
-        glow.position.set(side * (piece.radius - .12), .16, 0);
-        arm.add(glow);
       }
       return add(arm);
     }

@@ -201,7 +201,7 @@ export function buildOperatorViewSleeve(materials, parent, wrist, initial, side)
   elbow.position.y = -viewFore;
   sleeve.add(elbow);
   parent.add(sleeve);
-  bindGarment(sleeve, elbow, materials.sleeve, viewSleeveGeometry.clone(), .067);
+  bindGarment(sleeve, elbow, materials.sleeve, viewSleeveGeometry.clone(), .067).frustumCulled = false;
   sleeve.add(new THREE.Mesh(cuffGeometry.clone(), materials.webbing));
   const rest = new THREE.Vector3(...initial).normalize();
   sleeve.quaternion.setFromUnitVectors(downward, rest);
@@ -210,21 +210,19 @@ export function buildOperatorViewSleeve(materials, parent, wrist, initial, side)
 }
 
 const shoulder = new THREE.Vector3(), elbowHint = new THREE.Vector3();
-const weaponHome = new THREE.Vector3(-.10, .008, 0);
-export function poseOperatorViewSleeve(hand, camera, weaponRoot = null) {
+export function poseOperatorViewSleeve(hand, camera) {
   const rig = hand?.userData.viewSleeve;
   if (!rig || !hand.visible) return;
   const { sleeve, elbow, side } = rig;
-  shoulder.set(side * .225, -.245, -.17);
-  elbowHint.set(side * .29, -.49, -.40);
-  if (weaponRoot) {
-    shoulder.sub(weaponHome).applyQuaternion(weaponRoot.quaternion).add(weaponRoot.position);
-    elbowHint.sub(weaponHome).applyQuaternion(weaponRoot.quaternion).add(weaponRoot.position);
-  }
+  shoulder.set(side * OPERATOR.shoulderWidth, -.245, -.025);
+  elbowHint.set(side * .29, -.49, -.30);
   camera.localToWorld(shoulder);
   camera.localToWorld(elbowHint);
   hand.worldToLocal(shoulder);
   hand.worldToLocal(elbowHint);
   elbowHint.sub(sleeve.position);
-  solveOperatorLimb(sleeve, elbow, shoulder, elbowHint, viewFore, viewUpper);
+  const reach = shoulder.distanceTo(sleeve.position);
+  const upper = Math.max(viewUpper, reach - viewFore * .85);
+  elbow.scale.y = upper / viewUpper;
+  solveOperatorLimb(sleeve, elbow, shoulder, elbowHint, viewFore, upper);
 }

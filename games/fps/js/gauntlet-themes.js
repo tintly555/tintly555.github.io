@@ -29,6 +29,10 @@ const traverses = {
 export function createGauntletThemes(THREE) {
   const surfaces = createSurfaces(THREE);
   const styleCache = new Map();
+  const thrusterMaterial = new THREE.MeshStandardMaterial({
+    color: 0x425761, emissive: 0x24414b, emissiveIntensity: .08, roughness: .74, metalness: .28,
+  });
+  thrusterMaterial.userData.shared = thrusterMaterial.userData._cachedShared = true;
 
   // ---- Small helpers ---------------------------------------------------------------------
   function material(set, { color = 0xffffff, rough = 1, metal = 0, emissive = 0, emissiveIntensity = 0, side } = {}) {
@@ -107,32 +111,27 @@ export function createGauntletThemes(THREE) {
       return mesh;
     }
   }
-  function glowTexture() {
-    let t = glowCache.get("glow");
+  function smokeTexture() {
+    let t = glowCache.get("smoke");
     if (t) return t;
     const canvas = document.createElement("canvas");
-    canvas.width = canvas.height = 128;
-    const g = canvas.getContext("2d");
-    const r = g.createRadialGradient(64, 64, 0, 64, 64, 64);
-    r.addColorStop(0, "rgba(255,255,255,1)");
-    r.addColorStop(.3, "rgba(255,255,255,.45)");
-    r.addColorStop(1, "rgba(255,255,255,0)");
-    g.fillStyle = r;
-    g.fillRect(0, 0, 128, 128);
+    const size = canvas.width = canvas.height = 128;
+    const noise = fbm(size, 681, 5, 4);
+    const g = canvas.getContext("2d"), image = g.createImageData(size, size);
+    for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+      const dx = (x + .5) / size * 2 - 1, dy = (y + .5) / size * 2 - 1;
+      const i = y * size + x, radius = Math.hypot(dx * .92, dy * 1.08);
+      const edge = Math.max(0, Math.min(1, (.94 - radius + (noise[i] - .5) * .22) * 3.2));
+      const alpha = Math.pow(edge, 1.45) * (.22 + noise[i] * .42);
+      const p = i * 4;
+      image.data[p] = image.data[p + 1] = image.data[p + 2] = 255;
+      image.data[p + 3] = Math.round(alpha * 255);
+    }
+    g.putImageData(image, 0, 0);
     t = new THREE.CanvasTexture(canvas);
     t.colorSpace = THREE.SRGBColorSpace;
-    glowCache.set("glow", t);
+    glowCache.set("smoke", t);
     return t;
-  }
-  function glow(color, size, x, y, z, opacity = .8, additive = true) {
-    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({
-      map: glowTexture(), color, transparent: true, opacity, depthWrite: false,
-      blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending, fog: !additive,
-    }));
-    sprite.scale.set(size, size, 1);
-    sprite.position.set(x, y, z);
-    sprite.raycast = () => {};
-    return sprite;
   }
   function stars(rnd, count, radius, tint = 0xffffff) {
     const positions = new Float32Array(count * 3), colors = new Float32Array(count * 3);
@@ -198,11 +197,16 @@ export function createGauntletThemes(THREE) {
     ec.fillStyle = "#000"; ec.fillRect(0, 0, size, size);
     const cw = size / cols, ch = size / rows;
     for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
-      const x = c * cw + cw * .22, y = r * ch + ch * .2, w = cw * .56, h = ch * .58;
-      const broken = rnd() < .5;
+      const w = cw * (.43 + rnd() * .22), h = ch * (.42 + rnd() * .25);
+      const x = c * cw + (cw - w) * (.35 + rnd() * .3), y = r * ch + (ch - h) * (.35 + rnd() * .3);
+      const broken = rnd() < .58;
       cc.fillStyle = broken ? "rgb(12,12,14)" : `rgb(${facade[0] * .45},${facade[1] * .45},${facade[2] * .5})`;
       cc.fillRect(x, y, w, h);
-      if (rnd() < litChance) { ec.fillStyle = `rgb(${lit})`; ec.fillRect(x, y, w, h); }
+      if (!broken && rnd() < litChance * (.55 + rnd() * .9)) {
+        const brightness = .72 + rnd() * .28;
+        ec.fillStyle = `rgb(${lit.map(channel => Math.round(channel * brightness))})`;
+        ec.fillRect(x, y, w, h);
+      }
     }
     const noise = fbm(size, 5 + name.length, 3, 4);
     const img = cc.getImageData(0, 0, size, size);
@@ -220,13 +224,17 @@ export function createGauntletThemes(THREE) {
   function lavaTexture() {
     let t = glowCache.get("lava");
     if (t) return t;
-    const size = 512, n = fbm(size, 91, 5, 4), canvas = document.createElement("canvas");
+    const size = 512, n = fbm(size, 91, 5, 4), detail = fbm(size, 133, 4, 12), canvas = document.createElement("canvas");
     canvas.width = canvas.height = size;
     const g = canvas.getContext("2d"), img = g.createImageData(size, size);
     for (let i = 0; i < n.length; i++) {
-      const v = n[i], crust = Math.max(0, Math.min(1, (v - .42) * 4));
-      const hot = 1 - crust;
-      img.data[i * 4] = 40 + hot * 215 + crust * 18; img.data[i * 4 + 1] = 18 + hot * 112; img.data[i * 4 + 2] = 10 + hot * 24; img.data[i * 4 + 3] = 255;
+      const v = n[i], ridge = 1 - Math.abs(v - .5) * 2;
+      const seam = Math.max(0, Math.min(1, (ridge + (detail[i] - .5) * .2 - .82) * 8));
+      const crust = .35 + detail[i] * .28;
+      img.data[i * 4] = 34 + crust * 38 + seam * 155;
+      img.data[i * 4 + 1] = 17 + crust * 15 + seam * 58;
+      img.data[i * 4 + 2] = 10 + seam * 13;
+      img.data[i * 4 + 3] = 255;
     }
     g.putImageData(img, 0, 0);
     t = new THREE.CanvasTexture(canvas);
@@ -262,17 +270,11 @@ export function createGauntletThemes(THREE) {
     glowCache.set(key, t);
     return t;
   }
-  function planet(ctx, radius, x, y, z, texture, atmosphere) {
+  function planet(ctx, radius, x, y, z, texture) {
     const sphere = new THREE.Mesh(new THREE.SphereGeometry(radius, 64, 40), new THREE.MeshStandardMaterial({ map: texture, roughness: .95, metalness: 0, fog: false }));
     sphere.position.set(x, y, z);
     sphere.raycast = () => {};
     ctx.add(sphere);
-    if (atmosphere) {
-      const halo = glow(atmosphere, radius * 2.35, x, y, z, .55);
-      halo.material.fog = false;
-      halo.renderOrder = -1;
-      ctx.add(halo);
-    }
     return sphere;
   }
   // ---- Scenery ---------------------------------------------------------------------------
@@ -295,9 +297,16 @@ export function createGauntletThemes(THREE) {
     return place(mesh, ctx);
   }
   function smokeColumn(ctx, x, y, z, color = 0x2a2420, size = 22, count = 9) {
-    for (let i = 0; i < count; i++) {
-      const s = size * (.6 + i * .22);
-      const puff = glow(color, s, x + (ctx.rnd() - .5) * 6 + i * 1.5, y + i * size * .55, z + (ctx.rnd() - .5) * 6, .5 - i * .035, false);
+    const texture = smokeTexture();
+    for (let i = 0; i < Math.min(count, 5); i++) {
+      const s = size * (.52 + i * .19);
+      const puff = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: texture, color, transparent: true, opacity: .34 - i * .035,
+        depthWrite: false, blending: THREE.NormalBlending, fog: true,
+      }));
+      puff.scale.set(s, s * (.82 + ctx.rnd() * .24), 1);
+      puff.position.set(x + (ctx.rnd() - .5) * 5 + i * 1.1, y + i * size * .42, z + (ctx.rnd() - .5) * 5);
+      puff.raycast = () => {};
       ctx.add(puff);
     }
   }
@@ -315,8 +324,8 @@ export function createGauntletThemes(THREE) {
   function ashCity(ctx) {
     const g = ctx.groundY;
     groundPlane(ctx, g, surfaces.asphalt("ash-street", { base: [40, 40, 42], line: true }), 1800, 70);
-    const set = windowSet("ash", { facade: [78, 70, 64], lit: [255, 164, 76], litChance: .03 });
-    const mat = new THREE.MeshStandardMaterial({ map: set.map, emissiveMap: set.emissiveMap, emissive: 0xffffff, emissiveIntensity: 1, roughness: .92, metalness: .04 });
+    const set = windowSet("ash", { facade: [68, 67, 65], lit: [174, 166, 152], litChance: .006 });
+    const mat = new THREE.MeshStandardMaterial({ map: set.map, emissiveMap: set.emissiveMap, emissive: 0xffffff, emissiveIntensity: .16, roughness: .96, metalness: .02 });
     mat.userData.shared = mat.userData._cachedShared = true;
     const towers = new Batch(10), rubble = new Batch(4);
     let placed = 0;
@@ -332,8 +341,24 @@ export function createGauntletThemes(THREE) {
       const top = near ? ctx.lowY + (ctx.rnd() * 56 - 34) : g + 70 + ctx.rnd() * 130;
       const h = top - g;
       towers.box(w, h, d, x, g + h / 2, z);
-      if (ctx.rnd() < .6) towers.box(w * .62, h * .16, d * .62, x + (ctx.rnd() - .5) * w * .2, top + h * .08, z);
-      rubble.box(w + 3, 2.4 + ctx.rnd() * 1.6, d + 3, x, g + 1.4, z);
+      if (ctx.rnd() < .78) {
+        const tierH = Math.min(18, h * (.12 + ctx.rnd() * .12));
+        const tierW = w * (.58 + ctx.rnd() * .16), tierD = d * (.58 + ctx.rnd() * .16);
+        const tierX = x + (ctx.rnd() - .5) * (w - tierW) * .55, tierZ = z + (ctx.rnd() - .5) * (d - tierD) * .55;
+        towers.box(tierW, tierH, tierD, tierX, top + tierH / 2, tierZ);
+        if (h > 90 && ctx.rnd() < .34) {
+          const pentH = 4 + ctx.rnd() * 5;
+          towers.box(tierW * .36, pentH, tierD * .42, tierX, top + tierH + pentH / 2, tierZ);
+        }
+      }
+      if (near && ctx.rnd() < .45) {
+        for (let k = 0, pieces = 1 + Math.floor(ctx.rnd() * 2); k < pieces; k++) {
+          const rw = 1.4 + ctx.rnd() * 3.2, rd = 1.4 + ctx.rnd() * 3.2;
+          rubble.box(rw, .35 + ctx.rnd() * .7, rd,
+            x + (ctx.rnd() - .5) * (w + 4), g + .25, z + (ctx.rnd() - .5) * (d + 4),
+            (ctx.rnd() - .5) * .7, (ctx.rnd() - .5) * .12);
+        }
+      }
       if (near && ctx.rnd() < .25) smokeColumn(ctx, x, top, z, 0x2e2722, 18, 8);
     }
     place(towers.mesh(mat), ctx);
@@ -351,36 +376,86 @@ export function createGauntletThemes(THREE) {
     const lamps = new Batch(3);
     for (let i = 0; i < 40; i++) lampMast(lamps, ctx.scatterX(40), g, rz(ctx), 9, 1);
     place(lamps.mesh(steelMaterial("lamp", { base: [70, 74, 78], rust: .4 })), ctx);
-    for (let i = 0; i < 26; i++) ctx.add(glow(0xff7a2c, 30 + ctx.rnd() * 40, ctx.scatterX(200), g + 8 + ctx.rnd() * 30, rz(ctx), .45));
-    for (let i = 0; i < 14; i++) ctx.add(glow(0x8c5a3a, 160 + ctx.rnd() * 160, ctx.scatterX(300), ctx.highY + 30 + ctx.rnd() * 70, ctx.z0 - ctx.rnd() * (ctx.length + 200), .16, false));
-    particles(ctx, { count: 700, w: 80, h: 40, d: 90, velocity: [1.4, -1.6, .2], color: 0xb6aca2, size: .09, opacity: .7 });
+    particles(ctx, { count: 180, w: 80, h: 40, d: 90, velocity: [.35, -.35, .08], color: 0x89847c, size: .045, opacity: .22, jitter: .12 });
   }
 
   function foundry(ctx) {
     const g = ctx.groundY;
     groundPlane(ctx, g, surfaces.factory("fdy-floor", { base: [54, 52, 52] }), 1800, 80);
-    // Molten channels: each one gets its own texture at a scale matched to its size (the shared 8x8 repeat
-    // stretched across a 500 m channel read as carpet stripes), is emissive so it glows, and its texture
-    // drifts slowly so the melt visibly moves.
+    const channelCenter = (t, phase) => Math.sin(t * TAU * 1.4 + phase) * .72 + Math.sin(t * TAU * 3.7 + phase * 1.7) * .24;
+    const channelGeometry = (width, length, phase) => {
+      const steps = Math.max(32, Math.ceil(length / 8));
+      const positions = new Float32Array((steps + 1) * 6);
+      const uvs = new Float32Array((steps + 1) * 4);
+      const indices = [];
+      for (let i = 0; i <= steps; i++) {
+        const t = i / steps;
+        const center = channelCenter(t, phase);
+        const half = width * (.47 + .03 * Math.sin(t * TAU * 2.1 + phase));
+        const z = length * (.5 - t);
+        const k = i * 6, uv = i * 4;
+        positions[k] = center - half; positions[k + 1] = 0; positions[k + 2] = z;
+        positions[k + 3] = center + half; positions[k + 4] = 0; positions[k + 5] = z;
+        uvs[uv] = 0; uvs[uv + 1] = t;
+        uvs[uv + 2] = 1; uvs[uv + 3] = t;
+        if (i < steps) {
+          const a = i * 2;
+          indices.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
+        }
+      }
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+      geometry.setAttribute("uv", new THREE.BufferAttribute(uvs, 2));
+      geometry.setIndex(indices);
+      geometry.computeVertexNormals();
+      return geometry;
+    };
+    const troughGeometry = (length, phase) => {
+      const steps = Math.max(32, Math.ceil(length / 8));
+      const profile = [[-2.45, .58], [-1.18, .08], [1.18, .08], [2.45, .58]];
+      const positions = new Float32Array((steps + 1) * profile.length * 3);
+      const uvs = new Float32Array((steps + 1) * profile.length * 2);
+      const indices = [];
+      for (let i = 0; i <= steps; i++) {
+        const t = i / steps, center = channelCenter(t, phase), z = length * (.5 - t);
+        for (let j = 0; j < profile.length; j++) {
+          const k = (i * profile.length + j) * 3, uv = (i * profile.length + j) * 2;
+          positions[k] = center + profile[j][0]; positions[k + 1] = profile[j][1]; positions[k + 2] = z;
+          uvs[uv] = j / (profile.length - 1); uvs[uv + 1] = t * length / 8;
+          if (i < steps && j < profile.length - 1) {
+            const a = i * profile.length + j, b = a + profile.length;
+            indices.push(a, a + 1, b, a + 1, b + 1, b);
+          }
+        }
+      }
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+      geometry.setAttribute("uv", new THREE.BufferAttribute(uvs, 2));
+      geometry.setIndex(indices);
+      geometry.computeVertexNormals();
+      return geometry;
+    };
     const lavaFlow = [];
-    for (const x of [ctx.cx - ctx.wx - 20, ctx.cx + 4, ctx.cx + ctx.wx + 40]) {
-      const L = ctx.length + 500;
+    for (const [side, index] of [[-1, 0], [1, 1]]) {
+      const x = ctx.cx + side * (ctx.wx + 12);
+      const L = ctx.length + 180;
+      const phase = index * 1.7 + ctx.rnd() * TAU;
       const tex = lavaTexture().clone();
-      tex.repeat.set(1.2, L / 14);
+      tex.repeat.set(1, L / 10);
       tex.needsUpdate = true;
       const lava = new THREE.MeshStandardMaterial({
-        map: tex, emissiveMap: tex, emissive: new THREE.Color(0xff5a1c), emissiveIntensity: 1.25,
-        roughness: .34, metalness: 0,
+        map: tex, emissiveMap: tex, emissive: new THREE.Color(0xd74918), emissiveIntensity: .18,
+        roughness: .84, metalness: 0,
       });
       lavaFlow.push(tex);
-      const channel = new THREE.Mesh(new THREE.PlaneGeometry(12, L), lava);
-      channel.rotation.x = -Math.PI / 2;
-      channel.position.set(x, g + .2, ctx.mid);
-      channel.raycast = () => {};
+      const trough = new THREE.Mesh(troughGeometry(L, phase), steelMaterial("molten-trough", { base: [58, 52, 46], rust: .45 }, { metal: .24, rough: .86, side: THREE.DoubleSide }));
+      trough.position.set(x, g, ctx.mid);
+      place(trough, ctx);
+      const channel = new THREE.Mesh(channelGeometry(1.9, L, phase), lava);
+      channel.position.set(x, g + .13, ctx.mid);
       place(channel, ctx);
-      for (let i = 0; i < 9; i++) ctx.add(glow(0xff8a32, 26 + ctx.rnd() * 20, x + (ctx.rnd() - .5) * 8, g + 3, ctx.z0 - ctx.rnd() * (ctx.length + 140), .5));
     }
-    ctx.tick(dt => { for (const t of lavaFlow) t.offset.y -= dt * .018; });
+    ctx.tick(dt => { for (const t of lavaFlow) t.offset.y -= dt * .004; });
     const sheds = new Batch(5), furn = new Batch(6), tanks = new Batch(5), racks = new Batch(4), cranes = new Batch(4);
     for (let i = 0; i < 18 + Math.round(ctx.wx * ctx.length / 9000); i++) {
       const s = sideOf(ctx), w = 24 + ctx.rnd() * 30, d = 20 + ctx.rnd() * 40, h = 12 + ctx.rnd() * 10;
@@ -394,14 +469,11 @@ export function createGauntletThemes(THREE) {
       if (!ctx.claim(x, z, r + 14)) continue;
       furn.cyl(r * .92, r, h, x, g + h / 2, z, 22).cyl(r * .6, r * .92, 6, x, g + h + 3, z, 22);
       furn.cyl(1.3, 1.3, 26, x + s * (r + 12), g + 30, z, 10, 0, Math.PI / 2).cyl(1.3, 1.3, 18, x + s * (r + 24), g + 21, z, 10);
-      ctx.add(glow(0xff7a2a, r * 3, x, g + h * .55, z + r + .5, .75));
-      ctx.add(glow(0xff6a22, r * 4, x, g + h + 5, z, .5));
     }
     for (let i = 0; i < 7; i++) {
       const s = sideOf(ctx), x = ctx.cx + s * (50 + ctx.rnd() * (120 + ctx.wx)), z = rz(ctx), r = 3.5 + ctx.rnd() * 2, h = 80 + ctx.rnd() * 40;
       if (!ctx.claim(x, z, r + 4)) continue;
       furn.cyl(r * .78, r, h, x, g + h / 2, z, 18).cyl(r * .86, r * .78, 3, x, g + h + 1.5, z, 18);
-      ctx.add(glow(0xff6a22, r * 6, x, g + h + 3, z, .7));
       smokeColumn(ctx, x, g + h + 6, z, 0x2a1f1a, 16, 7);
     }
     for (let i = 0; i < 12; i++) {
@@ -424,7 +496,7 @@ export function createGauntletThemes(THREE) {
     place(tanks.mesh(steelMaterial("tank", { base: [112, 106, 98], rust: .4 })), ctx);
     place(racks.mesh(steelMaterial("rack", { base: [104, 100, 96], rust: .5 })), ctx);
     place(cranes.mesh(steelMaterial("crane", { base: [190, 150, 40], paint: [194, 150, 36], rust: .15 })), ctx);
-    particles(ctx, { count: 420, w: 70, h: 40, d: 80, velocity: [.2, 2.4, 0], color: 0xff9a40, size: .12, opacity: .9, jitter: .8 });
+    particles(ctx, { count: 150, w: 70, h: 28, d: 80, velocity: [.12, .75, 0], color: 0xd98a48, size: .055, opacity: .28, jitter: .35 });
   }
 
   function switchyard(ctx) {
@@ -454,7 +526,6 @@ export function createGauntletThemes(THREE) {
       }
       for (const arm of [-1, 1]) {
         pylons.box(26, .9, .9, x + arm * 10, base + h - 4, z).box(.5, 4, .5, x + arm * 22, base + h - 6.2, z);
-        ctx.add(glow(0xdfeaff, 7, x + arm * 22, base + h - 8.4, z, .8));
       }
     }
     for (let i = 0; i < 12; i++) {
@@ -467,7 +538,6 @@ export function createGauntletThemes(THREE) {
       const s = sideOf(ctx), x = ctx.cx + s * (24 + ctx.rnd() * (70 + ctx.wx)), z = rz(ctx);
       if (!ctx.claim(x, z, 6)) continue;
       trans.box(7, 6, 5, x, g + 3, z).box(1, 3, 1, x - 2, g + 7.5, z).box(1, 3, 1, x + 2, g + 7.5, z).box(8.4, .4, 6.4, x, g + .2, z);
-      ctx.add(glow(0x7fd0ff, 4, x, g + 7.5, z + 2.7, .8));
     }
     for (const fx of [ctx.cx - ctx.wx - 110, ctx.cx + ctx.wx + 110]) for (let i = 0; i < 60; i++) fence.box(.2, 3.4, 4, fx, g + 1.7, ctx.z0 + 70 - i * ((ctx.length + 220) / 59));
     place(tracks.mesh(steelMaterial("rails", { base: [90, 86, 80], rust: .5 })), ctx);
@@ -495,7 +565,7 @@ export function createGauntletThemes(THREE) {
     const lines = new THREE.LineSegments(wireGeometry, new THREE.LineBasicMaterial({ color: 0x20262c }));
     lines.frustumCulled = false;
     place(lines, ctx);
-    particles(ctx, { count: 600, w: 60, h: 40, d: 70, velocity: [-.6, -17, .5], color: 0xa8bccd, size: .06, opacity: .5, jitter: .05 });
+    particles(ctx, { count: 140, w: 60, h: 32, d: 70, velocity: [-.35, -8, .25], color: 0x9baab5, size: .032, opacity: .18, jitter: .04 });
   }
 
   function frozenDam(ctx) {
@@ -535,15 +605,12 @@ export function createGauntletThemes(THREE) {
     for (let i = 0; i < Math.ceil(span / 52); i++) lampMast(lamps, dx + 2, crest, ctx.mid + span / 2 - i * 52, 7, 1);
     place(lamps.mesh(steelMaterial("damlamp", { base: [90, 96, 102] })), ctx);
     place(bergs.mesh(material(surfaces.ice("berg"), { color: 0xcfe8f6, rough: .6 })), ctx);
-    particles(ctx, { count: 900, w: 80, h: 50, d: 90, velocity: [1.2, -2.2, .4], color: 0xf4f9ff, size: .12, opacity: .85, jitter: .9 });
+    particles(ctx, { count: 220, w: 80, h: 42, d: 90, velocity: [.55, -.9, .16], color: 0xc7d1d8, size: .05, opacity: .26, jitter: .32 });
   }
 
   function orbitalRelay(ctx) {
     ctx.add(stars(ctx.rnd, 3600, 3000));
-    planet(ctx, 1500, ctx.cx + 380, ctx.lowY - 1750, ctx.mid - 200, planetTexture("earthlike", [[10, 30, 80], [20, 70, 140], [30, 120, 150], [74, 130, 80], [150, 140, 100], [236, 240, 244]], 6, 11), 0x6fb4ff);
-    const sunGlow = glow(0xfff2d8, 520, ctx.cx + 900, ctx.highY + 640, ctx.mid - 1100, .95);
-    sunGlow.material.fog = false;
-    ctx.add(sunGlow);
+    planet(ctx, 1500, ctx.cx + 380, ctx.lowY - 1750, ctx.mid - 200, planetTexture("earthlike", [[10, 30, 80], [20, 70, 140], [30, 120, 150], [74, 130, 80], [150, 140, 100], [236, 240, 244]], 6, 11));
     const spine = new Batch(2.6), mods = new Batch(2.6), panels = new Batch(2.2), radiators = new Batch(2.2), dishes = new Batch(2);
     // A station running alongside the course: truss backbone, pressurised modules, solar wings, radiators.
     for (const side of [-1, 1]) {
@@ -582,20 +649,40 @@ export function createGauntletThemes(THREE) {
     const floor = surfaces.concrete("mazefloor", { base: [40, 52, 54], stain: .7, wet: .8, crack: 8 });
     groundPlane(ctx, g, floor, 1600, 90, 0xffffff, .5);
     const wallSet = surfaces.concrete("mazewall", { base: [58, 80, 82], stain: .7, wet: .5, crack: 14 });
-    const walls = new Batch(6);
-    const cell = 12, h = 34;
-    const n = Math.max(46, Math.min(74, Math.ceil(Math.max(ctx.wx * 2 + 160, ctx.length + 160) / cell)));
-    const ox = ctx.cx - n * cell / 2, oz = ctx.mid - n * cell / 2;
-    for (let gz = 0; gz < n; gz++) for (let gx = 0; gx < n; gx++) {
-      if (ctx.rnd() < .56) walls.box(cell + .8, h * (.8 + ctx.rnd() * .4), 1.1, ox + gx * cell + cell / 2, g + h / 2, oz + gz * cell);
-      if (ctx.rnd() < .56) walls.box(1.1, h * (.8 + ctx.rnd() * .4), cell + .8, ox + gx * cell, g + h / 2, oz + gz * cell + cell / 2);
+    const walls = new Batch(8), extentX = Math.max(ctx.wx * 2 + 220, ctx.length * .68), extentZ = Math.max(ctx.length + 180, ctx.wx * 2 + 220);
+    const runs = [
+      [[-.96, -.88], [.68, -.88], [.68, -.52], [-.62, -.52], [-.62, .08], [.42, .08], [.42, .44], [-.18, .44]],
+      [[-.84, .84], [-.84, .55], [-.32, .55], [-.32, .2], [.08, .2], [.08, -.2], [.86, -.2], [.86, .42]],
+      [[-.08, -.86], [-.08, -.7], [.45, -.7], [.45, -.48], [.92, -.48]],
+      [[.92, .82], [.55, .82], [.55, .62], [.12, .62], [.12, .88], [-.48, .88]],
+    ];
+    for (const run of runs) for (let i = 0; i < run.length - 1; i++) {
+      const [ax, az] = run[i], [bx, bz] = run[i + 1];
+      const x0 = ctx.cx + ax * extentX / 2, z0 = ctx.mid + az * extentZ / 2;
+      const x1 = ctx.cx + bx * extentX / 2, z1 = ctx.mid + bz * extentZ / 2;
+      const dx = x1 - x0, dz = z1 - z0, length = Math.hypot(dx, dz), sections = Math.max(1, Math.ceil(length / (24 + ctx.rnd() * 14)));
+      const yaw = Math.atan2(-dz, dx);
+      for (let section = 0; section < sections; section++) {
+        if (ctx.rnd() < .16) continue;
+        const t0 = section / sections, t1 = (section + .78 + ctx.rnd() * .16) / sections;
+        const sx = x0 + dx * t0, sz = z0 + dz * t0, ex = x0 + dx * t1, ez = z0 + dz * t1;
+        const height = 10 + ctx.rnd() * 20, thickness = 1.4 + ctx.rnd() * 1.4;
+        walls.box(Math.hypot(ex - sx, ez - sz), height, thickness, (sx + ex) / 2, g + height / 2, (sz + ez) / 2, yaw);
+      }
     }
     place(walls.mesh(material(wallSet, {})), ctx);
-    for (let i = 0; i < 30; i++) ctx.add(glow(0x35e0d0, 16, ox + ctx.rnd() * n * cell, g + 20 + ctx.rnd() * 10, oz + ctx.rnd() * n * cell, .5));
-    const towers = new Batch(5);
-    for (let i = 0; i < 12; i++) { const x = ctx.cx + sideOf(ctx) * (ctx.wx + 40 + ctx.rnd() * 140), z = rz(ctx), hh = 50 + ctx.rnd() * 60; towers.box(8, hh, 8, x, g + hh / 2, z).box(10, 2, 10, x, g + hh + 1, z); ctx.add(glow(0xff4a3a, 5, x, g + hh + 3, z, .9)); }
-    place(towers.mesh(material(wallSet, {})), ctx);
-    particles(ctx, { count: 380, w: 70, h: 40, d: 80, velocity: [.2, .1, .3], color: 0x7fe9de, size: .08, opacity: .35, jitter: .4 });
+    const sluice = new Batch(5), metal = new Batch(4);
+    const gateX = ctx.cx + ctx.wx + 72, gateZ = ctx.mid - ctx.length * .16, gateHeight = 34;
+    for (const side of [-1, 1]) {
+      sluice.box(5, gateHeight, 7, gateX + side * 16, g + gateHeight / 2, gateZ);
+      sluice.box(8, 3, 9, gateX + side * 16, g + 1.5, gateZ);
+    }
+    sluice.box(38, 5, 9, gateX, g + gateHeight + 2.5, gateZ);
+    metal.box(24, 22, .8, gateX, g + 12, gateZ - 4.2).box(28, 1.2, 1.2, gateX, g + 24, gateZ - 4.8);
+    metal.box(1.2, 25, 1.2, gateX - 12, g + 13, gateZ - 5).box(1.2, 25, 1.2, gateX + 12, g + 13, gateZ - 5);
+    place(sluice.mesh(wallMaterial("maze-sluice", { base: [68, 82, 82], stain: .8, wet: .6, crack: 12 })), ctx);
+    place(metal.mesh(steelMaterial("maze-gate", { base: [76, 88, 86], rust: .5 }, { metal: .42, rough: .72 })), ctx);
+    particles(ctx, { count: 140, w: 70, h: 30, d: 80, velocity: [.12, .05, .18], color: 0x84a9a6, size: .045, opacity: .2, jitter: .2 });
   }
 
   function missileSilos(ctx) {
@@ -610,7 +697,6 @@ export function createGauntletThemes(THREE) {
       steel.cyl(r * .5, r * .5, 1, x - r * .5, g + 2.4, z, 24, 0, s * .12).cyl(r * .5, r * .5, 1, x + r * .5, g + 2.4, z, 24, 0, -s * .12);
       if (i % 3 === 0) { nose.cyl(1.4, 1.4, 16, x, g + 8, z, 14).cyl(.1, 1.4, 5, x, g + 18.5, z, 14); }
       for (let k = 0; k < 6; k++) steel.box(.9, 3.2, .9, x + Math.cos(k) * (r + 6), g + 1.6, z + Math.sin(k) * (r + 6));
-      ctx.add(glow(0xff2a1a, 3.2, x, g + 4, z - r - 1.5, .95));
     }
     for (let i = 0; i < 8; i++) {
       const s = sideOf(ctx), x = ctx.cx + s * (30 + ctx.rnd() * (140 + ctx.wx)), z = rz(ctx), w = 14 + ctx.rnd() * 16, h = 6 + ctx.rnd() * 6;
@@ -628,8 +714,7 @@ export function createGauntletThemes(THREE) {
     place(conc.mesh(wallMaterial("silo", { base: [112, 110, 104], stain: .7, crack: 10, wet: .2 })), ctx);
     place(steel.mesh(steelMaterial("hatch", { base: [92, 98, 96], paint: [86, 104, 82], rust: .25 })), ctx);
     place(nose.mesh(steelMaterial("missile", { base: [206, 208, 204], paint: [212, 214, 208], rust: .05 }, { metal: .3, rough: .45 })), ctx);
-    for (let i = 0; i < 18; i++) ctx.add(glow(0xff3a22, 22, ctx.scatterX(150), g + 6 + ctx.rnd() * 20, ctx.z0 - ctx.rnd() * (ctx.length + 100), .3));
-    particles(ctx, { count: 420, w: 70, h: 40, d: 80, velocity: [.15, .5, 0], color: 0xbfb3a6, size: .1, opacity: .5, jitter: .5 });
+    particles(ctx, { count: 150, w: 70, h: 30, d: 80, velocity: [.08, .22, 0], color: 0x8d8378, size: .05, opacity: .22, jitter: .22 });
   }
 
   function alienOutpost(ctx) {
@@ -653,7 +738,6 @@ export function createGauntletThemes(THREE) {
       dome.raycast = () => {};
       ctx.add(dome);
       pads.box(r * 2.4, .6, r * 2.4, x, g + .3, z);
-      ctx.add(glow(0xffd29a, r * 1.6, x, g + r * .5, z + r * .75, .5));
       domeCentres.push([x, z, r]);
     }
     domeCentres.sort((a, b) => b[1] - a[1]);
@@ -673,19 +757,19 @@ export function createGauntletThemes(THREE) {
     place(shuttle.mesh(material(surfaces.composite("shuttle", { base: [226, 228, 230], accent: [60, 60, 70] }), { metal: .2 })), ctx);
     place(solar.mesh(material(surfaces.hull("solar2", { base: [24, 40, 96] }), { metal: .6, rough: .4, color: 0xb8c8ff })), ctx);
     for (const [x, y, z, r, k] of [[ctx.cx - 300, ctx.highY + 220, ctx.mid - 600, 130, [[120, 100, 90], [180, 160, 140], [90, 80, 74]]], [ctx.cx + 260, ctx.highY + 330, ctx.mid - 700, 60, [[150, 120, 100], [210, 190, 170], [110, 96, 84]]]]) {
-      const moon = planet(ctx, r, x, y, z, planetTexture("moon" + r, k, 3, r), null);
+      const moon = planet(ctx, r, x, y, z, planetTexture("moon" + r, k, 3, r));
       moon.material.fog = false;
     }
-    particles(ctx, { count: 800, w: 90, h: 40, d: 90, velocity: [-9, -.4, 1.5], color: 0xe0a070, size: .1, opacity: .55, jitter: 1.4 });
+    particles(ctx, { count: 160, w: 90, h: 32, d: 90, velocity: [-3, -.2, .45], color: 0xb78e79, size: .045, opacity: .2, jitter: .5 });
   }
 
   function hangar(ctx) {
     const g = ctx.groundY, ceilY = ctx.highY + 64;
     ctx.add(stars(ctx.rnd, 2600, 3000, 0xdfe8ff));
-    planet(ctx, 1100, ctx.cx - 520, g - 300, ctx.mid - 600, planetTexture("gasgiant", [[168, 120, 80], [210, 170, 120], [140, 90, 70], [226, 200, 150], [110, 80, 80]], 12, 21), 0xffc080);
+    planet(ctx, 1100, ctx.cx - 520, g - 300, ctx.mid - 600, planetTexture("gasgiant", [[168, 120, 80], [210, 170, 120], [140, 90, 70], [226, 200, 150], [110, 80, 80]], 12, 21));
     groundPlane(ctx, g, surfaces.hull("deckfloor", { base: [58, 64, 72] }), 1600, 90, 0xffffff, .6);
     const hullMat = material(surfaces.hull("ship", { base: [76, 88, 104] }), { metal: .55, rough: .65 });
-    const frame = new Batch(5), strips = new Batch(2), ships = new Batch(5), glowsA = new Batch(2), gantry = new Batch(4);
+    const frame = new Batch(5), strips = new Batch(2), ships = new Batch(5), gantry = new Batch(4);
     // Hangar bay: massive pillars and ceiling trusses well to the sides, an open window wall beyond.
     const span = 34, count = Math.ceil((ctx.length + 200) / span), bay = ctx.wx + 90;
     for (let i = 0; i < count; i++) {
@@ -697,19 +781,18 @@ export function createGauntletThemes(THREE) {
       strips.box(2, .4, span * .6, ctx.cx - 30, ceilY + .6, z - span / 2).box(2, .4, span * .6, ctx.cx + 30, ceilY + .6, z - span / 2);
     }
     frame.box(1.6, 2, ctx.length + 300, ctx.cx, ceilY + 2, ctx.mid).box(1.6, 2, ctx.length + 300, ctx.cx - bay * .5, ceilY + 2, ctx.mid).box(1.6, 2, ctx.length + 300, ctx.cx + bay * .5, ceilY + 2, ctx.mid);
-    // Docked ships on the bay floor: fuselage, wings, tail fin, engines with their glow.
+    // Docked ships on the bay floor: fuselage, wings, tail fin and engine nacelles.
     for (let i = 0; i < 6; i++) {
       const s = i % 2 ? 1 : -1, x = ctx.cx + s * (46 + ctx.rnd() * 36 + ctx.wx * .6), z = ctx.z0 + 10 - i * ((ctx.length + 80) / 5), l = 50 + ctx.rnd() * 40, wd = 12 + ctx.rnd() * 8;
       ships.box(wd, 7, l, x, g + 5, z).box(wd * .55, 5, l * .35, x, g + 4.5, z - l * .6, 0, 0).box(l * .7, .9, l * .34, x, g + 4, z + l * .12).box(.9, 11, 8, x, g + 12, z + l * .38);
       ships.box(3, 2, 6, x, g + 2, z - l * .4).box(.5, .5, l * .6, x - wd * .4, g + 9, z, 0, .2);
-      for (const e of [-1, 1]) { ships.cyl(2.1, 2.5, 6, x + e * wd * .32, g + 4.8, z + l / 2 + 2, 18, Math.PI / 2, 0); ctx.add(glow(0x7fd0ff, 6, x + e * wd * .32, g + 4.8, z + l / 2 + 6, .28)); }
+      for (const e of [-1, 1]) ships.cyl(2.1, 2.5, 6, x + e * wd * .32, g + 4.8, z + l / 2 + 2, 18, Math.PI / 2, 0);
     }
     for (let i = 0; i < 5; i++) { const z = ctx.z0 - i * (ctx.length / 4), x = ctx.cx + (i % 2 ? 1 : -1) * 28; gantry.box(1.4, 36, 1.4, x, g + 18, z).box(1.4, 36, 1.4, x + 12, g + 18, z).box(14, 1.4, 1.4, x + 6, g + 36, z).box(1, 1, 18, x + 6, g + 34.5, z - 6); }
     place(frame.mesh(hullMat), ctx);
     place(ships.mesh(material(surfaces.composite("ship2", { base: [196, 202, 208], accent: [60, 150, 210] }), { metal: .3, rough: .5 })), ctx);
     place(gantry.mesh(steelMaterial("hgantry", { base: [210, 150, 40], paint: [216, 156, 40] })), ctx);
     place(strips.mesh(new THREE.MeshBasicMaterial({ color: 0x66869b })), ctx);
-    for (let i = 0; i < 18; i++) ctx.add(glow(0x7fd8ff, 10, ctx.scatterX(120), g + 10 + ctx.rnd() * 20, ctx.z0 - ctx.rnd() * (ctx.length + 100), .08));
   }
 
   function weaponFactory(ctx) {
@@ -718,7 +801,7 @@ export function createGauntletThemes(THREE) {
     const darkMat = steelMaterial("line", { base: [70, 74, 78], paint: [54, 58, 62], rust: .1 }, { metal: .6, rough: .6 });
     const belts = new Batch(5), props = new Batch(3), rails = new Batch(3), diffusers = new Batch(3), presses = new Batch(4), ovens = new Batch(5), stacks = new Batch(3);
     const diffuserMaterial = new THREE.MeshStandardMaterial({
-      color: 0x8a7655, emissive: 0xb58b52, emissiveIntensity: .22, roughness: .86, metalness: .04,
+      color: 0x766b57, emissive: 0x7e6540, emissiveIntensity: .1, roughness: .9, metalness: .03,
     });
     const lanes = [-3, -2, 2, 3, 4];
     for (const lane of lanes) {
@@ -739,7 +822,6 @@ export function createGauntletThemes(THREE) {
       if (!ctx.claim(x, z, w)) continue;
       ovens.box(w, h, w, x, g + h / 2, z).box(w * .5, 6, w * .5, x, g + h + 3, z);
       stacks.cyl(1.6, 2, 36, x + w * .3, g + h + 18, z, 12);
-      ctx.add(glow(0xff7a22, w * 1.4, x, g + h * .45, z + w * .52, .8));
     }
     for (let i = 0; i < 13; i++) {
       const z = ctx.z0 + 30 - i * ((ctx.length + 120) / 12);
@@ -782,7 +864,7 @@ export function createGauntletThemes(THREE) {
       clock += dt;
       for (const a of armObjects) { a.lower.rotation.y = Math.sin(clock * .5 + a.phase) * .9; a.upper.rotation.x = -.4 + Math.sin(clock * .8 + a.phase) * .35; }
     });
-    particles(ctx, { count: 300, w: 70, h: 40, d: 80, velocity: [.1, 1.4, 0], color: 0xffa050, size: .08, opacity: .8, jitter: .6 });
+    particles(ctx, { count: 110, w: 70, h: 30, d: 80, velocity: [.05, .6, 0], color: 0xa77b57, size: .045, opacity: .2, jitter: .25 });
   }
 
   // ---- Supports --------------------------------------------------------------------------
@@ -975,28 +1057,21 @@ export function createGauntletThemes(THREE) {
         }
       }
     } else if (mode === "hover") {
-      const pods = new Batch(2);
       const targets = [...info.decks.map(d => ({ ...d, mesh: d.mesh })), ...info.movers.map(m => ({ x: m.x, z: m.z, w: m.w, d: m.d, mesh: m.mesh, under: m.y - m.h / 2, thick: m.h, moving: true }))];
       for (const deck of targets) {
         if (!deck.mesh) continue;
-        const local = new Batch(2.2), quads = [];
+        const local = new Batch(2.2), nozzles = new Batch(1.8);
         const nx = Math.max(1, Math.round(deck.w / 7)), nz = Math.max(1, Math.round(deck.d / 8));
         const thick = deck.thick || (deck.top - deck.under);
         for (let ix = 0; ix < nx; ix++) for (let iz = 0; iz < nz; iz++) {
           const px = (ix + .5) / nx * deck.w - deck.w / 2, pz = (iz + .5) / nz * deck.d - deck.d / 2, py = -thick / 2 - .5;
           local.cyl(.75, .9, .9, px, py, pz, 16).cyl(.5, .8, .35, px, py - .62, pz, 16);
-          const quad = new THREE.PlaneGeometry(2.6, 2.6);
-          quad.rotateX(-Math.PI / 2);
-          quad.translate(px, py - .95, pz);
-          quads.push(quad);
+          nozzles.cyl(.34, .42, .1, px, py - .84, pz, 12);
         }
         const podMesh = local.mesh(steelMaterial("pod", { base: [150, 156, 164], rust: 0 }, { metal: .6, rough: .4 }));
         if (podMesh) { podMesh.frustumCulled = true; deck.mesh.add(podMesh); }
-        const glowGeometry = mergeGeometries(quads, false);
-        quads.forEach(q => q.dispose());
-        const glowMesh = new THREE.Mesh(glowGeometry, new THREE.MeshBasicMaterial({ color: 0x7fd0ff, map: glowTexture(), transparent: true, opacity: .34, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
-        glowMesh.raycast = () => {};
-        deck.mesh.add(glowMesh);
+        const emitterMesh = nozzles.mesh(thrusterMaterial);
+        if (emitterMesh) { emitterMesh.frustumCulled = true; deck.mesh.add(emitterMesh); }
         if (!deck.moving) hover.push(deck);
       }
       // Free-form decks: thrusters under every drawn chunk, which sags and floats back as one.
@@ -1004,7 +1079,7 @@ export function createGauntletThemes(THREE) {
         const S = ribbon.samples;
         for (const chunk of ribbon.chunks) {
           if (!chunk.boxes || !chunk.boxes.length) continue;
-          const local = new Batch(2.2), quads = [];
+          const local = new Batch(2.2), nozzles = new Batch(1.8);
           const nx = Math.max(1, Math.round(ribbon.w / 7));
           const nz = Math.max(1, Math.round((chunk.to - chunk.from) * .5 / 8));
           for (let ix = 0; ix < nx; ix++) for (let iz = 0; iz < nz; iz++) {
@@ -1012,19 +1087,12 @@ export function createGauntletThemes(THREE) {
             const off = (ix + .5) / nx * ribbon.w - ribbon.w / 2;
             const px = s.x + Math.cos(s.th) * off, pz = s.z + Math.sin(s.th) * off, py = s.y - 1.4 - .5;
             local.cyl(.75, .9, .9, px, py, pz, 16).cyl(.5, .8, .35, px, py - .62, pz, 16);
-            const quad = new THREE.PlaneGeometry(2.6, 2.6);
-            quad.rotateX(-Math.PI / 2);
-            quad.translate(px, py - .95, pz);
-            quads.push(quad);
+            nozzles.cyl(.34, .42, .1, px, py - .84, pz, 12);
           }
           const podMesh = local.mesh(steelMaterial("pod", { base: [150, 156, 164], rust: 0 }, { metal: .6, rough: .4 }));
           if (podMesh) chunk.mesh.add(podMesh);
-          const glowGeometry = mergeGeometries(quads, false);
-          quads.forEach(q => q.dispose());
-          const glowMesh = new THREE.Mesh(glowGeometry, new THREE.MeshBasicMaterial({ color: 0x7fd0ff, map: glowTexture(), transparent: true, opacity: .34, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
-          glowMesh.raycast = () => {};
-          glowMesh.frustumCulled = false;
-          chunk.mesh.add(glowMesh);
+          const nozzleMesh = nozzles.mesh(thrusterMaterial);
+          if (nozzleMesh) { nozzleMesh.frustumCulled = false; chunk.mesh.add(nozzleMesh); }
           let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
           for (const b of chunk.boxes) { minX = Math.min(minX, b.min.x); maxX = Math.max(maxX, b.max.x); minZ = Math.min(minZ, b.min.z); maxZ = Math.max(maxZ, b.max.z); }
           hoverChunks.push({ mesh: chunk.mesh, boxes: chunk.boxes, cx: (minX + maxX) / 2, cz: (minZ + maxZ) / 2, reach: Math.max(maxX - minX, maxZ - minZ) / 2 });
@@ -1044,8 +1112,8 @@ export function createGauntletThemes(THREE) {
   // ---- Theme table -----------------------------------------------------------------------
   const THEMES = [
     {
-      id: "ashen-city", name: "Ashen City", tile: 3.4, groundDepth: 38, support: "pier", bg: 0x4a4038, fog: 0x4a4038, fogNear: 10, fogFar: 200, camFar: 520,
-      light: { ambient: [0xb8a898, .8], hemi: [0xc9b8a2, 0x2c2622, .9], sun: [0xffb487, .75, [-40, 30, -25]], fill: [0x8a96a8, .7] }, lamp: 0xffc388,
+      id: "ashen-city", name: "Ashen City", tile: 3.4, groundDepth: 38, support: "pier", bg: 0x393b3d, fog: 0x393b3d, fogNear: 10, fogFar: 200, camFar: 520,
+      light: { ambient: [0x9c9b98, .52], hemi: [0xbab5ac, 0x2c2926, .62], sun: [0xe1bda4, .42, [-40, 30, -25]], fill: [0x8293a8, .48] }, lamp: 0xffcda0,
       roles: s => ({
         deck: s.concrete("ash-deck", { base: [118, 114, 108], ash: .8, stain: .6, crack: 12 }), room: s.concrete("ash-room", { base: [92, 88, 84], ash: .6, stain: .8, crack: 16 }),
         beam: s.steel("ash-beam", { base: [96, 92, 90], rust: .6 }), exit: s.concrete("ash-exit", { base: [108, 120, 108], ash: .3 }), wall: s.concrete("ash-wall", { base: [98, 94, 90], ash: .75, crack: 14 }),
@@ -1054,7 +1122,7 @@ export function createGauntletThemes(THREE) {
     },
     {
       id: "foundry", name: "Foundry", tile: 3, groundDepth: 40, support: "steel", bg: 0x2a1a14, fog: 0x2a1a14, fogNear: 8, fogFar: 170, camFar: 480,
-      light: { ambient: [0xc08060, .7], hemi: [0xd08a60, 0x1c1210, .8], sun: [0xff8a4a, .8, [30, 35, -30]], fill: [0xff6a2a, .8] }, lamp: 0xff9a50,
+      light: { ambient: [0xb18d79, .46], hemi: [0xc3a08d, 0x1c1210, .56], sun: [0xf0a878, .55, [30, 35, -30]], fill: [0xc58061, .16] }, lamp: 0xc28b67,
       roles: s => ({
         deck: s.grating("foundry-deck", { base: [92, 98, 104] }), room: s.steel("foundry-room", { base: [92, 82, 74], rust: .55 }),
         beam: s.steel("foundry-beam", { base: [112, 104, 98], rust: .4 }), exit: s.steel("foundry-exit", { base: [90, 120, 96], paint: [60, 116, 84] }),
@@ -1064,7 +1132,7 @@ export function createGauntletThemes(THREE) {
     },
     {
       id: "switchyard", name: "Switchyard", tile: 3.2, groundDepth: 30, support: "steel", bg: 0x1b242e, fog: 0x1b242e, fogNear: 10, fogFar: 210, camFar: 520,
-      light: { ambient: [0x92a4b8, .75], hemi: [0xa8bad0, 0x1a2128, .85], sun: [0xcfe2ff, .7, [20, 40, -20]], fill: [0x6f8fb0, .7] }, lamp: 0xdfeaff,
+      light: { ambient: [0x92a4b8, .48], hemi: [0xa8bad0, 0x1a2128, .58], sun: [0xcfe2ff, .58, [20, 40, -20]], fill: [0x6f8fb0, .16] }, lamp: 0x9eb4c5,
       roles: s => ({
         deck: s.concrete("sw-deck", { base: [104, 106, 108], wet: .7, stain: .6, crack: 8 }), room: s.concrete("sw-room", { base: [84, 88, 92], wet: .9, crack: 10 }),
         beam: s.steel("sw-beam", { base: [116, 122, 126], rust: .15 }), exit: s.steel("sw-exit", { base: [96, 122, 106], paint: [64, 118, 88] }), wall: s.steel("sw-wall", { base: [92, 100, 104], paint: [74, 88, 98] }),
@@ -1073,7 +1141,7 @@ export function createGauntletThemes(THREE) {
     },
     {
       id: "frozen-dam", name: "Frozen Dam", tile: 3, groundDepth: 46, support: "pier", bg: 0x93a9bc, fog: 0x93a9bc, fogNear: 12, fogFar: 230, camFar: 560,
-      light: { ambient: [0xc2d4e6, 1.0], hemi: [0xdce8f4, 0x6a7c8e, 1.1], sun: [0xf2f7ff, 1.0, [30, 50, -20]], fill: [0xa8c4e0, .8] }, lamp: 0xeef6ff,
+      light: { ambient: [0xc2d4e6, .55], hemi: [0xdce8f4, 0x6a7c8e, .65], sun: [0xf2f7ff, .62, [30, 50, -20]], fill: [0xa8c4e0, .18] }, lamp: 0xa9bfcc,
       roles: s => ({
         deck: s.concrete("dam-deck", { base: [150, 154, 158], wet: .6, ash: .35, stain: .5, crack: 10 }), room: s.concrete("dam-room", { base: [128, 134, 140], wet: .8, crack: 12 }),
         beam: s.steel("dam-beam", { base: [128, 138, 148], rust: .08 }), exit: s.concrete("dam-exit", { base: [124, 150, 134], wet: .4 }), wall: s.concrete("dam-wall", { base: [140, 144, 148], wet: .5, ash: .3, crack: 14 }),
@@ -1082,7 +1150,7 @@ export function createGauntletThemes(THREE) {
     },
     {
       id: "orbital-relay", name: "Orbital Relay", tile: 2.6, groundDepth: 200, support: "hover", bg: 0x03050a, fog: 0x03050a, fogNear: 60, fogFar: 900, camFar: 4200,
-      light: { ambient: [0x6f8fb8, .4], hemi: [0x9fb8e0, 0x10141c, .35], sun: [0xfff4e0, .9, [60, 50, 40]], fill: [0x4a68a0, .35] }, lamp: 0xcfe8ff,
+      light: { ambient: [0x6f8fb8, .32], hemi: [0x9fb8e0, 0x10141c, .28], sun: [0xfff4e0, .55, [60, 50, 40]], fill: [0x4a68a0, .12] }, lamp: 0x9eb9c9,
       roles: s => ({
         deck: s.composite("relay-deck"), room: s.composite("relay-room", { base: [188, 194, 200], accent: [220, 140, 60] }),
         beam: s.steel("relay-beam", { base: [170, 176, 184], rust: 0 }), exit: s.composite("relay-exit", { base: [196, 222, 204], accent: [60, 200, 120] }), wall: s.composite("relay-wall", { base: [200, 204, 208], accent: [70, 150, 190] }),
@@ -1091,7 +1159,7 @@ export function createGauntletThemes(THREE) {
     },
     {
       id: "maze-causeway", name: "Causeway", tile: 3.4, groundDepth: 48, support: "pier", bg: 0x0d191c, fog: 0x0d191c, fogNear: 10, fogFar: 180, camFar: 460,
-      light: { ambient: [0x7f9ea0, .7], hemi: [0x8fb4b4, 0x10201f, .85], sun: [0xbfe8e2, .6, [-20, 45, -30]], fill: [0x4fa8a4, .7] }, lamp: 0xffd28a,
+      light: { ambient: [0x7f9ea0, .46], hemi: [0x8fb4b4, 0x10201f, .6], sun: [0xbfe8e2, .45, [-20, 45, -30]], fill: [0x4fa8a4, .16] }, lamp: 0xb0a381,
       roles: s => ({
         deck: s.asphalt("cw-deck"), room: s.asphalt("cw-room", { base: [50, 52, 56], line: false }), beam: s.steel("cw-beam", { base: [100, 108, 108], rust: .2 }),
         exit: s.concrete("cw-exit", { base: [100, 130, 112], wet: .3 }), wall: s.concrete("cw-wall", { base: [92, 98, 98], wet: .4, crack: 10 }),
@@ -1100,7 +1168,7 @@ export function createGauntletThemes(THREE) {
     },
     {
       id: "missile-silos", name: "Silo Field", tile: 3.2, groundDepth: 36, support: "steel", bg: 0x180e0c, fog: 0x180e0c, fogNear: 8, fogFar: 165, camFar: 460,
-      light: { ambient: [0xb08c80, .65], hemi: [0xc09a8a, 0x1a1210, .75], sun: [0xff9a78, .6, [-30, 30, -20]], fill: [0xff3a22, .7] }, lamp: 0xff5a3a,
+      light: { ambient: [0xb08c80, .45], hemi: [0xc09a8a, 0x1a1210, .55], sun: [0xff9a78, .46, [-30, 30, -20]], fill: [0xa86654, .16] }, lamp: 0xb76e5d,
       roles: s => ({
         deck: s.concrete("silo-deck", { base: [110, 106, 98], stain: .8, crack: 12 }), room: s.steel("silo-room", { base: [88, 94, 90], paint: [78, 98, 78], rust: .3 }),
         beam: s.steel("silo-beam", { base: [100, 100, 96], rust: .4 }), exit: s.concrete("silo-exit", { base: [96, 124, 96], stain: .4 }), wall: s.concrete("silo-wall", { base: [102, 98, 92], stain: .8, crack: 16 }),
@@ -1109,7 +1177,7 @@ export function createGauntletThemes(THREE) {
     },
     {
       id: "alien-outpost", name: "Outworks", tile: 3, groundDepth: 26, support: "pipe", bg: 0x6a4030, fog: 0x6a4030, fogNear: 12, fogFar: 200, camFar: 900,
-      light: { ambient: [0xd8a888, .8], hemi: [0xe8b898, 0x4a2a1c, .9], sun: [0xffc9a0, 1.2, [-50, 40, -10]], fill: [0xc87850, .6] }, lamp: 0xffd29a,
+      light: { ambient: [0xc09d85, .5], hemi: [0xd0ad97, 0x4a2a1c, .58], sun: [0xe9c1a4, .65, [-50, 40, -10]], fill: [0xa87860, .18] }, lamp: 0xb79a7d,
       roles: s => ({
         deck: s.regolith("out-deck", { base: [168, 98, 66] }), room: s.regolith("out-room", { base: [138, 82, 58] }),
         beam: s.steel("out-beam", { base: [168, 160, 150], rust: .25 }), exit: s.composite("out-exit", { base: [200, 206, 192], accent: [90, 190, 120] }), wall: s.regolith("out-wall", { base: [150, 88, 60] }),
@@ -1118,7 +1186,7 @@ export function createGauntletThemes(THREE) {
     },
     {
       id: "starship-hangar", name: "Interchange", tile: 2.8, groundDepth: 70, support: "hanger", bg: 0x0b121b, fog: 0x0b121b, fogNear: 14, fogFar: 260, camFar: 3600,
-      light: { ambient: [0x8aa6c8, .38], hemi: [0xa8c4e4, 0x121a24, .4], sun: [0xcfe6ff, .42, [10, 55, -10]], fill: [0x4a9ed8, .24] }, lamp: 0xbfeaff,
+      light: { ambient: [0x8aa6c8, .34], hemi: [0xa8c4e4, 0x121a24, .36], sun: [0xcfe6ff, .38, [10, 55, -10]], fill: [0x4a9ed8, .14] }, lamp: 0x91b0c2,
       roles: s => ({
         deck: s.hull("hg-deck", { base: [82, 94, 110] }), room: s.hull("hg-room", { base: [64, 74, 90] }), beam: s.steel("hg-beam", { base: [140, 150, 164] }),
         exit: s.composite("hg-exit", { base: [190, 222, 206], accent: [60, 210, 150] }), wall: s.hull("hg-wall", { base: [92, 104, 120] }),
@@ -1127,7 +1195,7 @@ export function createGauntletThemes(THREE) {
     },
     {
       id: "weapon-factory", name: "Blackline", tile: 3, groundDepth: 34, support: "steel", bg: 0x17120e, fog: 0x17120e, fogNear: 8, fogFar: 170, camFar: 460,
-      light: { ambient: [0xa89078, .7], hemi: [0xb89a7c, 0x16100c, .75], sun: [0xffd2a0, .8, [20, 40, -20]], fill: [0xff7a2a, .7] }, lamp: 0xfff1dc,
+      light: { ambient: [0xa89078, .46], hemi: [0xb89a7c, 0x16100c, .55], sun: [0xffd2a0, .58, [20, 40, -20]], fill: [0xc17e54, .16] }, lamp: 0xb6a88f,
       roles: s => ({
         deck: s.factory("wf-deck"), room: s.factory("wf-room", { base: [58, 60, 64] }), beam: s.steel("wf-beam", { base: [90, 94, 98], rust: .1 }),
         exit: s.factory("wf-exit", { base: [60, 90, 70] }), wall: s.steel("wf-wall", { base: [78, 82, 88], paint: [60, 64, 70], rust: .1 }),

@@ -1,5 +1,5 @@
-import { makeGauntletObstacle } from "./gauntlet-obstacles.js?v=5";
-import { createGauntletArt } from "./gauntlet-art.js?v=17-maglev-track";
+import { makeGauntletObstacle } from "./gauntlet-obstacles.js?v=6-authored-obstacle-forms";
+import { createGauntletArt } from "./gauntlet-art.js?v=18-structural-surfaces";
 
 const EYE_HEIGHT = 1.65;
 const BURIED = -90;

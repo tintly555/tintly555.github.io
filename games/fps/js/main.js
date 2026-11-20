@@ -14,11 +14,11 @@
     import { buildOperatorShell, OPERATOR, operatorSleeveMaterial } from "./operator-model.js?v=field-rig";
     import { animateImportedOperator, createImportedOperator, loadOperatorAsset } from "./operator-asset.js?v=male-rig-hands-v5";
     import { advanceOperatorGait, buildOperatorGlove, buildOperatorViewSleeve, operatorEnvelope,
-      operatorShot, operatorStride, poseOperatorFoot, poseOperatorViewSleeve, solveOperatorLimb } from "./operator-hands.js?v=field-rig-hands-v3";
-    import { extendGauntletCourses, GAUNTLET_CHAPTERS, GAUNTLET_CHAPTER_SIZE } from "./gauntlet-courses.js?v=relay-no-goo-v1";
-    import { createGauntletRuntime } from "./gauntlet-runtime.js?v=24-maglev-track";
+      operatorShot, operatorStride, poseOperatorFoot, poseOperatorViewSleeve, solveOperatorLimb } from "./operator-hands.js?v=body-sockets-v4";
+    import { extendGauntletCourses, GAUNTLET_CHAPTERS, GAUNTLET_CHAPTER_SIZE } from "./gauntlet-courses.js?v=authored-200-routes-v3";
+    import { createGauntletRuntime } from "./gauntlet-runtime.js?v=26-authored-route-geometry";
     import { createWorldAudio } from "./world-audio.js?v=5-material-footsteps-water-entry";
-    import { createGauntletThemes } from "./gauntlet-themes.js?v=16-built-traverses";
+    import { createGauntletThemes } from "./gauntlet-themes.js?v=18-grounded-chapter-details";
     import { createGauntletMusic } from "./gauntlet-music.js?v=1";
     import { templeWaterBank, TEMPLE_WATER_Y } from "./water-shape.js?v=3-footsteps";
     import { createPostFx, applyDisplayTone } from "./post-fx.js?v=16-gauntlet-light-balance";
@@ -32,7 +32,7 @@
     import { BOSS_IMPACT, ZOMBIE_MELEE, zombieStrikeClipPhase, zombieGait } from "./zombie-motion.js";
     import { ZOMBIE_LOOK_COUNT, loadZombieCharacterMeshes } from "./zombie-character-meshes.js?v=1";
     import { Footprints, slabBoxes, sampleAt, forwardOf, createPathGeometry } from "./gauntlet-path.js?v=3";
-    import { layoutSeg, composeLeg, lengthenSegs, FIXED, mulberry32 as legRng } from "./gauntlet-legs.js?v=6";
+    import { layoutSeg, FIXED } from "./gauntlet-legs.js?v=8-no-generated-legs";
     // The deployed file is translation.js (not translate.js — earlier versions of this HTML had the
     // wrong path and 404'd, which aborted the whole module and left Start unresponsive). The dynamic
     // import + catch is kept so a missing/renamed i18n file still lets the menu boot with a minimal stub.
@@ -3568,10 +3568,8 @@
           camera.updateProjectionMatrix();
           appliedCameraAspect = aspect;
         }
-        if (dprChanged) renderer.setPixelRatio(desiredDpr);
-        /** updateStyle=false: #app canvas uses 100% CSS; inline px from setSize(true) caused black/wrong size until DevTools resize. */
         if (sizeChanged || dprChanged) {
-          renderer.setSize(w, h, false);
+          renderer.setDrawingBufferSize(w, h, desiredDpr);
           appliedRendererWidth = w;
           appliedRendererHeight = h;
           appliedRendererDpr = desiredDpr;
@@ -6590,7 +6588,8 @@
     }
 
     function lobbyMapFromPending() {
-      if (pendingLobbyMode === "gauntlet-party") return "crossfire";
+      // Multiplayer gauntlet rooms carry their own map tag, so a PVP quick play never lands in one.
+      if (pendingLobbyMode === "gauntlet-party") return "gauntlet_party";
       if (pendingLobbyMode === "crossfire") return PENDING_PVP_MAP;
       if (pendingLobbyMode === "training-coop") return "training";
       if (pendingLobbyMode === "boss-coop") return "boss_arena";
@@ -6610,7 +6609,7 @@
      *   Levels 16–20  zombies + Hormone Zombie boss
      *   Level  20     the boss is the HELL Hormone Zombie
      *
-     * The course is built from segments laid end to end down -Z. Everything outside a
+     * The course follows authored segments along its route. Everything outside a
      * platform is void: falling off resets you to the last checkpoint, not to the menu.
      * ═════════════════════════════════════════════════════════════════════ */
     function isGauntletMap(m) { return m === "gauntlet"; }
@@ -6619,7 +6618,7 @@
     const GAUNTLET_VOID_MARGIN = 7.5;
     /** The implicit "floor everywhere" is pushed far under the course so pits are real. */
     const GAUNTLET_FLOOR_EYE_Y = -80;
-    const GAUNTLET_W = 12;            // standard corridor width
+    const GAUNTLET_W = 8;             // standard corridor width
     const GAUNTLET_PROGRESS_KEY = "fps_gauntlet_progress";
 
     /** Jump clears ~5.4u (speed 6.5, 0.83s hang). Dash covers 8.0u. Gaps are sized off that. */
@@ -6640,31 +6639,31 @@
      */
     const GAUNTLET_LEVELS = extendGauntletCourses([
       // ── 1–5: movement only ──────────────────────────────────────────────
-      { name: "FIRST STEPS",  segs: [{t:"run",len:16},{t:"jump"},{t:"run",len:12},{t:"jump"},{t:"run",len:14}] },
-      { name: "THE GAP",      segs: [{t:"run",len:12},{t:"jump"},{t:"run",len:8},{t:"dash"},{t:"run",len:14}] },
-      { name: "DUCK",         segs: [{t:"run",len:10},{t:"crawl",len:10},{t:"jump"},{t:"crawl",len:8},{t:"run",len:12}] },
-      { name: "NARROW",       segs: [{t:"run",len:10},{t:"beam",len:18,w:2.4},{t:"jump"},{t:"beam",len:14,w:2.0},{t:"run",len:12}] },
-      { name: "STAIRWAY",     segs: [{t:"run",len:10},{t:"steps",n:6,rise:0.95,len:4},{t:"dash"},{t:"pads",n:3,len:3.5,gap:GAP_JUMP,w:4},{t:"run",len:12}] },
+      { name: "FIRST STEPS", segs: [{t:"run",len:10},{t:"jump",gap:3.6},{t:"run",len:7,turn:22,rise:1},{t:"run",len:7,turn:-22,rise:-1},{t:"jump"},{t:"run",len:12}] },
+      { name: "THE GAP", segs: [{t:"run",len:8},{t:"run",len:8,rise:1.35},{t:"jump"},{t:"run",len:8,rise:-1.35},{t:"dash"},{t:"run",len:12}] },
+      { name: "DUCK", segs: [{t:"run",len:8},{t:"crawl",len:9,turn:18},{t:"run",len:7,turn:-18},{t:"jump"},{t:"run",len:6},{t:"crawl",len:8,turn:-14},{t:"run",len:6,turn:14},{t:"run",len:8}] },
+      { name: "NARROW", segs: [{t:"run",len:8},{t:"beam",len:11,w:2.4,turn:18},{t:"beam",len:11,w:2.2,turn:-18},{t:"jump"},{t:"beam",len:12,w:2.0,turn:-16},{t:"run",len:8,turn:16},{t:"run",len:10}] },
+      { name: "STAIRWAY", segs: [{t:"run",len:8},{t:"steps",n:4,rise:.82,len:3.5,w:6},{t:"beam",len:8,w:2.4},{t:"steps",n:4,rise:-.82,len:3.5,w:6},{t:"dash"},{t:"pads",n:3,len:3.5,gap:GAP_JUMP,w:4,turn:20},{t:"run",len:7,turn:-20},{t:"run",len:9}] },
 
       // ── 6–15: zombies + movement ────────────────────────────────────────
-      { name: "WELCOMING PARTY", z:4,  segs: [{t:"run",len:10},{t:"room",len:22},{t:"jump"},{t:"run",len:14}] },
-      { name: "CROSSING",        z:5,  segs: [{t:"run",len:10},{t:"room",len:18},{t:"dash"},{t:"beam",len:16,w:2.6},{t:"run",len:12}] },
-      { name: "LOW ROADS",       z:6,  segs: [{t:"run",len:10},{t:"crawl",len:12},{t:"room",len:18},{t:"crawl",len:10},{t:"run",len:12}] },
-      { name: "FREIGHT LIFT", segs: [{t:"run",len:12},{t:"lift",rise:4.0},{t:"run",len:10},{t:"beam",len:12,w:2.2},{t:"jump",gap:3.2},{t:"run",len:12}] },
-      { name: "THE LONG DROP",   z:8,  segs: [{t:"run",len:10},{t:"dash"},{t:"beam",len:20,w:2.2},{t:"dash"},{t:"room",len:20},{t:"run",len:12}] },
-      { name: "FERRY", segs: [{t:"run",len:10},{t:"shuttle",gap:11.5},{t:"run",len:10},{t:"pads",n:4,len:3.2,gap:3.0,w:2.8},{t:"run",len:12}] },
-      { name: "HIGH GROUND",     z:10, segs: [{t:"run",len:10},{t:"steps",n:6,rise:0.95,len:4},{t:"beam",len:14,w:2.6},{t:"steps",n:6,rise:-0.95,len:4},{t:"room",len:20},{t:"dash"},{t:"run",len:12}] },
-      { name: "PINCH", segs: [{t:"run",len:10},{t:"beam",len:12,w:1.8},{t:"shuttle",gap:11.2,drift:2.6},{t:"run",len:8},{t:"crawl",len:9},{t:"run",len:12}] },
-      { name: "NO FLOOR",        z:12, segs: [{t:"run",len:10},{t:"pads",n:5,len:3.2,gap:GAP_JUMP,w:3.6},{t:"room",len:22},{t:"dash"},{t:"pads",n:3,len:3.2,gap:GAP_JUMP,w:3.6},{t:"run",len:12}] },
-      { name: "GRINDER",         z:14, segs: [{t:"run",len:10},{t:"room",len:22},{t:"crawl",len:12},{t:"dash"},{t:"room",len:22},{t:"beam",len:14,w:2.4},{t:"run",len:12}] },
+      { name: "WELCOMING PARTY", z:4, segs: [{t:"run",len:8},{t:"run",len:8,turn:20,rise:.8},{t:"run",len:8,turn:-20,rise:-.8},{t:"room",len:22},{t:"jump"},{t:"run",len:8,turn:-18},{t:"run",len:8,turn:18},{t:"run",len:8}] },
+      { name: "CROSSING", z:5, segs: [{t:"run",len:8},{t:"run",len:7,turn:-22,rise:1.2},{t:"run",len:7,turn:22,rise:-1.2},{t:"room",len:18},{t:"dash"},{t:"beam",len:10,w:2.6,turn:16},{t:"beam",len:10,w:2.4,turn:-16},{t:"run",len:10}] },
+      { name: "LOW ROADS", z:6, segs: [{t:"run",len:8},{t:"crawl",len:10,turn:16},{t:"run",len:6,turn:-16},{t:"room",len:18},{t:"crawl",len:9,turn:-18},{t:"run",len:7,turn:18},{t:"jump"},{t:"run",len:9}] },
+      { name: "FREIGHT LIFT", segs: [{t:"run",len:9},{t:"lift",rise:4.0},{t:"beam",len:9,w:2.2,turn:18},{t:"beam",len:9,w:2.4,turn:-18},{t:"jump",gap:3.2},{t:"run",len:7,rise:-1.1},{t:"run",len:7,rise:1.1},{t:"run",len:9}] },
+      { name: "THE LONG DROP", z:8, segs: [{t:"run",len:8},{t:"dash"},{t:"beam",len:9,w:2.2,turn:20,rise:-1.5},{t:"beam",len:9,w:2.2,turn:-20,rise:-1.5},{t:"dash"},{t:"room",len:20},{t:"run",len:10}] },
+      { name: "FERRY", segs: [{t:"run",len:8},{t:"shuttle",gap:11.5},{t:"run",len:7,turn:-18,rise:.7},{t:"run",len:7,turn:18,rise:-.7},{t:"pads",n:4,len:3.2,gap:3.0,w:2.8,turn:18},{t:"run",len:8,turn:-18},{t:"run",len:9}] },
+      { name: "HIGH GROUND", z:10, segs: [{t:"run",len:8},{t:"steps",n:5,rise:.86,len:3.6},{t:"beam",len:10,w:2.6,turn:16},{t:"beam",len:10,w:2.6,turn:-16},{t:"steps",n:5,rise:-.86,len:3.6},{t:"room",len:20},{t:"dash"},{t:"run",len:10}] },
+      { name: "PINCH", segs: [{t:"run",len:8},{t:"beam",len:10,w:1.8,turn:16},{t:"beam",len:10,w:1.8,turn:-16},{t:"shuttle",gap:11.2,drift:2.6},{t:"run",len:7},{t:"crawl",len:9,turn:-18},{t:"run",len:7,turn:18},{t:"run",len:9}] },
+      { name: "NO FLOOR", z:12, segs: [{t:"run",len:8},{t:"pads",n:5,len:3.2,gap:GAP_JUMP,w:3.6,turn:24},{t:"run",len:7,turn:-24},{t:"room",len:22},{t:"dash"},{t:"pads",n:3,len:3.2,gap:GAP_JUMP,w:3.6,turn:-18},{t:"run",len:7,turn:18},{t:"run",len:9}] },
+      { name: "GRINDER", z:14, segs: [{t:"run",len:8},{t:"room",len:22},{t:"steps",n:4,rise:.75,len:3.4},{t:"crawl",len:10,turn:16},{t:"run",len:7,turn:-16},{t:"dash"},{t:"room",len:22},{t:"beam",len:10,w:2.4,turn:-16},{t:"beam",len:10,w:2.4,turn:16},{t:"run",len:9}] },
 
       // ── 16–20: zombies + boss ───────────────────────────────────────────
-      { name: "HORMONE",         z:8,  boss:1, segs: [{t:"run",len:10},{t:"room",len:20},{t:"dash"},{t:"room",len:28,boss:true},{t:"run",len:14}] },
-      { name: "BOSS + BEAMS",    z:9,  boss:1, segs: [{t:"run",len:10},{t:"beam",len:18,w:2.6},{t:"room",len:28,boss:true},{t:"dash"},{t:"run",len:14}] },
-      { name: "CRAWLSPACE",      z:10, boss:1, segs: [{t:"run",len:10},{t:"crawl",len:12},{t:"room",len:28,boss:true},{t:"crawl",len:12},{t:"run",len:14}] },
-      { name: "THE CLIMB",       z:12, boss:1, segs: [{t:"run",len:10},{t:"steps",n:6,rise:0.95,len:4},{t:"beam",len:14,w:2.6},{t:"steps",n:6,rise:-0.95,len:4},{t:"room",len:28,boss:true},{t:"dash"},{t:"pads",n:3,len:3.4,gap:GAP_JUMP,w:4},{t:"run",len:14}] },
-      { name: "HELL",            z:14, boss:1, hell:true,
-        segs: [{t:"run",len:10},{t:"dash"},{t:"beam",len:18,w:2.4},{t:"room",len:24},{t:"crawl",len:10},{t:"room",len:32,boss:true},{t:"run",len:14}] },
+      { name: "HORMONE", z:8, boss:1, segs: [{t:"run",len:8},{t:"run",len:8,turn:22,rise:.9},{t:"run",len:8,turn:-22,rise:-.9},{t:"room",len:20},{t:"dash"},{t:"steps",n:4,rise:.8,len:3.2},{t:"room",len:28,boss:true},{t:"run",len:10}] },
+      { name: "BOSS + BEAMS", z:9, boss:1, segs: [{t:"run",len:8},{t:"beam",len:9,w:2.6,turn:-18},{t:"beam",len:9,w:2.4,turn:18},{t:"room",len:28,boss:true},{t:"dash"},{t:"run",len:8,rise:1.2},{t:"run",len:8,rise:-1.2},{t:"run",len:10}] },
+      { name: "CRAWLSPACE", z:10, boss:1, segs: [{t:"run",len:8},{t:"crawl",len:10,turn:18},{t:"run",len:7,turn:-18},{t:"room",len:28,boss:true},{t:"crawl",len:9,turn:-16},{t:"run",len:7,turn:16},{t:"jump"},{t:"run",len:10}] },
+      { name: "THE CLIMB", z:12, boss:1, segs: [{t:"run",len:8},{t:"steps",n:5,rise:.82,len:3.6},{t:"beam",len:9,w:2.6,turn:18},{t:"beam",len:9,w:2.6,turn:-18},{t:"steps",n:5,rise:-.82,len:3.6},{t:"room",len:28,boss:true},{t:"dash"},{t:"pads",n:3,len:3.4,gap:GAP_JUMP,w:4,turn:18},{t:"run",len:8,turn:-18},{t:"run",len:10}] },
+      { name: "HELL", z:14, boss:1, hell:true,
+        segs: [{t:"run",len:8},{t:"dash"},{t:"beam",len:9,w:2.4,turn:18},{t:"beam",len:9,w:2.4,turn:-18},{t:"room",len:24},{t:"crawl",len:9,turn:-18},{t:"run",len:7,turn:18},{t:"room",len:32,boss:true},{t:"pads",n:3,len:3.4,gap:GAP_JUMP,w:3.6,turn:-18},{t:"run",len:8,turn:18},{t:"run",len:10}] },
     ]);
 
     const GAUNTLET_LEVEL_COUNT = GAUNTLET_LEVELS.length;
@@ -6806,7 +6805,7 @@
       p.rosterEl.replaceChildren();
       const head = document.createElement("div");
       head.className = "h";
-      head.textContent = `${tr("gauntletPartyCourse", "PARTY · COURSE")} ${L}/${GAUNTLET_LEVEL_COUNT}`;
+      head.textContent = `${tr("gauntletPartyCourse", "MULTIPLAYER · COURSE")} ${L}/${GAUNTLET_LEVEL_COUNT}`;
       p.rosterEl.appendChild(head);
       for (const row of rows) {
         const line = document.createElement("div");
@@ -7365,7 +7364,7 @@
       nextBtn.style.display = party || last ? "none" : "";
       q("#gClearRetry").style.display = party ? "none" : "";
       q("#gClearRetry").textContent = tr("gauntletRetry", "RETRY");
-      q("#gClearMenu").textContent = party ? tr("gauntletLeaveParty", "LEAVE PARTY") : tr("gauntletMenu", "MENU");
+      q("#gClearMenu").textContent = party ? tr("gauntletLeaveParty", "LEAVE MULTIPLAYER") : tr("gauntletMenu", "MENU");
       q("#gClearParty").style.display = party ? "" : "none";
       gauntletClearOpen = true;
       document.body.classList.add("results-open");
@@ -7630,7 +7629,6 @@
       let fixedY0 = 0;
 
       const lipMat = getGauntletEdgeMaterials().lip;
-      const hazardMat = (len) => getGauntletEdgeMaterials().hazard(len);
 
       const RIM_EDGE = 0xffa53a;   // amber: the floor ends here
       const RIM_SIDE = 0x3fa7d6;   // cyan: ordinary platform
@@ -7667,16 +7665,6 @@
         return mesh;
       };
       /** A flat painted marker across the path (checkpoint bars, deck-end hazard bands). */
-      const crossBar = (sample, width, depth, height, material, lift = 0) => {
-        const m = new THREE.Mesh(new THREE.BoxGeometry(width, height, depth), material);
-        m.position.set(sample.x, sample.y + lift + height / 2, sample.z);
-        m.rotation.y = -sample.th;
-        m.receiveShadow = true;
-        m.raycast = () => {};
-        scene.add(m);
-        gauntletProps.push(m);
-        return m;
-      };
       const pushCentreline = (samples, every = 2, w = GAUNTLET_W, kerb = false) => {
         for (let i = 0; i < samples.length; i += every) {
           const s = samples[i];
@@ -7819,121 +7807,17 @@
         // Invisible checkpoint (see mark()).
         checkpoints.push(cp);
       };
-      const paintEnd = (sample, w) => crossBar(sample, w, .26, .05, hazardMat(w));
-      const fixtures = [];
-      const traverse = style.traverse;
-      const diffuser = new THREE.MeshStandardMaterial({
-        color: traverse.lamp, emissive: traverse.lamp, emissiveIntensity: .3, roughness: .87,
-      });
-      let lastBay = -Infinity, bayCount = 0;
-      const dressTraverse = ({ samples, w }) => {
-        const start = samples[0].arc, end = samples[samples.length - 1].arc;
-        const length = end - start;
-        if (length < 5.2 || start - lastBay < 22) return;
-        const span = Math.min(length - 1.4, 11);
-        const from = start + (length - span) / 2, to = from + span;
-        const track = [sampleAt(samples, from), ...samples.filter(s => s.arc > from && s.arc < to), sampleAt(samples, to)];
-        if (Math.abs(track.at(-1).th - track[0].th) > .58) return;
-        const { height, kind, open } = traverse;
-        const sideHigh = (bayCount + gauntletLevel) % 2 ? -1 : 1;
-        lastBay = start;
-        bayCount++;
-        const wall = style.role("wall"), metal = style.role("beam"), brace = style.brace;
-        const half = w / 2;
-        const band = (width, offset, bottom, top, mat = wall, points = track) => {
-          const options = { width, offset, bottom, top };
-          addRibbon(points, options, mat);
-          slabBoxes(points, options).forEach(box => addSlab(box));
-        };
-        const bevel = (points, side, base, cap, bottom, top, mat) => {
-          const width = Math.abs(base[0] - base[1]), offset = side * (base[0] + base[1]) / 2;
-          const topWidth = Math.abs(cap[0] - cap[1]), topOffset = side * (cap[0] + cap[1]) / 2;
-          addRibbon(points, { width, offset, topWidth, topOffset, bottom, top }, mat);
-          const slices = Math.max(2, Math.ceil(Math.max(Math.abs(base[0] - cap[0]), Math.abs(base[1] - cap[1])) / .24));
-          for (let i = 0; i < slices; i++) {
-            const t = (i + .5) / slices;
-            slabBoxes(points, {
-              width: THREE.MathUtils.lerp(width, topWidth, t), offset: THREE.MathUtils.lerp(offset, topOffset, t),
-              bottom: THREE.MathUtils.lerp(bottom, top, i / slices), top: THREE.MathUtils.lerp(bottom, top, (i + 1) / slices),
-            }).forEach(box => addSlab(box));
-          }
-        };
-        const facing = (arc, width, center, bottom, top, mat, depth) => {
-          const points = [sampleAt(track, arc - depth / 2), sampleAt(track, arc + depth / 2)];
-          band(width, center, bottom, top, mat, points);
-        };
-        for (const side of [-1, 1]) {
-          const low = open && side !== sideHigh;
-          const edge = side * (half + .26);
-          const top = low ? 1.28 : height;
-          band(.52, edge, KERB_H, top);
-          if (kind === "cut") {
-            bevel(track, side, [half - .1, half + 2.6], [half + .18, half + 1.9], -4.2, low ? .48 : 2.1, wall);
-            if (!low) bevel(track, side, [half + .2, half + 1.9], [half + .76, half + 1.42], 2.1, height - .6, wall);
-          } else {
-            const lip = side * (half + .08);
-            band(.16, lip, .92, 1.08, brace);
-            if (!low) {
-              band(.24, lip, height - .89, height - .58, metal);
-              if (kind === "service") band(.18, lip, height - 1.28, height - 1.08, brace);
-            }
-          }
-        }
-        if (!open) band(w + 1.02, 0, height, height + .6, kind === "viaduct" ? wall : metal);
-        for (const arc of [from + .42, to - .42]) {
-          for (const side of [-1, 1]) {
-            if (open && side !== sideHigh) continue;
-            const offset = side * (half + .19);
-            facing(arc, .68, offset, -.32, height + .15, brace, .42);
-            if (!open) {
-              const rib = [sampleAt(track, arc - .2), sampleAt(track, arc + .2)];
-              const reach = kind === "hull" ? 1.65 : kind === "service" ? 1.2 : .8;
-              bevel(rib, side, [half - .16, half + .47], [half - reach, half + .47], height - 1.4, height, brace);
-            }
-          }
-          if (!open) facing(arc, w + 1.04, 0, height - .31, height + .19, brace, .42);
-        }
-        const arc = (from + to) / 2, s = sampleAt(track, arc);
-        const lightOffset = open ? sideHigh * (half - .27) : 0;
-        const lampY = height - (open ? .65 : .22);
-        facing(arc, 1.92, lightOffset, lampY, lampY + .22, metal, .52);
-        const lens = [sampleAt(track, arc - .15), sampleAt(track, arc + .15)];
-        addTrim(lens, { width: 1.64, offset: lightOffset, bottom: lampY - .032, top: lampY + .01 }, diffuser);
-        fixtures.push({
-          x: s.x + Math.cos(s.th) * lightOffset, y: s.y + lampY - .055,
-          z: s.z + Math.sin(s.th) * lightOffset, tx: s.x, ty: s.y, tz: s.z,
-        });
-      };
-      const freeDeck = (part, roleName, { kerbs = false, edgeStart = false, edgeEnd = false, hazardSides = false } = {}) => {
+      const freeDeck = (part, roleName) => {
         const { samples, w } = part;
         const chunks = addRibbon(samples, { width: w, bottom: -DECK_T, top: 0 }, style.role(roleName));
         // Each drawn chunk owns the slabs under it, so a hover chapter can sag a chunk at a time.
         for (const chunk of chunks) {
           chunk.boxes = slabBoxes(samples.slice(chunk.from, chunk.to + 1), { width: w, bottom: -DECK_T, top: 0 }).map((b) => addSlab(b, { deck: true }));
         }
-        const length = samples[samples.length - 1].arc - samples[0].arc;
-        // Steel lip along both edges; painted hazard stripes on a narrow beam.
-        const painted = hazardSides && w < 5;
-        for (const side of [-1, 1]) {
-          addTrim(samples, {
-            offset: side * (w / 2 - 0.08), width: 0.16, bottom: 0, top: 0.05, startCap: false, endCap: false,
-            alongLen: painted ? length : 0,
-          }, painted ? hazardMat(length) : lipMat);
-        }
-        if (edgeStart) paintEnd(samples[0], w);
-        if (edgeEnd) paintEnd(samples[samples.length - 1], w);
-        if (kerbs) {
-          for (const side of [-1, 1]) {
-            const band = { offset: side * (w / 2 + 0.25), width: 0.5, bottom: 0, top: KERB_H };
-            addRibbon(samples, band, style.role("wall"));
-            slabBoxes(samples, band).forEach((b) => addSlab(b));
-          }
-          dressTraverse(part);
-        }
         const entry = { samples, w, kind: part.kind, chunks };
         ribbonDecks.push(entry);
         footprints.addTrace(samples, w / 2 + 4, 1);
-        pushCentreline(samples, 2, w, kerbs);
+        pushCentreline(samples, 2, w);
         return entry;
       };
       /** A low tunnel: roof, side walls and strip lights over a deck. Standing height is blocked; crouching clears it. */
@@ -7969,37 +7853,25 @@
       };
 
       /** Lay one free segment (any heading, slope, width) onto the course. */
-      let lastDeck = null;       // the deck the pen last left, so its far edge can be painted at a pit
-      let afterPit = false;
       const freeSeg = (sg) => {
         const lay = layoutSeg(sg, pen);
         for (const part of lay.parts) {
           const first = part.samples[0], last = part.samples[part.samples.length - 1];
           if (part.kind === "pit") {
             hints.push({ kind: sg.t === "dash" ? "dash" : "jump", arcFrom: first.arc - 5, arcTo: last.arc });
-            if (lastDeck) paintEnd(first, lastDeck.w);
             pitFence(first); pitFence(last);
             footprints.addTrace(part.samples, GAUNTLET_W / 2 + 3, 1);
             pushCentreline(part.samples);
-            afterPit = true;
-            lastDeck = null;
             continue;
           }
-          const isRun = sg.t === "run";
-          const narrow = part.kind === "beam" || (sg.t === "pads");
           const role = part.kind === "beam" || sg.t === "pads" ? "beam" : "deck";
           if (part.kind === "tunnel") {
             hints.push({ kind: "crouch", arcFrom: first.arc - 6, arcTo: first.arc + 1 });
             freeDeck(part, "deck");
             freeTunnel(part);
           } else {
-            freeDeck(part, role, {
-              kerbs: isRun, edgeStart: afterPit || narrow || part.kind === "tread", edgeEnd: narrow || part.kind === "tread",
-              hazardSides: part.kind === "beam" || sg.t === "pads",
-            });
+            freeDeck(part, role);
           }
-          afterPit = false;
-          lastDeck = part;
         }
         const allSamples = lay.parts.flatMap((p) => p.samples);
         const kinds = lay.parts.map((p) => p.kind);
@@ -8007,16 +7879,7 @@
         if (kinds.some((k) => k !== "pit")) markFree(lay.parts.filter((p) => p.kind !== "pit").pop().samples);
         return allSamples;
       };
-      const fixedReach = (sg) => {
-        if (sg.t === "room") return { len: sg.len, w: sg.w || (GAUNTLET_W + 10), door: true };
-        if (sg.t === "mechanic") return { len: 26, w: 14 };
-        if (sg.t === "lift") return { len: 10, w: 8 };
-        if (sg.t === "shuttle") return { len: (sg.gap || 11) + 6, w: 8 };
-        return { len: 14, w: GAUNTLET_W + 4 };
-      };
-
-      // Build order. Authored segments stay as written; legs are invented as the course is built.
-      const segList = lengthenSegs(spec.segs, { level: gauntletLevel, tier: Math.min(3, 1 + Math.floor(gauntletLevel / 70)) });
+      const segList = spec.segs;
 
       // Start pad
       beginFixed();
@@ -8024,13 +7887,7 @@
       mark();
       endFixed(GAUNTLET_W / 2 + 6);
 
-      for (let si = 0; si < segList.length; si++) {
-        let sg = segList[si];
-        if (sg.t === "leg") {
-          const legs = composeLeg(legRng(sg.seed), { ...sg, after: segList[si + 1] ? fixedReach(segList[si + 1]) : fixedReach({}) }, pen, footprints);
-          for (const part of legs) freeSeg(part);
-          continue;
-        }
+      for (const sg of segList) {
         if (!FIXED.has(sg.t)) { freeSeg(sg); continue; }
         // Axis-aligned set pieces start with the pen heading straight again.
         beginFixed();
@@ -8086,7 +7943,6 @@
           reach = w / 2 + 6;
         }
         endFixed(reach);
-        lastDeck = null; afterPit = false;
       }
 
       // Exit pad — visually distinct, plus a beacon column so it reads from a distance.
@@ -8136,50 +7992,18 @@
       const lowY = bounds.y0;
       const highest = bounds.y1;
 
-      // Lighting. Without this the course was pitch black — the map builders each own their
-      // own lights and this one was only adding the exit beacon. A cool overhead key plus a
-      // run of lamps down the course, so you can actually see the next platform edge.
+      // Match the scene's authored lighting instead of overpowering it with broad fill lights.
       const light = theme.light;
-      const amb = new THREE.AmbientLight(light.ambient[0], 1.18 * light.ambient[1]);
+      const amb = new THREE.AmbientLight(light.ambient[0], 0.78 * light.ambient[1]);
       scene.add(amb); pvpMapLights.push(amb);
-      const hemi = new THREE.HemisphereLight(light.hemi[0], light.hemi[1], 2.1 * light.hemi[2]);
+      const hemi = new THREE.HemisphereLight(light.hemi[0], light.hemi[1], 1.05 * light.hemi[2]);
       scene.add(hemi); pvpMapLights.push(hemi);
-      const key = new THREE.DirectionalLight(light.sun[0], 3.5 * light.sun[1]);
+      const key = new THREE.DirectionalLight(light.sun[0], 1.45 * light.sun[1]);
       key.position.set(light.sun[2][0] * 1.5, light.sun[2][1] * 1.5, light.sun[2][2] * 1.5); key.castShadow = false;
       scene.add(key); pvpMapLights.push(key);
-      const fill = new THREE.DirectionalLight(light.fill[0], 1.35 * light.fill[1]);
+      const fill = new THREE.DirectionalLight(light.fill[0], .45 * light.fill[1]);
       fill.position.set(-22, 30, -40); fill.castShadow = false;
       scene.add(fill); pvpMapLights.push(fill);
-      const fixtureSlots = Array.from({ length: Math.min(3, fixtures.length) }, () => {
-        const lamp = createPhysicalSpotLight(traverse.lamp, 30, 17, Math.PI / 4, .83);
-        const intensity = lamp.intensity;
-        lamp.intensity = 0;
-        scene.add(lamp, lamp.target);
-        pvpMapLights.push(lamp, lamp.target);
-        return { lamp, intensity, fixture: null, fade: 0 };
-      });
-      if (fixtureSlots.length) {
-        gauntletTicks.push(dt => {
-          const p = player.position;
-          const distance = f => (f.x - p.x) ** 2 + (f.y - p.y) ** 2 + (f.z - p.z) ** 2;
-          const nearest = fixtures.map(f => ({ f, d: distance(f) })).sort((a, b) => a.d - b.d)
-            .slice(0, fixtureSlots.length).map(entry => entry.f);
-          for (const slot of fixtureSlots) {
-            const keep = slot.fixture && nearest.includes(slot.fixture);
-            slot.fade = THREE.MathUtils.clamp(slot.fade + dt * (keep ? 3.5 : -5), 0, 1);
-            if (!keep && slot.fade <= 0) {
-              const next = nearest.find(f => !fixtureSlots.some(other => other.fixture === f));
-              slot.fixture = next || null;
-              if (next) {
-                slot.lamp.position.set(next.x, next.y, next.z);
-                slot.lamp.target.position.set(next.tx, next.ty, next.tz);
-                slot.lamp.target.updateMatrixWorld();
-              }
-            }
-            slot.lamp.intensity = slot.intensity * slot.fade;
-          }
-        });
-      }
 
       // Fog bank: a sea of soft cloud sprites below the course plus drifting mist at deck level.
       // Flat gradient sheets read as rectangles; sprites give a soft, volumetric haze.
@@ -15727,7 +15551,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     }
 
     function aimViewSleeve(hand) {
-      poseOperatorViewSleeve(hand, camera, weaponRoot);
+      poseOperatorViewSleeve(hand, camera);
     }
 
     function makeViewHandMesh(side, grip, spec) {
@@ -16303,10 +16127,10 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
 
     /**
      * Sight picture: the eye sits at the camera origin, so ADS must bring the sight line
-     * (local y = sightY at x = 0) to exactly y = 0 after WEAPON_VIEW_DROP_Y.
+     * (local y = sightY at x = 0) to the camera's forward axis.
      */
     function adsForSight(basePos, sightY, z) {
-      return new THREE.Vector3(-basePos.x, -WEAPON_VIEW_DROP_Y - basePos.y - sightY, z);
+      return new THREE.Vector3(-basePos.x, -basePos.y - sightY, z);
     }
 
     /**
@@ -16347,11 +16171,8 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       };
       // Small round face (sight dots, bores) looking down ±Z.
       const disc = (parent, mat, r, x, y, z) => kit.put(parent, gunTube(r, r, 0.0012, 12), mat, x, y, z);
-      // Buttstock parts that sit right under the eye once aimed — hidden past mid-ADS, the
-      // way a real stock disappears beside your cheek.
       const stockGrp = new THREE.Group();
       gunGroup.add(stockGrp);
-      root.userData.adsHideStock = stockGrp;
 
       if (type === 0) {
         // ── Polymer-frame striker pistol ──
@@ -17054,7 +16875,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       root.add(gun);
       root.userData.gun = gun;
       root.userData.basePos = gun.position.clone();
-      root.userData.adsOffset = new THREE.Vector3(-0.24, 0.10, 0.26);
+      root.userData.adsOffset = adsForSight(gun.position, .086, .26);
       root.userData.animDart = animDart;
       // Fetch point is a pouch below/left of the receiver — somewhere a hand can actually
       // reach. (It used to be up-forward-right of the muzzle, i.e. mid-air, which is why
@@ -17221,7 +17042,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       g.userData.muzzleNode = muzzleNode;
       g.userData.gun = receiver;
       g.userData.basePos = receiver.position.clone();
-      g.userData.adsOffset = new THREE.Vector3(0, 0, 0);
+      g.userData.adsOffset = adsForSight(receiver.position, .04, 0);
       polishViewModel(g);
       return g;
     }
@@ -17253,6 +17074,23 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     weaponModels.forEach((w, i) => {
       w.visible = i === state.weaponIndex;
       weaponRoot.add(w);
+      if (i !== 4 && i !== 7) {
+        const { gun, gripR, gripL, supportHand } = w.userData;
+        const bounds = new THREE.Box3();
+        function measure(part, matrix) {
+          if (part === gripR || part === gripL || part === supportHand || !part.visible) return;
+          part.updateMatrix();
+          const transform = matrix.clone().multiply(part.matrix);
+          if (part.isMesh) {
+            part.geometry.computeBoundingBox();
+            bounds.union(part.geometry.boundingBox.clone().applyMatrix4(transform));
+          }
+          for (const child of part.children) measure(child, transform);
+        }
+        const identity = new THREE.Matrix4();
+        for (const child of gun.children) measure(child, identity);
+        w.userData.hardwareBounds = bounds;
+      }
       w.traverse(mesh => {
         if (!mesh.isMesh) return;
         for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
@@ -20611,7 +20449,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       );
     }
 
-    const _weaponScaleVec = new THREE.Vector3();
+    const viewHardwareMatrix = new THREE.Matrix4(), viewHardwareBounds = new THREE.Box3();
 
     const viewDynamics = { yaw: 0, pitch: 0, lagX: 0, lagY: 0, dash: 0, air: 0, sidestep: 0, weight: 0 };
     function updateWeaponVisuals(dt) {
@@ -20622,9 +20460,12 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         (state.ads || keys.shift) &&
         !state.reloading &&
         player.health > 0 &&
-        state.weaponIndex !== 3 &&
         state.weaponIndex !== 4 &&
         state.weaponIndex !== 7;
+      const adsSpeed = (weapon().adsSpeed ?? 8) * getDartSlowAdsMult();
+      state.adsProgress += ((usingAds ? 1 : 0) - state.adsProgress) * Math.min(1, dt * adsSpeed);
+      const adsBlend = THREE.MathUtils.smoothstep(state.adsProgress, 0, adsReadyProgressForWeapon(state.weaponIndex));
+      const aimWeight = 1 - adsBlend;
         
       const motion = viewDynamics;
       const yawDelta = Math.atan2(Math.sin(player.yaw - motion.yaw), Math.cos(player.yaw - motion.yaw));
@@ -20635,7 +20476,6 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       motion.pitch = player.pitch;
       motion.dash = dampScalar(motion.dash, now < state.dashActiveUntil ? 1 : 0, dt, 14);
       motion.air = dampScalar(motion.air, player.onGround ? 0 : THREE.MathUtils.clamp(player.velocityY / 8, -1, 1), dt, 10);
-      const aimWeight = 1 - state.adsProgress * 0.94;
       const uiMotion = gameSettings.cameraMotion === false ? 0 : 1;
       const sideSpeed = (state.velX * Math.cos(player.yaw) - state.velZ * Math.sin(player.yaw)) / Math.max(1, player.speed);
       motion.sidestep = dampScalar(motion.sidestep, THREE.MathUtils.clamp(sideSpeed, -1, 1), dt, 12);
@@ -20705,11 +20545,6 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       const basePos = activeWeapon.userData.basePos;
       const adsOffset = activeWeapon.userData.adsOffset;
 
-      const targetAds = usingAds ? 1 : 0;
-      const adsSpeed = (weapon().adsSpeed ?? 8) * getDartSlowAdsMult();
-
-      state.adsProgress += (targetAds - state.adsProgress) * Math.min(1, dt * adsSpeed);
-
       if (state.weaponIndex !== 4) {
         const adsReadyThrVis = adsReadyProgressForWeapon(state.weaponIndex);
         if (usingAds && state.adsProgress >= adsReadyThrVis && state.adsFiredWhileScoping) {
@@ -20719,33 +20554,15 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         if (!usingAds) state.adsFiredWhileScoping = false;
       }
 
-      const adsBlend = state.adsProgress;
-      if (activeWeapon.userData.adsHideStock) activeWeapon.userData.adsHideStock.visible = adsBlend < 0.6;
-
-      const targetScale =
-        usingAds && state.weaponIndex === 1
-          ? 1.18
-          : usingAds && state.weaponIndex === 5
-            ? 1.08
-            : 1.0;
-      _weaponScaleVec.set(targetScale, targetScale, targetScale);
-      activeWeapon.scale.lerp(_weaponScaleVec, Math.min(1, dt * 12));
-      const targetX = basePos.x + adsOffset.x * adsBlend;
-      const targetY = basePos.y + adsOffset.y * adsBlend;
-      const targetZ = basePos.z + adsOffset.z * adsBlend;
-
-      // Blend the sight position separately from action offsets so a draw animation
-      // cannot feed its offset back into the next frame's ADS position.
-      const pose = activeWeapon.userData.sightPose ||= basePos.clone();
-      pose.x = dampScalar(pose.x, targetX, dt, 18);
-      pose.y = dampScalar(pose.y, targetY, dt, 18);
-      pose.z = dampScalar(pose.z, targetZ, dt, 18);
-      gun.position.set(pose.x + viewAnim.offX, pose.y + viewAnim.offY, pose.z + viewAnim.offZ);
-      gun.rotation.x = viewAnim.rotX;
-      gun.rotation.z = viewAnim.rotZ;
+      gun.position.copy(basePos).addScaledVector(adsOffset, adsBlend);
+      gun.position.x += viewAnim.offX * aimWeight;
+      gun.position.y += viewAnim.offY * aimWeight;
+      gun.position.z += viewAnim.offZ * aimWeight;
+      gun.rotation.x = viewAnim.rotX * aimWeight;
+      gun.rotation.z = viewAnim.rotZ * aimWeight;
          
       const hideCrosshair =
-        (viewMode === 0 && usingAds && state.weaponIndex !== 1) || state.weaponIndex === 4;
+        (viewMode === 0 && usingAds && state.weaponIndex !== 1 && state.weaponIndex !== 8) || state.weaponIndex === 4;
       crosshairEl.classList.toggle("hidden", hideCrosshair);
       if (medKitReticleEl) {
         medKitReticleEl.classList.toggle("hidden", state.weaponIndex !== 4);
@@ -20759,7 +20576,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         amrScopeOverlayEl.setAttribute("aria-hidden", scopeOp < 0.04 ? "true" : "false");
       }
       if (state.weaponIndex === 5 && activeWeapon) {
-        activeWeapon.visible = adsBlend < 0.94;
+        activeWeapon.visible = state.adsProgress < 0.94;
       }
 
       const shotAge = Math.max(0, now - (state.viewShotAt ?? -Infinity)) * .001;
@@ -20769,17 +20586,24 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       if (trigger) trigger.rotation.set(-.21 * shotKick + (1 - adsBlend) * .08, -.18 * shotKick, 0);
       const crouchCarry = crouchAmt * uiMotion * aimWeight;
       weaponRoot.position.set(
-        state.weaponBobX + reloadX - .10,
-        WEAPON_VIEW_DROP_Y - state.recoil * .76 - state.weaponBobY + reloadY + crouchCarry * .018 + .04
+        (state.weaponBobX - .10) * aimWeight + reloadX,
+        (WEAPON_VIEW_DROP_Y - state.recoil * .76 - state.weaponBobY + .04) * aimWeight + reloadY + crouchCarry * .018
           - (motion.dash * .115 + state.landDipVis * .50 + motion.air * .025) * aimWeight * uiMotion,
         reloadPushZ + state.recoil * .38 + muzzleSettle + motion.dash * .075 * uiMotion
       );
       weaponRoot.rotation.set(
-        state.recoil * (usingAds ? .62 : .84) + reloadRotX + shotKick * .023
+        (state.recoil * .84 + shotKick * .023) * aimWeight + reloadRotX
           + (motion.lagY + motion.dash * .21 + motion.air * .035) * aimWeight * uiMotion,
         reloadRotY + motion.lagX * aimWeight * uiMotion,
-        state.weaponBobRotZ + reloadRotZ + motion.dash * .12 * uiMotion + crouchCarry * .036
+        (state.weaponBobRotZ + motion.dash * .12 * uiMotion) * aimWeight + reloadRotZ + crouchCarry * .036
       );
+      if (ud.hardwareBounds) {
+        weaponRoot.updateMatrix();
+        gun.updateMatrix();
+        viewHardwareMatrix.multiplyMatrices(weaponRoot.matrix, gun.matrix);
+        const rear = viewHardwareBounds.copy(ud.hardwareBounds).applyMatrix4(viewHardwareMatrix).max.z;
+        weaponRoot.position.z -= Math.max(0, rear + camera.near + .015);
+      }
       if (ud.viewArmL?.visible && ud.supportHand && state.reloading) {
         const release = THREE.MathUtils.smoothstep(reloadProgress, 0, .13)
           * (1 - THREE.MathUtils.smoothstep(reloadProgress, .87, 1));
@@ -24932,6 +24756,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
 
     const frameDiagnostics = new URLSearchParams(location.search).get("perf") === "1" ? [] : null;
     if (frameDiagnostics) window.__fpsFrameDiagnostics = frameDiagnostics;
+    let previousFrameWork = null;
     let playerUpdateMsLastFrame = 0;
     let altGaugeMsLastFrame = 0;
     let enemyUpdateMsLastFrame = 0;
@@ -25019,6 +24844,22 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       const rawDelta = clock.getDelta();
       const dt = Math.min(rawDelta, 0.033);
       const frameStart = frameDiagnostics ? performance.now() : 0;
+      if (previousFrameWork) {
+        const sample = previousFrameWork;
+        previousFrameWork = null;
+        if (gameWorldReady && !paused && document.visibilityState === "visible" && sample.map === CURRENT_MAP) {
+          sample.frameMs = Math.round(frameStart - sample.startMs);
+          sample.outsideCallbackMs = Math.max(0, sample.frameMs - sample.callbackMs);
+          if (sample.frameMs >= 30 || sample.callbackMs >= 25) {
+            frameDiagnostics.push(sample);
+            if (frameDiagnostics.length > 60) frameDiagnostics.shift();
+            if (frameStart >= nextSlowFrameLog) {
+              nextSlowFrameLog = frameStart + 1200;
+              console.info("[fps slow frame] " + JSON.stringify(sample));
+            }
+          }
+        }
+      }
       playerUpdateMsLastFrame = 0;
       altGaugeMsLastFrame = 0;
       enemyUpdateMsLastFrame = 0;
@@ -25371,9 +25212,9 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       const worldRenderStart = frameDiagnostics ? performance.now() : 0;
       renderWorld(dt);
       if (frameDiagnostics) worldRenderMsLastFrame = performance.now() - worldRenderStart;
-      if (frameDiagnostics && (rawDelta > 0.085 || performance.now() - frameStart > 35)) {
-        const sample = {
-          map: CURRENT_MAP, frameMs: Math.round(rawDelta * 1000),
+      if (frameDiagnostics) {
+        previousFrameWork = {
+          map: CURRENT_MAP, startMs: frameStart, callbackMs: Math.round(performance.now() - frameStart),
           visibility: document.visibilityState, focused: document.hasFocus(),
           simulationMs: Math.round(renderStart - frameStart),
           renderSubmitMs: Math.round(performance.now() - renderStart),
@@ -25388,12 +25229,6 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           resolutionScale: Math.round(resolutionScale * 100) / 100,
           adaptiveAaLevel,
         };
-        frameDiagnostics.push(sample);
-        if (frameDiagnostics.length > 60) frameDiagnostics.shift();
-        if (audioNow >= nextSlowFrameLog) {
-          nextSlowFrameLog = audioNow + 1200;
-          console.info("[fps slow frame] " + JSON.stringify(sample));
-        }
       }
     }
 
@@ -25780,7 +25615,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       const wrap = document.querySelector(".menu-panels-wrap");
       if (!wrap || _gauntletPanel) return;
       const panel = document.createElement("div");
-      panel.id = "menuGauntlet";
+      panel.id = "menuGauntletCourses";
       panel.className = "menu-subpanel menu-subpanel--wide";
       panel.style.display = "none";
 
@@ -25788,7 +25623,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       back.type = "button";
       back.className = "menu-float-icon menu-back-btn";
       back.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>';
-      back.addEventListener("click", () => showMenuPanel("menuStart"));
+      back.addEventListener("click", () => showMenuPanel("menuGauntlet"));
 
       const h = document.createElement("h2");
       h.className = "menu-title";
@@ -25822,12 +25657,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       launch.type = "button";
       launch.textContent = tr("menuDeploy", "Start");
       launch.addEventListener("click", () => startGauntletLevel(_gauntletPanel.selected));
-      const party = document.createElement("button");
-      party.type = "button";
-      party.id = "btnGauntletParty";
-      party.textContent = tr("gauntletPartyBtn", "PARTY");
-      party.addEventListener("click", () => showLobby("gauntlet-party", tr("gauntletPartyTitle", "GAUNTLET PARTY")));
-      actions.append(launch, party);
+      actions.append(launch);
       panel.appendChild(back);
       panel.appendChild(h);
       panel.append(pager, grid, briefing, actions);
@@ -26167,8 +25997,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
 
     function showLobby(mode, title) {
       pendingLobbyMode = mode;
-      // A party is only ever made or joined by code, never matched at random.
-      btnQuickplay.style.display = mode === "gauntlet-party" ? "none" : "";
+      btnQuickplay.style.display = "";
       lobbyTitle.textContent = title;
       clearLobbyErr();
       showMenuPanel("menuLobby");
@@ -26231,10 +26060,21 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       b.id = "btnGauntlet";
       b.dataset.i18n = "btnGauntlet";
       b.textContent = tr("btnGauntlet", "GAUNTLET");
-      b.addEventListener("click", () => { refreshGauntletPanel(); showMenuPanel("menuGauntlet"); });
+      b.addEventListener("click", () => showMenuPanel("menuGauntlet"));
       host.appendChild(b);
       applyMenuDescriptions();
     })();
+
+    // GAUNTLET hub: one card per way to play. Solo opens the course picker; MULTIPLAYER opens
+    // the shared lobby (QUICK PLAY, CREATE A ROOM, JOIN VIA CODE) for a group run.
+    document.getElementById("btnGauntletSolo").addEventListener("click", () => {
+      refreshGauntletPanel();
+      showMenuPanel("menuGauntletCourses");
+    });
+    document.getElementById("btnGauntletMulti").addEventListener("click", () => {
+      showLobby("gauntlet-party", tr("lobbyMultiplayer", "MULTIPLAYER"));
+    });
+    document.getElementById("btnGauntletHubBack").addEventListener("click", () => showMenuPanel("menuStart"));
 
     document.getElementById("btnStart").addEventListener("click", () => showMenuPanel("menuStart"));
     document.getElementById("btnMenuHome").addEventListener("click", () => showMenuPanel("menuMain"));
@@ -26448,6 +26288,15 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           showLobbyErr(norm.error);
           return;
         }
+        // A multiplayer quick play must land in a gauntlet room. The relay only knows "crossfire"
+        // rooms, so if it matched us into a PVP room, refuse rather than start a mismatched run.
+        if (pendingLobbyMode === "gauntlet-party" && eventName === "quickplay" && norm.map && norm.map !== "gauntlet_party") {
+          nameModal.style.display = "none";
+          pendingNameAction = null;
+          btnNameOk.disabled = false;
+          showLobbyErr(tr("mpNoGauntletRoom", "No multiplayer gauntlet game is open right now. Create a room instead."));
+          return;
+        }
         nameModal.style.display = "none";
         pendingNameAction = null;
         btnNameOk.disabled = false;
@@ -26523,7 +26372,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       let code = rawInput;
       if (pendingLobbyMode === "gauntlet-party") {
         if (parsePvpShareCode(rawInput).variant !== "gauntlet_party") {
-          codeError.textContent = tr("partyCodeNeeded", "Enter a Gauntlet Party code (it ends in -P).");
+          codeError.textContent = tr("partyCodeNeeded", "Enter a Multiplayer gauntlet code (it ends in -P).");
           return;
         }
         code = parsePvpShareCode(rawInput).code;

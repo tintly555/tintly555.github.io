@@ -930,3 +930,47 @@ body :is(input[type="text"], input[type="number"], input[type="password"], selec
 @media (max-width: 480px) {
   .fx-setting { grid-template-columns: minmax(92px, 1fr) minmax(54px, 1fr) 32px; gap: 5px; }
 }
+
+/* ── GAUNTLET hub: SINGLEPLAYER / MULTIPLAYER cards ───────────────────────────── */
+#menu .gauntlet-mode-cards {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  margin-top: 6px;
+}
+#menu .gauntlet-mode-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 18px 18px 16px;
+  text-align: left;
+  white-space: normal;
+  background: #161b17e6;
+  border: 1px solid var(--console-line);
+  border-left: 3px solid var(--console-accent);
+  border-radius: 6px;
+  cursor: pointer;
+}
+#menu .gauntlet-mode-card:hover,
+#menu .gauntlet-mode-card:focus-visible {
+  border-color: var(--console-accent);
+  background: #222a22ee;
+  outline: none;
+}
+#menu .gauntlet-mode-kicker {
+  font: 600 11px/1.2 var(--game-font-ui);
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: #c4a878;
+}
+#menu .gauntlet-mode-name {
+  font: 400 clamp(16px, 2vw, 20px)/1.1 var(--game-font-ui);
+  letter-spacing: .05em;
+  color: #fff;
+}
+#menu .gauntlet-mode-desc {
+  font: 400 13px/1.45 var(--game-font-ui);
+  letter-spacing: .02em;
+  color: #c9d1cb;
+}

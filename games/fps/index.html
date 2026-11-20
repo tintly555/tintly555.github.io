@@ -2156,7 +2156,7 @@
     #needleHud.nh-inject .nh-label { color: #88ccff; text-shadow: 0 0 6px #88ccff88; }
     #needleHud.nh-inject .nh-bar-fill { background: #88ccff; }
 </style>
-  <link rel="stylesheet" href="interface.css?v=26-transparent-tutorial-prompt">
+  <link rel="stylesheet" href="interface.css?v=28-gauntlet-hub">
   <script>
     (function () {
       function normBase(b) {
@@ -2316,6 +2316,22 @@
       <button type="button" id="btnArena" data-i18n="btnZombieArena">Zombie Arena</button>
       <button type="button" id="btnBossFight" data-i18n="btnBossFight">BOSS FIGHT</button>
       <button type="button" id="btnCrossfire" data-i18n="btnCrossfire">PVP</button>
+    </div>
+    <div id="menuGauntlet" class="menu-subpanel menu-subpanel--wide">
+      <button type="button" id="btnGauntletHubBack" class="menu-float-icon menu-back-btn"><svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
+      <h2 class="menu-title" data-i18n="gauntletTitle">GAUNTLET</h2>
+      <div class="gauntlet-mode-cards">
+        <button type="button" id="btnGauntletSolo" class="gauntlet-mode-card">
+          <span class="gauntlet-mode-kicker" data-i18n="gauntletSoloKicker">Alone</span>
+          <span class="gauntlet-mode-name" data-i18n="btnSingleplayer">SINGLEPLAYER</span>
+          <span class="gauntlet-mode-desc" data-i18n="gauntletSoloDesc">Run the courses by yourself. Each course opens when the one before it is cleared.</span>
+        </button>
+        <button type="button" id="btnGauntletMulti" class="gauntlet-mode-card">
+          <span class="gauntlet-mode-kicker" data-i18n="gauntletMultiKicker">With friends</span>
+          <span class="gauntlet-mode-name" data-i18n="lobbyMultiplayer">MULTIPLAYER</span>
+          <span class="gauntlet-mode-desc" data-i18n="gauntletMultiDesc">Run the courses together. Everyone starts on course 1 and moves on as a group.</span>
+        </button>
+      </div>
     </div>
     <div id="menuArenaMode" class="menu-subpanel">
       <h2 id="menuZombieArenaHeading" class="menu-title" data-i18n="zombieArenaTitle">ZOMBIE ARENA</h2>
@@ -3817,7 +3833,7 @@ if (typeof window !== "undefined") {
     {"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.182.0/build/three.module.js"}}
   </script>
   <script type="module" src="js/game-cursor.js?v=1"></script>
-  <script type="module" src="js/main.js?v=20261118-gauntlet-built-traverses"></script>
+  <script type="module" src="js/main.js?v=20261120-authored-gauntlet-v2"></script>
   <footer id="pageFooter" style="position:fixed;left:0;right:0;bottom:0;display:flex;justify-content:center;align-items:center;gap:16px;padding:10px 14px;background:transparent;backdrop-filter:none;z-index:101;pointer-events:auto;">
     <img src="images/tintly555.png" alt="Tintly555" style="height:28px;width:auto;display:block;opacity:0.75;" />
     <img src="images/jimmyqrg.png" alt="JimmyQrg" style="height:32px;width:auto;display:block;margin-bottom:2px;opacity:0.75;" />
