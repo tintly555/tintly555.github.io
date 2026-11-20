@@ -24,9 +24,9 @@ export function station(core) {
     ],
     env: {
       bg: 0x05080f, fog: 0x0b111b, fogNear: 40, fogFar: 340, bright: true,
-      hemi: [0xe4eeff, 0x8a96aa, 2.6], ambient: [0xdfe9ff, 0.55], sun: [0xfff0dc, 7.5, [-0.62, 0.36, 0.5]], shadow: 50, envIntensity: 1.3,
+      hemi: [0xe4eeff, 0x8a96aa, 1.5], ambient: [0xdfe9ff, 0.35], sun: [0xfff0dc, 4.5, [-0.62, 0.36, 0.5]], shadow: 50, envIntensity: 0.9,
       sky: { space: true, sun: [-0.62, 0.36, 0.5], planet: [0.3, -0.16, 0.94], radius: 0.62 },
-      look: { tint: 0xeaf4ff, vignette: 0.3, bloom: 0.45, threshold: 1.15 },
+      look: { tint: 0xeaf4ff, vignette: 0.3, bloom: 0.18, threshold: 1.45 },
     },
     preview: { eye: 1.7, path: [[-24, -2], [-12, -3], [-8, 8], [4, 10], [12, 6], [10, -10], [-2, -12], [-18, -9], [-24, -2]] },
 
@@ -203,10 +203,10 @@ export function station(core) {
       kit.deco(cage.mesh(steel, { shadow: true }));
       const ring = (y, c) => { const t = new THREE.Mesh(new THREE.TorusGeometry(2.5, 0.12, 8, 40), c); t.rotation.x = Math.PI / 2; t.position.y = y; t.raycast = () => {}; kit.deco(t); return t; };
       const rings = [ring(1.6, cyan), ring(4.2, cyan), ring(6.8, cyan)];
-      const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.85, 0.85, 10.8, 18), glowing("hr-beam", 0x7fe6ff, 2.8));
+      const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.85, 0.85, 10.8, 18), glowing("hr-beam", 0x7fe6ff, 1.6));
       beam.position.y = 6.4; beam.raycast = () => {};
       kit.deco(beam);
-      const coreLight = new THREE.PointLight(0x6fdcff, 110, 34, 2); coreLight.position.set(0, 5.5, 0); kit.light(coreLight);
+      const coreLight = new THREE.PointLight(0x6fdcff, 40, 34, 2); coreLight.position.set(0, 5.5, 0); kit.light(coreLight);
       // The floor around it carries a hazard band marking the pulse radius, and signs say why.
       const hz = document.createElement("canvas"); hz.width = 512; hz.height = 32;
       { const g = hz.getContext("2d"); g.fillStyle = "#1a1c20"; g.fillRect(0, 0, 512, 32); g.fillStyle = "#e8b820"; for (let x = -32; x < 544; x += 64) { g.beginPath(); g.moveTo(x, 32); g.lineTo(x + 32, 0); g.lineTo(x + 64, 0); g.lineTo(x + 32, 32); g.fill(); } }
@@ -225,8 +225,8 @@ export function station(core) {
       world.tick((dt, t) => {
         const c = pulseAt(t);
         const charge = c >= 18 && c < 21 ? (c - 18) / 3 : 0;
-        beam.material.emissiveIntensity = 2.8 + charge * 3 + (c >= 21 && c < 22 ? 4 : 0);
-        coreLight.intensity = 110 + charge * 160;
+        beam.material.emissiveIntensity = 1.6 + charge * 2 + (c >= 21 && c < 22 ? 2.5 : 0);
+        coreLight.intensity = 40 + charge * 90;
         rings.forEach((r, i) => { r.position.y = 1.6 + ((i * 2.6 + t * (0.4 + charge)) % 7.8) ; r.rotation.z = t * 0.5; });
         if (c >= 21 && c < 22.6) { const u = (c - 21) / 1.6; wave.material.opacity = (1 - u) * 0.85; wave.scale.setScalar(1 + u * 8); } else wave.material.opacity = 0;
       });

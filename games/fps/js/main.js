@@ -3,7 +3,7 @@
     import { RoundedBoxGeometry } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/geometries/RoundedBoxGeometry.js";
     import { mergeGeometries, toCreasedNormals } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/utils/BufferGeometryUtils.js";
     import { clone as cloneSkinnedModel } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/utils/SkeletonUtils.js";
-    import { createPvpMaps } from "./pvp-maps.js?v=town-glass-v2";
+    import { createPvpMaps } from "./pvp-maps.js?v=foundry-fire-v1";
     import { createPvpWorld } from "./pvp-world.js?v=4";
     import { createBossNavigation } from "./boss-navigation.js?v=2";
     import { BOSS_ATTACK_BY_ID, chooseBossAttack } from "./boss-attacks.js?v=2";
@@ -9893,9 +9893,13 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           }
         }
       }
-      // Fully enclosed at this height — stand on whatever we are inside of.
+      // Fully enclosed at this height — stand on whatever we are inside of. Only a surface at or
+      // below the feet counts: a ceiling is also a box we are under, and standing "on" it teleported
+      // the player up onto the roof. Under a ceiling with nothing to stand on, stay where we are.
+      const feetY = player.position.y - 1.65;
       let topY = null;
       forEachNearbyWallBox(player.position.x, player.position.z, (box) => {
+        if (box.enemyOnly || box.max.y > feetY + 0.05) return;
         if (!centreOverBoxTop(box, player.position.x, player.position.z)) return;
         if (topY === null || box.max.y > topY) topY = box.max.y;
       });
@@ -15790,7 +15794,10 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
             // Metal reads from its reflections; polymer, wood and gloves only pick up a
             // faint sheen so they keep their shape in dark maps without looking wet.
             m.envMap = env;
-            m.envMapIntensity = m.metalness > 0.2 ? 0.34 : 0.14;
+            // Metal guns used to reflect the bright sky at 0.34 with a mirror finish, so the stock
+            // blew out into a bloom glow on bright maps. Keep the sheen, cap the hot spot.
+            m.envMapIntensity = m.metalness > 0.2 ? 0.16 : 0.1;
+            if (m.metalness > 0.2) m.roughness = Math.max(m.roughness, 0.42);
             m.needsUpdate = true;
           }
         }
@@ -16227,7 +16234,8 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         attachViewHandGrips(gunGroup, root, VIEW_HAND_GRIPS[0]);
         if (!opts.noHands) {
           attachViewArmsOnGrips(root);
-          attachSupportHand(gunGroup, root, -.006, -.106, .058, .027, [-.098, -.23, .22], true);
+          // The support sleeve reaches out to the left so it no longer overlaps the right sleeve (they flickered).
+          attachSupportHand(gunGroup, root, -.006, -.106, .058, .027, [-.42, -.42, .12], true);
         }
         adsOffset = adsForSight(gunGroup.position, 0.104, 0.26);
         attachEjectPort(gunGroup, root, 0.006, 0.09, -0.035);

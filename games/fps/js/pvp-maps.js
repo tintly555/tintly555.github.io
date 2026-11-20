@@ -21,8 +21,8 @@
 import { mergeGeometries } from "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/utils/BufferGeometryUtils.js";
 import { createSurfaces, rngFor, fbm } from "./gauntlet-surfaces.js?v=3";
 import { createNature } from "./pvp-nature.js?v=57";
-import { foundry } from "./pvp-map-foundry.js?v=lava-bloom-v1";
-import { station } from "./pvp-map-station.js?v=12";
+import { foundry } from "./pvp-map-foundry.js?v=fire-flame-v1";
+import { station } from "./pvp-map-station.js?v=13-tone";
 import { ruins } from "./pvp-map-ruins.js?v=20-collision";
 import { town } from "./pvp-map-town.js?v=16-saloon-doors";
 

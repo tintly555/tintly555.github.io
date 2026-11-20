@@ -231,7 +231,11 @@ export function foundry(core) {
         kit.collider(2.4, 1.4, 2.4, cx - 3, 4.0, cz + 3);
         kit.collider(2.4, 1.4, 2.4, cx + 3, 4.0, cz - 4);
         kit.deco(pots.mesh(steel));
-        const glow = sprite(0xff8a3a, 7, cx - 3, 4.9, cz + 3, 0.8); kit.deco(glow);
+        // Real flame on the pot: crossed burning tongues and lifting sparks, standing on the pot's top (y 4.7).
+        // A glow sprite here read as a painted blob, because sprites are depth-tested and cut off.
+        const potFire = new THREE.Group(); kit.deco(potFire);
+        N.fire(potFire, world, { x: cx - 3, y: 4.7, z: cz + 3, width: 1.25, height: 1.7, sparks: 5 });
+        N.embers(potFire, world, { x: cx - 3, z: cz + 3, w: 1.4, d: 1.4, height: 3.2, count: 8, rate: 0.6, size: 0.1 });
       }
 
       // ── SW: the conveyor yard ───────────────────────────────────────────────────────
