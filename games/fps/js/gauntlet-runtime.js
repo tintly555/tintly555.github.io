@@ -1,5 +1,5 @@
 import { makeGauntletObstacle } from "./gauntlet-obstacles.js?v=20-seeded-hazard-variants";
-import { createGauntletArt } from "./gauntlet-art.js?v=21-recessed-heater-ladder";
+import { createGauntletArt } from "./gauntlet-art.js?v=22-glass-catwalk-grounded-field";
 
 const EYE_HEIGHT = 1.65;
 const PLAYER_RADIUS = .34;
@@ -76,9 +76,14 @@ export function createGauntletRuntime(THREE, solid, decorate, hooks, style = nul
             mesh.userData.gauntletTarget = () => section.links.set(piece.gate, { from: time, until: Infinity });
           }
           if (piece.motion?.kind === "glass") {
-            mesh.material = new THREE.MeshStandardMaterial({
-              color: 0x86cddd, roughness: .18, metalness: .2, opacity: .64, transparent: true, depthWrite: false,
-            });
+            const visualHeight = .12;
+            const originalGeometry = mesh.geometry;
+            mesh.geometry = new THREE.BoxGeometry(piece.w - .16, visualHeight, piece.d - .16);
+            originalGeometry.dispose();
+            mesh.userData.gauntletVisualYOffset = (h - visualHeight) / 2;
+            mesh.position.y += mesh.userData.gauntletVisualYOffset;
+            mesh.material = art.glassDeckMaterial(piece, x, z);
+            art.glassDeckFrame(piece, mesh);
             mesh.userData.gauntletTarget = () => { if (mover.age === null) mover.age = time; };
           }
           mesh.userData.moving = !!piece.motion && ["slide", "orbit", "weight", "ride"].includes(piece.motion.kind);
@@ -216,14 +221,15 @@ export function createGauntletRuntime(THREE, solid, decorate, hooks, style = nul
       }
     }
     const x = m.x + dx, y = m.y + (active ? dy : BURIED), z = m.z - dz;
+    const previousMeshY = m.mesh.position.y - (m.mesh.userData.gauntletVisualYOffset || 0);
     if (riding && active) {
       p.x += x - m.mesh.position.x;
-      p.y += y - m.mesh.position.y;
+      p.y += y - previousMeshY;
       p.z += z - m.mesh.position.z;
     }
     m.home = active;
     m.mesh.visible = active;
-    m.mesh.position.set(x, y, z);
+    m.mesh.position.set(x, y + (m.mesh.userData.gauntletVisualYOffset || 0), z);
     m.box.min.set(x - m.w / 2, y - m.h / 2, z - m.d / 2);
     m.box.max.set(x + m.w / 2, y + m.h / 2, z + m.d / 2);
     // Warnings are read from the plate itself (no glowing outlines): a tint on the deck material.

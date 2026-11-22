@@ -97,10 +97,14 @@ export function operatorEnvelope(progress, enter, exit) {
 
 export function operatorShot(age, heavy) {
   if (!Number.isFinite(age) || age < 0) return 0;
-  const duration = heavy ? .098 : .065;
-  const peak = Math.min(1, age / .016);
-  return peak * Math.exp(-Math.max(0, age - .016) / duration)
-    - .105 * Math.sin(Math.min(Math.PI, Math.max(0, age - .071) * 21)) * Math.exp(-age * 2.3);
+  const rise = 1 - Math.exp(-age / .011);
+  const decay = Math.exp(-age / (heavy ? .19 : .14));
+  const reboundAge = age - (heavy ? .11 : .085);
+  const rebound = reboundAge > 0
+    ? .045 * Math.sin(Math.min(Math.PI, reboundAge * (heavy ? 15 : 19)))
+      * Math.exp(-reboundAge * (heavy ? 7 : 9))
+    : 0;
+  return 1.18 * rise * decay - rebound;
 }
 
 export function digitGeometry(THREE, joints) {

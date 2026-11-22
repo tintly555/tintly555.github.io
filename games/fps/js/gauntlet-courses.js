@@ -281,7 +281,9 @@ const CONNECTOR_RISE_SHAPES = Object.freeze([
   [0, 0.6, -0.25, -0.35],
   [0.55, -0.1, -0.7, 0.25],
 ]);
-const ROUTE_WIDTH_BY_TIER = Object.freeze({ 1: 6.6, 2: 4.6, 3: 3.2, 4: 2.95, 5: 2.7 });
+const ROUTE_WIDTH_BY_TIER = Object.freeze({ 1: 5.8, 2: 4.2, 3: 2.95, 4: 2.6, 5: 2.35 });
+const MAX_AUTHORED_JUMP_GAP = 4.2;
+const JUMP_SAFETY_MARGIN = 0.12;
 const FORBIDDEN_GAUNTLET_OBSTACLES = new Set(["ceilingHops", "jetRise", "jetRefuel"]);
 
 function stableSeed(value) {
@@ -322,6 +324,74 @@ function connectorRoute(connector, level, journey, fromId, toId, transition, tie
       rise: riseMagnitude * riseShape[index] * elevation,
     })),
   };
+}
+
+function gapCrossing(level, journey, transition, fromId, toId) {
+  const progress = (level - 1) / 199;
+  const seed = stableSeed(`${level}:${journey}:${fromId}>${toId}:${transition}:crossing`);
+  const islands = Math.min(5, 2 + Math.floor(progress * 3) + ((seed >>> 5) & 1));
+  const variation = (seed % 3) - 1;
+  const width = Math.max(2.55, Math.min(3.7, 3.7 - progress * 1.05 + variation * 0.1));
+  const lateralStep = Math.min(0.95, width * 0.23) * (islands > 3 ? 2 : islands > 2 ? 1 : 0);
+  const heightStep = islands > 3 ? 0.41 : islands > 2 ? 0.28 : 0;
+  const safeGap = Math.sqrt(Math.max(0,
+    MAX_AUTHORED_JUMP_GAP ** 2 - lateralStep ** 2 - heightStep ** 2)) - JUMP_SAFETY_MARGIN;
+  return {
+    t: "pads",
+    n: islands,
+    len: Math.max(2.65, Math.min(3.45, 3.45 - progress * 0.65 + variation * 0.07)),
+    gap: Math.min(safeGap, MAX_AUTHORED_JUMP_GAP - 0.05, 3.45 + progress * 0.7 + variation * 0.035),
+    w: width,
+    gauntletChallenge: true,
+  };
+}
+
+function maxSafeCrossingGap(segment) {
+  const lateralStep = Math.min(0.95, segment.w * 0.23) * (segment.n > 3 ? 2 : segment.n > 2 ? 1 : 0);
+  const heightStep = segment.n > 3 ? 0.41 : segment.n > 2 ? 0.28 : 0;
+  return Math.sqrt(Math.max(0,
+    MAX_AUTHORED_JUMP_GAP ** 2 - lateralStep ** 2 - heightStep ** 2)) - JUMP_SAFETY_MARGIN;
+}
+
+function openingCoursesWithChallenge(firstTwenty) {
+  return firstTwenty.slice(0, GAUNTLET_CHAPTER_SIZE).map((course, index) => {
+    if (!course || !Array.isArray(course.segs)) {
+      throw new Error(`Invalid opening Gauntlet course at level ${index + 1}`);
+    }
+    const level = index + 1;
+    const crossing = gapCrossing(level, course.journey || course.name || `opening-${level}`, 1, "opening", "exit");
+    const targetRun = course.segs.findLastIndex(segment => segment.t === "run"
+      && Number.isFinite(segment.len) && segment.len >= 7
+      && Math.abs(segment.turn || 0) < 1e-6 && Math.abs(segment.rise || 0) < 1e-6);
+    let inserted = false;
+    const runWidth = 6.8 - (level - 1) / (GAUNTLET_CHAPTER_SIZE - 1) * 0.25;
+    const segs = course.segs.map((segment, segmentIndex) => {
+      if (segmentIndex === targetRun) {
+        inserted = true;
+        return crossing;
+      }
+      if (segment.t === "run" && segment.len >= 5.5) {
+        return { ...segment, w: Math.min(segment.w || 8, runWidth) };
+      }
+      return segment;
+    });
+    if (!inserted) segs.push(crossing);
+    return { ...course, segs };
+  });
+}
+
+function validateChallengeSegments(courses) {
+  for (const course of courses) {
+    const challenges = course.segs.filter(segment => segment.gauntletChallenge);
+    if (!challenges.length || challenges.some(segment => segment.t !== "pads"
+        || !Number.isInteger(segment.n) || segment.n < 2 || segment.n > 5
+        || !Number.isFinite(segment.len) || segment.len < 2.65 || segment.len > 3.45
+        || !Number.isFinite(segment.w) || segment.w < 2.55 || segment.w > 3.7
+        || !Number.isFinite(segment.gap) || segment.gap < 3.4
+        || segment.gap > Math.min(MAX_AUTHORED_JUMP_GAP - 0.05, maxSafeCrossingGap(segment)))) {
+      throw new Error(`Invalid authored Gauntlet gap challenge in ${course.name}`);
+    }
+  }
 }
 
 for (const [chapterIndex, progression] of CURATED_CHAPTERS.entries()) {
@@ -367,10 +437,10 @@ if (connectorProfiles.size !== CURATED_CHAPTERS.length * GAUNTLET_CHAPTER_SIZE) 
 }
 
 export function extendGauntletCourses(firstTwenty) {
-  const courses = firstTwenty.slice(0, GAUNTLET_CHAPTER_SIZE);
-  if (courses.length !== GAUNTLET_CHAPTER_SIZE) {
+  if (!Array.isArray(firstTwenty) || firstTwenty.length < GAUNTLET_CHAPTER_SIZE) {
     throw new Error(`Gauntlet requires ${GAUNTLET_CHAPTER_SIZE} authored opening courses`);
   }
+  const courses = openingCoursesWithChallenge(firstTwenty);
 
   for (const [chapterIndex, progression] of CURATED_CHAPTERS.entries()) {
     for (const [courseIndex, [journey, tier, obstacleIds, roomAfter, connector]] of progression.courses.entries()) {
@@ -381,6 +451,11 @@ export function extendGauntletCourses(firstTwenty) {
       const combat = boss || ENCOUNTER_COURSES.has(level);
       const enemies = combat ? 2 + (level * 3 % 5) + Math.floor(routeTier / 2) : 0;
       const relay = progression.chapter === "Relay";
+      const connectorTransitions = [1, 2].filter(transition => !combat || transition !== roomAfter);
+      const desiredCrossings = level < 81 ? 1 : 2;
+      const crossingOffset = stableSeed(`${level}:${journey}:crossing-order`) % connectorTransitions.length;
+      const challengeTransitions = new Set(Array.from({ length: Math.min(desiredCrossings, connectorTransitions.length) }, (_, offset) =>
+        connectorTransitions[(crossingOffset + offset) % connectorTransitions.length]));
       const segs = [];
       for (let index = 0; index <= obstacleIds.length; index++) {
         if (combat && index === roomAfter) {
@@ -389,6 +464,9 @@ export function extendGauntletCourses(firstTwenty) {
         if (index < obstacleIds.length) {
           if (index > 0) {
             segs.push(connectorRoute(connector, level, journey, obstacleIds[index - 1], obstacleIds[index], index, routeTier));
+            if (challengeTransitions.has(index)) {
+              segs.push(gapCrossing(level, journey, index, obstacleIds[index - 1], obstacleIds[index]));
+            }
           }
           const sourceId = obstacleIds[index];
           const id = relay && sourceId === "dragStrip" ? "runup" : sourceId;
@@ -415,6 +493,7 @@ export function extendGauntletCourses(firstTwenty) {
   if (courses.length !== GAUNTLET_CHAPTERS.length * GAUNTLET_CHAPTER_SIZE) {
     throw new Error("Curated Gauntlet progression must contain exactly 200 courses");
   }
+  validateChallengeSegments(courses);
   if (new Set(courses.map(course => course.name)).size !== courses.length) {
     throw new Error("Every Gauntlet course needs a unique name");
   }

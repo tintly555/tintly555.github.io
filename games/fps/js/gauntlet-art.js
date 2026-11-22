@@ -21,7 +21,9 @@ export function createGauntletArt(THREE, { decorate, solid, scroll, spin, tick, 
     const canvas = document.createElement("canvas");
     canvas.width = w;
     canvas.height = h;
-    let seed = 90210 + key.length * 977;
+    let seed = 2166136261;
+    for (let index = 0; index < key.length; index++) seed = Math.imul(seed ^ key.charCodeAt(index), 16777619) >>> 0;
+    if (!seed) seed = 90210;
     const rnd = () => (seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296;
     paint(canvas.getContext("2d"), w, h, rnd);
     const map = new THREE.CanvasTexture(canvas);
@@ -110,6 +112,30 @@ export function createGauntletArt(THREE, { decorate, solid, scroll, spin, tick, 
     g.fillStyle = grime;
     g.fillRect(0, h * .6, w, h * .4);
     scuffs(g, w, h, rnd, 120, .2);
+  });
+  const glassMap = variant => texture(`walkway-glass-${variant}`, 256, 256, (g, w, h, rnd) => {
+    const base = g.createLinearGradient(0, 0, w, h);
+    base.addColorStop(0, "#8f9fa0");
+    base.addColorStop(.48, "#59686b");
+    base.addColorStop(1, "#798888");
+    g.fillStyle = base;
+    g.fillRect(0, 0, w, h);
+    g.strokeStyle = "rgba(224,236,233,.12)";
+    g.lineWidth = 1;
+    for (let row = 0; row < 4; row++) {
+      const y = 32 + row * 64;
+      g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke();
+    }
+    for (let index = 0; index < 52; index++) {
+      const x = rnd() * w, y = rnd() * h;
+      g.strokeStyle = `rgba(224,236,233,${(.035 + rnd() * .11).toFixed(3)})`;
+      g.lineWidth = .5 + rnd() * 1.2;
+      g.beginPath(); g.moveTo(x, y); g.lineTo(x + 3 + rnd() * 24, y + (rnd() - .5) * 3); g.stroke();
+    }
+    for (let index = 0; index < 24; index++) {
+      g.fillStyle = `rgba(18,25,27,${(.025 + rnd() * .075).toFixed(3)})`;
+      g.fillRect(rnd() * w, rnd() * h, 2 + rnd() * 12, 1 + rnd() * 2);
+    }
   });
   const doorMap = () => texture("door", 128, 128, (g, w, h, rnd) => {
     g.fillStyle = "#383d44";
@@ -670,46 +696,57 @@ export function createGauntletArt(THREE, { decorate, solid, scroll, spin, tick, 
 
   function jammer(piece, x, y, z) {
     const { w, d } = piece;
-    const tips = [];
-    const reach = Math.min(w / 2, 3.8) - .3;
-    for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
-      const mx = x + sx * reach, mz = z + sz * (d / 2 - .6);
-      const mast = new THREE.Mesh(new THREE.CylinderGeometry(.09, .14, 3.4, 10), darkMetal());
-      mast.position.set(mx, y + 1.7, mz);
-      add(mast);
-      const dish = new THREE.Mesh(new THREE.CylinderGeometry(.5, .08, .16, 18), lightMetal());
-      dish.position.set(mx, y + 2.7, mz);
-      dish.rotation.x = Math.PI / 2 - .5 * sz;
-      add(dish);
-      const lamp = new THREE.Mesh(new THREE.SphereGeometry(.09, 10, 8), new THREE.MeshBasicMaterial({ color: 0xff5040 }));
-      lamp.position.set(mx, y + 3.45, mz);
-      add(lamp);
-      tips.push(new THREE.Vector3(mx, y + 3.3, mz));
-    }
-    const pairs = [[0, 2], [1, 3], [0, 1], [2, 3]];
-    const segments = 9;
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(pairs.length * segments * 6), 3));
-    const arcs = new THREE.LineSegments(geometry, new THREE.LineBasicMaterial({ color: 0xc8b0ff, transparent: true, opacity: .8, blending: THREE.AdditiveBlending, depthWrite: false }));
-    arcs.frustumCulled = false;
-    add(arcs);
-    let flicker = 0;
-    tick(dt => {
-      flicker += dt;
-      const p = geometry.attributes.position.array;
-      let k = 0;
-      for (const [a, b] of pairs) {
-        let prev = tips[a];
-        for (let s = 1; s <= segments; s++) {
-          const t = s / segments, amp = Math.sin(t * Math.PI) * .45;
-          const next = s === segments ? tips[b] : new THREE.Vector3().lerpVectors(tips[a], tips[b], t).add(new THREE.Vector3((Math.random() - .5) * amp, (Math.random() - .5) * amp, (Math.random() - .5) * amp));
-          p[k++] = prev.x; p[k++] = prev.y; p[k++] = prev.z; p[k++] = next.x; p[k++] = next.y; p[k++] = next.z;
-          prev = next;
-        }
+    const reach = Math.min(w / 2, 3.8) - .8;
+    const cabinetMaterials = [metal(0x485158, .7), metal(0x51595e, .74)];
+    for (const [index, side] of [-1, 1].entries()) {
+      const cabinet = new THREE.Group();
+      cabinet.position.set(x + side * reach, y, z + (index ? .22 : -.22));
+      cabinet.rotation.y = -side * Math.PI / 2;
+      const base = new THREE.Mesh(new THREE.BoxGeometry(1.05, .12, .92), metal(0x343c41, .72));
+      base.position.y = .06;
+      cabinet.add(base);
+      const body = new THREE.Mesh(new THREE.BoxGeometry(.72, 1.04, .72), cabinetMaterials[index]);
+      body.position.y = .64;
+      cabinet.add(body);
+      const servicePanel = new THREE.Mesh(new THREE.BoxGeometry(.42, .66, .025), metal(0x30383d, .78));
+      servicePanel.position.set(0, .66, .374);
+      cabinet.add(servicePanel);
+      for (let slot = 0; slot < 5; slot++) {
+        const vent = new THREE.Mesh(new THREE.BoxGeometry(.27, .025, .018), metal(0x1f272b, .82));
+        vent.position.set(0, .47 + slot * .08, .396);
+        cabinet.add(vent);
       }
-      geometry.attributes.position.needsUpdate = true;
-      arcs.material.opacity = .45 + Math.random() * .5 * (Math.sin(flicker * 17) > -.3 ? 1 : .2);
+      const statusLens = new THREE.Mesh(new THREE.BoxGeometry(.16, .035, .025), new THREE.MeshStandardMaterial({
+        color: 0x726f68, emissive: 0x493e31, emissiveIntensity: .12, roughness: .48, metalness: .18,
+      }));
+      statusLens.position.set(0, .91, .396);
+      cabinet.add(statusLens);
+      cabinet.traverse(node => { if (node.isMesh) { node.castShadow = true; node.receiveShadow = true; } });
+      add(cabinet);
+    }
+  }
+
+  function glassDeckMaterial(piece, x, z) {
+    const variant = Math.abs(Math.round(x * 13 + z * 7 + (piece.w || 0) * 19)) % 6;
+    return new THREE.MeshPhysicalMaterial({
+      map: glassMap(variant), color: 0x97a7a5, roughness: .3, metalness: .04,
+      transparent: true, opacity: .48, depthWrite: false, clearcoat: .5, clearcoatRoughness: .24,
     });
+  }
+
+  function glassDeckFrame(piece, mesh) {
+    const { w, d } = piece;
+    const material = metal(0x414c50, .58);
+    const attach = (geometry, x, z) => {
+      const rail = new THREE.Mesh(geometry, material);
+      rail.position.set(x, 0, z);
+      rail.raycast = () => {};
+      mesh.add(rail);
+    };
+    const edge = .08;
+    for (const side of [-1, 1]) attach(new THREE.BoxGeometry(edge, .085, d), side * (w / 2 - edge / 2), 0);
+    for (const end of [-1, 1]) attach(new THREE.BoxGeometry(w, .085, edge), 0, end * (d / 2 - edge / 2));
+    for (const fraction of [-.28, .28]) attach(new THREE.BoxGeometry(w - edge * 2, .018, .026), 0, d * fraction);
   }
 
   function conveyor(piece, x, y, z) {
@@ -1260,5 +1297,5 @@ export function createGauntletArt(THREE, { decorate, solid, scroll, spin, tick, 
     return add(new THREE.Mesh(new THREE.BoxGeometry(width, .1, .2), glowMaterial(red, .85)));
   }
 
-  return { deckMaterial, wallMaterial, rung, ladder, ramp, drawField, drawNode, drawHazard, portals };
+  return { deckMaterial, wallMaterial, rung, ladder, ramp, glassDeckMaterial, glassDeckFrame, drawField, drawNode, drawHazard, portals };
 }

@@ -132,8 +132,32 @@ body.game-active #menuBg { display: none; }
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
+.home-start-link {
+  position: relative;
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+#menu .home-start-link::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 100%;
+  width: clamp(36px, 6vw, 104px);
+  height: 6px;
+  transform: translateY(-50%);
+  opacity: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 0 50%, #fff0cf 0 2px, transparent 2.5px),
+    radial-gradient(circle at 100% 50%, #fff0cf 0 2px, transparent 2.5px),
+    linear-gradient(90deg, #efa95d, #ffd493);
+  filter: drop-shadow(0 0 5px #efa95d9c);
+  transition: opacity 160ms ease;
+}
+#menu[data-route]:not([data-route=""]) .home-start-link::after { opacity: 1; }
 #menu #btnStart {
   grid-column: 1 / -1;
+  width: 100%;
   padding: 10px 15px;
   display: flex;
   justify-content: space-between;
@@ -589,7 +613,7 @@ body:not(.game-active) #gauntletObjective { display: none; }
 }
 #menuMain { align-self: center; min-height: 0; width: 100%; }
 #menu .menu-subpanel { max-height: 100%; overflow: auto; scrollbar-color: #73767a #1b2025; }
-#menu .menu-subpanel--wide { align-self: start; }
+#menu .menu-subpanel--wide { align-self: center; }
 #menu[data-entry="btnLoadout"] #btnLoadout,
 #menu[data-entry="btnTraining"] #btnTraining {
   border-color: #ffbd75;
@@ -828,6 +852,7 @@ body :is(input[type="text"], input[type="number"], input[type="password"], selec
     width: min(100%, 620px);
     grid-template-columns: 1.18fr 1.1fr .9fr;
   }
+  #menu:where(:not([data-route]), [data-route=""]) .home-start-link { grid-column: auto; }
   #menu:where(:not([data-route]), [data-route=""]) #btnStart { grid-column: auto; }
 }
 @media (max-height: 620px) {

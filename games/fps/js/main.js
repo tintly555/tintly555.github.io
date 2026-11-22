@@ -14,9 +14,9 @@
     import { buildOperatorShell, OPERATOR, operatorSleeveMaterial } from "./operator-model.js?v=field-rig";
     import { animateImportedOperator, createImportedOperator, loadOperatorAsset } from "./operator-asset.js?v=male-rig-hands-v5";
     import { advanceOperatorGait, buildOperatorGlove, buildOperatorViewSleeve, operatorEnvelope,
-      operatorShot, operatorStride, poseOperatorFoot, poseOperatorViewSleeve, solveOperatorLimb } from "./operator-hands.js?v=body-sockets-v4";
-    import { extendGauntletCourses, GAUNTLET_CHAPTERS, GAUNTLET_CHAPTER_SIZE } from "./gauntlet-courses.js?v=authored-200-routes-v13-seeded-hazard-variants";
-    import { createGauntletRuntime } from "./gauntlet-runtime.js?v=40-seeded-hazard-variants";
+      operatorShot, operatorStride, poseOperatorFoot, poseOperatorViewSleeve, solveOperatorLimb } from "./operator-hands.js?v=shot-recovery-v5";
+    import { extendGauntletCourses, GAUNTLET_CHAPTERS, GAUNTLET_CHAPTER_SIZE } from "./gauntlet-courses.js?v=authored-200-routes-v14-progressive-gauntlet-challenges";
+    import { createGauntletRuntime } from "./gauntlet-runtime.js?v=41-glass-catwalk-grounded-field";
     import { createWorldAudio } from "./world-audio.js?v=6-balanced-footsteps";
     import { createGauntletThemes } from "./gauntlet-themes.js?v=19-segmented-foundry-channels";
     import { createGauntletMusic } from "./gauntlet-music.js?v=1";
@@ -2659,7 +2659,7 @@
       const kick = operatorShot(age, heavy) * (heavy ? 1 : .56);
       const reload = rp.isReloading ? rp.remoteReload ?? Math.min(1, (rp.reloadPhase += dt) / Math.max(.01, weapons[type].reloadTime / 1000)) : 0;
       if (!rp.isReloading) rp.reloadPhase = 0;
-      const service = operatorEnvelope(reload, .19, .78);
+      const service = rp.isReloading ? operatorEnvelope(reload, .08, .90) : 0;
       rp.healBlend = dampScalar(rp.healBlend || 0, type === 4 ? rp.healProgress || 0 : 0, dt, 14);
       const heal = rp.healBlend;
       const treatment = operatorEnvelope(heal, .24, .78);
@@ -2697,8 +2697,9 @@
         stance.holdY + aim * .15 - service * .12 + treatment * .18 - dash * .10 + carry - poseDrop - equip * .16,
         stance.holdZ - .11 + aim * .035 - kick * .065 - service * .035 + slash * .13 - equip * .07
       );
-      hold.rotation.set(-(rp.remotePitch || 0) * .87 - kick * .14 + service * .14 + dash * .19 + equip * .29,
-        slash * -.9 - equip * .14, service * .61 + walk * .012 - treatment * .24 + equip * .19, "YXZ");
+      hold.rotation.set(-(rp.remotePitch || 0) * .87 - kick * .14 + service * .20 + dash * .19 + equip * .29,
+        slash * -.9 - equip * .14 - service * .06,
+        service * .30 + walk * .012 - treatment * .24 + equip * .19, "YXZ");
       if (rp.importedOperator) hold.position.x *= -1;
       const cyclePart = type === 2 ? .12 * Math.sin(Math.PI * THREE.MathUtils.smoothstep(age, .10, .42))
         : type === 5 ? .19 * Math.sin(Math.PI * THREE.MathUtils.smoothstep(age, .14, .58)) : kick * .055;
@@ -2706,9 +2707,20 @@
       if (type === 2 && rp.supportSocket && TP_GUN_FIT[2]) {
         rp.supportSocket.position.z = rp.supportSocket.userData.restZ + cyclePart * TP_GUN_FIT[2].s;
       }
-      if (model.userData.magazine) {
-        model.userData.magazine.position.copy(model.userData.magazineRest);
-        model.userData.magazine.position.y -= service * 0.15;
+      if (model.userData.magazine && model.userData.magazineRest) {
+        const magazine = model.userData.magazine;
+        const rest = model.userData.magazineRest;
+        magazine.position.copy(rest);
+        magazine.rotation.set(0, 0, 0);
+        magazine.visible = true;
+        if (rp.isReloading) {
+          const pull = THREE.MathUtils.smoothstep(reload, .18, .31);
+          const seat = THREE.MathUtils.smoothstep(reload, .50, .67);
+          const offset = reload < .49 ? pull : 1 - seat;
+          magazine.position.set(rest.x - offset * .045, rest.y - offset * (type === 0 ? .13 : .16), rest.z + offset * .045);
+          magazine.rotation.set(-offset * .18, offset * .12, -offset * .28);
+          magazine.visible = reload < .445 || reload >= .49;
+        }
       }
       if (model.userData.medLid) model.userData.medLid.rotation.x = -treatment * 1.20;
 
@@ -7580,6 +7592,7 @@
       const FLOOR = 0x55606e, BEAM = 0x7a6a52, ROOM = 0x4d5a68, EXIT = 0x2f7d4f;
       const checkpoints = [];
       const spots = [];
+      const roomBoundsList = [];
       let bossSpot = null;
       let roomCount = 0;
 
@@ -7785,10 +7798,35 @@
       };
       const color_kerb = 0x3d4652;
       const rails = (len, w, topY) => {
-        // Waist-high kerbs so a "run" segment reads as a corridor and you don't walk off
-        // sideways by accident. Beams and pads deliberately get none.
-        themed(addWallBox(0.5, 1.1, len, ox + w / 2 + 0.25, topY + 0.55, cz + len / 2, color_kerb), 0.5, 1.1, len, style.role("wall"));
-        themed(addWallBox(0.5, 1.1, len, ox - w / 2 - 0.25, topY + 0.55, cz + len / 2, color_kerb), 0.5, 1.1, len, style.role("wall"));
+        const fenceHeight = 2.8;
+        const spacing = 0.55;
+        const postCount = Math.ceil(len / spacing) + 1;
+        const postGeometry = new THREE.BoxGeometry(0.075, fenceHeight - 0.16, 0.075);
+        const postMaterial = style.role("beam");
+        const post = new THREE.Object3D();
+        const centerZ = cz + len / 2;
+        for (const side of [-1, 1]) {
+          const x = ox + side * (w / 2 + 0.25);
+          const posts = new THREE.InstancedMesh(postGeometry, postMaterial, postCount);
+          posts.castShadow = true;
+          posts.receiveShadow = true;
+          for (let i = 0; i < postCount; i++) {
+            post.position.set(x, topY + fenceHeight / 2, cz + len - (len * i) / (postCount - 1));
+            post.updateMatrix();
+            posts.setMatrixAt(i, post.matrix);
+          }
+          posts.instanceMatrix.needsUpdate = true;
+          scene.add(posts);
+          gauntletProps.push(posts);
+          for (const railY of [topY + 0.12, topY + fenceHeight / 2, topY + fenceHeight - 0.12]) {
+            addRoomDetail(0.12, 0.12, len, x, railY, centerZ, style.role("wall"));
+          }
+          addSlab({
+            minX: x - 0.1, maxX: x + 0.1,
+            minY: topY, maxY: topY + fenceHeight,
+            minZ: cz - 0.1, maxZ: cz + len + 0.1,
+          });
+        }
       };
       /**
        * Zombie-only fence. enemyCollidesWall() samples a sphere at y=1.0, while the floor
@@ -7935,13 +7973,21 @@
           mark();
         } else if (sg.t === "room") {
           const w = sg.w || (GAUNTLET_W + 10);
-          const zEnd = cz - sg.len;
-          const roomZ = cz - sg.len / 2;
+          const roomStartZ = cz;
+          const zEnd = roomStartZ - sg.len;
+          const roomZ = roomStartZ - sg.len / 2;
           const roomSeed = hashRoomSeed(`gauntlet-room:${gauntletLevel}:${roomCount}`);
           const roomVariant = roomSeed % 8;
           plat(sg.len, w, y, ROOM, RIM_SIDE);
           rails(sg.len, w, y);
           dressRoomEdge(w, sg.len, y, roomZ, roomVariant % 4);
+          const roomBounds = {
+            minX: ox - w / 2 + 0.65,
+            maxX: ox + w / 2 - 0.65,
+            minZ: zEnd + 1.0,
+            maxZ: roomStartZ - 1.0,
+          };
+          roomBoundsList.push({ room: roomCount, bounds: roomBounds });
           const coverZones = [];
           if (sg.cover || spec.z) {
             const layouts = [
@@ -7955,7 +8001,7 @@
               [[-4.9, .29, 1.8, 1.9, 2.05], [4.1, .55, 3.2, 1.25, 1.1], [-1.2, .78, 2.3, 1.2, 1.45]],
             ];
             for (const [x, fraction, coverW, coverD, h] of layouts[roomVariant]) {
-              const coverZ = cz - sg.len * fraction;
+              const coverZ = roomStartZ - sg.len * fraction;
               themed(addWallBox(coverW, h, coverD, ox + x, y + h / 2, coverZ, 0x6d7882), coverW, h, coverD, style.role("wall"));
               coverZones.push({ x: ox + x, z: coverZ, w: coverW, d: coverD });
             }
@@ -7964,7 +8010,7 @@
           const roomRng = mulberry32(roomSeed ^ 0xa511e9b3);
           for (let attempt = 0; attempt < 700 && roomSpots.length < 48; attempt++) {
             const spawnX = ox + (roomRng() - .5) * (w - 1.5);
-            const spawnZ = cz - 1.25 - roomRng() * (sg.len - 2.5);
+            const spawnZ = roomStartZ - 1.25 - roomRng() * (sg.len - 2.5);
             const blockedByCover = coverZones.some((cover) =>
               Math.abs(spawnX - cover.x) < cover.w / 2 + .55 && Math.abs(spawnZ - cover.z) < cover.d / 2 + .8);
             if (blockedByCover || roomSpots.some((spot) => Math.hypot(spawnX - spot.x, spawnZ - spot.z) < 1.85)) continue;
@@ -7975,7 +8021,7 @@
             for (const fraction of [.16, .24, .32, .4, .5, .6, .68, .76, .84]) {
               for (const lane of [-.38, -.19, 0, .19, .38]) {
                 const bossX = ox + lane * w;
-                const bossZ = cz - sg.len * fraction;
+                const bossZ = roomStartZ - sg.len * fraction;
                 if (coverZones.some((cover) => Math.abs(bossX - cover.x) < cover.w / 2 + 1.15
                     && Math.abs(bossZ - cover.z) < cover.d / 2 + 1.15)) continue;
                 const nearestSpot = roomSpots.reduce((nearest, spot) =>
@@ -8082,7 +8128,6 @@
             addExitPiece(.2, 3.6, .2, finishX + side * 3.95, y + 2.55, exitZ + .08, exitSurface);
           }
           addExitPiece(9.6, .48, .62, finishX, y + 5.05, exitZ, exitFrame);
-          addExitPiece(3.2, 2.6, .24, finishX, y + 2.65, exitZ - .24, exitSurface);
         } else {
           for (const side of [-1, 1]) {
             addExitPiece(.82, 4.6, .82, finishX + side * 4.75, y + 2.3, exitZ, exitFrame);
@@ -8179,7 +8224,7 @@
 
       gauntletCourse = {
         finishX, finishZ, finishY: y, length: pen.arc, finishArc: pen.arc - finishLen / 2,
-        checkpoints, spots, bossSpot, spec, hints, path: centreline, bounds,
+        checkpoints, spots, rooms: roomBoundsList, bossSpot, spec, hints, path: centreline, bounds,
       };
       gauntletState = { cleared: false, deaths: 0, startMs: 0, checkpointIdx: 0, finishedMs: 0, progressIdx: 0, arc: 0 };
       indexGauntletBoxes();
@@ -14004,14 +14049,10 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       else if (now < (jt.cooldownUntil || 0)) { jFrac = 1 - (jt.cooldownUntil - now) / JET_COOLDOWN_MS; jMode = "cool"; }
       _setGear("gearJet", jFrac, jMode, codeToLabel(kbCode("jetHarness")), "");
 
-      // ── Action ring on the crosshair: reload, injecting, strapping in ──────
+      // ── Action ring on the crosshair: injecting, strapping in ─────────────
       // The medkit already has its own ring at the crosshair, so it is not repeated here.
       let ring = -1, ringMode = "";
-      if (state.reloading && state.weaponIndex !== 4) {
-        const total = Math.max(1, state.reloadEnd - (state.reloadStartMs || state.reloadEnd - (w.reloadTime || 1)));
-        ring = THREE.MathUtils.clamp(1 - (state.reloadEnd - now) / total, 0, 1);
-        ringMode = "reload";
-      } else if (nd.phase === "injecting") {
+      if (nd.phase === "injecting") {
         ring = nFrac; ringMode = "inject";
       } else if (jt.phase === "strapping") {
         ring = jFrac; ringMode = "inject";
@@ -17513,10 +17554,12 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         reloadPushZ: 0,
       };
       if (wi === 0) {
-        out.reloadRotZ = -0.08 * sin;
-        out.reloadY = 0.04 * sin;
-        out.reloadX = 0.025 * sin;
-        out.reloadPushZ = -0.07 * sin;
+        const service = THREE.MathUtils.smoothstep(p, .06, .42)
+          * (1 - THREE.MathUtils.smoothstep(p, .72, .96));
+        out.reloadRotZ = -0.15 * service;
+        out.reloadY = -0.045 * service;
+        out.reloadX = 0.025 * service;
+        out.reloadPushZ = -0.05 * service;
       } else if (wi === 1 || wi === 3 || wi === 9) {
         out.reloadRotZ = -0.16 * sin;
         out.reloadY = 0.05 * sin;
@@ -18254,7 +18297,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       if (!state.locked) {
         _freeLookHasLast = false;
         releaseAllInput();
-        if (started && player.health > 0 && menuEl.style.display === "none" && !chatOpen && !settingsModalOpen && gameWorldReady && !gauntletClearOpen && !bossResultsOpen) {
+        if (!gameSettings.skipClickToPlay && started && player.health > 0 && menuEl.style.display === "none" && !chatOpen && !settingsModalOpen && gameWorldReady && !gauntletClearOpen && !bossResultsOpen) {
           showPause();
         }
       } else {
@@ -18386,11 +18429,21 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       return hit || !hasFloor;
     }
 
-    function bossRouteClear(fromX, fromZ, toX, toZ, floorY, radius = 0.68) {
+    function enemyOutsideGauntletRoom(enemy, x, z, radius = 0) {
+      const bounds = enemy?.gauntletRoomBounds;
+      return !!bounds && (x - radius < bounds.minX || x + radius > bounds.maxX
+        || z - radius < bounds.minZ || z + radius > bounds.maxZ);
+    }
+
+    function enemyCanOccupy(enemy, x, z, radius, floorY) {
+      return !enemyOutsideGauntletRoom(enemy, x, z, radius) && !enemyCollidesWall(x, z, radius, floorY);
+    }
+
+    function bossRouteClear(fromX, fromZ, toX, toZ, floorY, radius = 0.68, enemy = null) {
       const dx = toX - fromX, dz = toZ - fromZ;
       const steps = Math.max(1, Math.ceil(Math.hypot(dx, dz) / 0.45));
-      // A big body (the creature) is tested as wall boxes only, from above the floor; small ones keep the old test.
-      const hits = radius > 1 ? (x, z) => circleHitsWallBox(x, z, radius, floorY) : (x, z) => enemyCollidesWall(x, z, radius, floorY);
+      const hits = (x, z) => enemyOutsideGauntletRoom(enemy, x, z, radius)
+        || (radius > 1 ? circleHitsWallBox(x, z, radius, floorY) : enemyCollidesWall(x, z, radius, floorY));
       for (let i = 1; i <= steps; i++) {
         if (hits(fromX + dx * i / steps, fromZ + dz * i / steps)) return false;
       }
@@ -18404,7 +18457,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         const distance = radius * (1 - attempt * 0.10);
         const x = origin.x + Math.cos(direction) * distance;
         const z = origin.z + Math.sin(direction) * distance;
-        if (!enemyCollidesWall(x, z, 0.42, boss.baseY || 0)) return { x, z };
+        if (enemyCanOccupy(boss, x, z, 0.42, boss.baseY || 0)) return { x, z };
       }
       return { x: origin.x, z: origin.z };
     }
@@ -18542,6 +18595,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         const spec = gauntletCourse ? gauntletCourse.spec : null;
         if (!spec) return;
         _spawnRng = mulberry32(hashRoomSeed(`gauntlet-zombies:${gauntletLevel}`));
+        const roomBoundsById = new Map((gauntletCourse.rooms || []).map(({ room, bounds }) => [room, bounds]));
         const spotsByRoom = new Map();
         for (const spot of gauntletCourse.spots) {
           if (!spotsByRoom.has(spot.room)) spotsByRoom.set(spot.room, []);
@@ -18583,6 +18637,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           zomb.group.position.y = sp.y;
           zomb.netIndex = i;
           zomb.gauntletRoom = sp.room;
+          zomb.gauntletRoomBounds = roomBoundsById.get(sp.room) || null;
           drawEnemyHp(zomb);
           state.enemies.push(zomb);
         }
@@ -18594,6 +18649,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           // Gauntlet bosses are a quick fight: 5x a normal zombie's 100 HP in every mode.
           boss.hp = boss.maxHp = boss.baseTankHp = boss.baseGunnerHp = boss.baseSpeedHp = 5 * 100;
           boss.gauntletRoom = bs.room;
+          boss.gauntletRoomBounds = roomBoundsById.get(bs.room) || null;
           boss.netIndex = state.enemies.length;
           drawEnemyHp(boss);
           state.enemies.push(boss);
@@ -21241,6 +21297,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         Math.sin(pitch),
         -Math.cos(player.yaw) * Math.cos(pitch)
       );
+      const aimFocus = behind ? target.clone().addScaledVector(viewForward, 7.5) : target;
       let distance = 3.25;
       const side = behind ? -1 : 1;
       const cameraOffset = new THREE.Vector3(0, 0.32, 0);
@@ -21252,7 +21309,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         }
       }
       camera.position.copy(target).addScaledVector(viewForward, side * distance).add(cameraOffset);
-      camera.lookAt(target);
+      camera.lookAt(aimFocus);
     }
     document.addEventListener("keydown", (e) => {
       if (e.code !== "F5" || e.repeat) return;
@@ -24057,6 +24114,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
                 minion.baseY = enemy.baseY;
                 minion.group.position.y = enemy.baseY;
                 minion.gauntletRoom = enemy.gauntletRoom;
+                minion.gauntletRoomBounds = enemy.gauntletRoomBounds;
               }
               minion.netIndex = state.enemies.length;
               minion.summonedBy = enemy;
@@ -24185,14 +24243,14 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
             const BOSS_CR = enemy.isBoss ? 0.68 : 0.34;
 
             // ── 主动推出墙体：如 boss 已经陷入几何体，立即弹出 ───────────────
-            if (enemy.isBoss && enemyCollidesWall(enemy.group.position.x, enemy.group.position.z, BOSS_CR, enemyFloorY)) {
+            if (enemy.isBoss && !enemyCanOccupy(enemy, enemy.group.position.x, enemy.group.position.z, BOSS_CR, enemyFloorY)) {
               let pushed = false;
               outerPush: for (let pd = 0.15; pd <= 2.4; pd += 0.15) {
                 for (let pa = 0; pa < 16; pa++) {
                   const ang = pa * Math.PI / 8 + (pd * 0.3);
                   const tx = enemy.group.position.x + Math.sin(ang) * pd;
                   const tz = enemy.group.position.z + Math.cos(ang) * pd;
-                  if (!enemyCollidesWall(tx, tz, BOSS_CR, enemyFloorY)) {
+                  if (enemyCanOccupy(enemy, tx, tz, BOSS_CR, enemyFloorY)) {
                     enemy.group.position.x = tx;
                     enemy.group.position.z = tz;
                     pushed = true;
@@ -24223,7 +24281,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
 
             if (enemy.isBoss) {
               const ox = enemy.group.position.x, oz = enemy.group.position.z;
-              const canReach = (x, z) => bossRouteClear(ox, oz, x, z, enemyFloorY);
+              const canReach = (x, z) => bossRouteClear(ox, oz, x, z, enemyFloorY, 0.68, enemy);
               const probe = Math.min(2.8, dLen);
               const directX = ox + dx / Math.max(0.01, dLen) * probe;
               const directZ = oz + dz / Math.max(0.01, dLen) * probe;
@@ -24343,7 +24401,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
               // X-only, Z-only, fall-back). The sliding-along-axis fallback
               // adds visible jitter at corners, but cuts per-frame raycast cost
               // by 4×, which is the main arena-mode perf bottleneck.
-              if (!enemyCollidesWall(nx, nz, BOSS_CR, enemyFloorY)) {
+              if (enemyCanOccupy(enemy, nx, nz, BOSS_CR, enemyFloorY)) {
                 enemy.group.position.x = nx;
                 enemy.group.position.z = nz;
               } else if (flow) {
@@ -24352,7 +24410,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
                 if (fLen > 0.01) {
                   nx = enemy.group.position.x + (flow.x / fLen) * subLen;
                   nz = enemy.group.position.z + (flow.z / fLen) * subLen;
-                  if (!enemyCollidesWall(nx, nz, BOSS_CR, enemyFloorY)) {
+                  if (enemyCanOccupy(enemy, nx, nz, BOSS_CR, enemyFloorY)) {
                     enemy.group.position.x = nx;
                     enemy.group.position.z = nz;
                   }
@@ -24479,7 +24537,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
             // Probe a little ahead so they turn before grinding their face on the wall.
             const wpx = enemy.group.position.x + Math.sin(enemy._wanderYaw) * 0.6;
             const wpz = enemy.group.position.z + Math.cos(enemy._wanderYaw) * 0.6;
-            if (!enemyCollidesWall(wpx, wpz, 0.34, enemyFloorY)) {
+            if (enemyCanOccupy(enemy, wpx, wpz, 0.34, enemyFloorY)) {
               enemy.group.position.x = wnx;
               enemy.group.position.z = wnz;
               enemy.facingYaw = enemy._wanderYaw;
@@ -26593,6 +26651,11 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     btnDeathSettings.addEventListener("click", () => openSettingsModal());
     btnDeathQuit.addEventListener("click", goToMenu);
     btnResume.addEventListener("click", () => {
+      if (gameSettings.skipClickToPlay) {
+        hidePause();
+        updateClickHintVisibility();
+        return;
+      }
       renderer.domElement.requestPointerLock()?.catch(() => {});
     });
     btnPauseSettings.addEventListener("click", () => openSettingsModal());
