@@ -382,15 +382,18 @@ export function createGauntletThemes(THREE) {
   function foundry(ctx) {
     const g = ctx.groundY;
     groundPlane(ctx, g, surfaces.factory("fdy-floor", { base: [54, 52, 52] }), 1800, 80);
-    const channelCenter = (t, phase) => Math.sin(t * TAU * 1.4 + phase) * .72 + Math.sin(t * TAU * 3.7 + phase * 1.7) * .24;
+    const channelCenter = (t, phase, length) => {
+      const distance = t * length;
+      return Math.sin(distance * TAU / 34 + phase) * .32 + Math.sin(distance * TAU / 19 + phase * 1.7) * .11;
+    };
     const channelGeometry = (width, length, phase) => {
-      const steps = Math.max(32, Math.ceil(length / 8));
+      const steps = Math.max(16, Math.ceil(length / 2.5));
       const positions = new Float32Array((steps + 1) * 6);
       const uvs = new Float32Array((steps + 1) * 4);
       const indices = [];
       for (let i = 0; i <= steps; i++) {
         const t = i / steps;
-        const center = channelCenter(t, phase);
+        const center = channelCenter(t, phase, length);
         const half = width * (.47 + .03 * Math.sin(t * TAU * 2.1 + phase));
         const z = length * (.5 - t);
         const k = i * 6, uv = i * 4;
@@ -410,14 +413,15 @@ export function createGauntletThemes(THREE) {
       geometry.computeVertexNormals();
       return geometry;
     };
-    const troughGeometry = (length, phase) => {
-      const steps = Math.max(32, Math.ceil(length / 8));
-      const profile = [[-2.45, .58], [-1.18, .08], [1.18, .08], [2.45, .58]];
+    const troughGeometry = (length, phase, outerWidth) => {
+      const steps = Math.max(16, Math.ceil(length / 2.5));
+      const innerHalf = outerWidth * .28;
+      const profile = [[-outerWidth / 2, .42], [-innerHalf, .1], [innerHalf, .1], [outerWidth / 2, .42]];
       const positions = new Float32Array((steps + 1) * profile.length * 3);
       const uvs = new Float32Array((steps + 1) * profile.length * 2);
       const indices = [];
       for (let i = 0; i <= steps; i++) {
-        const t = i / steps, center = channelCenter(t, phase), z = length * (.5 - t);
+        const t = i / steps, center = channelCenter(t, phase, length), z = length * (.5 - t);
         for (let j = 0; j < profile.length; j++) {
           const k = (i * profile.length + j) * 3, uv = (i * profile.length + j) * 2;
           positions[k] = center + profile[j][0]; positions[k + 1] = profile[j][1]; positions[k + 2] = z;
@@ -435,27 +439,63 @@ export function createGauntletThemes(THREE) {
       geometry.computeVertexNormals();
       return geometry;
     };
-    const lavaFlow = [];
-    for (const [side, index] of [[-1, 0], [1, 1]]) {
-      const x = ctx.cx + side * (ctx.wx + 12);
-      const L = ctx.length + 180;
-      const phase = index * 1.7 + ctx.rnd() * TAU;
-      const tex = lavaTexture().clone();
-      tex.repeat.set(1, L / 10);
-      tex.needsUpdate = true;
-      const lava = new THREE.MeshStandardMaterial({
-        map: tex, emissiveMap: tex, emissive: new THREE.Color(0xd74918), emissiveIntensity: .18,
-        roughness: .84, metalness: 0,
-      });
-      lavaFlow.push(tex);
-      const trough = new THREE.Mesh(troughGeometry(L, phase), steelMaterial("molten-trough", { base: [58, 52, 46], rust: .45 }, { metal: .24, rough: .86, side: THREE.DoubleSide }));
-      trough.position.set(x, g, ctx.mid);
-      place(trough, ctx);
-      const channel = new THREE.Mesh(channelGeometry(1.9, L, phase), lava);
-      channel.position.set(x, g + .13, ctx.mid);
-      place(channel, ctx);
+    const channelBeds = new Batch(4), channelSupports = new Batch(4), channelEnds = new Batch(4), troughParts = [], lavaParts = [];
+    const outerWidth = 2.5, lavaWidth = 1.12, coveredLength = ctx.length + 112;
+    const segmentCount = Math.min(30, Math.max(4, Math.ceil(coveredLength / 58)));
+    const segmentStep = coveredLength / segmentCount;
+    const troughMaterial = steelMaterial("molten-trough", { base: [58, 52, 46], rust: .45 }, { metal: .24, rough: .86, side: THREE.DoubleSide });
+    const bedMaterial = wallMaterial("molten-channel-bed", { base: [68, 64, 58], stain: .45, crack: 8 });
+    const supportMaterial = steelMaterial("molten-channel-support", { base: [72, 70, 66], rust: .35 }, { metal: .35, rough: .78 });
+    const lavaTextureMap = lavaTexture().clone();
+    lavaTextureMap.repeat.set(1, 1);
+    lavaTextureMap.needsUpdate = true;
+    const lavaMaterial = new THREE.MeshStandardMaterial({
+      map: lavaTextureMap, emissiveMap: lavaTextureMap, emissive: new THREE.Color(0x873a16), emissiveIntensity: .064,
+      roughness: .94, metalness: 0,
+    });
+    for (const side of [-1, 1]) {
+      for (let i = 0; i < segmentCount; i++) {
+        const segmentLength = Math.max(7, Math.min(30, segmentStep * (.38 + ctx.rnd() * .15)));
+        const segmentZ = ctx.mid + coveredLength / 2 - (i + .5) * segmentStep + (ctx.rnd() - .5) * segmentStep * .24;
+        const x = ctx.cx + side * (ctx.wx + 8 + ctx.rnd() * 6);
+        const phase = ctx.rnd() * TAU;
+        const centerAt = t => x + channelCenter(t, phase, segmentLength);
+        channelBeds.box(outerWidth + 1.2, .24, segmentLength + .54, x, g + .12, segmentZ);
+        const trough = troughGeometry(segmentLength, phase, outerWidth);
+        trough.translate(x, g + .24, segmentZ);
+        troughParts.push(trough);
+        const endThickness = .18;
+        for (const end of [-1, 1]) {
+          const t = end < 0 ? 0 : 1;
+          channelEnds.box(outerWidth, .46, endThickness, centerAt(t), g + .47, segmentZ + end * (segmentLength / 2 - endThickness / 2));
+        }
+        const supportCount = Math.max(2, Math.ceil(segmentLength / 5));
+        for (let support = 0; support <= supportCount; support++) {
+          const t = support / supportCount;
+          const z = segmentZ + segmentLength * (.5 - t);
+          channelSupports.box(outerWidth + .16, .12, .2, centerAt(t), g + .3, z);
+        }
+        const channelLength = segmentLength - .42;
+        const channel = channelGeometry(lavaWidth, channelLength, phase);
+        const uv = channel.attributes.uv, textureOffset = ctx.rnd();
+        for (let vertex = 0; vertex < uv.count; vertex++) {
+          uv.setXY(vertex, uv.getX(vertex), uv.getY(vertex) * channelLength / 7.5 + textureOffset);
+        }
+        uv.needsUpdate = true;
+        channel.translate(x, g + .35, segmentZ);
+        lavaParts.push(channel);
+      }
     }
-    ctx.tick(dt => { for (const t of lavaFlow) t.offset.y -= dt * .004; });
+    place(channelBeds.mesh(bedMaterial), ctx);
+    place(channelSupports.mesh(supportMaterial), ctx);
+    place(channelEnds.mesh(troughMaterial), ctx);
+    const troughMesh = new THREE.Mesh(mergeGeometries(troughParts, false), troughMaterial);
+    troughMesh.raycast = () => {};
+    place(troughMesh, ctx);
+    const lavaMesh = new THREE.Mesh(mergeGeometries(lavaParts, false), lavaMaterial);
+    lavaMesh.raycast = () => {};
+    place(lavaMesh, ctx);
+    ctx.tick(dt => { lavaTextureMap.offset.y -= dt * .0012; });
     const sheds = new Batch(5), furn = new Batch(6), tanks = new Batch(5), racks = new Batch(4), cranes = new Batch(4);
     for (let i = 0; i < 18 + Math.round(ctx.wx * ctx.length / 9000); i++) {
       const s = sideOf(ctx), w = 24 + ctx.rnd() * 30, d = 20 + ctx.rnd() * 40, h = 12 + ctx.rnd() * 10;

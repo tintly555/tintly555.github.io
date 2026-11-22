@@ -1,7 +1,8 @@
-import { makeGauntletObstacle } from "./gauntlet-obstacles.js?v=6-authored-obstacle-forms";
-import { createGauntletArt } from "./gauntlet-art.js?v=18-structural-surfaces";
+import { makeGauntletObstacle } from "./gauntlet-obstacles.js?v=20-seeded-hazard-variants";
+import { createGauntletArt } from "./gauntlet-art.js?v=21-recessed-heater-ladder";
 
 const EYE_HEIGHT = 1.65;
+const PLAYER_RADIUS = .34;
 const BURIED = -90;
 const TAU = Math.PI * 2;
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
@@ -71,6 +72,9 @@ export function createGauntletRuntime(THREE, solid, decorate, hooks, style = nul
         if (piece.motion || piece.gate) {
           box.dyn = true;   // these slabs move, so they stay out of the spatial index
           const mover = { ...piece, mesh, box, x, y, z, h, amount: 0, age: null, home: true };
+          if (piece.gate && piece.breakable) {
+            mesh.userData.gauntletTarget = () => section.links.set(piece.gate, { from: time, until: Infinity });
+          }
           if (piece.motion?.kind === "glass") {
             mesh.material = new THREE.MeshStandardMaterial({
               color: 0x86cddd, roughness: .18, metalness: .2, opacity: .64, transparent: true, depthWrite: false,
@@ -121,9 +125,13 @@ export function createGauntletRuntime(THREE, solid, decorate, hooks, style = nul
         ramps.push({ x, z0: originZ - piece.from, z1: originZ - piece.to, w: piece.w, y0: originY + piece.y0, y1: originY + piece.y1 });
       } else if (piece.type === "prop") {
         art.rung(piece, x, originY + piece.y, z);
+      } else if (piece.type === "ladder") {
+        art.ladder(piece, x, originY + piece.y, z);
       } else if (piece.type === "hazard") {
         const y = originY + piece.y;
-        section.hazards.push({ ...piece, x, y, z, ox: originX, hitAt: -Infinity, pushAt: -Infinity, mesh: art.drawHazard(piece, x, y, z) });
+        const mesh = art.drawHazard(piece, x, y, z);
+        if (piece.kind === "dart") mesh.visible = false;
+        section.hazards.push({ ...piece, x, y, z, ox: originX, hitAt: -Infinity, pushAt: -Infinity, mesh });
       }
     }
     return { length: plan.length, exitHeight: plan.exitHeight };
@@ -143,7 +151,6 @@ export function createGauntletRuntime(THREE, solid, decorate, hooks, style = nul
       if (m.breakable && hooks.dashing() && Math.abs(p.x - m.x) < m.w / 2
           && Math.abs(p.z - m.z) < .95 && p.y >= m.y - m.h / 2 && p.y <= m.y + m.h / 2 + .4) {
         section.links.set(m.gate, { from: time, until: Infinity });
-        hooks.signal("impact");
       }
       const opened = (Array.isArray(m.gate) ? m.gate : [m.gate]).every(id => linkOn(section, id));
       const inDoorway = Math.abs(p.x - m.x) < m.w / 2 + .3 && Math.abs(p.z - m.z) < m.d / 2 + .45;
@@ -155,7 +162,7 @@ export function createGauntletRuntime(THREE, solid, decorate, hooks, style = nul
       dy = -m.amount * (m.h + .45);
     } else {
       const { kind, period = 4, phase = 0, trigger } = motion;
-      const age = section.started === null ? 0 : time - section.started;
+      const age = time;
       const elapsed = trigger ? Math.max(0, time - (section.links.get(trigger)?.from ?? time)) : age;
       const cycle = wrap(elapsed / period + phase);
       const triangle = 1 - Math.abs(cycle * 2 - 1);
@@ -233,10 +240,39 @@ export function createGauntletRuntime(THREE, solid, decorate, hooks, style = nul
 
   function insideField(field, player) {
     const p = player.position, feet = p.y - EYE_HEIGHT;
-    return Math.abs(p.x - field.x) <= field.w / 2
-      && Math.abs(p.z - field.z) <= field.d / 2
+    return Math.abs(p.x - field.x) <= field.w / 2 + PLAYER_RADIUS
+      && Math.abs(p.z - field.z) <= field.d / 2 + PLAYER_RADIUS
       && feet >= field.y - .31 && feet <= field.y + field.maxY;
   }
+
+  function segmentIntersectsBox(start, end, minX, maxX, minY, maxY, minZ, maxZ) {
+    let enter = 0, leave = 1;
+    for (const [origin, delta, min, max] of [
+      [start.x, end.x - start.x, minX, maxX],
+      [start.y, end.y - start.y, minY, maxY],
+      [start.z, end.z - start.z, minZ, maxZ],
+    ]) {
+      if (Math.abs(delta) < 1e-9) {
+        if (origin < min || origin > max) return false;
+        continue;
+      }
+      let a = (min - origin) / delta, b = (max - origin) / delta;
+      if (a > b) [a, b] = [b, a];
+      enter = Math.max(enter, a);
+      leave = Math.min(leave, b);
+      if (enter > leave) return false;
+    }
+    return true;
+  }
+
+  function sweptFieldContact(field, start, end) {
+    const minX = field.x - field.w / 2 - PLAYER_RADIUS, maxX = field.x + field.w / 2 + PLAYER_RADIUS;
+    const minY = field.y - .31 + EYE_HEIGHT, maxY = field.y + field.maxY + EYE_HEIGHT;
+    const minZ = field.z - field.d / 2 - PLAYER_RADIUS, maxZ = field.z + field.d / 2 + PLAYER_RADIUS;
+    return segmentIntersectsBox(start, end, minX, maxX, minY, maxY, minZ, maxZ);
+  }
+
+  let previousPlayerPosition = null;
 
   /** Is the player in (or beside) this section? The course winds, so z alone no longer says. */
   const near = (section, p, margin) => p.z <= section.z + margin && p.z >= section.end - margin
@@ -288,6 +324,7 @@ export function createGauntletRuntime(THREE, solid, decorate, hooks, style = nul
         const fits = (_portalCrossing.x / .81) ** 2 + (_portalCrossing.y / .77) ** 2 < 1;
         if (fits) {
           hooks.traversePortal?.(_portalTransform, node.portal);
+          previousPlayerPosition = player.position.clone();
           // Rebaseline both gates after the coordinate mapping. Otherwise the partner
           // gate can mistake the same crossing for a second traversal on this frame.
           _portalLocalNow.copy(player.position).applyMatrix4(_portalSourceInverse);
@@ -316,9 +353,7 @@ export function createGauntletRuntime(THREE, solid, decorate, hooks, style = nul
     node.inside = inside;
 
     if (node.kind === "mine") {
-      const bodies = hooks.bodies ? hooks.bodies() : [];
-      const stepped = bodies.some(b => Math.hypot(b.x - node.x, b.z - node.z) <= node.radius && Math.abs(b.y - node.y) < .5);
-      if ((inside || stepped) && node.armed === null && !node.used) node.armed = time;
+      if (inside && node.armed === null && !node.used) node.armed = time;
       if (node.armed !== null) {
         (node.lamp || node.mesh).material.color.setHex(Math.floor(time * 15) % 2 ? 0xff9c43 : 0xff4238);
         if (time - node.armed >= node.delay) {
@@ -326,9 +361,6 @@ export function createGauntletRuntime(THREE, solid, decorate, hooks, style = nul
           node.armed = null;
           node.mesh.visible = false;
           hooks.explode?.(node.x, node.y + .3, node.z, d);
-          for (const b of bodies) {
-            if (Math.hypot(b.x - node.x, b.z - node.z) < 2.3 && Math.abs(b.y - node.y) < 1.6) hooks.hurtBody(b.ref, Math.round(22 * ENV_DAMAGE_SCALE * 1.4), b.x, b.y + 1, b.z);
-          }
           if (d < 2.05 && Math.abs(dy) < 1.3) {
             hurt(22, player);
             hooks.launch(4.6, Math.sign(p.x - node.x) * 2.4, -1.3);
@@ -379,22 +411,19 @@ export function createGauntletRuntime(THREE, solid, decorate, hooks, style = nul
     if (player.health > 0) hooks.damage(Math.round(damage * ENV_DAMAGE_SCALE));
   }
 
-  function tickHazard(section, hazard, player) {
+  function tickHazard(section, hazard, player, checkContact = true, sweepStart = null, previousTime = time) {
     const p = player.position;
-    const feet = p.y - EYE_HEIGHT;
-    const head = p.y - hooks.crouchDrop() + .12;
-    const cycle = wrap((time - (section.started ?? time)) / (hazard.period || 3.4) + (hazard.phase || 0));
-    // Each hazard works out its own state for this frame once, and answers "does it touch a body
-    // standing at (x, z)?" for anything that asks: the player, and the zombies.
+    const cycle = wrap(time / (hazard.period || 3.4) + (hazard.phase || 0));
+    // Each hazard works out its own state for this frame once, then tests the player position.
     let test = () => false;
     let hitHalfHeight = .12;
     if (hazard.kind === "rotor") {
       const a = cycle * TAU;
       hazard.mesh.rotation.y = a;
-      test = (x, z) => {
+      test = (x, z, angle = a) => {
         const dx = x - hazard.x, dz = z - hazard.z;
-        return Math.abs(dx * Math.sin(a) + dz * Math.cos(a)) < .35 + .28
-          && Math.abs(dx * Math.cos(a) - dz * Math.sin(a)) < hazard.radius + .24 + .28;
+        return Math.abs(dx * Math.sin(angle) + dz * Math.cos(angle)) < .35 + PLAYER_RADIUS
+          && Math.abs(dx * Math.cos(angle) - dz * Math.sin(angle)) < hazard.radius + .24 + PLAYER_RADIUS;
       };
     } else if (hazard.kind === "beam") {
       hazard.mesh.visible = cycle < .43;
@@ -402,53 +431,113 @@ export function createGauntletRuntime(THREE, solid, decorate, hooks, style = nul
       hazard.mesh.material.opacity = opacity;
       hazard.mesh.userData.fade?.forEach(material => { material.opacity = Math.min(1, opacity + .1); });
       const live = cycle > .14 && cycle < .43;
+      const liveForContact = live || hazard.wasLive === true;
+      hazard.wasLive = live;
       hitHalfHeight = .35;
-      test = (x, z) => live && Math.abs(z - hazard.z) < .32 + .28 && Math.abs(x - hazard.x) < hazard.width / 2 + .28;
+      test = (x, z) => liveForContact && Math.abs(z - hazard.z) < .32 + PLAYER_RADIUS && Math.abs(x - hazard.x) < hazard.width / 2 + PLAYER_RADIUS;
     } else if (hazard.kind === "dart") {
       const travel = cycle / .39;
       const x0 = hazard.ox + (hazard.x - hazard.ox) * (1 - travel * 2);
-      const previous = hazard.mesh.visible ? hazard.mesh.position.x : hazard.x;
+      const wasVisible = hazard.mesh.visible;
+      const previous = wasVisible ? (hazard.lastX ?? hazard.mesh.position.x) : x0;
+      const active = wasVisible || travel < 1;
+      const currentX = x0;
+      hazard.sweepFromX = previous;
+      hazard.sweepToX = currentX;
+      hazard.sweepActive = active;
       hazard.mesh.visible = travel < 1;
       hazard.mesh.position.x = x0;
-      test = (x, z) => travel < 1 && Math.abs(z - hazard.z) < .34 + .28 && x >= Math.min(x0, previous) - .33 - .28 && x <= Math.max(x0, previous) + .33 + .28;
+      hazard.lastX = x0;
+      test = (x, z) => travel < 1 && Math.abs(z - hazard.z) < .34 + PLAYER_RADIUS && Math.abs(x - x0) < .33 + PLAYER_RADIUS;
     } else if (hazard.kind === "chase") {
       const start = section.links.get(hazard.trigger)?.from;
       const offset = start == null ? -1 : (time - start) * hazard.speed;
+      const wasVisible = hazard.mesh.visible;
+      const previousZ = wasVisible ? hazard.mesh.position.z : hazard.z;
       hazard.mesh.visible = offset >= 0 && offset < hazard.range;
       hazard.mesh.position.z = hazard.z - offset;
+      hazard.sweepFromZ = previousZ;
+      hazard.sweepToZ = hazard.mesh.position.z;
+      hazard.sweepActive = hazard.mesh.visible || wasVisible;
       hitHalfHeight = .85;
-      test = (x, z) => hazard.mesh.visible && Math.abs(z - hazard.mesh.position.z) < .49 + .28 && Math.abs(x - hazard.ox) < hazard.width / 2 + .28;
+      test = (x, z, centerZ = hazard.mesh.position.z) => hazard.mesh.visible && Math.abs(z - centerZ) < .49 + PLAYER_RADIUS && Math.abs(x - hazard.ox) < hazard.width / 2 + PLAYER_RADIUS;
     }
+    if (!checkContact) return;
     const y = hazard.mesh.position.y;
-    const reach = test(p.x, p.z) && y + hitHalfHeight >= feet + .045 && y - hitHalfHeight <= head;
-    if (reach && hazard.kind === "rotor" && time - hazard.pushAt > .16) {
-      // Shove the player along the arm's sweep, harder near the tip, with a little outward kick.
-      hazard.pushAt = time;
-      const a = cycle * TAU, dx = p.x - hazard.x, dz = p.z - hazard.z;
-      const nx = Math.sin(a), nz = Math.cos(a), along = Math.abs(dx * Math.cos(a) - dz * Math.sin(a));
-      const outward = Math.hypot(dx, dz) || 1;
-      const power = 3.4 + 3.2 * Math.min(1, along / hazard.radius);
-      hooks.push?.(-nx * power + dx / outward * 1.4, -nz * power + dz / outward * 1.4);
+    const intersects = (x, py, z, pose) => test(x, z, pose) && y + hitHalfHeight >= py - EYE_HEIGHT + .045
+      && y - hitHalfHeight <= py - hooks.crouchDrop() + .12;
+    let contact = intersects(p.x, p.y, p.z) ? p : null;
+    if (!contact && sweepStart && hazard.kind === "dart" && hazard.sweepActive) {
+      const start = { x: sweepStart.x - hazard.sweepFromX, y: sweepStart.y, z: sweepStart.z - hazard.z };
+      const end = { x: p.x - hazard.sweepToX, y: p.y, z: p.z - hazard.z };
+      const minY = y - hitHalfHeight + hooks.crouchDrop() - .12;
+      const maxY = y + hitHalfHeight + EYE_HEIGHT - .045;
+      if (segmentIntersectsBox(start, end, -.61, .61, minY, maxY, -.62, .62)) contact = p;
+    } else if (!contact && sweepStart && hazard.kind === "chase" && hazard.sweepActive) {
+      const start = { x: sweepStart.x - hazard.ox, y: sweepStart.y, z: sweepStart.z - hazard.sweepFromZ };
+      const end = { x: p.x - hazard.ox, y: p.y, z: p.z - hazard.sweepToZ };
+      const minY = y - hitHalfHeight + hooks.crouchDrop() - .12;
+      const maxY = y + hitHalfHeight + EYE_HEIGHT - .045;
+      if (segmentIntersectsBox(start, end, -hazard.width / 2 - PLAYER_RADIUS, hazard.width / 2 + PLAYER_RADIUS,
+        minY, maxY, -.49 - PLAYER_RADIUS, .49 + PLAYER_RADIUS)) contact = p;
+    } else if (!contact && sweepStart && hazard.kind === "rotor") {
+      const previousAngle = wrap(previousTime / (hazard.period || 3.4) + (hazard.phase || 0)) * TAU;
+      const currentAngle = cycle * TAU;
+      const angleDelta = Math.atan2(Math.sin(currentAngle - previousAngle), Math.cos(currentAngle - previousAngle));
+      const travel = Math.hypot(p.x - sweepStart.x, p.y - sweepStart.y, p.z - sweepStart.z)
+        + Math.abs(angleDelta) * (hazard.radius + .24);
+      const steps = Math.max(1, Math.ceil(travel / .12));
+      for (let index = 0; index <= steps && !contact; index++) {
+        const fraction = index / steps;
+        const x = sweepStart.x + (p.x - sweepStart.x) * fraction;
+        const py = sweepStart.y + (p.y - sweepStart.y) * fraction;
+        const z = sweepStart.z + (p.z - sweepStart.z) * fraction;
+        const angle = previousAngle + angleDelta * fraction;
+        if (intersects(x, py, z, angle)) contact = { x, y: py, z, angle };
+      }
+    } else if (!contact && sweepStart) {
+      const dx = p.x - sweepStart.x, dy = p.y - sweepStart.y, dz = p.z - sweepStart.z;
+      const steps = Math.ceil(Math.hypot(dx, dy, dz) / .12);
+      for (let i = 0; i <= steps && !contact; i++) {
+        const t = steps ? i / steps : 0;
+        const x = sweepStart.x + dx * t, py = sweepStart.y + dy * t, z = sweepStart.z + dz * t;
+        if (intersects(x, py, z)) contact = { x, y: py, z };
+      }
     }
-    if (reach && time - hazard.hitAt > .7) {
+    const reach = !!contact;
+    if (reach && hazard.kind === "rotor") {
+      p.set(contact.x, contact.y, contact.z);
+      const a = contact.angle ?? cycle * TAU, dx = p.x - hazard.x, dz = p.z - hazard.z;
+      const nx = Math.sin(a), nz = Math.cos(a);
+      const tx = Math.cos(a), tz = -Math.sin(a);
+      const across = dx * nx + dz * nz;
+      const along = dx * tx + dz * tz;
+      const sidePenetration = .35 + .28 - Math.abs(across);
+      const endPenetration = hazard.radius + .24 + .28 - Math.abs(along);
+      const side = Math.sign(across) || 1;
+      const end = Math.sign(along) || 1;
+      const normalX = sidePenetration <= endPenetration ? nx * side : tx * end;
+      const normalZ = sidePenetration <= endPenetration ? nz * side : tz * end;
+      const penetration = Math.min(sidePenetration, endPenetration);
+      p.x += normalX * (penetration + .035);
+      p.z += normalZ * (penetration + .035);
+      if (time - hazard.pushAt > .16) {
+        hazard.pushAt = time;
+        const outward = Math.hypot(dx, dz) || 1;
+        const power = 3.4 + 3.2 * Math.min(1, Math.abs(along) / hazard.radius);
+        hooks.push?.(normalX * power - nx * power * .45 + dx / outward * 1.4,
+          normalZ * power - nz * power * .45 + dz / outward * 1.4);
+      }
+    }
+    if (reach && hazard.kind !== "rotor" && time - hazard.hitAt > .7) {
       hazard.hitAt = time;
       hurt(hazard.damage, player);
     }
-    // Zombies are not immune: anything that hurts the player hurts them too.
-    const bodies = hooks.bodies ? hooks.bodies() : null;
-    if (bodies && bodies.length) {
-      hazard.enemyHit ||= new Map();
-      for (const b of bodies) {
-        if (!test(b.x, b.z) || y + hitHalfHeight < b.y + .045 || y - hitHalfHeight > b.y + 1.9) continue;
-        if (time - (hazard.enemyHit.get(b.ref) ?? -Infinity) < .7) continue;
-        hazard.enemyHit.set(b.ref, time);
-        hooks.hurtBody(b.ref, Math.round(hazard.damage * ENV_DAMAGE_SCALE), b.x, b.y + 1, b.z);
-      }
-    }
   }
 
-  function update(dt, player) {
-    time += dt;
+  function update(dt, player, synchronizedTime = null) {
+    const previousTime = time;
+    time = Number.isFinite(synchronizedTime) ? Math.max(0, synchronizedTime) : time + dt;
     for (const item of scrollers) {
       item.map.offset.x += item.u * dt;
       item.map.offset.y += item.v * dt;
@@ -456,46 +545,41 @@ export function createGauntletRuntime(THREE, solid, decorate, hooks, style = nul
     for (const item of spinners) item.obj.rotation[item.axis] += item.rate * dt;
     for (const fn of ticks) fn(dt, time);
     const p = player.position;
+    const sweepStart = previousPlayerPosition && previousPlayerPosition.distanceToSquared(p) <= 64
+      ? previousPlayerPosition : p;
     const zone = { heat: false, air: false };
     for (const section of sections) {
-      if (!near(section, p, 10)) continue;
-      if (section.started === null && p.z <= section.z + 1.4) {
+      const checkContact = near(section, p, 10) || near(section, sweepStart, 10);
+      if (checkContact && section.started === null && p.z <= section.z + 1.4) {
         section.started = time;
         const memory = section.movers.find(m => m.motion?.kind === "memory" && m.motion.safe);
         if (memory) section.previewUntil = time + memory.motion.show;
       }
-      for (const node of section.nodes) useNode(section, node, player);
+      if (checkContact) for (const node of section.nodes) useNode(section, node, player);
       for (const mover of section.movers) move(section, mover, player, dt);
-      for (const hazard of section.hazards) tickHazard(section, hazard, player);
+      for (const hazard of section.hazards) tickHazard(section, hazard, player, checkContact, sweepStart, previousTime);
+      if (!checkContact) continue;
       for (const field of section.fields) {
         const inside = insideField(field, player);
-        const entering = inside && !field.inside;
+        const touched = inside || sweptFieldContact(field, sweepStart, p);
+        const entering = touched && !field.inside;
         field.inside = inside;
         if (inside && field.kind === "damage") zone.heat = true;
         else if (inside && ["wind", "gust", "updraft"].includes(field.kind)) zone.air = true;
         if (entering && field.kind === "water") hooks.signal("splash");
-        if (inside && field.kind === "damage") hurt(field.damage, player);
-        if (field.kind === "damage" && hooks.bodies) {
-          field.enemyHit ||= new Map();
-          for (const b of hooks.bodies()) {
-            if (Math.abs(b.x - field.x) > field.w / 2 || Math.abs(b.z - field.z) > field.d / 2) continue;
-            if (b.y < field.y - .31 || b.y > field.y + field.maxY) continue;
-            if (time - (field.enemyHit.get(b.ref) ?? -Infinity) < .48) continue;
-            field.enemyHit.set(b.ref, time);
-            hooks.hurtBody(b.ref, Math.round(field.damage * ENV_DAMAGE_SCALE), b.x, b.y + 1, b.z);
-          }
-        }
+        if (touched && field.kind === "damage") hurt(field.damage, player);
         if (entering && field.kind === "spring" && player.onGround) {
           hooks.launch(field.lift, field.xForce || 0, field.zForce);
           hooks.signal("launch");
         }
-        if (inside && field.kind === "wallKick" && hooks.jumpPressed() && !field.kicked && !player.onGround) {
+        if (touched && field.kind === "wallKick" && hooks.jumpPressed() && !field.kicked && !player.onGround) {
           field.kicked = true;
           hooks.launch(field.lift, field.xForce || 0, field.zForce);
         }
         if (!inside || player.onGround) field.kicked = false;
       }
     }
+    previousPlayerPosition = p.clone();
     hooks.zone?.(zone);
   }
 
@@ -511,6 +595,7 @@ export function createGauntletRuntime(THREE, solid, decorate, hooks, style = nul
   function resetAfter(checkpointArc) {
     lastDamage = -Infinity;
     shieldUntil = 0;
+    previousPlayerPosition = null;
     for (const section of sections) {
       if (section.arc < checkpointArc - .01) continue;
       section.started = null;

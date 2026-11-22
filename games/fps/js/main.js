@@ -15,10 +15,10 @@
     import { animateImportedOperator, createImportedOperator, loadOperatorAsset } from "./operator-asset.js?v=male-rig-hands-v5";
     import { advanceOperatorGait, buildOperatorGlove, buildOperatorViewSleeve, operatorEnvelope,
       operatorShot, operatorStride, poseOperatorFoot, poseOperatorViewSleeve, solveOperatorLimb } from "./operator-hands.js?v=body-sockets-v4";
-    import { extendGauntletCourses, GAUNTLET_CHAPTERS, GAUNTLET_CHAPTER_SIZE } from "./gauntlet-courses.js?v=authored-200-routes-v3";
-    import { createGauntletRuntime } from "./gauntlet-runtime.js?v=26-authored-route-geometry";
-    import { createWorldAudio } from "./world-audio.js?v=5-material-footsteps-water-entry";
-    import { createGauntletThemes } from "./gauntlet-themes.js?v=18-grounded-chapter-details";
+    import { extendGauntletCourses, GAUNTLET_CHAPTERS, GAUNTLET_CHAPTER_SIZE } from "./gauntlet-courses.js?v=authored-200-routes-v13-seeded-hazard-variants";
+    import { createGauntletRuntime } from "./gauntlet-runtime.js?v=40-seeded-hazard-variants";
+    import { createWorldAudio } from "./world-audio.js?v=6-balanced-footsteps";
+    import { createGauntletThemes } from "./gauntlet-themes.js?v=19-segmented-foundry-channels";
     import { createGauntletMusic } from "./gauntlet-music.js?v=1";
     import { templeWaterBank, TEMPLE_WATER_Y } from "./water-shape.js?v=3-footsteps";
     import { createPostFx, applyDisplayTone } from "./post-fx.js?v=16-gauntlet-light-balance";
@@ -32,7 +32,7 @@
     import { BOSS_IMPACT, ZOMBIE_MELEE, zombieStrikeClipPhase, zombieGait } from "./zombie-motion.js";
     import { ZOMBIE_LOOK_COUNT, loadZombieCharacterMeshes } from "./zombie-character-meshes.js?v=1";
     import { Footprints, slabBoxes, sampleAt, forwardOf, createPathGeometry } from "./gauntlet-path.js?v=3";
-    import { layoutSeg, FIXED } from "./gauntlet-legs.js?v=8-no-generated-legs";
+    import { layoutSeg, FIXED } from "./gauntlet-legs.js?v=10-reachability-guardrails";
     // The deployed file is translation.js (not translate.js — earlier versions of this HTML had the
     // wrong path and 404'd, which aborted the whole module and left Start unresponsive). The dynamic
     // import + catch is kept so a missing/renamed i18n file still lets the menu boot with a minimal stub.
@@ -1492,6 +1492,8 @@
       // Gauntlet Party: someone on another course is not in this world, so keep them hidden.
       rp.partyLevel = data.gl != null ? (Number(data.gl) | 0) : 0;
       rp.partyCleared = !!data.gc;
+      rp.gauntletMotionTime = Number.isFinite(data.gt) ? Math.max(0, data.gt) : null;
+      rp.gauntletClockAt = performance.now();
       rp.group.visible = !rp.isDown && !(gauntletPartyOn() && rp.partyLevel && rp.partyLevel !== gauntletLevel);
     }
     socket.on("enemyMove", applyRemotePlayerState);
@@ -6940,29 +6942,6 @@
       }
     }
 
-    /** A trap, laser or heat field hurting a zombie: same flinch, bar and death as a bullet, no score from the player. */
-    function hurtEnemyByTrap(enemy, amount, x, y, z) {
-      if (!enemy.alive) return;
-      const dmg = enemy.isBoss ? amount * 0.12 : amount;
-      enemy.hp -= dmg;
-      enemy.playerHit = true;   // a bar appears: you can see the trap working
-      enemy._flinchMs = 260;
-      enemy._flinchUntil = performance.now() + enemy._flinchMs;
-      enemy._flinchAmt = enemy.isBoss ? 0.06 : 0.4;
-      enemy._staggerUntil = performance.now() + 260;
-      drawEnemyHp(enemy);
-      createSparks(new THREE.Vector3(x, y, z), 0xffb060);
-      if (enemy.hp <= 0 && enemy.alive) {
-        enemy.alive = false;
-        enemy.respawnTimer = zombieRespawnDelay();
-        enemy.dissolveTimer = DISSOLVE_DURATION + 0.12;
-        spawnHumanoidDissolve(enemy.group, new THREE.Vector3(x, y, z));
-        enemy.group.visible = false;
-        registerEnemyKill(enemy);
-        if (enemy.isBoss) checkAllBossesDead(enemy.group.position.clone());
-      }
-    }
-
     /** Pickup feedback used to be a line of text in the middle of the screen. The pickups, the effects they
      *  cause and the sounds already show what happened, so this is deliberately silent. Kept so callers need no change. */
     let _gShieldEl = null, _gShieldFill = null, _gShieldMax = 1;
@@ -6992,11 +6971,10 @@
       const dt = Math.min(0.05, (now - (gauntletDoorLast || now)) / 1000);
       gauntletDoorLast = now;
       for (const door of gauntletDoors) {
-        if (!door.open && state.enemies.length
+        if (!door.open
             && !state.enemies.some((e) => e.gauntletRoom === door.room && e.alive)) {
           door.open = true;
           door.lamp.material.color.setHex(0x5dffa6);
-          if (worldAudioReady()) playCheckpointSound();
         }
         if (door.open && door.amount < 1) {
           door.amount = Math.min(1, door.amount + dt / 2.2);
@@ -7058,7 +7036,6 @@
           if (gauntletState.arc >= cp.arc) {
             gauntletState.checkpointIdx = i;
             if (cp.indicator) cp.indicator.material.color.setHex(0x7effc4);
-            if (spec.checkpoints && worldAudioReady()) playCheckpointSound();
             break;
           }
         }
@@ -7195,9 +7172,9 @@
       const fast = enemy.type === "fast";
       const heavy = enemy.type === "tank" || enemy.isBoss;
       const duration = enemy.isBoss ? 2.0 : fast ? 1.05 : heavy ? 1.65 : 1.35;
-      visual.position.set(0, -1.45, 0.28);
-      visual.rotation.set(0.72, 0, 0);
-      visual.scale.set(0.86, 0.48, 0.86);
+      visual.position.set(0, 0, 0.34);
+      visual.rotation.set(0.82, 0, 0);
+      visual.scale.set(0.86, 0.68, 0.9);
       enemy.spawnEmergence = { visual, elapsed: 0, duration };
 
       const { x, z } = enemy.group.position;
@@ -7213,13 +7190,13 @@
       if (!emergence) return;
       emergence.elapsed = Math.min(emergence.duration, emergence.elapsed + dt);
       const p = emergence.elapsed / emergence.duration;
-      const rise = THREE.MathUtils.smoothstep(p, 0.04, 0.88);
-      const remaining = 1 - rise;
-      const struggle = Math.sin(emergence.elapsed * 17 + enemy.walkTime) * remaining;
+      const crawl = 1 - THREE.MathUtils.smoothstep(p, 0.24, 0.7);
+      const stand = THREE.MathUtils.smoothstep(p, 0.48, 1);
+      const struggle = Math.sin(emergence.elapsed * 13 + enemy.walkTime) * crawl;
       const visual = emergence.visual;
-      visual.position.set(struggle * 0.045, -1.45 * remaining + Math.abs(struggle) * 0.045, 0.28 * remaining);
-      visual.rotation.set(0.72 * remaining, 0, struggle * 0.055);
-      visual.scale.set(0.86 + 0.14 * rise, 0.48 + 0.52 * rise, 0.86 + 0.14 * rise);
+      visual.position.set(struggle * 0.035, 0, 0.34 * crawl);
+      visual.rotation.set(0.82 * crawl, 0, struggle * 0.07);
+      visual.scale.set(0.86 + 0.14 * stand, 0.68 + 0.32 * stand, 0.9 + 0.1 * stand);
       if (p < 1) return;
       visual.position.set(0, 0, 0);
       visual.rotation.set(0, 0, 0);
@@ -7463,7 +7440,18 @@
     function updateGauntletPlatforms(dt) {
       if (!isGauntletMap(CURRENT_MAP) || !gameWorldReady || !controlsInputReady() || gauntletClearOpen) return;
       gauntletMotionTime += dt;
-      gauntletRuntime?.update(dt, player);
+      if (gauntletPartyOn()) {
+        const localId = String(socket.id || "~local");
+        const now = performance.now();
+        for (const [id, remote] of remotePlayers) {
+          if (remote.partyLevel !== gauntletLevel || remote.partyCleared || remote.isDown
+              || !Number.isFinite(remote.gauntletMotionTime)
+              || String(id).localeCompare(localId) >= 0) continue;
+          gauntletMotionTime = remote.gauntletMotionTime + Math.max(0, now - remote.gauntletClockAt) / 1000;
+          break;
+        }
+      }
+      gauntletRuntime?.update(dt, player, gauntletPartyOn() ? gauntletMotionTime : null);
       for (const platform of movingGauntletPlatforms) {
         const { deck, box, x, y, z, w, d, travel, seconds } = platform;
         const phase = (gauntletMotionTime % seconds) / seconds;
@@ -7531,26 +7519,17 @@
             state.dashWasActive = false;
             player.fallApexY = null;
           },
-          fuel(airborne) {
-            if (airborne && !isJetActive()) return false;
-            state.jet.cooldownUntil = 0;
-            if (isJetActive()) state.jet.endMs = performance.now() + JET_ACTIVE_MS;
-            state.stamina = STAMINA_MAX;
-            return true;
-          },
+          fuel() { return false; },
           refill: () => { state.stamina = STAMINA_MAX; },
           notice: (text, seconds) => showGauntletNotice(text, seconds),
-          // Zombies standing in a trap are hurt by it exactly like the player.
-          bodies: () => {
-            const out = [];
-            for (const e of state.enemies) {
-              if (!e.alive || e.trainingDummy || !e.group || !e.group.visible) continue;
-              out.push({ ref: e, x: e.group.position.x, y: e.group.position.y, z: e.group.position.z });
+          push(x, z) {
+            if (performance.now() < state.dashActiveUntil) {
+              state.dashActiveUntil = 0;
+              state.dashRemainingDist = 0;
             }
-            return out;
+            state.velX += x;
+            state.velZ += z;
           },
-          hurtBody: (enemy, amount, x, y, z) => hurtEnemyByTrap(enemy, amount, x, y, z),
-          push(x, z) { state.velX += x; state.velZ += z; },
           zone(flags) {
             const now = performance.now();
             if (flags.heat) state.heatUntil = now + 140;
@@ -7589,19 +7568,12 @@
             if (kind === "launch") {
               addCamKick({ fov: 7, pitch: 0.03 });
               spawnBurstFx(player.position.x, player.position.y - 1.5, player.position.z, { count: 10, speed: 2.6, size: 0.9, life: 0.8 });
-              if (worldAudioReady()) playLaunchSound();
               return;
             }
             if (kind === "splash") {
               addCamKick({ pitch: -0.015 });
               spawnBurstFx(player.position.x, player.position.y - 1.4, player.position.z, { color: 0xcfe8ff, count: 12, speed: 3, size: 0.7, life: 0.7, up: 1.6, opacity: 0.7 });
-              if (worldAudioReady()) playSplashSound();
-              return;
             }
-            if (!worldAudioReady()) return;
-            if (kind === "impact") worldAudio.play("zombieStep", player.position, { local: true, volume: .9 });
-            else if (kind === "portal") playPortalSound();
-            else playCheckpointSound();
           },
         }, style);
       }
@@ -7629,6 +7601,54 @@
       let fixedY0 = 0;
 
       const lipMat = getGauntletEdgeMaterials().lip;
+
+      const addRoomDetail = (w, h, d, x, y, z, material, rotationY = 0) => {
+        const detail = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), material);
+        detail.position.set(x, y, z);
+        detail.rotation.y = rotationY;
+        detail.castShadow = true;
+        detail.receiveShadow = true;
+        detail.raycast = () => {};
+        scene.add(detail);
+        gauntletProps.push(detail);
+      };
+
+      const dressRoomEdge = (w, len, topY, roomZ, variant) => {
+        const railX = w / 2 + 0.25;
+        const roomBeam = style.role("beam");
+        const roomWall = style.role("wall");
+        for (const side of [-1, 1]) {
+          const x = ox + side * railX;
+          if (variant === 0) {
+            for (const fraction of [0.18, 0.5, 0.82]) {
+              addRoomDetail(0.16, 1.0, 0.16, x, topY + 1.55, roomZ - len * (fraction - 0.5), roomBeam);
+            }
+            addRoomDetail(0.12, 0.1, len - 0.8, x, topY + 2.02, roomZ, roomWall);
+          } else if (variant === 1) {
+            for (const offset of [1.32, 1.58]) {
+              addRoomDetail(0.12, 0.12, len - 0.8, x - side * 0.12, topY + offset, roomZ, roomBeam);
+            }
+            for (let z = roomZ - len * 0.36; z <= roomZ + len * 0.36; z += 3.6) {
+              addRoomDetail(0.14, 0.42, 0.14, x, topY + 1.43, z, roomWall);
+            }
+          } else if (variant === 2) {
+            for (const fraction of [0.25, 0.75]) {
+              addRoomDetail(0.18, 1.35, 0.18, x, topY + 1.38, roomZ - len * (fraction - 0.5), roomWall);
+            }
+            for (const direction of [-1, 1]) {
+              addRoomDetail(0.12, 0.12, Math.min(2.5, len * 0.22), x + side * 0.32, topY + 1.38,
+                roomZ + direction * len * 0.17, roomBeam, side * direction * 0.38);
+            }
+          } else {
+            for (const fraction of [0.28, 0.72]) {
+              const z = roomZ - len * (fraction - 0.5);
+              addRoomDetail(0.52, 1.18, 0.18, x, topY + 1.48, z, roomWall);
+              addRoomDetail(0.12, 1.3, 0.12, x - side * 0.3, topY + 1.48, z, roomBeam);
+              addRoomDetail(0.12, 1.3, 0.12, x + side * 0.3, topY + 1.48, z, roomBeam);
+            }
+          }
+        }
+      };
 
       const RIM_EDGE = 0xffa53a;   // amber: the floor ends here
       const RIM_SIDE = 0x3fa7d6;   // cyan: ordinary platform
@@ -7675,7 +7695,7 @@
       /**
        * A gatehouse right after a combat room: two towers that run down into the abyss, a lintel
        * with a roll-up shutter housing, and the shutter itself. Around it, out of sight, a wide
-       * and tall invisible barrier means a jump, a jet harness or a dash cannot get past either side.
+       * and tall invisible barrier means a jump or dash cannot get past either side.
        * The shutter lifts only once every zombie from that room is dead.
        */
       const addClearDoor = (room, doorZ, topY, roomW) => {
@@ -7794,7 +7814,7 @@
         const dz = pen.z - cz;
         footprints.addStraight(ox, (fixedY0 + y) / 2, pen.z, cz, radius, pen.arc + dz);
         for (let d = 0; d < dz; d += 1) centreline.push({ x: ox, y: fixedY0 + (y - fixedY0) * (d / dz), z: pen.z - d, arc: pen.arc + d, w: GAUNTLET_W + 4, kerb: false });
-        pen.z = cz; pen.y = y; pen.x = ox; pen.arc += dz;
+        pen.z = cz; pen.y = y; pen.x = ox; pen.th = 0; pen.arc += dz;
       };
 
       // ── Free-form pieces: follow the pen at any heading and slope ──────────────────────
@@ -7916,27 +7936,60 @@
         } else if (sg.t === "room") {
           const w = sg.w || (GAUNTLET_W + 10);
           const zEnd = cz - sg.len;
+          const roomZ = cz - sg.len / 2;
+          const roomSeed = hashRoomSeed(`gauntlet-room:${gauntletLevel}:${roomCount}`);
+          const roomVariant = roomSeed % 8;
           plat(sg.len, w, y, ROOM, RIM_SIDE);
           rails(sg.len, w, y);
-          if (sg.cover) {
-            for (const [index, x] of [-4.2, 4.2].entries()) {
-              const h = index ? 1.48 : 2.6;
-              themed(addWallBox(2.2, h, 1.45, ox + x, y + h / 2, cz + sg.len * (.42 + index * .23), 0x6d7882), 2.2, h, 1.45, style.role("wall"));
+          dressRoomEdge(w, sg.len, y, roomZ, roomVariant % 4);
+          const coverZones = [];
+          if (sg.cover || spec.z) {
+            const layouts = [
+              [[-4.4, .34, 2.5, 1.5, 2.35], [4.4, .68, 2.3, 1.35, 1.35]],
+              [[-5.5, .27, 2.4, 1.2, 1.25], [0, .52, 2.8, 1.35, 1.65], [5.5, .76, 2.5, 1.25, 2.05]],
+              [[-5.4, .28, 2.2, 1.2, 1.55], [5.4, .28, 2.2, 1.2, 1.55], [-5.4, .72, 2.6, 1.4, 2.15], [5.4, .72, 2.6, 1.4, 1.35]],
+              [[-2.1, .38, 2.6, 1.1, 1.15], [2.1, .64, 2.6, 1.1, 1.15]],
+              [[-5.2, .25, 3.0, 1.0, 1.0], [0, .56, 2.0, 2.0, 1.9], [5.0, .78, 2.4, 1.1, 1.25]],
+              [[-3.8, .22, 2.2, 1.6, 1.4], [3.7, .42, 3.4, 1.1, .95], [-4.6, .75, 2.6, 1.3, 2.1], [2.8, .8, 2.0, 1.8, 1.2]],
+              [[-5.6, .48, 2.1, 2.2, 1.8], [0, .32, 2.6, 1.1, 1.1], [5.1, .68, 2.6, 1.3, 1.65]],
+              [[-4.9, .29, 1.8, 1.9, 2.05], [4.1, .55, 3.2, 1.25, 1.1], [-1.2, .78, 2.3, 1.2, 1.45]],
+            ];
+            for (const [x, fraction, coverW, coverD, h] of layouts[roomVariant]) {
+              const coverZ = cz - sg.len * fraction;
+              themed(addWallBox(coverW, h, coverD, ox + x, y + h / 2, coverZ, 0x6d7882), coverW, h, coverD, style.role("wall"));
+              coverZones.push({ x: ox + x, z: coverZ, w: coverW, d: coverD });
             }
           }
-          // Spawn points spread across the room floor, inset from the edges.
-          const cols = 7, rows = Math.max(3, Math.round(sg.len / 5));
-          for (let r = 0; r < rows; r++) {
-            for (let c = 0; c < cols; c++) {
-              spots.push({
-                x: ox + (c - (cols - 1) / 2) * (w * 0.84 / cols),
-                z: cz + sg.len * ((r + 0.5) / rows),
-                y,
-                room: roomCount,
-              });
-            }
+          const roomSpots = [];
+          const roomRng = mulberry32(roomSeed ^ 0xa511e9b3);
+          for (let attempt = 0; attempt < 700 && roomSpots.length < 48; attempt++) {
+            const spawnX = ox + (roomRng() - .5) * (w - 1.5);
+            const spawnZ = cz - 1.25 - roomRng() * (sg.len - 2.5);
+            const blockedByCover = coverZones.some((cover) =>
+              Math.abs(spawnX - cover.x) < cover.w / 2 + .55 && Math.abs(spawnZ - cover.z) < cover.d / 2 + .8);
+            if (blockedByCover || roomSpots.some((spot) => Math.hypot(spawnX - spot.x, spawnZ - spot.z) < 1.85)) continue;
+            roomSpots.push({ x: spawnX, z: spawnZ, y, room: roomCount });
           }
-          if (sg.boss) bossSpot = { x: ox, z: zEnd + sg.len * 0.35, y, room: roomCount };
+          if (sg.boss) {
+            const bossCandidates = [];
+            for (const fraction of [.16, .24, .32, .4, .5, .6, .68, .76, .84]) {
+              for (const lane of [-.38, -.19, 0, .19, .38]) {
+                const bossX = ox + lane * w;
+                const bossZ = cz - sg.len * fraction;
+                if (coverZones.some((cover) => Math.abs(bossX - cover.x) < cover.w / 2 + 1.15
+                    && Math.abs(bossZ - cover.z) < cover.d / 2 + 1.15)) continue;
+                const nearestSpot = roomSpots.reduce((nearest, spot) =>
+                  Math.min(nearest, Math.hypot(bossX - spot.x, bossZ - spot.z)), Infinity);
+                const edgeClearance = Math.min(w / 2 - Math.abs(bossX - ox), sg.len * fraction - 1.8, sg.len * (1 - fraction) - 1.8);
+                bossCandidates.push({ x: bossX, z: bossZ, score: Math.min(nearestSpot, edgeClearance) });
+              }
+            }
+            bossCandidates.sort((a, b) => b.score - a.score);
+            bossSpot = { ...(bossCandidates[0] || { x: ox, z: zEnd + sg.len * 0.35 }), y, room: roomCount };
+            roomSpots.splice(0, roomSpots.length, ...roomSpots.filter((spot) =>
+              Math.hypot(spot.x - bossSpot.x, spot.z - bossSpot.z) >= 2.4));
+          }
+          spots.push(...roomSpots);
           addClearDoor(roomCount, zEnd + 0.8, y, w);
           roomCount++;
           mark();
@@ -7945,42 +7998,103 @@
         endFixed(reach);
       }
 
-      // Exit pad — visually distinct, plus a beacon column so it reads from a distance.
+      // Exit pad uses the site's construction language instead of a universal neon arch.
       beginFixed();
       const finishLen = 14;
       const finishZ = cz - finishLen / 2;
       plat(finishLen, GAUNTLET_W + 4, y, EXIT, RIM_EXIT);
       endFixed(GAUNTLET_W / 2 + 6);
       const finishX = ox;
-      // Exit gate: two steel posts and a lintel with a lit green panel, so the light at the
-      // finish comes from a fixture you can see instead of a glowing column in the air.
       {
-        const gateMat = getGauntletEdgeMaterials().lip;
-        const gw = GAUNTLET_W + 2, gh = 5.2;
-        for (const sx of [-gw / 2, gw / 2]) {
-          const post = new THREE.Mesh(new THREE.BoxGeometry(0.45, gh, 0.45), gateMat);
-          post.position.set(finishX + sx, y + gh / 2, finishZ + 3);
-          post.castShadow = true; post.receiveShadow = true;
-          scene.add(post); gauntletProps.push(post);
+        const exitSurface = style.role("exit");
+        const exitFrame = style.role("beam");
+        const exitZ = finishZ + 3;
+        const addExitPiece = (w, h, d, x, py, z, material = exitSurface, rz = 0) => {
+          const geometry = gauntletThemes.boxUv(new THREE.BoxGeometry(w, h, d), w, h, d, theme.tile);
+          const mesh = new THREE.Mesh(geometry, material);
+          mesh.position.set(x, py, z);
+          mesh.rotation.z = rz;
+          mesh.castShadow = true;
+          mesh.receiveShadow = true;
+          mesh.raycast = () => {};
+          scene.add(mesh);
+          gauntletProps.push(mesh);
+        };
+        if (theme.id === "ashen-city") {
+          addExitPiece(1.05, 4.4, 1.2, finishX - 4.85, y + 2.2, exitZ);
+          addExitPiece(1.45, 3.35, 1.45, finishX + 4.65, y + 1.675, exitZ);
+          addExitPiece(4.6, .62, 1, finishX - 2.55, y + 4.4, exitZ, exitFrame, -.08);
+        } else if (theme.id === "foundry") {
+          for (const side of [-1, 1]) {
+            addExitPiece(.72, 5.2, .72, finishX + side * 4.8, y + 2.6, exitZ, exitFrame);
+            addExitPiece(.28, 2.8, .3, finishX + side * 3.55, y + 3.7, exitZ, exitFrame, side * -.58);
+          }
+          addExitPiece(10.4, .68, .82, finishX, y + 5.05, exitZ, exitFrame);
+          addExitPiece(4.2, .42, .64, finishX, y + 4.05, exitZ, exitSurface);
+        } else if (theme.id === "switchyard") {
+          addExitPiece(.62, 5.1, .62, finishX - 4.7, y + 2.55, exitZ, exitFrame);
+          addExitPiece(.78, 3.5, .78, finishX + 4.7, y + 1.75, exitZ, exitFrame);
+          addExitPiece(9.6, .32, .38, finishX, y + 4.85, exitZ, exitFrame);
+          addExitPiece(.78, .82, .42, finishX + 4.7, y + 4.15, exitZ + .18, exitSurface);
+          addExitPiece(2.2, .22, .22, finishX + 3.6, y + 3.45, exitZ, exitFrame);
+        } else if (theme.id === "frozen-dam") {
+          addExitPiece(1.55, 3.8, 1.5, finishX - 4.7, y + 1.9, exitZ);
+          addExitPiece(1.55, 3.8, 1.5, finishX + 4.7, y + 1.9, exitZ);
+          const pipe = new THREE.Mesh(new THREE.CylinderGeometry(.28, .28, 9.1, 12), exitFrame);
+          pipe.rotation.z = Math.PI / 2;
+          pipe.position.set(finishX, y + 3.75, exitZ);
+          pipe.castShadow = true; pipe.receiveShadow = true; pipe.raycast = () => {};
+          scene.add(pipe); gauntletProps.push(pipe);
+          addExitPiece(3.1, .5, .58, finishX, y + 4.45, exitZ, exitSurface);
+        } else if (theme.id === "orbital-relay") {
+          addExitPiece(.3, 5.4, .32, finishX - 4.4, y + 2.7, exitZ, exitFrame, -.12);
+          addExitPiece(.3, 5.4, .32, finishX + 4.4, y + 2.7, exitZ, exitFrame, .12);
+          addExitPiece(8.8, .26, .28, finishX, y + 4.95, exitZ, exitFrame);
+          addExitPiece(5.2, .2, .24, finishX, y + 3.9, exitZ, exitSurface);
+          addExitPiece(.55, .7, .52, finishX, y + 5.45, exitZ, exitSurface);
+        } else if (theme.id === "maze-causeway") {
+          addExitPiece(1.85, 3.6, 1.65, finishX - 4.6, y + 1.8, exitZ);
+          addExitPiece(1.5, 4.6, 1.7, finishX + 4.65, y + 2.3, exitZ);
+          addExitPiece(3.8, .85, 1.8, finishX - 2.35, y + 4.15, exitZ, exitSurface, .06);
+        } else if (theme.id === "missile-silos") {
+          for (const side of [-1, 1]) {
+            const silo = new THREE.Mesh(new THREE.CylinderGeometry(.74, .9, 4.8, 12), exitSurface);
+            silo.position.set(finishX + side * 4.75, y + 2.4, exitZ);
+            silo.castShadow = true; silo.receiveShadow = true; silo.raycast = () => {};
+            scene.add(silo); gauntletProps.push(silo);
+          }
+          addExitPiece(9.8, .34, .42, finishX, y + 4.8, exitZ, exitFrame);
+          addExitPiece(2.8, .5, .36, finishX, y + 3.95, exitZ + .24, exitSurface);
+        } else if (theme.id === "alien-outpost") {
+          for (const [side, scale] of [[-1, 1], [1, .82]]) {
+            const stone = new THREE.Mesh(new THREE.DodecahedronGeometry(1, 0), exitSurface);
+            stone.scale.set(1.4 * scale, 2.25 * scale, 1.2 * scale);
+            stone.position.set(finishX + side * 4.9, y + 1.95 * scale, exitZ);
+            stone.rotation.set(.08 * side, .18 * side, .12 * side);
+            stone.castShadow = true; stone.receiveShadow = true; stone.raycast = () => {};
+            scene.add(stone); gauntletProps.push(stone);
+          }
+          addExitPiece(.26, 2.4, .28, finishX - 4.05, y + 3.75, exitZ, exitFrame);
+          placeGauntletSign(finishX - 4.05, y + 4.55, exitZ + .18, tr("gauntletExit", "EXIT"), 0xd5dbc9);
+        } else if (theme.id === "starship-hangar") {
+          for (const side of [-1, 1]) {
+            addExitPiece(.52, 5.1, .56, finishX + side * 4.75, y + 2.55, exitZ, exitFrame);
+            addExitPiece(.2, 3.6, .2, finishX + side * 3.95, y + 2.55, exitZ + .08, exitSurface);
+          }
+          addExitPiece(9.6, .48, .62, finishX, y + 5.05, exitZ, exitFrame);
+          addExitPiece(3.2, 2.6, .24, finishX, y + 2.65, exitZ - .24, exitSurface);
+        } else {
+          for (const side of [-1, 1]) {
+            addExitPiece(.82, 4.6, .82, finishX + side * 4.75, y + 2.3, exitZ, exitFrame);
+            addExitPiece(1.35, 1.3, .42, finishX + side * 4.75, y + 4.25, exitZ + .36, exitSurface);
+          }
+          addExitPiece(10.1, .56, .88, finishX, y + 4.8, exitZ, exitFrame);
+          addExitPiece(2.8, .32, .32, finishX, y + 3.9, exitZ + .52, exitSurface);
         }
-        const lintel = new THREE.Mesh(new THREE.BoxGeometry(gw + 0.45, 0.5, 0.5), gateMat);
-        lintel.position.set(finishX, y + gh, finishZ + 3);
-        lintel.castShadow = true;
-        scene.add(lintel); gauntletProps.push(lintel);
-        const panel = new THREE.Mesh(
-          new THREE.BoxGeometry(gw * 0.6, 0.14, 0.34),
-          new THREE.MeshStandardMaterial({ color: 0x0c1a12, emissive: 0x54ffa0, emissiveIntensity: 2.2, roughness: 0.4 })
-        );
-        panel.position.set(finishX, y + gh - 0.31, finishZ + 3);
-        panel.raycast = () => {};
-        scene.add(panel); gauntletProps.push(panel);
       }
-      placeGauntletSign(finishX, y + 4.3, finishZ + 3.34, tr("gauntletExit", "EXIT"), 0x9fffd2);
-      const beaconLight = createPhysicalPointLight(0x62ffb0, 420, 40, 2.0);
-      beaconLight.position.set(finishX, y + 4.5, finishZ + 3);
-      beaconLight.castShadow = false;
-      scene.add(beaconLight);
-      pvpMapLights.push(beaconLight);
+      if (theme.id !== "alien-outpost") {
+        placeGauntletSign(finishX, y + 5.35, finishZ + 3.42, tr("gauntletExit", "EXIT"), 0xaebdaf);
+      }
 
       // Extent of the course, for the scenery, the cloud deck and the supports.
       const bounds = { x0: Infinity, x1: -Infinity, z0: Infinity, z1: -Infinity, y0: Infinity, y1: -Infinity };
@@ -9677,7 +9791,7 @@
         ` · ${tr("hudLblReload", "Reload")} ${K("reload")}` +
         ` · ${tr("hudLblHeal", "Heal")} ${K("heal")}`;
       const hudHelpGear = `${tr("hudLblGear", "Gear")}: ${K("speedNeedle")} ${tr("needleName", "Speed Needle")}` +
-        ` · ${K("jetHarness")} ${tr("jetName", "Jet Harness")} <span style="opacity:0.7;">(${tr("hudJetHint", "hold Space to climb, Ctrl to sink, dash to burst — mind the drop")})</span>`;
+        (isGauntletMap(CURRENT_MAP) ? "" : ` · ${K("jetHarness")} ${tr("jetName", "Jet Harness")} <span style="opacity:0.7;">(${tr("hudJetHint", "hold Space to climb, Ctrl to sink, dash to burst — mind the drop")})</span>`);
       const hudHelpMisc = `${tr("hudLblLight", "Light")} ${K("flashlight")}` +
         ` · ${tr("hudLblChat", "Chat")} ${K("chat")}` +
         ` · ${tr("hudLblQuests", "Quests")} ${K("questHud")}` +
@@ -10098,45 +10212,56 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       const px = player.position.x;
       const pz = player.position.z;
       const r = player.radius;
+      const crouchOffset = CROUCH_EYE_DROP * crouchAmt;
       forEachNearbyWallBox(px, pz, (box) => {
         if (box.enemyOnly) return;
         // Only boxes we actually stand under matter.
         if (px < box.min.x - r || px > box.max.x + r) return;
         if (pz < box.min.z - r || pz > box.max.z + r) return;
-        // Underside of a box that is above our head now but below where we are heading.
-        if (box.min.y >= fromY - CROUCH_EYE_DROP * crouchAmt && box.min.y < toY) toY = box.min.y;
+        // Clamp the actual head beneath the underside, with clearance. Clamping the eye
+        // directly lets a crouched jump carry the head into the slab by the crouch offset.
+        const headFromY = fromY - crouchOffset;
+        const headToY = toY - crouchOffset;
+        if (box.min.y >= headFromY && box.min.y < headToY) {
+          toY = Math.min(toY, box.min.y + crouchOffset - 0.04);
+        }
       });
       return toY;
     }
 
     function resolveWallSliding(nextPos) {
-      // v91: corner re-check only — NO substepping. Substepping shortens effective frame motion
-      // and makes wall-hug dodges feel sluggish, getting you shot more.
-      //
-      // The real bug: independent X / Z axis tests can both be "clear" yet the combined {newX, newZ}
-      // lands inside an outside corner of a wall. Solution: after the two single-axis tests, re-test
-      // the combined position; if still collided, keep only whichever single axis is clear.
-      const result = player.position.clone();
+      const start = player.position.clone();
       const limit = isBossArenaMap(CURRENT_MAP) ? BOSS_ARENA_HALF - 0.5 - player.radius : Infinity;
       const nextX = THREE.MathUtils.clamp(nextPos.x, -limit, limit);
       const nextZ = THREE.MathUtils.clamp(nextPos.z, -limit, limit);
+      const distance = Math.hypot(nextX - start.x, nextZ - start.z);
+      const maxStep = Math.max(.1, player.radius * .35);
+      const steps = Math.max(1, Math.ceil(distance / maxStep));
+      let result = start.clone();
 
-      const tryX = result.clone();
-      tryX.x = nextX;
-      const xClear = !collidesWithWalls(tryX);
-      if (xClear) result.x = tryX.x;
+      for (let stepIndex = 1; stepIndex <= steps; stepIndex++) {
+        const fraction = stepIndex / steps;
+        const previous = result.clone();
+        const targetX = start.x + (nextX - start.x) * fraction;
+        const targetZ = start.z + (nextZ - start.z) * fraction;
+        const tryX = previous.clone();
+        tryX.x = targetX;
+        const xClear = !collidesWithWalls(tryX);
+        const tryZ = previous.clone();
+        tryZ.z = targetZ;
+        const zClear = !collidesWithWalls(tryZ);
+        if (xClear) result.x = targetX;
+        if (zClear) result.z = targetZ;
 
-      const tryZ = result.clone();
-      tryZ.z = nextZ;
-      const zClear = !collidesWithWalls(tryZ);
-      if (zClear) result.z = tryZ.z;
-
-      if (xClear && zClear && collidesWithWalls(result)) {
-        const onlyX = player.position.clone(); onlyX.x = nextX;
-        if (!collidesWithWalls(onlyX)) return onlyX;
-        const onlyZ = player.position.clone(); onlyZ.z = nextZ;
-        if (!collidesWithWalls(onlyZ)) return onlyZ;
-        return player.position.clone();
+        if (xClear && zClear && collidesWithWalls(result)) {
+          const onlyX = previous.clone();
+          onlyX.x = targetX;
+          const onlyZ = previous.clone();
+          onlyZ.z = targetZ;
+          if (!collidesWithWalls(onlyX)) result.copy(onlyX);
+          else if (!collidesWithWalls(onlyZ)) result.copy(onlyZ);
+          else result.copy(previous);
+        }
       }
       return result;
     }
@@ -13815,6 +13940,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
 
       buildGameHud();
       const now = performance.now();
+      if (_hudEls.gearJet) _hudEls.gearJet.style.display = isGauntletMap(CURRENT_MAP) ? "none" : "";
 
       // ── Health ────────────────────────────────────────────────────────────
       const pct = player.maxHealth > 0 ? THREE.MathUtils.clamp(player.health / player.maxHealth, 0, 1) : 0;
@@ -18041,7 +18167,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       }
       if (isAction(e, "jetHarness") && started && !paused && gameWorldReady && menuEl.style.display === "none" && !chatOpen && !settingsModalOpen && !isMedKitHoldHealing()) {
         e.preventDefault();
-        if (!e.repeat) activateJetHarness();
+        if (!isGauntletMap(CURRENT_MAP) && !e.repeat) activateJetHarness();
       }
       if (isAction(e, "fire")) {
         keys.v = true;
@@ -18341,6 +18467,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
      */
     const ZOMBIE_MIX = { normal: 0.50, fast: 0.25, gunner: 0.18, tank: 0.07 };
     function buildZombieComposition(count) {
+      const rnd = _spawnRng || Math.random;
       const out = [];
       for (const [type, share] of Object.entries(ZOMBIE_MIX)) {
         for (let i = 0; i < Math.round(count * share); i++) out.push(type);
@@ -18348,7 +18475,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       while (out.length < count) out.push("normal");
       out.length = count;
       for (let i = out.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
+        const j = Math.floor(rnd() * (i + 1));
         [out[i], out[j]] = [out[j], out[i]];
       }
       return out;
@@ -18414,11 +18541,41 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       if (isGauntletMap(CURRENT_MAP)) {
         const spec = gauntletCourse ? gauntletCourse.spec : null;
         if (!spec) return;
-        const spots = gauntletCourse.spots.slice();
-        const n = Math.min((spec.z || 0) * ZOMBIE_POPULATION_MULTIPLIER, spots.length);
+        _spawnRng = mulberry32(hashRoomSeed(`gauntlet-zombies:${gauntletLevel}`));
+        const spotsByRoom = new Map();
+        for (const spot of gauntletCourse.spots) {
+          if (!spotsByRoom.has(spot.room)) spotsByRoom.set(spot.room, []);
+          spotsByRoom.get(spot.room).push(spot);
+        }
+        const roomOrder = [...spotsByRoom.keys()];
+        for (let i = roomOrder.length - 1; i > 0; i--) {
+          const j = Math.floor(_spawnRng() * (i + 1));
+          [roomOrder[i], roomOrder[j]] = [roomOrder[j], roomOrder[i]];
+        }
+        for (const [room, roomSpots] of spotsByRoom) {
+          const roomRng = mulberry32(hashRoomSeed(`gauntlet-zombies:${gauntletLevel}:${room}`));
+          for (let i = roomSpots.length - 1; i > 0; i--) {
+            const j = Math.floor(roomRng() * (i + 1));
+            [roomSpots[i], roomSpots[j]] = [roomSpots[j], roomSpots[i]];
+          }
+        }
+        const targetCount = Math.min((spec.z || 0) * ZOMBIE_POPULATION_MULTIPLIER, gauntletCourse.spots.length);
+        const selectedSpots = [];
+        while (selectedSpots.length < targetCount) {
+          let added = false;
+          for (const room of roomOrder) {
+            const spot = spotsByRoom.get(room)?.pop();
+            if (!spot) continue;
+            selectedSpots.push(spot);
+            added = true;
+            if (selectedSpots.length >= targetCount) break;
+          }
+          if (!added) break;
+        }
+        const n = selectedSpots.length;
         const composition = buildZombieComposition(n);
         for (let i = 0; i < n; i++) {
-          const sp = spots.splice(Math.floor(Math.random() * spots.length), 1)[0];
+          const sp = selectedSpots[i];
           const zomb = makeZombie(sp.x, sp.z, composition[i]);
           // Zombie Y is driven from baseY every frame (baseY + walk bob), so writing
           // group.position.y here would be overwritten on the next tick.
@@ -18441,6 +18598,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           drawEnemyHp(boss);
           state.enemies.push(boss);
         }
+        _spawnRng = null;
         return;
       }
 
@@ -18454,7 +18612,6 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           const boss = makeHormoneZombie(x, z, BOSS_HELL_MODE);
           boss.netIndex = i;
           drawEnemyHp(boss);
-          beginZombieEmergence(boss);
           state.enemies.push(boss);
         }
         _spawnRng = null;
@@ -19106,12 +19263,12 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     // ── Jet harness ───────────────────────────────────────────────────────────
     /** True while the harness is on and the flight window has not expired. */
     function isJetActive() {
-      return state.jet.phase === "active";
+      return !isGauntletMap(CURRENT_MAP) && state.jet.phase === "active";
     }
 
     /** True while strapping in — the player is committed and cannot shoot or dash. */
     function isJetStrapping() {
-      return state.jet.phase === "strapping";
+      return !isGauntletMap(CURRENT_MAP) && state.jet.phase === "strapping";
     }
 
     function jetPhaseProgress() {
@@ -19122,6 +19279,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
     }
 
     function activateJetHarness() {
+      if (isGauntletMap(CURRENT_MAP)) return;
       if (!controlsInputReady()) return;
       if (!gameWorldReady || !menuEl || menuEl.style.display !== "none") return;
       if (player.health <= 0 || paused) return;
@@ -21120,6 +21278,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         slow: Math.max(0, (state.slowUntil - now) / 1000),
         gl: gauntletPartyOn() ? gauntletLevel : 0,
         gc: gauntletPartyOn() && gauntletState.cleared ? 1 : 0,
+        gt: gauntletPartyOn() ? gauntletMotionTime : null,
         achievement: equippedAchievementIds[0] || "",
       });
     }
@@ -23738,12 +23897,14 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
             if (enemy._bossDeathTime) {
               const elapsed = (performance.now() - enemy._bossDeathTime) / 1000;
               if (elapsed >= 5) {
-                for (const m of state.enemies) {
-                  if (m.alive && !m.isBoss && m._summonedByBoss === enemy) {
-                    m.alive = false;
-                    m.group.visible = false;
-                    m.dissolveTimer = DISSOLVE_DURATION + 0.12;
-                    spawnHumanoidDissolve(m.group, m.group.position);
+                if (!gauntlet) {
+                  for (const m of state.enemies) {
+                    if (m.alive && !m.isBoss && m._summonedByBoss === enemy) {
+                      m.alive = false;
+                      m.group.visible = false;
+                      m.dissolveTimer = DISSOLVE_DURATION + 0.12;
+                      spawnHumanoidDissolve(m.group, m.group.position);
+                    }
                   }
                 }
                 enemy._bossDeathTime = null;
@@ -25710,8 +25871,10 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       const locked = level > gauntletProgress() + 1;
       for (const btn of grid.children) btn.setAttribute("aria-pressed", String(Number(btn.dataset.level) === level && !locked));
       launch.disabled = locked;
+      const hasShotGate = spec.segs.some(segment => segment.t === "mechanic" && segment.id === "shotRelease");
       const task = locked ? tr("gauntletClearEarlier", "Clear the earlier courses to start here.")
-        : spec.z ? tr("gauntletFightBrief", "Clear the combat rooms and reach the green exit.")
+        : hasShotGate ? tr("gauntletShootTargetBrief", "Shoot the marked target to open the gate, then reach the green exit.")
+          : spec.z ? tr("gauntletFightBrief", "Clear the combat rooms and reach the green exit.")
         : tr("gauntletMovementBrief", "Reach the green exit. Yellow and black edges mark gaps.");
       briefing.textContent = `${tr("gauntletCourse", "Course")} ${level} · ${task}`;
     }
