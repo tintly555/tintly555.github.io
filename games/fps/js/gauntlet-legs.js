@@ -6,6 +6,7 @@
 import { trace, DEG } from "./gauntlet-path.js?v=3";
 
 export const GAUNTLET_W = 8;
+export const GAUNTLET_GAP_SCALE = 2;
 export const GAP_JUMP = 4.2;
 export const GAP_DASH = 7.0;
 const MAX_WALK_GRADE = 0.18;
@@ -25,7 +26,10 @@ const finiteOr = (value, fallback, label) => {
   if (!Number.isFinite(value)) throw new RangeError(`Invalid Gauntlet ${label}: ${value}`);
   return value;
 };
-const safeGap = (requested, maximum) => Math.min(positiveOr(requested, maximum, "gap"), maximum);
+const scaledGap = (requested, maximum) => Math.min(
+  positiveOr(requested, maximum, "gap") * GAUNTLET_GAP_SCALE,
+  maximum * GAUNTLET_GAP_SCALE,
+);
 
 /** Largest turn (radians) a stretch of walkway can make without its inner edge folding over. */
 export const maxTurn = (len, width) => len / (width / 2 + EDGE_RADIUS);
@@ -89,8 +93,8 @@ export function layoutSeg(seg, pen) {
       parts.push({ kind, samples, w: width });
       break;
     }
-    case "jump": pit(safeGap(seg.gap, GAP_JUMP)); break;
-    case "dash": pit(safeGap(seg.gap, GAP_DASH)); break;
+    case "jump": pit(scaledGap(seg.gap, GAP_JUMP)); break;
+    case "dash": pit(scaledGap(seg.gap, GAP_DASH)); break;
     case "steps": {
       if (!Number.isInteger(seg.n) || seg.n < 1 || seg.n > 64) {
         throw new RangeError(`Invalid Gauntlet step count: ${seg.n}`);
@@ -115,7 +119,7 @@ export function layoutSeg(seg, pen) {
         const offset = middle ? (i % 2 ? 1 : -1) * handedness * Math.min(.95, w * .23) : 0;
         deck("landing", seg.len, middle ? w * (i % 2 ? .92 : 1.04) : w, each, 0, offset,
           middle ? (i % 2 ? .28 : -.13) : 0);
-        if (i < seg.n - 1) pit(safeGap(seg.gap, GAP_JUMP));
+        if (i < seg.n - 1) pit(scaledGap(seg.gap, GAP_JUMP));
       }
       break;
     }

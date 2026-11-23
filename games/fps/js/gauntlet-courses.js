@@ -1,4 +1,4 @@
-import { gauntletObstacleIds } from "./gauntlet-obstacles.js?v=20-seeded-hazard-variants";
+import { gauntletObstacleIds } from "./gauntlet-obstacles.js?v=22-double-gap-layout";
 
 export const GAUNTLET_CHAPTER_SIZE = 20;
 export const GAUNTLET_CHAPTERS = Object.freeze([

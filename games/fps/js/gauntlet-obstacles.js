@@ -1,3 +1,5 @@
+import { GAUNTLET_GAP_SCALE } from "./gauntlet-legs.js?v=11-double-gap-layout";
+
 /*
  * Layouts use X for width, Y for height above the entrance deck, and positive Z
  * for distance down-course. The builder mirrors X and converts to world space.
@@ -28,7 +30,8 @@ const obstacles = {
   },
   forks({ pad, wall, finish }, tier) {
     pad(0, 3);
-    pad(3, 18, { x: -3.1, w: 1.55 - .12 * tier });
+    pad(3, 8, { x: -3.1, w: 1.55 - .12 * tier });
+    pad(10.8, 15, { x: -3.1, w: 1.55 - .12 * tier });
     pad(3, 8, { x: 3.1, w: 3.3 });
     pad(10.8, 15, { x: 3.1, w: 2.9, y: .65 });
     wall(10.5, { h: 3.8, w: .55, d: 12 });
@@ -735,6 +738,67 @@ const obstacles = {
 
 export const gauntletObstacleIds = Object.freeze(Object.keys(obstacles));
 
+function expandWalkableGaps(pieces, length) {
+  const intervals = pieces
+    .filter(piece => (piece.type === "deck" || piece.type === "ramp") && Number.isFinite(piece.d) && piece.d > 0)
+    .map(piece => piece.type === "ramp"
+      ? [Math.max(0, Math.min(piece.from, piece.to)), Math.min(length, Math.max(piece.from, piece.to))]
+      : [Math.max(0, piece.z - piece.d / 2), Math.min(length, piece.z + piece.d / 2)])
+    .filter(([start, end]) => end > start)
+    .sort((first, second) => first[0] - second[0]);
+  const merged = [];
+  for (const interval of intervals) {
+    const previous = merged[merged.length - 1];
+    if (previous && interval[0] <= previous[1] + 1e-6) previous[1] = Math.max(previous[1], interval[1]);
+    else merged.push(interval.slice());
+  }
+  const gaps = [];
+  if (merged.length && merged[0][0] > 1e-6) gaps.push([0, merged[0][0]]);
+  for (let index = 1; index < merged.length; index++) {
+    if (merged[index][0] > merged[index - 1][1] + 1e-6) {
+      gaps.push([merged[index - 1][1], merged[index][0]]);
+    }
+  }
+  if (merged.length && length > merged[merged.length - 1][1] + 1e-6) {
+    gaps.push([merged[merged.length - 1][1], length]);
+  }
+  const mapDistance = distance => {
+    let added = 0;
+    for (const [start, end] of gaps) {
+      if (distance <= start) return distance + added;
+      if (distance < end) return start + added + (distance - start) * GAUNTLET_GAP_SCALE;
+      added += (end - start) * (GAUNTLET_GAP_SCALE - 1);
+    }
+    return distance + added;
+  };
+
+  for (const piece of pieces) {
+    const originalZ = piece.z;
+    const originalMotionDz = piece.motion?.dz;
+    if (piece.type === "ramp") {
+      piece.from = mapDistance(piece.from);
+      piece.to = mapDistance(piece.to);
+      piece.d = Math.abs(piece.to - piece.from);
+      piece.z = (piece.from + piece.to) / 2;
+    } else if ((piece.type === "deck" || piece.type === "field")
+        && Number.isFinite(piece.z) && Number.isFinite(piece.d) && piece.d > 0) {
+      const start = mapDistance(piece.z - piece.d / 2);
+      const end = mapDistance(piece.z + piece.d / 2);
+      piece.z = (start + end) / 2;
+      piece.d = end - start;
+    } else if (Number.isFinite(piece.z)) {
+      piece.z = mapDistance(piece.z);
+    }
+    if (piece.to && typeof piece.to === "object" && Number.isFinite(piece.to.z)) {
+      piece.to.z = mapDistance(piece.to.z);
+    }
+    if (Number.isFinite(originalMotionDz) && Number.isFinite(originalZ)) {
+      piece.motion.dz = mapDistance(originalZ + originalMotionDz) - mapDistance(originalZ);
+    }
+  }
+  return mapDistance(length);
+}
+
 export function makeGauntletObstacle(id, tier, mirror, seed) {
   const pieces = [];
   let length, exitHeight;
@@ -775,6 +839,7 @@ export function makeGauntletObstacle(id, tier, mirror, seed) {
   const build = obstacles[id];
   if (!build) throw new Error("Unknown Gauntlet obstacle " + id);
   build(builder, tier, seed);
+  length = expandWalkableGaps(pieces, length);
   for (const piece of pieces) {
     piece.x *= mirror;
     if (piece.xForce) piece.xForce *= mirror;

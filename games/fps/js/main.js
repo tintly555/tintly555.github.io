@@ -15,8 +15,8 @@
     import { animateImportedOperator, createImportedOperator, loadOperatorAsset } from "./operator-asset.js?v=male-rig-hands-v5";
     import { advanceOperatorGait, buildOperatorGlove, buildOperatorViewSleeve, operatorEnvelope,
       operatorShot, operatorStride, poseOperatorFoot, poseOperatorViewSleeve, solveOperatorLimb } from "./operator-hands.js?v=shot-recovery-v5";
-    import { extendGauntletCourses, GAUNTLET_CHAPTERS, GAUNTLET_CHAPTER_SIZE } from "./gauntlet-courses.js?v=authored-200-routes-v14-progressive-gauntlet-challenges";
-    import { createGauntletRuntime } from "./gauntlet-runtime.js?v=41-glass-catwalk-grounded-field";
+    import { extendGauntletCourses, GAUNTLET_CHAPTERS, GAUNTLET_CHAPTER_SIZE } from "./gauntlet-courses.js?v=authored-200-routes-v16-double-gauntlet-gaps";
+    import { createGauntletRuntime } from "./gauntlet-runtime.js?v=43-double-gauntlet-gaps";
     import { createWorldAudio } from "./world-audio.js?v=6-balanced-footsteps";
     import { createGauntletThemes } from "./gauntlet-themes.js?v=19-segmented-foundry-channels";
     import { createGauntletMusic } from "./gauntlet-music.js?v=1";
@@ -32,7 +32,7 @@
     import { BOSS_IMPACT, ZOMBIE_MELEE, zombieStrikeClipPhase, zombieGait } from "./zombie-motion.js";
     import { ZOMBIE_LOOK_COUNT, loadZombieCharacterMeshes } from "./zombie-character-meshes.js?v=1";
     import { Footprints, slabBoxes, sampleAt, forwardOf, createPathGeometry } from "./gauntlet-path.js?v=3";
-    import { layoutSeg, FIXED } from "./gauntlet-legs.js?v=10-reachability-guardrails";
+    import { layoutSeg, FIXED, GAUNTLET_GAP_SCALE } from "./gauntlet-legs.js?v=11-double-gap-layout";
     // The deployed file is translation.js (not translate.js — earlier versions of this HTML had the
     // wrong path and 404'd, which aborted the whole module and left Start unresponsive). The dynamic
     // import + catch is kept so a missing/renamed i18n file still lets the menu boot with a minimal stub.
@@ -6635,9 +6635,9 @@
     const GAUNTLET_W = 8;             // standard corridor width
     const GAUNTLET_PROGRESS_KEY = "fps_gauntlet_progress";
 
-    /** Jump clears ~5.4u (speed 6.5, 0.83s hang). Dash covers 8.0u. Gaps are sized off that. */
-    const GAP_JUMP = 4.2;   // comfortably jumpable
-    const GAP_DASH = 7.0;   // not jumpable — dash only
+    /** Authored base gaps; layoutSeg doubles the physical jump and dash crossings. */
+    const GAP_JUMP = 4.2;
+    const GAP_DASH = 7.0;
     const CRAWL_CLEAR = 1.30; // slab underside: blocks a 1.65 standing eye, passes 1.03 crouched
 
     /**
@@ -7966,9 +7966,10 @@
           mark();
         } else if (sg.t === "shuttle") {
           const deck = 3.45;
+          const gap = sg.gap * GAUNTLET_GAP_SCALE;
           addMovingGauntletPlatform(ox, y, cz - deck / 2, 4.8, deck,
-            { x: sg.drift || 0, y: 0, z: -(sg.gap - deck) }, 9.2);
-          cz -= sg.gap;
+            { x: sg.drift || 0, y: 0, z: -(gap - deck) }, 9.2);
+          cz -= gap;
           plat(5.5, GAUNTLET_W, y, FLOOR);
           mark();
         } else if (sg.t === "room") {
@@ -8436,7 +8437,7 @@
       yaw: 0,
       pitch: 0,
       radius: 0.34,
-      speed: 6.5 * PLAYER_SPEED_FACTOR,
+      speed: 13 * PLAYER_SPEED_FACTOR,
       health: 100,
       maxHealth: 100,
       regenTimer: 0,
@@ -10133,7 +10134,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
 
     /** Ledges, kerbs and stair treads up to this high are stepped onto, never treated as walls. */
     const STEP_UP = 0.32;
-    const WALLJUMP_PUSH = 7.5;
+    const WALLJUMP_PUSH = 15;
     const WALLJUMP_REACH = 0.22;
     const WALLJUMP_COOLDOWN_MS = 260;
 
@@ -18141,7 +18142,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           // every frame in updatePlayer): W → forward, W+A → diagonal forward-left,
           // etc. If the player has no recent movement input, fall back to camera-
           // forward. Wall sliding + the 350ms cooldown still apply.
-          const DASH_DIST = 8.0;
+          const DASH_DIST = 16.0;
           const DASH_DURATION_MS = isJetActive() ? 290 : 200;
           const cp = Math.cos(player.pitch);
           let dirX;
@@ -18176,7 +18177,7 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
           state.dashDirX = dirX / dirLen;
           state.dashDirY = dirY / dirLen;
           state.dashDirZ = dirZ / dirLen;
-          state.dashRemainingDist = jetting ? 6.4 : DASH_DIST;
+          state.dashRemainingDist = jetting ? DASH_DIST * 0.8 : DASH_DIST;
           state.dashSpeed = state.dashRemainingDist / (DASH_DURATION_MS / 1000);
           state.dashActiveUntil = nowC + DASH_DURATION_MS;
           state.dashIsJet = jetting;
@@ -20904,19 +20905,18 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
       if (_dashing) {
         state.dashWasActive = true;
         const distance = Math.min(state.dashRemainingDist, state.dashSpeed * dt);
-        const _stepX = state.dashDirX * distance;
-        const _stepZ = state.dashDirZ * distance;
-        const _stepY = state.dashDirY * distance;
-        const _next = player.position.clone().add(new THREE.Vector3(_stepX, _stepY, _stepZ));
-        const _resolved = resolveWallSliding(_next);
-        player.position.x = _resolved.x;
-        player.position.z = _resolved.z;
-        // resolveWallSliding() starts from player.position and only ever writes .x/.z, so
-        // _resolved.y is just the CURRENT altitude — reading it back silently threw the
-        // vertical part of the step away. Harmless while dashDirY was hard-coded to 0, but
-        // it meant the jet dash could never leave the ground. Apply _stepY ourselves and do
-        // our own floor/ceiling clamp.
-        player.position.y = resolveVerticalStep(player.position.y, _stepY);
+        let dashStepRemaining = distance;
+        while (dashStepRemaining > 1e-6) {
+          const step = Math.min(0.18, dashStepRemaining);
+          const _next = player.position.clone();
+          _next.x += state.dashDirX * step;
+          _next.z += state.dashDirZ * step;
+          const _resolved = resolveWallSliding(_next);
+          player.position.x = _resolved.x;
+          player.position.z = _resolved.z;
+          player.position.y = resolveVerticalStep(player.position.y, state.dashDirY * step);
+          dashStepRemaining -= step;
+        }
         player.velocityY = 0;
         state.dashRemainingDist = Math.max(0, state.dashRemainingDist - distance);
       }
@@ -21025,15 +21025,15 @@ ${hudMapLabel}: ${mapLabel}${MULTIPLAYER ? hudMpTag : ""}<br>
         _jumped = true;
         addCamKick({ pitch: 0.012 });
       }
-      // Wall jump: a fresh jump press in the air against any wall. It rises exactly as far as a
-      // normal jump (never higher) and throws you clear of the wall, away from its face.
+      // Wall jump: a fresh jump press in the air against any wall. The stronger lift reaches
+      // authored high landings while the doubled outward impulse clears the wall face.
       if (!_jumped && _spacePressed && !player.onGround && !_dashing && !healLock && !moveLocked
           && !isJetActive() && _nowMs - (state.lastWallJumpMs || 0) > WALLJUMP_COOLDOWN_MS) {
         const wall = findWallJumpNormal();
         if (wall) {
           state.lastWallJumpMs = _nowMs;
           state.wallJumpCarryUntil = _nowMs + 260;
-          player.velocityY = 5.8;
+          player.velocityY = 7.6;
           state.velX = wall.x * WALLJUMP_PUSH;
           state.velZ = wall.z * WALLJUMP_PUSH;
           state.jumpedSinceGround = true;

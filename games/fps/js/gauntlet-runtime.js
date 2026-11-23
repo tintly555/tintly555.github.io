@@ -1,4 +1,4 @@
-import { makeGauntletObstacle } from "./gauntlet-obstacles.js?v=20-seeded-hazard-variants";
+import { makeGauntletObstacle } from "./gauntlet-obstacles.js?v=22-double-gap-layout";
 import { createGauntletArt } from "./gauntlet-art.js?v=22-glass-catwalk-grounded-field";
 
 const EYE_HEIGHT = 1.65;
@@ -10,6 +10,7 @@ const ease = value => value * value * (3 - 2 * value);
 const wrap = value => ((value % 1) + 1) % 1;
 /** Hazards hit hard: a swinger, laser, blade, hot floor or mine costs a third to half of your health. */
 const ENV_DAMAGE_SCALE = 2.5;
+const WALL_KICK_REPEL_SCALE = 2;
 const rests = { speed: 1, grip: 1, jump: 1, gravity: 1, x: 0, z: 0, lift: 0, climb: 0, locked: false };
 
 export function createGauntletRuntime(THREE, solid, decorate, hooks, style = null) {
@@ -580,7 +581,8 @@ export function createGauntletRuntime(THREE, solid, decorate, hooks, style = nul
         }
         if (touched && field.kind === "wallKick" && hooks.jumpPressed() && !field.kicked && !player.onGround) {
           field.kicked = true;
-          hooks.launch(field.lift, field.xForce || 0, field.zForce);
+          hooks.launch(field.lift, (field.xForce || 0) * WALL_KICK_REPEL_SCALE,
+            (field.zForce || 0) * WALL_KICK_REPEL_SCALE);
         }
         if (!inside || player.onGround) field.kicked = false;
       }
